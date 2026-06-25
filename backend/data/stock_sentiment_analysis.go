@@ -91,6 +91,7 @@ func InitAnalyzeSentiment() {
 		logger.SugaredLogger.Info("加载默认词典成功")
 	}
 	seg.CalcToken()
+	logger.SugaredLogger.Info("CalcToken (default) done")
 
 	stocks := &[]StockBasic{}
 	db.Dao.Model(&StockBasic{}).Find(stocks)
@@ -145,7 +146,14 @@ func InitAnalyzeSentiment() {
 		}
 	}
 	logger.SugaredLogger.Info("加载tags词典成功")
-	seg.CalcToken()
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Error(fmt.Sprintf("CalcToken panic: %v", r))
+			}
+		}()
+		seg.CalcToken()
+	}()
 	//加载用户自定义词典 先判断用户词典是否存在
 	if fileutil.IsExist("data/dict/user.txt") {
 		lines, err := fileutil.ReadFileByLine("data/dict/user.txt")
@@ -161,7 +169,16 @@ func InitAnalyzeSentiment() {
 			if len(k) == 0 {
 				continue
 			}
-			_, _, ok := seg.Find(k[0])
+			var ok bool
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Error(fmt.Sprintf("seg.Find panic for '%s': %v", k[0], r))
+						ok = false
+					}
+				}()
+				_, _, ok = seg.Find(k[0])
+			}()
 			switch len(k) {
 			case 1:
 				if ok {
@@ -196,7 +213,14 @@ func InitAnalyzeSentiment() {
 	} else {
 		logger.SugaredLogger.Info("用户词典不存在")
 	}
-	seg.CalcToken()
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Error(fmt.Sprintf("CalcToken panic (final): %v", r))
+			}
+		}()
+		seg.CalcToken()
+	}()
 }
 
 // getWordWeight 获取词汇权重

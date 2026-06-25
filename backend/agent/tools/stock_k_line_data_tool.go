@@ -1,92 +1,139 @@
 package tools
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
-	"github.com/duke-git/lancet/v2/convertor"
-	"github.com/duke-git/lancet/v2/strutil"
-	"github.com/tidwall/gjson"
+	"go-stock/backend/agent/types"
 	"go-stock/backend/data"
+	"go-stock/backend/logger"
+	"strconv"
+	"strings"
+
+	bladesTools "github.com/go-kratos/blades/tools"
+	"github.com/tidwall/gjson"
 )
 
-// @Author spark
-// @Date 2025/8/5 11:31
-// @Desc
-//-----------------------------------------------------------------------------------
-
-func GetStockKLineTool() tool.InvokableTool {
-	return &QueryStockKLine{}
-}
-
-type QueryStockKLine struct {
-}
-
-func (q QueryStockKLine) Info(ctx context.Context) (*schema.ToolInfo, error) {
-	return &schema.ToolInfo{
-		Name: "QueryStockKLine",
-		Desc: "获取股票K线数据。输入股票名称和K线周期，返回股票K线数据。",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"days": {
-				Type:     "string",
-				Desc:     "日K数据条数。",
-				Required: true,
-			},
-			"stockCode": {
-				Type:     "string",
-				Desc:     "股票代码（A股：sh,sz开头;港股hk开头,美股：us开头）",
-				Required: true,
-			},
-		}),
-	}, nil
-}
-
-func (q QueryStockKLine) InvokableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (string, error) {
-	stockCode := GetStockCode(gjson.Get(argumentsInJSON, "stockCode").String())
-	days := gjson.Get(argumentsInJSON, "days").String()
-	toIntDay, err := convertor.ToInt(days)
-	if err != nil {
-		toIntDay = 90
-	}
-	if strutil.HasPrefixAny(stockCode, []string{"sz", "sh", "hk", "us", "gb_"}) {
-		K := &[]data.KLineData{}
-		if strutil.HasPrefixAny(stockCode, []string{"sz", "sh"}) {
-			K = data.NewStockDataApi().GetKLineData(stockCode, "240", toIntDay)
-		}
-		if strutil.HasPrefixAny(stockCode, []string{"hk", "us", "gb_"}) {
-			K = data.NewStockDataApi().GetHK_KLineData(stockCode, "day", toIntDay)
-		}
-		var sourceLabel string
-		if K == nil || len(*K) == 0 {
-			fallbackResult := data.FetchKLineWithFallback(stockCode, "", "101", int(toIntDay), "")
-			if fallbackResult.Data != nil && len(*fallbackResult.Data) > 0 {
-				K = fallbackResult.Data
-				sourceLabel = fallbackResult.Source
+func GetStockKLineTool() bladesTools.Tool {
+	return types.NewTool("GetStockKLine", "查询股票K线数据（支持日、周、月、年、分钟级别）",
+		map[string]*types.ParamDef{
+			"code":  {Type: "string", Desc: "股票代码", Required: true},
+			"type":  {Type: "string", Desc: "K线类型：day/week/month/year/minute", Required: true},
+			"count": {Type: "string", Desc: "数量（举例：10）"},
+		},
+		func(args string) (string, error) {
+			code := gjson.Get(args, "code").String()
+			kType := gjson.Get(args, "type").String()
+			countStr := gjson.Get(args, "count").String()
+			code = GetStockCode(code)
+			count, err := strconv.ParseInt(countStr, 10, 64)
+			if err != nil {
+				count = 90
 			}
-		}
-		Kmap := &[]map[string]any{}
-		for _, kline := range *K {
-			mapk := make(map[string]any, 6)
-			mapk["日期"] = kline.Day
-			mapk["开盘价"] = kline.Open
-			mapk["最高价"] = kline.High
-			mapk["最低价"] = kline.Low
-			mapk["收盘价"] = kline.Close
-			Volume, _ := convertor.ToFloat(kline.Volume)
-			mapk["成交量(万手)"] = Volume / 10000.00 / 100.00
-			*Kmap = append(*Kmap, mapk)
-		}
-		jsonData, _ := json.Marshal(Kmap)
-		markdownTable, _ := JSONToMarkdownTable(jsonData)
-		sourceInfo := ""
-		if sourceLabel != "" {
-			sourceInfo = "（数据源：" + sourceLabel + "）"
-		}
-		res := "\r\n ### " + stockCode + " " + convertor.ToString(toIntDay) + "日K线数据" + sourceInfo + "：\r\n" + markdownTable + "\r\n"
-		return res, nil
-	} else {
-		return "无数据，可能股票代码错误。（A股：sh,sz开头;港股hk开头,美股：us开头）", fmt.Errorf("不支持的股票代码:%s", stockCode)
-	}
+			kline := data.NewStockDataApi().GetKLineData(code, kType, count)
+			if kline == nil {
+				return fmt.Sprintf("未获取到股票 %s 的K线数据", code), nil
+			}
+			bytes, err := json.Marshal(kline)
+			if err != nil {
+				logger.SugaredLogger.Errorf("Failed to marshal KLine data: %v", err)
+				return "", err
+			}
+			return string(bytes), nil
+		},
+	)
+}
+
+func GetStockEastMoneyKLineTool() bladesTools.Tool {
+	return types.NewTool("GetEastMoneyKLine", "查询东方财富K线数据",
+		map[string]*types.ParamDef{
+			"code":     {Type: "string", Desc: "股票代码", Required: true},
+			"kline_ty": {Type: "string", Desc: "K线类型", Required: true},
+			"limit":    {Type: "string", Desc: "返回条数"},
+			"adjust":   {Type: "string", Desc: "复权类型：forward/backward/null"},
+		},
+		func(args string) (string, error) {
+			code := gjson.Get(args, "code").String()
+			klineTy := gjson.Get(args, "kline_ty").String()
+			limit := int(gjson.Get(args, "limit").Int())
+			if limit <= 0 {
+				limit = 60
+			}
+			adjust := gjson.Get(args, "adjust").String()
+			api := data.NewEastMoneyKLineApi(data.GetSettingConfig())
+			result := api.GetKLineData(code, klineTy, adjust, limit)
+			if result == nil {
+				return fmt.Sprintf("未获取到股票 %s 的东方财富K线数据", code), nil
+			}
+			bytes, err := json.Marshal(result)
+			if err != nil {
+				logger.SugaredLogger.Errorf("Failed to marshal EastMoneyKLine data: %v", err)
+				return "", err
+			}
+			return string(bytes), nil
+		},
+	)
+}
+
+func GetEastMoneyKLineWithMATool() bladesTools.Tool {
+	return types.NewTool("GetEastMoneyKLineWithMA", "查询东方财富K线数据（带均线MA）",
+		map[string]*types.ParamDef{
+			"code":       {Type: "string", Desc: "股票代码", Required: true},
+			"kline_ty":   {Type: "string", Desc: "K线类型", Required: true},
+			"limit":      {Type: "string", Desc: "返回条数"},
+			"adjust":     {Type: "string", Desc: "复权类型"},
+			"ma_periods": {Type: "string", Desc: "均线周期，逗号分隔（如 5,10,20,60）"},
+		},
+		func(args string) (string, error) {
+			code := gjson.Get(args, "code").String()
+			klineTy := gjson.Get(args, "kline_ty").String()
+			limit := int(gjson.Get(args, "limit").Int())
+			if limit <= 0 {
+				limit = 60
+			}
+			maPeriodsStr := gjson.Get(args, "ma_periods").String()
+			var maPeriods []int
+			for _, s := range strings.Split(maPeriodsStr, ",") {
+				s = strings.TrimSpace(s)
+				if p, err := strconv.Atoi(s); err == nil {
+					maPeriods = append(maPeriods, p)
+				}
+			}
+			if len(maPeriods) == 0 {
+				maPeriods = []int{5, 10, 20, 60}
+			}
+			api := data.NewEastMoneyKLineApi(data.GetSettingConfig())
+			result, err := api.GetKLineWithMA(code, klineTy, limit, maPeriods...)
+			if err != nil {
+				return fmt.Sprintf("查询东方财富K线数据失败: %v", err), nil
+			}
+			bytes, err := json.Marshal(result)
+			if err != nil {
+				logger.SugaredLogger.Errorf("Failed to marshal EastMoneyKLineMA data: %v", err)
+				return "", err
+			}
+			return string(bytes), nil
+		},
+	)
+}
+
+func GetStockMinuteDataTool() bladesTools.Tool {
+	return types.NewTool("GetStockMinuteData", "查询股票分钟数据",
+		map[string]*types.ParamDef{
+			"code": {Type: "string", Desc: "股票代码", Required: true},
+		},
+		func(args string) (string, error) {
+			code := gjson.Get(args, "code").String()
+			code = GetStockCode(code)
+			result, desc := data.NewStockDataApi().GetStockMinutePriceData(code)
+			if result == nil {
+				return fmt.Sprintf("未获取到股票 %s 的分钟数据: %s", code, desc), nil
+			}
+			bytes, err := json.Marshal(result)
+			if err != nil {
+				logger.SugaredLogger.Errorf("Failed to marshal minute data: %v", err)
+				return "", err
+			}
+			return string(bytes), nil
+		},
+	)
 }

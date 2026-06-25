@@ -3,22 +3,22 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"go-stock/backend/agent/types"
 	"go-stock/backend/data"
 	"go-stock/backend/models"
 	"strings"
 
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
+	bladesTools "github.com/go-kratos/blades/tools"
 	"github.com/tidwall/gjson"
 )
 
-func GetMCPServerTools() []tool.BaseTool {
-	var tools []tool.BaseTool
+func GetMCPServerTools() []bladesTools.Tool {
+	var result []bladesTools.Tool
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"ListMCPServers",
 		"查询MCP服务器列表。可以按名称、状态、启用状态筛选，支持分页。MCP服务器是外部工具服务，提供额外的AI工具能力。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"name": {
 				Type:     "string",
 				Desc:     "按名称模糊搜索（可选）",
@@ -99,10 +99,10 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetMCPServerDetail",
 		"根据ID获取MCP服务器的详细信息，包括名称、描述、URL、状态等",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "MCP服务器ID",
@@ -135,10 +135,10 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"CreateMCPServer",
 		"创建一个新的MCP服务器配置。MCP服务器是外部工具服务，通过URL连接提供额外的AI工具能力。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"name": {
 				Type:     "string",
 				Desc:     "服务器名称",
@@ -201,10 +201,10 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"UpdateMCPServer",
 		"更新MCP服务器配置信息",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "服务器ID",
@@ -283,10 +283,10 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"DeleteMCPServer",
 		"删除MCP服务器配置",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "MCP服务器ID",
@@ -305,10 +305,10 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"EnableMCPServer",
 		"启用或禁用MCP服务器",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "MCP服务器ID",
@@ -337,10 +337,10 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"TestMCPServer",
 		"测试MCP服务器连接是否可用，并获取该服务器提供的工具列表",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "MCP服务器ID",
@@ -360,10 +360,10 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"ListMCPServerTools",
 		"获取MCP服务器提供的工具列表，包括工具名称和描述。可按服务器ID筛选，不传则返回所有服务器的工具。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"serverId": {
 				Type:     "integer",
 				Desc:     "MCP服务器ID，不传则返回所有服务器的工具",
@@ -404,10 +404,10 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetMCPToolDetail",
 		"获取MCP工具的详细信息，包括完整的描述和参数定义（JSON Schema格式）。需要提供工具ID。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"toolId": {
 				Type:     "integer",
 				Desc:     "MCP工具ID",
@@ -446,16 +446,16 @@ func GetMCPServerTools() []tool.BaseTool {
 		},
 	))
 
-	return tools
+	return result
 }
 
-func GetSkillTools() []tool.BaseTool {
-	var tools []tool.BaseTool
+func GetSkillTools() []bladesTools.Tool {
+	var result []bladesTools.Tool
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"ListSkills",
 		"查询技能列表。可以按名称、分类、启用状态筛选，支持分页。技能是AI Agent的专业能力配置，包含系统提示词和触发关键词。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"name": {
 				Type:     "string",
 				Desc:     "按名称模糊搜索（可选）",
@@ -536,10 +536,10 @@ func GetSkillTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetSkillDetail",
 		"根据ID获取技能的详细信息，包括系统提示词、示例对话、触发关键词等完整配置",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "技能ID",
@@ -577,10 +577,10 @@ func GetSkillTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"CreateSkill",
 		"创建一个新的技能。技能是AI Agent的专业能力配置，包含系统提示词和触发关键词，激活后会追加到Agent的系统提示词中。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"name": {
 				Type:     "string",
 				Desc:     "技能名称",
@@ -654,10 +654,10 @@ func GetSkillTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"UpdateSkill",
 		"更新技能配置信息",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "技能ID",
@@ -752,10 +752,10 @@ func GetSkillTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"DeleteSkill",
 		"删除技能",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "技能ID",
@@ -774,10 +774,10 @@ func GetSkillTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"EnableSkill",
 		"启用或禁用技能",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "技能ID",
@@ -806,15 +806,15 @@ func GetSkillTools() []tool.BaseTool {
 		},
 	))
 
-	return tools
+	return result
 }
 
-func markdownTableWithTitle(title string, data any) string {
-	jsonData, err := json.Marshal(data)
+func markdownTableWithTitle(title string, d any) string {
+	jsonData, err := json.Marshal(d)
 	if err != nil {
 		return fmt.Sprintf("生成表格失败: %v", err)
 	}
-	table, err := JSONToMarkdownTable(jsonData)
+	table, err := data.JSONToMarkdownTable(jsonData)
 	if err != nil {
 		return fmt.Sprintf("生成表格失败: %v", err)
 	}

@@ -54,7 +54,6 @@ const formValue = ref({
   httpProxyEnabled:false,
   enableAgent: false,
   qgqpBId: '',
-  updateChannel: 'release',
   promptPlazaApiBase: '',
 })
 
@@ -71,6 +70,8 @@ function addAiConfig() {
     httpProxy:"",
     httpProxyEnabled:false,
     thinking: true,
+    embeddingEnabled: false,
+    embeddingModelName: '',
   }));
 }
 
@@ -80,12 +81,6 @@ function removeAiConfig(index) {
   // 使用filter创建新数组确保响应式更新
   formValue.value.openAI.aiConfigs = formValue.value.openAI.aiConfigs.filter((_, i) => i !== index);
 }
-
-const updateChannelOptions = [
-  { label: 'Release（稳定版）', value: 'release' },
-  { label: 'Pre-release（预发布版）', value: 'pre' },
-  { label: 'Dev（开发版）', value: 'dev' },
-]
 
 async function fetchAiModels(aiConfig) {
   if (!aiConfig.baseUrl || !aiConfig.apiKey) {
@@ -233,7 +228,6 @@ onMounted(() => {
     formValue.value.httpProxyEnabled=res.httpProxyEnabled;
     formValue.value.enableAgent = res.enableAgent;
     formValue.value.qgqpBId = res.qgqpBId;
-    formValue.value.updateChannel = res.updateChannel || 'release';
     formValue.value.promptPlazaApiBase = res.promptPlazaApiBase || '';
 
   })
@@ -277,7 +271,6 @@ function saveConfig() {
     httpProxyEnabled:formValue.value.httpProxyEnabled,
     enableAgent: formValue.value.enableAgent,
     qgqpBId: formValue.value.qgqpBId,
-    updateChannel: formValue.value.updateChannel,
     promptPlazaApiBase: formValue.value.promptPlazaApiBase,
   })
 
@@ -446,26 +439,6 @@ function deletePrompt(ID) {
             </n-form-item-gi>
             <n-form-item-gi :span="6" label="暗黑主题：" path="darkTheme">
               <n-switch v-model:value="formValue.darkTheme"/>
-            </n-form-item-gi>
-            <n-form-item-gi :span="8" label="更新通道：" path="updateChannel">
-              <n-select v-model:value="formValue.updateChannel" :options="updateChannelOptions" />
-              <n-tooltip placement="top">
-                <template #trigger>
-                  <n-icon color="#0e7a0d" size="20">
-                    <HelpCircleFilledIcon />
-                  </n-icon>
-                </template>
-                <template #default>
-                  <n-gradient-text :type="'warning'">
-                  <div style="max-width: 400px;text-align: left">
-                    更新通道说明：<br>
-                    <b>Release（稳定版）</b>：仅接收正式发布版本，稳定性最高<br>
-                    <b>Pre-release（预发布版）</b>：包含预发布版本，可提前体验新功能<br>
-                    <b>Dev（开发版）</b>：包含所有可用版本，获取最新开发进度
-                  </div>
-                  </n-gradient-text>
-                </template>
-              </n-tooltip>
             </n-form-item-gi>
             <n-form-item-gi :span="10" label="浏览器安装路径：" path="browserPath">
               <n-input type="text" placeholder="浏览器安装路径" v-model:value="formValue.browserPath" clearable/>
@@ -712,6 +685,28 @@ function deletePrompt(ID) {
                       </n-form-item-gi>
                       <n-form-item-gi :span="12" v-if="aiConfig.httpProxyEnabled" title="http代理地址" :path="`openAI.aiConfigs[${index}].httpProxy`">
                         <n-input type="text" placeholder="http代理地址" v-model:value="aiConfig.httpProxy" clearable/>
+                      </n-form-item-gi>
+                      <n-form-item-gi :span="12" label="语义向量记忆">
+                        <n-switch v-model:value="aiConfig.embeddingEnabled"/>
+                        <n-tooltip placement="top">
+                          <template #trigger>
+                            <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
+                              <HelpCircleFilledIcon />
+                            </n-icon>
+                          </template>
+                          <template #default>
+                            <n-gradient-text :type="'warning'">
+                            <div style="max-width: 400px;text-align: left">
+                              启用语义向量记忆后，Agent 会基于当前问题语义检索
+                              最相关的历史对话（而非简单的最近N条），
+                              需要配置 Embedding 模型（如 bge-m3）。
+                            </div>
+                            </n-gradient-text>
+                          </template>
+                        </n-tooltip>
+                      </n-form-item-gi>
+                      <n-form-item-gi :span="12" v-if="aiConfig.embeddingEnabled" label="Embedding模型名" :path="`openAI.aiConfigs[${index}].embeddingModelName`">
+                        <n-input type="text" placeholder="bge-m3" v-model:value="aiConfig.embeddingModelName" clearable/>
                       </n-form-item-gi>
                     </n-grid>
                   </n-collapse-item>

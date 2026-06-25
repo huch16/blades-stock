@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -19,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/inconshreveable/go-update"
 	"github.com/samber/lo"
 	"golang.org/x/exp/slices"
 
@@ -28,7 +26,6 @@ import (
 	"github.com/duke-git/lancet/v2/mathutil"
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/duke-git/lancet/v2/strutil"
-	"github.com/samber/lo"
 	"github.com/robfig/cron/v3"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -140,215 +137,6 @@ func (a *App) QuitApp() {
 		runtime.Quit(a.ctx)
 	}
 }
-func (a *App) CheckUpdate(flag int) {
-	updateChannel := a.GetConfig().UpdateChannel
-	if updateChannel == "" {
-		updateChannel = "release"
-	}
-
-	githubApiHeaders := map[string]string{
-		"Accept":               "application/vnd.github+json",
-		"X-GitHub-Api-Version": "2022-11-28",
-	}
-
-	releaseVersion := &models.GitHubReleaseVersion{}
-	if updateChannel == "release" {
-		resp, err := data.SharedHTTPClient.R().
-			SetHeaders(githubApiHeaders).
-			SetResult(releaseVersion).
-			Get("https://api.github.com/repos/ArvinLovegood/go-stock/releases/latest")
-		if err != nil {
-			logger.SugaredLogger.Errorf("get github release version error:%s", err.Error())
-			return
-		}
-		if resp.StatusCode() != 200 {
-			logger.SugaredLogger.Errorf("get github release version failed, status:%d", resp.StatusCode())
-			return
-		}
-	} else {
-		var releases []models.GitHubReleaseVersion
-		resp, err := data.SharedHTTPClient.R().
-			SetHeaders(githubApiHeaders).
-			SetResult(&releases).
-			Get("https://api.github.com/repos/ArvinLovegood/go-stock/releases")
-		if err != nil {
-			logger.SugaredLogger.Errorf("get github releases error:%s", err.Error())
-			return
-		}
-		if resp.StatusCode() != 200 {
-			logger.SugaredLogger.Errorf("get github releases failed, status:%d", resp.StatusCode())
-			return
-		}
-		if len(releases) == 0 {
-			logger.SugaredLogger.Errorf("no releases found")
-			return
-		}
-		if updateChannel == "pre" {
-			for _, r := range releases {
-				if !r.Draft {
-					releaseVersion = &r
-					break
-				}
-			}
-			if releaseVersion.TagName == "" {
-				releaseVersion = &releases[0]
-			}
-		} else {
-			releaseVersion = &releases[0]
-		}
-	}
-
-	if releaseVersion.TagName != Version {
-		tag := &models.Tag{}
-		tagResp, tagErr := data.SharedHTTPClient.R().
-			SetHeaders(githubApiHeaders).
-			SetResult(tag).
-			Get("https://api.github.com/repos/ArvinLovegood/go-stock/git/ref/tags/" + releaseVersion.TagName)
-		if tagErr == nil && tagResp.StatusCode() == 200 && tag.Object.Url != "" {
-			releaseVersion.Tag = *tag
-			commit := &models.Commit{}
-			commitResp, commitErr := data.SharedHTTPClient.R().
-				SetHeaders(githubApiHeaders).
-				SetResult(commit).
-				Get(tag.Object.Url)
-			if commitErr == nil && commitResp.StatusCode() == 200 {
-				releaseVersion.Commit = *commit
-			}
-		}
-
-		commitMessage := releaseVersion.Body
-		if releaseVersion.Commit.Message != "" {
-			commitMessage = releaseVersion.Commit.Message
-		}
-
-		downloadUrl := ""
-		assetName := ""
-		if IsWindows() {
-			if IsArm64() {
-				assetName = "go-stock-windows-arm64.exe"
-			} else {
-				assetName = "go-stock-windows-amd64.exe"
-			}
-		} else if IsMacOS() {
-			assetName = "go-stock-darwin-universal"
-		} else if IsLinux() {
-			assetName = "go-stock-linux-amd64"
-		}
-
-		for _, asset := range releaseVersion.Assets {
-			if asset.Name == assetName {
-				downloadUrl = asset.BrowserDownloadUrl
-				break
-			}
-		}
-
-		if downloadUrl == "" {
-			downloadUrl = fmt.Sprintf("https://github.com/ArvinLovegood/go-stock/releases/download/%s/%s", releaseVersion.TagName, assetName)
-		}
-
-		originalDownloadUrl := downloadUrl
-		mirrorDownloadUrl := "https://gh.927223.xyz/" + originalDownloadUrl
-		manualDownloadTip := fmt.Sprintf("\n手动下载链接(加速镜像): %s\n手动下载链接(原始地址): %s\n下载后请替换当前程序文件即可完成更新。", mirrorDownloadUrl, originalDownloadUrl)
-
-		go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
-			"time":    "发现新版本：" + releaseVersion.TagName,
-			"isRed":   true,
-			"source":  "go-stock",
-			"content": commitMessage + "\n正在下载新版本，请耐心等待...",
-		})
-
-		tmpFile, err := os.CreateTemp("", "go-stock-update-*.tmp")
-		if err != nil {
-			logger.SugaredLogger.Errorf("create temp file error: %s", err.Error())
-			go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
-				"time":    "新版本：" + releaseVersion.TagName,
-				"isRed":   true,
-				"source":  "go-stock",
-				"content": commitMessage + "\n新版本下载失败(无法创建临时文件)。" + manualDownloadTip,
-			})
-			return
-		}
-		tmpPath := tmpFile.Name()
-		tmpFile.Close()
-		defer os.Remove(tmpPath)
-
-		downloadClient := data.CreateDownloadClient()
-
-		downloadUrls := []string{mirrorDownloadUrl, downloadUrl}
-		var downloadSuccess bool
-		for _, url := range downloadUrls {
-			_, err = downloadClient.R().
-				SetHeader("User-Agent", "go-stock-updater").
-				SetOutput(tmpPath).
-				Get(url)
-			if err != nil {
-				logger.SugaredLogger.Warnf("download from %s error: %s, trying next...", url, err.Error())
-				continue
-			}
-			fileInfo, statErr := os.Stat(tmpPath)
-			if statErr != nil || fileInfo.Size() < 1024*500 {
-				logger.SugaredLogger.Warnf("download from %s file size invalid, trying next...", url)
-				continue
-			}
-			downloadSuccess = true
-			break
-		}
-
-		if !downloadSuccess {
-			go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
-				"time":    "新版本：" + releaseVersion.TagName,
-				"isRed":   true,
-				"source":  "go-stock",
-				"content": commitMessage + "\n新版本自动下载失败，请手动下载更新。" + manualDownloadTip,
-			})
-			return
-		}
-
-		body, err := os.ReadFile(tmpPath)
-		if err != nil {
-			logger.SugaredLogger.Errorf("read downloaded file error: %s", err.Error())
-			go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
-				"time":    "新版本：" + releaseVersion.TagName,
-				"isRed":   true,
-				"source":  "go-stock",
-				"content": commitMessage + "\n新版本下载失败(无法读取临时文件)。" + manualDownloadTip,
-			})
-			return
-		}
-
-		err = update.Apply(bytes.NewReader(body), update.Options{})
-		if err != nil {
-			logger.SugaredLogger.Error("更新失败: ", err.Error())
-			if !IsRunningAsAdmin() {
-				go runtime.EventsEmit(a.ctx, "updateNeedAdmin", map[string]any{
-					"version": releaseVersion.TagName,
-					"message": commitMessage,
-				})
-			} else {
-				go runtime.EventsEmit(a.ctx, "updateVersion", releaseVersion)
-			}
-			return
-		} else {
-			go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
-				"time":    "新版本：" + releaseVersion.TagName,
-				"isRed":   true,
-				"source":  "go-stock",
-				"content": "版本更新完成,下次重启软件生效.",
-			})
-		}
-	} else {
-		if flag == 1 {
-			go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
-				"time":    "当前版本：" + Version,
-				"isRed":   true,
-				"source":  "go-stock",
-				"content": "当前版本无更新",
-			})
-		}
-
-	}
-}
-
 
 
 func GetSource(tags []string) string {
@@ -573,19 +361,14 @@ func (a *App) domReady(ctx context.Context) {
 			a.setCronEntry("ConceptFundFlowFetchAndSave", idConceptFundFlow)
 		}
 	}()
-	//检查新版本
+	//检查股票基础信息
 	go func() {
-		a.CheckUpdate(0)
 		go a.CheckStockBaseInfo(a.ctx)
 		go syncAllStockInfo(a.ctx)
 
 		a.cron.AddFunc("0 0 2 * * *", func() {
-			logger.SugaredLogger.Errorf("Checking for updates...")
+			logger.SugaredLogger.Errorf("Checking for stock updates...")
 			a.CheckStockBaseInfo(a.ctx)
-		})
-		a.cron.AddFunc("30 05 8,12,20 * * *", func() {
-			logger.SugaredLogger.Errorf("Checking for updates...")
-			a.CheckUpdate(0)
 		})
 		a.cron.AddFunc("30 05 8,12,20 * * *", func() {
 			syncAllStockInfo(a.ctx)

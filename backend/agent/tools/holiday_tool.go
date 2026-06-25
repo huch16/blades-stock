@@ -1,46 +1,19 @@
 package tools
 
 import (
-	"context"
 	"fmt"
+	"go-stock/backend/agent/types"
 	"go-stock/backend/data"
-	"go-stock/backend/logger"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
+	bladesTools "github.com/go-kratos/blades/tools"
 	"github.com/tidwall/gjson"
 )
 
-type HolidayTool struct {
-	name        string
-	description string
-	params      map[string]*schema.ParameterInfo
-	handler     func(args string) (string, error)
-}
-
-func NewHolidayTool(name, description string, params map[string]*schema.ParameterInfo, handler func(args string) (string, error)) *HolidayTool {
-	return &HolidayTool{
-		name:        name,
-		description: description,
-		params:      params,
-		handler:     handler,
-	}
-}
-
-func (t *HolidayTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
-	return &schema.ToolInfo{
-		Name:        t.name,
-		Desc:        t.description,
-		ParamsOneOf: schema.NewParamsOneOfByParams(t.params),
-	}, nil
-}
-
-func (t *HolidayTool) InvokableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (string, error) {
-	logger.SugaredLogger.Infof("Tool %s called with args: %s", t.name, argumentsInJSON)
-	return t.handler(argumentsInJSON)
+func NewHolidayTool(name, description string, params map[string]*types.ParamDef, handler func(args string) (string, error)) bladesTools.Tool {
+	return types.NewTool(name, description, params, handler)
 }
 
 type HolidayInfo struct {
@@ -71,13 +44,13 @@ type HolidayYearInfo struct {
 	} `json:"holiday"`
 }
 
-func GetHolidayTools() []tool.BaseTool {
-	var tools []tool.BaseTool
+func GetHolidayTools() []bladesTools.Tool {
+	var result []bladesTools.Tool
 
-	tools = append(tools, NewHolidayTool(
+	result = append(result, NewHolidayTool(
 		"GetHolidayInfo",
 		"查询指定日期的节假日信息。返回该日期是否为节假日、节假日名称、是否需要补班等信息。支持查询中国法定节假日（元旦、春节、清明、五一、端午、中秋、国庆等）。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期，格式：YYYY-MM-DD，如：2026-01-01。不传则查询今天",
@@ -149,10 +122,10 @@ func GetHolidayTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewHolidayTool(
+	result = append(result, NewHolidayTool(
 		"GetHolidayYear",
 		"查询指定年份的所有节假日数据。返回该年份所有法定节假日的详细信息，包括日期、名称、连休天数、补班安排等。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"year": {
 				Type:     "string",
 				Desc:     "查询年份，格式：YYYY，如：2026。不传则查询当前年份",
@@ -237,10 +210,10 @@ func GetHolidayTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewHolidayTool(
+	result = append(result, NewHolidayTool(
 		"GetHolidayBatch",
 		"批量查询多个日期的节假日信息。适合需要一次性查询多个日期是否为节假日的场景。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"dates": {
 				Type:     "string",
 				Desc:     "查询日期列表，多个日期用逗号分隔，格式：YYYY-MM-DD，如：2026-01-01,2026-01-02,2026-01-03",
@@ -340,10 +313,10 @@ func GetHolidayTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewHolidayTool(
+	result = append(result, NewHolidayTool(
 		"IsTradingDay",
 		"判断指定日期是否为A股交易日。规则：周一至周五且非法定节假日为交易日，周末（含调休补班）和法定节假日为休市日。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期，格式：YYYY-MM-DD，如：2026-01-02。不传则查询今天",
@@ -418,10 +391,10 @@ func GetHolidayTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewHolidayTool(
+	result = append(result, NewHolidayTool(
 		"GetNextTradingDay",
 		"获取指定日期之后的下一个A股交易日。规则：周一至周五且非法定节假日为交易日，周末（含调休补班）和法定节假日为休市日。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"startDate": {
 				Type:     "string",
 				Desc:     "起始日期，格式：YYYY-MM-DD，如：2026-01-01。不传则从今天开始",
@@ -502,5 +475,5 @@ func GetHolidayTools() []tool.BaseTool {
 		},
 	))
 
-	return tools
+	return result
 }

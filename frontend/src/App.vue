@@ -3,7 +3,6 @@ import {
   EventsEmit,
   EventsOff,
   EventsOn,
-  Quit,Hide ,
   WindowFullscreen,
   WindowUnfullscreen,
   WindowSetTitle
@@ -17,11 +16,10 @@ import {
   BarChartSharp, Bonfire, BonfireOutline, DiamondOutline, EaselSharp,
   ExpandOutline, Flag,
   Flame, FlameSharp, FlaskOutline, GlobeOutline, InformationOutline,
-  LogoGithub,
   ChatbubblesOutline,
   NewspaperOutline,
   NewspaperSharp, Notifications,
-  PowerOutline, Pulse,
+  Pulse,
   ReorderTwoOutline,
   SettingsOutline, ServerOutline, Skull, SkullOutline, SkullSharp,
   SparklesOutline, FlashOutline, Star,
@@ -35,7 +33,7 @@ import FloatingAgentAssistant from "./components/FloatingAgentAssistant.vue";
 import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
 import {Prompt, ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
 import {LocalFireDepartmentRound} from "@vicons/material";
-import {AppsList20Regular, BoxSearch20Regular,SlideHide24Filled, CommentNote20Filled} from "@vicons/fluent";
+import {AppsList20Regular, BoxSearch20Regular, CommentNote20Filled} from "@vicons/fluent";
 import {FireFilled, MoneyCollectOutlined, NotificationFilled, StockOutlined} from "@vicons/antd";
 
 
@@ -899,27 +897,6 @@ const menuOptions = ref([
     icon: renderIcon(SettingsOutline),
   },
   {
-    label: () =>
-        h(
-            RouterLink,
-            {
-              to: {
-                name: 'about',
-                query: {
-                  name:"关于",
-                }
-              },
-              onClick: () => {
-                activeKey.value = 'about'
-              },
-            },
-            {default: () => '关于'}
-        ),
-    key: 'about',
-    icon: renderIcon(LogoGithub),
-    show: true,
-  },
-  {
     show:false,
     label: () => h("a", {
       href: '#',
@@ -938,22 +915,6 @@ const menuOptions = ref([
   //   key: 'move',
   //   icon: renderIcon(MoveOutline),
   // },
-  {
-    label: () => h("a", {
-      href: '#',
-      onClick: Hide,
-    }, {default: () => '隐藏至托盘区'}),
-    key: 'hide',
-    icon: renderIcon(SlideHide24Filled),
-  },
-  {
-    label: () => h("a", {
-      href: '#',
-      onClick: Quit,
-    }, {default: () => '退出程序'}),
-    key: 'exit',
-    icon: renderIcon(PowerOutline),
-  },
 ])
 
 // 重建"股票自选"菜单的分组子项（保留"全部"，用最新分组列表替换其余子项）

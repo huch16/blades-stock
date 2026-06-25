@@ -4,30 +4,22 @@ import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
 )
 
 func TestGetHolidayTools(t *testing.T) {
 	tools := GetHolidayTools()
 	t.Logf("Total holiday tools count: %d", len(tools))
 
-	for i, tool := range tools {
-		info, err := tool.Info(nil)
-		if err != nil {
-			t.Errorf("Tool %d: failed to get info: %v", i, err)
-			continue
-		}
-		t.Logf("Tool %d: %s - %s", i+1, info.Name, info.Desc)
+	for i, tl := range tools {
+		t.Logf("Tool %d: %s - %s", i+1, tl.Name(), tl.Description())
 	}
 }
 
 func TestGetHolidayInfo(t *testing.T) {
-	tool := NewHolidayTool(
+	tl := NewHolidayTool(
 		"GetHolidayInfo",
 		"查询指定日期的节假日信息",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期",
@@ -39,16 +31,11 @@ func TestGetHolidayInfo(t *testing.T) {
 		},
 	)
 
-	info, err := tool.Info(context.Background())
-	if err != nil {
-		t.Fatalf("Failed to get tool info: %v", err)
+	if tl.Name() != "GetHolidayInfo" {
+		t.Errorf("Expected tool name 'GetHolidayInfo', got '%s'", tl.Name())
 	}
 
-	if info.Name != "GetHolidayInfo" {
-		t.Errorf("Expected tool name 'GetHolidayInfo', got '%s'", info.Name)
-	}
-
-	t.Logf("Tool info: Name=%s, Desc=%s", info.Name, info.Desc)
+	t.Logf("Tool info: Name=%s, Desc=%s", tl.Name(), tl.Description())
 }
 
 func TestIsTradingDay_Weekend(t *testing.T) {
@@ -93,11 +80,10 @@ func TestIsTradingDay_API(t *testing.T) {
 	}
 
 	holidayTools := GetHolidayTools()
-	var isTradingDayTool tool.InvokableTool
+	var isTradingDayTool bladesTools.Tool
 	for _, tl := range holidayTools {
-		info, _ := tl.Info(nil)
-		if info.Name == "IsTradingDay" {
-			isTradingDayTool = tl.(tool.InvokableTool)
+		if tl.Name() == "IsTradingDay" {
+			isTradingDayTool = tl
 			break
 		}
 	}
@@ -119,7 +105,7 @@ func TestIsTradingDay_API(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			args := `{"date": "` + tc.date + `"}`
-			result, err := isTradingDayTool.InvokableRun(context.Background(), args)
+			result, err := isTradingDayTool.Handle(context.Background(), args)
 
 			if err != nil {
 				t.Fatalf("API call failed: %v", err)
@@ -146,11 +132,10 @@ func TestGetHolidayInfo_API(t *testing.T) {
 	}
 
 	holidayTools := GetHolidayTools()
-	var holidayInfoTool tool.InvokableTool
+	var holidayInfoTool bladesTools.Tool
 	for _, tl := range holidayTools {
-		info, _ := tl.Info(nil)
-		if info.Name == "GetHolidayInfo" {
-			holidayInfoTool = tl.(tool.InvokableTool)
+		if tl.Name() == "GetHolidayInfo" {
+			holidayInfoTool = tl
 			break
 		}
 	}
@@ -160,7 +145,7 @@ func TestGetHolidayInfo_API(t *testing.T) {
 	}
 
 	args := `{"date": "2026-01-01"}`
-	result, err := holidayInfoTool.InvokableRun(context.Background(), args)
+	result, err := holidayInfoTool.Handle(context.Background(), args)
 
 	if err != nil {
 		t.Fatalf("API call failed: %v", err)
@@ -179,11 +164,10 @@ func TestGetNextTradingDay_API(t *testing.T) {
 	}
 
 	holidayTools := GetHolidayTools()
-	var nextTradingDayTool tool.InvokableTool
+	var nextTradingDayTool bladesTools.Tool
 	for _, tl := range holidayTools {
-		info, _ := tl.Info(nil)
-		if info.Name == "GetNextTradingDay" {
-			nextTradingDayTool = tl.(tool.InvokableTool)
+		if tl.Name() == "GetNextTradingDay" {
+			nextTradingDayTool = tl
 			break
 		}
 	}
@@ -193,7 +177,7 @@ func TestGetNextTradingDay_API(t *testing.T) {
 	}
 
 	args := `{"startDate": "2026-04-04", "days": 10}`
-	result, err := nextTradingDayTool.InvokableRun(context.Background(), args)
+	result, err := nextTradingDayTool.Handle(context.Background(), args)
 
 	if err != nil {
 		t.Fatalf("API call failed: %v", err)
@@ -212,11 +196,10 @@ func TestGetHolidayYear_API(t *testing.T) {
 	}
 
 	holidayTools := GetHolidayTools()
-	var holidayYearTool tool.InvokableTool
+	var holidayYearTool bladesTools.Tool
 	for _, tl := range holidayTools {
-		info, _ := tl.Info(nil)
-		if info.Name == "GetHolidayYear" {
-			holidayYearTool = tl.(tool.InvokableTool)
+		if tl.Name() == "GetHolidayYear" {
+			holidayYearTool = tl
 			break
 		}
 	}
@@ -226,7 +209,7 @@ func TestGetHolidayYear_API(t *testing.T) {
 	}
 
 	args := `{"year": "2026"}`
-	result, err := holidayYearTool.InvokableRun(context.Background(), args)
+	result, err := holidayYearTool.Handle(context.Background(), args)
 
 	if err != nil {
 		t.Fatalf("API call failed: %v", err)

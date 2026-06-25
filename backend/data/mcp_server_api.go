@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	einomcp "github.com/cloudwego/eino-ext/components/tool/mcp"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -207,14 +206,14 @@ func (a *MCPServerApi) TestConnection(id uint) (string, error) {
 		return "", fmt.Errorf("%s", errMsg)
 	}
 
-	tools, err := einomcp.GetTools(ctx, &einomcp.Config{Cli: cli})
+	result, err := cli.ListTools(ctx, mcp.ListToolsRequest{})
 	if err != nil {
 		errMsg := fmt.Sprintf("获取工具列表失败: %s", err.Error())
 		a.UpdateStatus(id, "unavailable", errMsg)
 		return "", fmt.Errorf("%s", errMsg)
 	}
 
-	toolCount := len(tools)
+	toolCount := len(result.Tools)
 
 	a.UpdateStatus(id, "available", fmt.Sprintf("可用，共 %d 个工具", toolCount))
 
@@ -225,31 +224,22 @@ func (a *MCPServerApi) TestConnection(id uint) (string, error) {
 	}
 
 	var toolNames []string
-	for _, t := range tools {
-		info, err := t.Info(ctx)
-		if err != nil || info == nil {
-			continue
-		}
-		toolNames = append(toolNames, info.Name)
+	for _, t := range result.Tools {
+		toolNames = append(toolNames, t.Name)
 
 		var paramsJSON string
-		if info.ParamsOneOf != nil {
-			js, err := info.ParamsOneOf.ToJSONSchema()
-			if err == nil && js != nil {
-				if data, err := json.Marshal(js); err == nil {
-					paramsJSON = string(data)
-				}
-			}
+		if data, err := json.Marshal(t.InputSchema); err == nil {
+			paramsJSON = string(data)
 		}
 
 		toolRecord := models.MCPServerTool{
 			MCPServerID:  id,
-			ToolName:     info.Name,
-			Description:  info.Desc,
+			ToolName:     t.Name,
+			Description:  t.Description,
 			ParamsSchema: paramsJSON,
 		}
 		if err := db.Dao.Create(&toolRecord).Error; err != nil {
-			logger.SugaredLogger.Warnf("保存MCP工具信息失败 [%s]: %v", info.Name, err)
+			logger.SugaredLogger.Warnf("保存MCP工具信息失败 [%s]: %v", t.Name, err)
 		}
 	}
 

@@ -64,6 +64,8 @@ type AIConfig struct {
 	HttpProxyEnabled bool    `json:"httpProxyEnabled"`
 	SessionId        string  `json:"sessionId" gorm:"index;size:64"`
 	Thinking         bool    `json:"thinking"`
+	EmbeddingEnabled bool    `json:"embeddingEnabled"`
+	EmbeddingModelName string `json:"embeddingModelName"`
 }
 
 func (AIConfig) TableName() string {
@@ -206,17 +208,19 @@ func updateAiConfigs(aiConfigs []*AIConfig) error {
 		} else {
 			notDeleteIds = append(notDeleteIds, item.ID)
 			e = db.Dao.Model(&AIConfig{}).Where("id=?", item.ID).Updates(map[string]interface{}{
-				"name":               item.Name,
-				"base_url":           item.BaseUrl,
-				"api_key":            item.ApiKey,
-				"model_name":         item.ModelName,
-				"max_tokens":         item.MaxTokens,
-				"temperature":        item.Temperature,
-				"time_out":           item.TimeOut,
-				"http_proxy":         item.HttpProxy,
-				"http_proxy_enabled": item.HttpProxyEnabled,
-				"session_id":         item.SessionId,
-				"thinking":           item.Thinking,
+				"name":                item.Name,
+				"base_url":            item.BaseUrl,
+				"api_key":             item.ApiKey,
+				"model_name":          item.ModelName,
+				"max_tokens":          item.MaxTokens,
+				"temperature":         item.Temperature,
+				"time_out":            item.TimeOut,
+				"http_proxy":          item.HttpProxy,
+				"http_proxy_enabled":  item.HttpProxyEnabled,
+				"session_id":          item.SessionId,
+				"thinking":            item.Thinking,
+				"embedding_enabled":   item.EmbeddingEnabled,
+				"embedding_model_name": item.EmbeddingModelName,
 			}).Error
 			if e != nil {
 				return
@@ -240,6 +244,8 @@ func updateAiConfigs(aiConfigs []*AIConfig) error {
 }
 
 func GetSettingConfig() *SettingConfig {
+	db.Dao.AutoMigrate(&AIConfig{})
+
 	settingConfig := &SettingConfig{}
 	settings := &Settings{}
 	aiConfigs := make([]*AIConfig, 0)

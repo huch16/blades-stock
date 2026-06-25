@@ -3,7 +3,7 @@ package tools
 import (
 	"strings"
 
-	"github.com/cloudwego/eino/components/tool"
+	"github.com/go-kratos/blades/tools"
 )
 
 type ToolGroup string
@@ -43,15 +43,10 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetStockConceptInfo":     GroupStockAnalysis,
 
 	"QueryEvent": GroupStockAnalysis,
-
 	"QueryBasicInfo": GroupStockAnalysis,
-
 	"QueryFinance": GroupStockAnalysis,
-
 	"QueryIndustry": GroupStockAnalysis,
-
 	"QueryManagement": GroupStockAnalysis,
-
 	"QueryFundFinance":  GroupStockAnalysis,
 	"QueryBusinessData": GroupStockAnalysis,
 
@@ -64,109 +59,85 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetDailyDimensionStats":     GroupMarket,
 	"GetTypeStatsByDate":         GroupMarket,
 	"QueryIwencai":               GroupMarket,
-
 	"QueryZhishu": GroupMarket,
-
 	"QueryMacro": GroupMarket,
-
 	"QueryFutures": GroupMarket,
-
 	"QueryStockConnect": GroupMarket,
 
-	"StockEarningsReview": GroupStockAnalysis,
-
-	"FinancialQA": GroupAIAnalysis,
-
-	"GetStockLatestFinance":       GroupStockAnalysis,
-	"GetStockQtrMainFinance":      GroupStockAnalysis,
-	"GetStockOrgPredict":          GroupStockAnalysis,
-	"GetStockPredictSummary":      GroupStockAnalysis,
-	"GetStockValuationPercentile": GroupStockAnalysis,
-	"GetStockMarginTrading":       GroupStockAnalysis,
-	"GetStockBlockTrade":          GroupStockAnalysis,
-	"GetStockHolderTrend":         GroupStockAnalysis,
-	"GetStockBillboard":           GroupStockAnalysis,
-	"GetStockOperationDeptTrade":  GroupStockAnalysis,
-	"ComparableCompanyAnalysis":   GroupStockAnalysis,
-	"HotspotDiscovery":            GroupMarket,
-
-	"IndustryResearch": GroupStockAnalysis,
-
-	"TrackingReport": GroupStockAnalysis,
-
-	"FinanceDataQuery": GroupStockAnalysis,
-
-	"FinanceSearch": GroupNewsResearch,
-
-	"SearchReport": GroupNewsResearch,
-
-	"QueryInsResearch": GroupNewsResearch,
-
-	"SearchNews": GroupNewsResearch,
-
-	"SearchInvestor": GroupNewsResearch,
-
-	"SearchAnnouncement": GroupNewsResearch,
-
-	"FilterStocks":            GroupScreening,
-	"SearchStockByIndicators": GroupScreening,
-
-	"SelectAStock": GroupScreening,
-
-	"SelectSector": GroupScreening,
-
-	"SelectETF":             GroupScreening,
-	"SelectFundManager":     GroupScreening,
-	"SelectConvertibleBond": GroupScreening,
-	"SelectFundCompany":     GroupScreening,
-	"SelectFund":            GroupScreening,
-	"SelectFuturesOption":   GroupScreening,
-	"SelectHKStock":         GroupScreening,
-	"SelectUSStock":         GroupScreening,
-	"SearchBk":              GroupScreening,
-	"SearchETF":             GroupScreening,
-	"HotStrategyTable":      GroupScreening,
-	"HotStockTable":         GroupScreening,
-
-	"GetStockMoneyData":        GroupMoneyFlow,
-	"GetMutualTop10Deal":       GroupMoneyFlow,
-	"GetStockHistoryMoneyData": GroupMoneyFlow,
-	"GetIndustryMoneyRank":     GroupMoneyFlow,
-
-	"QueryStockNewsTool":          GroupNewsResearch,
-	"GetNewsListData":             GroupNewsResearch,
-	"GetStockResearchReport":      GroupNewsResearch,
-	"GetIndustryResearchReport":   GroupNewsResearch,
-	"GetSecuritiesCompanyOpinion": GroupNewsResearch,
-	"StockNotice":                 GroupNewsResearch,
-	"GetStockNotice":              GroupNewsResearch,
-	"InteractiveAnswer":           GroupNewsResearch,
-	"GetInvestCalendar":           GroupNewsResearch,
-	"GetLongTigerList":            GroupNewsResearch,
-	"GetHotStockList":             GroupNewsResearch,
-	"GetHotEventList":             GroupNewsResearch,
-	"GetUplimitLadder":            GroupNewsResearch,
-	"GetUplimitHotPlates":         GroupNewsResearch,
-	"GetUplimitHotStocks":         GroupNewsResearch,
-	"GetUplimitExplodedStocks":    GroupNewsResearch,
-	"GetUplimitPlateStocks":       GroupNewsResearch,
-
-	"GetWallstreetcnLives":      GroupNewsResearch,
-	"GetWallstreetcnMarketReal": GroupMarket,
-	"GetWallstreetcnKline":      GroupMarket,
-	"GetWallstreetcnCalendar":   GroupNewsResearch,
-
-	"AiRecommendStocks":    GroupAIAnalysis,
-	"GetAIAnalysisHistory": GroupAIAnalysis,
-	"GetAIAnalysisDetail":  GroupAIAnalysis,
-	"GetAIAnalysisContent": GroupAIAnalysis,
-
-	"SetTradingPrice":     GroupOperations,
-	"SendDingDingMessage": GroupOperations,
-	"SendToDingDing":      GroupOperations,
-	"SearchFund":          GroupOperations,
-	"GetFundInfo":         GroupOperations,
-	"GetEconomicData":     GroupOperations,
+	"StockEarningsReview":            GroupStockAnalysis,
+	"FinancialQA":                    GroupAIAnalysis,
+	"GetStockLatestFinance":          GroupStockAnalysis,
+	"GetStockQtrMainFinance":         GroupStockAnalysis,
+	"GetStockOrgPredict":             GroupStockAnalysis,
+	"GetStockPredictSummary":         GroupStockAnalysis,
+	"GetStockValuationPercentile":    GroupStockAnalysis,
+	"GetStockMarginTrading":          GroupStockAnalysis,
+	"GetStockBlockTrade":             GroupStockAnalysis,
+	"GetStockHolderTrend":            GroupStockAnalysis,
+	"GetStockBillboard":              GroupStockAnalysis,
+	"GetStockOperationDeptTrade":     GroupStockAnalysis,
+	"ComparableCompanyAnalysis":      GroupStockAnalysis,
+	"HotspotDiscovery":               GroupMarket,
+	"IndustryResearch":               GroupStockAnalysis,
+	"TrackingReport":                 GroupStockAnalysis,
+	"FinanceDataQuery":               GroupStockAnalysis,
+	"FinanceSearch":                  GroupNewsResearch,
+	"SearchReport":                   GroupNewsResearch,
+	"QueryInsResearch":               GroupNewsResearch,
+	"SearchNews":                     GroupNewsResearch,
+	"SearchInvestor":                 GroupNewsResearch,
+	"SearchAnnouncement":             GroupNewsResearch,
+	"FilterStocks":                   GroupScreening,
+	"SearchStockByIndicators":        GroupScreening,
+	"SelectAStock":                   GroupScreening,
+	"SelectSector":                   GroupScreening,
+	"SelectETF":                      GroupScreening,
+	"SelectFundManager":              GroupScreening,
+	"SelectConvertibleBond":          GroupScreening,
+	"SelectFundCompany":              GroupScreening,
+	"SelectFund":                     GroupScreening,
+	"SelectFuturesOption":            GroupScreening,
+	"SelectHKStock":                  GroupScreening,
+	"SelectUSStock":                  GroupScreening,
+	"SearchBk":                       GroupScreening,
+	"SearchETF":                      GroupScreening,
+	"HotStrategyTable":               GroupScreening,
+	"HotStockTable":                  GroupScreening,
+	"GetStockMoneyData":              GroupMoneyFlow,
+	"GetMutualTop10Deal":             GroupMoneyFlow,
+	"GetStockHistoryMoneyData":       GroupMoneyFlow,
+	"GetIndustryMoneyRank":           GroupMoneyFlow,
+	"QueryStockNewsTool":             GroupNewsResearch,
+	"GetNewsListData":                GroupNewsResearch,
+	"GetStockResearchReport":         GroupNewsResearch,
+	"GetIndustryResearchReport":      GroupNewsResearch,
+	"GetSecuritiesCompanyOpinion":    GroupNewsResearch,
+	"StockNotice":                    GroupNewsResearch,
+	"GetStockNotice":                 GroupNewsResearch,
+	"InteractiveAnswer":              GroupNewsResearch,
+	"GetInvestCalendar":              GroupNewsResearch,
+	"GetLongTigerList":               GroupNewsResearch,
+	"GetHotStockList":                GroupNewsResearch,
+	"GetHotEventList":                GroupNewsResearch,
+	"GetUplimitLadder":               GroupNewsResearch,
+	"GetUplimitHotPlates":            GroupNewsResearch,
+	"GetUplimitHotStocks":            GroupNewsResearch,
+	"GetUplimitExplodedStocks":       GroupNewsResearch,
+	"GetUplimitPlateStocks":          GroupNewsResearch,
+	"GetWallstreetcnLives":           GroupNewsResearch,
+	"GetWallstreetcnMarketReal":      GroupMarket,
+	"GetWallstreetcnKline":           GroupMarket,
+	"GetWallstreetcnCalendar":        GroupNewsResearch,
+	"AiRecommendStocks":              GroupAIAnalysis,
+	"GetAIAnalysisHistory":           GroupAIAnalysis,
+	"GetAIAnalysisDetail":            GroupAIAnalysis,
+	"GetAIAnalysisContent":           GroupAIAnalysis,
+	"SetTradingPrice":                GroupOperations,
+	"SendDingDingMessage":            GroupOperations,
+	"SendToDingDing":                 GroupOperations,
+	"SearchFund":                     GroupOperations,
+	"GetFundInfo":                    GroupOperations,
+	"GetEconomicData":                GroupOperations,
 }
 
 type groupKeywords struct {
@@ -278,9 +249,7 @@ func ClassifyQuestion(question string) map[ToolGroup]bool {
 	matched := map[ToolGroup]bool{
 		GroupBase: true,
 	}
-
 	lowerQ := strings.ToLower(question)
-
 	for _, gk := range groupKeywordsList {
 		for _, kw := range gk.keywords {
 			if strings.Contains(lowerQ, strings.ToLower(kw)) {
@@ -289,7 +258,6 @@ func ClassifyQuestion(question string) map[ToolGroup]bool {
 			}
 		}
 	}
-
 	if len(matched) <= 1 {
 		for _, g := range []ToolGroup{
 			GroupStockAnalysis, GroupMarket, GroupNewsResearch,
@@ -297,19 +265,13 @@ func ClassifyQuestion(question string) map[ToolGroup]bool {
 			matched[g] = true
 		}
 	}
-
 	return matched
 }
 
-func FilterToolsByGroups(allTools []tool.BaseTool, groups map[ToolGroup]bool) []tool.BaseTool {
-	var filtered []tool.BaseTool
+func FilterToolsByGroups(allTools []tools.Tool, groups map[ToolGroup]bool) []tools.Tool {
+	var filtered []tools.Tool
 	for _, t := range allTools {
-		info, err := t.Info(nil)
-		if err != nil {
-			filtered = append(filtered, t)
-			continue
-		}
-		group, exists := toolGroupMap[info.Name]
+		group, exists := toolGroupMap[t.Name()]
 		if !exists || groups[group] {
 			filtered = append(filtered, t)
 		}

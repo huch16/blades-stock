@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -9,16 +8,16 @@ import (
 	"strings"
 	"time"
 
+	"go-stock/backend/agent/types"
 	"go-stock/backend/data"
 	"go-stock/backend/db"
 	"go-stock/backend/logger"
 	"go-stock/backend/models"
 	"go-stock/backend/util"
 
-	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/schema"
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/random"
+	bladesTools "github.com/go-kratos/blades/tools"
 	fakeUserAgent "github.com/lib4u/fake-useragent"
 	"github.com/tidwall/gjson"
 )
@@ -26,30 +25,16 @@ import (
 type DataToolWrapper struct {
 	name        string
 	description string
-	params      map[string]*schema.ParameterInfo
+	params      map[string]*types.ParamDef
 	handler     func(args string) (string, error)
 }
 
-func NewDataToolWrapper(name, description string, params map[string]*schema.ParameterInfo, handler func(args string) (string, error)) *DataToolWrapper {
-	return &DataToolWrapper{
-		name:        name,
-		description: description,
-		params:      params,
-		handler:     handler,
-	}
+func NewDataToolWrapper(name, description string, params map[string]*types.ParamDef, handler func(args string) (string, error)) bladesTools.Tool {
+	return types.NewTool(name, description, params, handler)
 }
 
-func (t *DataToolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
-	return &schema.ToolInfo{
-		Name:        t.name,
-		Desc:        t.description,
-		ParamsOneOf: schema.NewParamsOneOfByParams(t.params),
-	}, nil
-}
-
-func (t *DataToolWrapper) InvokableRun(ctx context.Context, argumentsInJSON string, opts ...tool.Option) (string, error) {
-	logger.SugaredLogger.Infof("Tool %s called with args: %s", t.name, argumentsInJSON)
-	return t.handler(argumentsInJSON)
+func (t *DataToolWrapper) toTool() bladesTools.Tool {
+	return types.NewTool(t.name, t.description, t.params, t.handler)
 }
 
 func thsResultToMarkdown(res map[string]any, title string) string {
@@ -99,17 +84,17 @@ func thsResultToMarkdown(res map[string]any, title string) string {
 	}
 
 	jsonData, _ := json.Marshal(*table)
-	markdownTable, _ := JSONToMarkdownTable(jsonData)
+	markdownTable, _ := data.JSONToMarkdownTable(jsonData)
 	return "\r\n### " + title + "：\r\n" + markdownTable + "\r\n"
 }
 
-func GetAllDataTools() []tool.BaseTool {
-	var tools []tool.BaseTool
+func GetAllDataTools() []bladesTools.Tool {
+	var result []bladesTools.Tool
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"FilterStocks",
 		"根据技术指标或者关注排名或者连涨/连跌跌天数筛选股票。支持多种K线形态和技术指标条件筛选，如MACD金叉、KDJ金叉、均线排列、K线形态，人气，关注排名，连涨/连跌跌天数等。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"keyword": {
 				Type:     "string",
 				Desc:     "股票名称或代码关键词搜索（可选）",
@@ -392,10 +377,10 @@ func GetAllDataTools() []tool.BaseTool {
 			return summary + "\n\n" + util.MarkdownTableWithTitle("股票筛选结果", rows), nil
 		},
 	))
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SearchStockByIndicators",
 		"根据自然语言筛选股票。可以使用K线形态、技术指标、财务指标等条件选股。可以查询股票常用的指标，如均线，kdj,rsi,boll，macd等。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"words": {
 				Type:     "string",
 				Desc:     "选股条件描述，支持K线形态、技术指标、财务指标、均线、kdj、rsi、boll、macd等。",
@@ -410,10 +395,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SearchBk",
 		"根据自然语言查询板块/概念/指数整体数据。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"words": {
 				Type:     "string",
 				Desc:     "板块/概念/指数查询条件描述。",
@@ -428,10 +413,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SearchETF",
 		"根据自然语言查询ETF数据。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"words": {
 				Type:     "string",
 				Desc:     "ETF查询条件描述。",
@@ -446,10 +431,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"InteractiveAnswer",
 		"获取投资者与上市公司互动问答的数据",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"page": {
 				Type:     "string",
 				Desc:     "分页号",
@@ -484,10 +469,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockResearchReport",
 		"获取市场分析师的股票研究报告。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码",
@@ -515,20 +500,20 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"HotStrategyTable",
 		"获取当前热门选股策略",
-		map[string]*schema.ParameterInfo{},
+		map[string]*types.ParamDef{},
 		func(args string) (string, error) {
 			result := data.NewSearchStockApi("").HotStrategyTable()
 			return result, nil
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"HotStockTable",
 		"当前热门股票排名",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"pageSize": {
 				Type:     "string",
 				Desc:     "分页大小",
@@ -549,10 +534,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockMoneyData",
 		"今日股票资金流入排名",
-		map[string]*schema.ParameterInfo{},
+		map[string]*types.ParamDef{},
 		func(args string) (string, error) {
 			res := data.NewStockDataApi().GetStockMoneyData()
 			md := util.MarkdownTableWithTitle("今日个股资金流向Top50", res.Data.Diff)
@@ -560,10 +545,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetMutualTop10Deal",
 		"获取北向资金/南向资金十大成交股数据",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"mutualType": {
 				Type:     "string",
 				Desc:     "通道类型：001=沪股通，002=港股通(沪)，003=深股通，004=港股通(深)",
@@ -603,10 +588,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockFinancialInfo",
 		"获取股票财务报表信息",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码，如：601138.SH",
@@ -621,10 +606,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockHolderNum",
 		"获取股票股东人数信息",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码，如：601138.SH",
@@ -639,10 +624,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockHistoryMoneyData",
 		"获取股票历史资金流向数据",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码，如：601138.SH",
@@ -657,10 +642,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockRZRQInfo",
 		"获取股票融资融券信息",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码",
@@ -675,10 +660,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetIndustryValuation",
 		"获取行业/板块平均估值和中值",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"bkName": {
 				Type:     "string",
 				Desc:     "行业/板块名称，如：半导体",
@@ -693,10 +678,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetNewsListData",
 		"获取新闻资讯",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"startTime": {
 				Type:     "string",
 				Desc:     "开始时间（如：2026-02-23 00:00:00）",
@@ -754,10 +739,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GlobalStockIndexesReadable",
 		"获取全球主要指数概览",
-		map[string]*schema.ParameterInfo{},
+		map[string]*types.ParamDef{},
 		func(args string) (string, error) {
 			result := data.NewMarketNewsApi().GlobalStockIndexesReadable(30)
 			if result == "" {
@@ -767,10 +752,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"StockNotice",
 		"获取上市公司公告列表",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stock_list": {
 				Type:     "string",
 				Desc:     "股票代码，多只用英文逗号分隔",
@@ -814,10 +799,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetSecuritiesCompanyOpinion",
 		"获取券商/机构的市场分析观点",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"startDate": {
 				Type:     "string",
 				Desc:     "开始时间（如：2026-02-23）",
@@ -841,10 +826,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetCurrentTime",
 		"获取当前本地时间（含星期几）及全球市场开盘状态",
-		map[string]*schema.ParameterInfo{},
+		map[string]*types.ParamDef{},
 		func(args string) (string, error) {
 			now := time.Now()
 			weekday := data.WeekdayCN(now.Weekday())
@@ -853,19 +838,19 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetMarketData",
 		"获取市场行情数据，包括指数行情、上涨/下跌/涨停/跌停家数、涨跌分布和今日申购信息",
-		map[string]*schema.ParameterInfo{},
+		map[string]*types.ParamDef{},
 		func(args string) (string, error) {
 			return getMarketDataContent()
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"AiRecommendStocks",
 		"获取近期AI分析/推荐股票明细列表",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"startDate": {
 				Type:     "string",
 				Desc:     "开始时间",
@@ -934,10 +919,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetAIAnalysisHistory",
 		"查询历史AI分析报告。可以根据股票代码、股票名称、问题关键词、日期范围等条件筛选历史AI分析记录。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码筛选（可选）",
@@ -1044,10 +1029,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetAIAnalysisDetail",
 		"根据ID获取历史AI分析报告的详细内容",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"id": {
 				Type:     "integer",
 				Desc:     "分析报告ID",
@@ -1081,10 +1066,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetAIAnalysisContent",
 		"根据股票代码获取最新的AI分析报告内容。直接返回该股票最近一次AI分析的完整内容。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码，如：600519.SH、000001.SZ",
@@ -1116,10 +1101,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SendDingDingMessage",
 		"发送消息到钉钉机器人",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"message": {
 				Type:     "string",
 				Desc:     "要发送的消息内容，支持 Markdown 格式",
@@ -1136,10 +1121,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SendToDingDing",
 		"将指定标题和内容以 Markdown 形式发送到钉钉机器人",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"title": {
 				Type:     "string",
 				Desc:     "消息标题，会显示为「go-stock {title}」",
@@ -1162,10 +1147,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockKLine",
 		"获取股票日K线数据。支持一次查询多只。数据源优先级：通达信MAC→东方财富→新浪→腾讯→通达信。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"days": {
 				Type:     "string",
 				Desc:     "日K数据条数",
@@ -1227,10 +1212,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetEastMoneyKLine",
 		"获取股票 K 线数据。支持日/周/月/季/年 K 线及 1/5/15/30/60 分钟线，可选前复权或后复权。A股数据源优先级：通达信MAC→东方财富→新浪→腾讯→通达信。港股走东方财富。股票代码格式：A股 000001.SZ、600000.SH，港股 00700.HK 等。支持一次查询多只。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码。A股如 000001.SZ、600000.SH；港股如 00700.HK。多只时可用英文逗号分隔。",
@@ -1292,10 +1277,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetEastMoneyKLineWithMA",
 		"获取股票 K 线数据并带多条均线（SMA，按收盘价计算）。用于技术分析时同时查看 K 线与均线。A股数据源优先级：通达信MAC→东方财富→新浪→腾讯→通达信。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码。A股如 000001.SZ、600000.SH；港股如 00700.HK。多只时可用英文逗号分隔。",
@@ -1357,10 +1342,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"CreateAiRecommendStocks",
 		"创建/保存AI推荐股票记录",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"modelName": {
 				Type:     "string",
 				Desc:     "模型名称",
@@ -1454,18 +1439,18 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"BatchCreateAiRecommendStocks",
 		"批量创建/保存AI推荐股票记录，建议每次批量保存5条记录",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stocks": {
 				Type:     "array",
 				Desc:     "股票推荐列表",
 				Required: true,
-				ElemInfo: &schema.ParameterInfo{
+				ElemInfo: &types.ParamDef{
 					Type:     "object",
 					Required: true,
-					SubParams: map[string]*schema.ParameterInfo{
+					SubParams: map[string]*types.ParamDef{
 						"modelName": {
 							Type:     "string",
 							Desc:     "模型名称",
@@ -1563,10 +1548,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SetTradingPrice",
 		"设置股票的预警价位线（开仓价、止盈价、止损价），用于设置股票的买入价格和风险控制参数",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码，如 000001.SZ、600000.SH",
@@ -1607,10 +1592,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SearchFund",
 		"搜索基金信息，支持按基金代码或名称模糊搜索",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"keyword": {
 				Type:     "string",
 				Desc:     "搜索关键词（基金代码或名称）",
@@ -1653,10 +1638,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetFundInfo",
 		"获取基金详细信息，包括净值、涨跌幅、评级等",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"fundCode": {
 				Type:     "string",
 				Desc:     "基金代码，如 000001",
@@ -1714,10 +1699,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetFundKLine",
 		"获取基金K线数据，支持多周期(日K/周K/月K/年K等)。场内基金(ETF/LOF)使用4层数据源fallback，场外基金从东方财富历史净值接口获取",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"fundCode": {
 				Type:     "string",
 				Desc:     "基金代码，如 510050(场内ETF)、000001(场外基金)",
@@ -1786,10 +1771,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetFundHistoryNetValue",
 		"获取基金历史净值数据。场外基金从东方财富API获取，场内基金(ETF/LOF)从K线收盘价换算",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"fundCode": {
 				Type:     "string",
 				Desc:     "基金代码，如 000001",
@@ -1857,10 +1842,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetFundTop10Holdings",
 		"获取基金前十大重仓持股信息，包括股票代码、名称、持仓占比、实时股价和涨跌幅",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"fundCode": {
 				Type:     "string",
 				Desc:     "基金代码，如 000001",
@@ -1910,10 +1895,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetFollowedStocks",
 		"获取用户关注/自选的股票列表",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"groupId": {
 				Type:     "integer",
 				Desc:     "股票分组ID，不传则返回所有关注/自选的股票",
@@ -1962,10 +1947,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockInfo",
 		"获取股票详细信息，包括实时行情、基本信息等",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码(（A股：sh,sz开头;港股hk开头,美股：us开头）)，支持多个股票代码，用逗号分隔",
@@ -2012,10 +1997,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetHotStockList",
 		"获取雪球热门股票排行榜",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"marketType": {
 				Type:     "string",
 				Desc:     "市场类型：全球(10)、沪深(12)、港股(13)、美股(11)",
@@ -2071,10 +2056,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetHotEventList",
 		"获取雪球热门话题/事件",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"size": {
 				Type:     "integer",
 				Desc:     "返回条数，默认20",
@@ -2109,10 +2094,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetIndustryMoneyRank",
 		"获取行业资金流向排名（按行业分类）",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"fenlei": {
 				Type:     "string",
 				Desc:     "行业分类：0=所有行业, 1=行业分类, 2=概念板块, 3=地域板块",
@@ -2174,10 +2159,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetLongTigerList",
 		"获取龙虎榜数据（营业部排行榜）",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期，格式：2026-03-28",
@@ -2225,10 +2210,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetEconomicData",
 		"获取宏观经济数据，包括GDP、CPI、PPI、PMI等",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"dataType": {
 				Type:     "string",
 				Desc:     "数据类型：gdp=国内生产总值, cpi=居民消费价格指数, ppi=工业生产者出厂价格指数, pmi=采购经理指数",
@@ -2340,10 +2325,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetInvestCalendar",
 		"获取投资日历，包括财报发布、股东大会、IPO等重要日期事件",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"yearMonth": {
 				Type:     "string",
 				Desc:     "年月，格式：2026-03",
@@ -2391,10 +2376,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockNotice",
 		"获取个股公告信息",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCodes": {
 				Type:     "string",
 				Desc:     "股票代码列表，逗号分隔，如：600519,000001",
@@ -2432,10 +2417,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockMinuteData",
 		"获取股票分时数据（当日分钟级成交量和价格）",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码，如：600519.SH",
@@ -2473,10 +2458,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockConceptInfo",
 		"获取股票的概念板块信息，包括概念名称、成分股数量等",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码，如：600519",
@@ -2512,7 +2497,7 @@ func GetAllDataTools() []tool.BaseTool {
 	//tools = append(tools, NewDataToolWrapper(
 	//	"WebSearch",
 	//	"联网搜索工具，支持搜索最新财经新闻、股票资讯、市场动态等信息。使用此工具获取实时网络数据。",
-	//	map[string]*schema.ParameterInfo{
+	//	map[string]*types.ParamDef{
 	//		"query": {
 	//			Type:     "string",
 	//			Desc:     "搜索关键词/问题，如：茅台最新股价、A股今日行情、人工智能板块最新消息",
@@ -2542,7 +2527,7 @@ func GetAllDataTools() []tool.BaseTool {
 	//tools = append(tools, NewDataToolWrapper(
 	//	"SearchParams",
 	//	"联网搜索股票技术指标参数、财务参数、API参数等的工具，用于查询指标的计算公式、参数设置和用法说明。",
-	//	map[string]*schema.ParameterInfo{
+	//	map[string]*types.ParamDef{
 	//		"paramName": {
 	//			Type:     "string",
 	//			Desc:     "参数/指标名称，如：MACD、RSI、布林带、PE、PB等技术指标或财务指标名称",
@@ -2577,10 +2562,10 @@ func GetAllDataTools() []tool.BaseTool {
 	//	},
 	//))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockChanges",
 		"获取股票异动数据，包括火箭发射、快速反弹、大笔买入、封涨停板、加速下跌、高台跳水、大笔卖出、封跌停板等异动类型。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"changeTypes": {
 				Type:     "string",
 				Desc:     "异动类型，多个用逗号分隔：火箭发射=8201,快速反弹=8202,大笔买入=8193,封涨停板=4,打开跌停板=32,有大买盘=64,竞价上涨=8207,高开5日线=8209,向上缺口=8211,60日新高=8213,60日大幅上涨=8215,加速下跌=8204,高台跳水=8203,大笔卖出=8194,封跌停板=8,打开涨停板=16,有大卖盘=128,竞价下跌=8208,低开5日线=8210,向下缺口=8212,60日新低=8214,60日大幅下跌=8216。默认查询火箭发射、快速反弹、大笔买入、封涨停板、加速下跌、高台跳水、大笔卖出、封跌停板",
@@ -2623,10 +2608,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetStockChangeHistoryList",
 		"查询股票异动历史记录。可以根据股票代码、股票名称、异动类型、日期范围、成交量、金额、涨跌幅、行业、概念等条件筛选历史异动数据。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码筛选（可选），支持模糊匹配",
@@ -2797,10 +2782,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetDailyChangeStats",
 		"获取近N日每日异动统计趋势，包括每天的上涨异动数、下跌异动数、封涨停数、封跌停数和总异动数。用于分析市场异动活跃度的变化趋势。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"days": {
 				Type:     "integer",
 				Desc:     "查询天数，如7表示近7日，30表示近30日，默认30",
@@ -2842,10 +2827,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetChangeRank",
 		"获取异动次数排行榜，支持按股票、行业、概念三个维度排名，区分利好异动（封涨停板、火箭发射、快速反弹等）和利空异动（封跌停板、高台跳水、加速下跌等）。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"days": {
 				Type:     "integer",
 				Desc:     "查询天数，1=当日，3=近3日，5=近5日，10=近10日，默认1",
@@ -2928,10 +2913,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetDailyDimensionStats",
 		"按维度查询近N日每日异动趋势，支持按股票、行业、概念、异动类型四个维度查询，返回每天的利好异动数、利空异动数和总异动数。用于分析某个股票/行业/概念/异动类型在一段时间内的异动变化趋势。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"dimension": {
 				Type:     "string",
 				Desc:     "查询维度：stock=按股票，industry=按行业，concept=按概念，type=按异动类型",
@@ -2986,10 +2971,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetTypeStatsByDate",
 		"查询某一天的异动类型分布统计，返回该天每种异动类型的利好/利空次数和总次数。用于分析某天的市场异动结构。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期，格式：YYYY-MM-DD，如2025-04-13",
@@ -3027,10 +3012,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryIwencai",
 		"同花顺问财行情数据查询。支持自然语言查询股票、ETF、指数等实时价格、涨跌幅、成交量、主力资金流向、大小单、技术指标等行情数据。当用户询问股票价格、ETF行情、指数行情、涨跌幅、成交量、资金流向、技术指标等行情数据查询问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：同花顺最新价格、主力资金流向、上证指数行情、连续涨停的股票等",
@@ -3065,10 +3050,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SearchReport",
 		"研报搜索。搜索主流投研机构发布的研究报告，获取专业分析逻辑、投资评级、目标价等重要投研决策信息。当用户询问研究报告、研报、投资评级、目标价、行业分析报告、公司深度分析等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "搜索关键词，如：人工智能行业研究报告、特斯拉投资评级、芯片行业深度分析等",
@@ -3085,10 +3070,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryInsResearch",
 		"机构研究与评级查询。查询研报评级、业绩预测、ESG评级、信用评级、主体评级、基金评级、券商金股等机构观点数据。支持自然语言问句输入。当用户询问研报评级、业绩预测、ESG评级、信用评级、主体评级、基金评级、券商金股等机构研究数据时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：同花顺研报评级、业绩预测、券商金股、ESG评级等",
@@ -3123,10 +3108,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryZhishu",
 		"指数数据查询。查询上证指数、沪深300、创业板指、恒生指数、纳斯达克指数等指数行情数据，支持涨跌幅、成交量、点位等指标查询。当用户询问指数数据、上证指数、沪深300、创业板指、恒生指数、纳斯达克指数、指数行情、指数涨跌幅、指数点位等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：上证指数涨跌幅、沪深300最新点位、创业板指成交量等",
@@ -3161,10 +3146,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryEvent",
 		"事件数据查询。查询个股业绩预告、增发配股、股权质押、限售解禁、机构调研、监管函、股东大会等事件数据。当用户询问业绩预告、增发配股、股权质押、限售解禁、机构调研、监管函等事件数据时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：同花顺业绩预告、最近的增发配股、机构调研记录等",
@@ -3199,10 +3184,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SearchNews",
 		"财经新闻搜索。搜索财经领域新闻资讯，覆盖官媒、主流财经媒体、垂直行业网站等，帮助了解最新财经事件、政策动态、行业革新、企业业务进展。当用户询问财经新闻、最新动态、政策变化、行业趋势等新闻资讯问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "搜索关键词，如：人工智能最新动态、央行货币政策、芯片行业新闻等",
@@ -3219,10 +3204,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SearchInvestor",
 		"投资者关系活动搜索。搜索上市公司投资者关系活动记录，包括业绩说明会、路演活动、投资者调研、分析师会议等投关活动信息，获取公司管理层对业务发展、战略规划、行业前景等关键问题的回应。当用户询问投资者关系活动、业绩说明会、路演、投资者调研、分析师会议、投关活动等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "搜索关键词，如：贵州茅台投资者关系活动、宁德时代业绩说明会、芯片行业投资者调研等",
@@ -3239,10 +3224,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectAStock",
 		"A股智能选股。通过自然语言查询进行A股股票筛选，支持行情指标（股价、涨跌幅、成交量等）、技术形态（均线多头、突破新高、K线形态等）、财务指标（营收、利润、PE、PB等）、行业概念（科技、医药、消费等）等多条件组合筛选。当用户需要进行股票筛选、选股、条件选股时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言选股条件，如：今日涨跌幅超过5%的A股、均线多头的科技股、PE小于20且营收增长超过30%的股票等",
@@ -3277,10 +3262,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryMacro",
 		"宏观数据查询。查询GDP、CPI、PPI、利率、汇率、社融、M2、PMI、工业增加值、消费、投资、进出口等宏观经济指标数据。当用户询问宏观经济数据、GDP、CPI、PPI、利率、汇率、社融、M2、PMI等宏观经济指标时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：2024年中国GDP、最近一期CPI、LPR利率、M2增速等",
@@ -3315,10 +3300,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectSector",
 		"板块智能筛选。通过自然语言查询筛选市场板块，支持行业估值（PE、PB、估值分位等）、资金流向（主力资金净流入、北向资金等）、涨跌幅、板块类型（行业板块、概念板块、地域板块等）、成交量等多条件组合筛选。当用户需要进行板块筛选、选板块、板块排行时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：今日涨幅最大的板块、主力资金净流入的板块、PE最低的行业板块等",
@@ -3353,10 +3338,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryBasicInfo",
 		"基本资料查询。查询全品类标的（股票、指数、基金、期货、期权、转债、债券、理财、保险等）的基础信息、发行主体、机构资料、费率、上市地点、上市日期等静态信息。当用户询问股票基本信息、基金资料、期货合约信息、债券资料、费率信息、上市日期等基本资料时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：同花顺上市日期、基金费率、期货合约详情、可转债基本信息等",
@@ -3391,10 +3376,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryFinance",
 		"财务数据查询。查询全市场个股营业收入、净利润、毛利率、净利率、ROE、ROA、负债率、现金流、市盈率、市净率、市销率等财务指标。当用户询问股票财务指标、营业收入、净利润、ROE、负债率、现金流、毛利率、净利率等财务数据时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：同花顺营业收入、ROE最高的股票、负债率最低的行业等",
@@ -3429,10 +3414,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryIndustry",
 		"行业数据查询。查询行业估值、行业财务指标、行业盈利数据、行业行情数据、板块排名等行业维度数据，支持自然语言问句输入。当用户询问行业数据、行业估值、行业排名、行业财务、行业盈利、行业行情、板块排名等行业相关问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：A股行业估值排名、银行业盈利数据、新能源板块行情等",
@@ -3467,10 +3452,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryFutures",
 		"期货期权数据查询。查询期货期权的行情数据（价格、涨跌幅、成交量等）、波动率数据（隐含波动率、历史波动率等）、产销数据（库存、产量、销量等）、会员持仓数据（持仓量、持仓变化等）、会员榜单数据（成交量排行、持仓量排行等）、行权数据（行权价、行权量等）。当用户询问期货行情、期权波动率、期货持仓、期货产销、会员持仓、行权等期货期权数据时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：沪铜期货最新行情、50ETF期权隐含波动率、螺纹钢期货会员持仓排名等",
@@ -3505,10 +3490,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectETF",
 		"ETF智能筛选。通过自然语言查询筛选ETF，支持行情指标（价格、涨跌幅、成交量、换手率等）、跟踪指数（沪深300、中证500、上证50、创业板指等）、基本面（估值、费率、跟踪误差等）、规模（资产规模、份额变化等）、风格类型（成长、价值、平衡等）多条件组合筛选。当用户需要筛选ETF、选ETF、查询ETF时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：沪深300ETF有哪些、规模最大的ETF、创业板ETF等",
@@ -3543,10 +3528,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryManagement",
 		"公司股东股本查询。查询股本结构（总股本、流通股本、限售股本等）、股权结构、股东户数、前十大股东/流通股东、主要持有人、实控人信息、股权质押情况、高管信息（董事会、监事会、高管团队等）。当用户询问股本结构、股东户数、前十大股东、实控人、股权质押、高管等股东股本数据时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：同花顺股本结构、前十大股东、实控人信息、股东户数变化等",
@@ -3581,10 +3566,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryStockConnect",
 		"沪深港通资金流查询。查询北向资金（沪股通、深股通）和南向资金（港股通）的净流入流出、个股资金流向、板块资金配置、北向持股变动、AH溢价指数等沪深港通资金流数据。当用户询问北向资金、南向资金、沪深港通、沪股通、深股通、港股通、外资流入、AH溢价等资金流问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：今日北向资金净流入、沪深港通个股资金流向、北向持股变动、AH溢价指数等",
@@ -3619,10 +3604,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SearchAnnouncement",
 		"公告搜索。搜索A股、港股、基金、ETF等金融标的公告，公告类型包括定期财务报告、分红派息、回购增持、资产重组等。当用户询问公司公告、分红公告、回购公告、重组公告、定期报告等公告信息时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "搜索关键词，如：贵州茅台分红公告、宁德时代回购公告、资产重组公告等",
@@ -3639,10 +3624,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectFundManager",
 		"智能选基金经理。根据历史业绩、管理规模、投资风格、风险控制等维度筛选公募基金经理，返回符合条件的相关基金经理数据。当用户询问基金经理筛选、基金经理排名、基金经理业绩等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：管理规模最大的基金经理、近三年业绩最好的基金经理、投资风格偏价值的基金经理等",
@@ -3677,10 +3662,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectConvertibleBond",
 		"智能选可转债。通过转股溢价率、正股表现、评级、剩余期限等多条件组合筛选可转债，返回符合条件的相关可转债数据。当用户询问可转债筛选、可转债溢价率、可转债评级等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：转股溢价率低于10%的可转债、AAA级可转债、剩余期限3年内的可转债等",
@@ -3715,10 +3700,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectFundCompany",
 		"智能选基金公司。根据管理规模、旗下产品业绩、投研实力、风险评级等维度筛选公募基金公司，返回符合条件的相关基金公司数据。当用户询问基金公司筛选、基金公司排名、基金公司规模等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：规模最大的基金公司、业绩最好的基金公司、头部基金公司等",
@@ -3753,10 +3738,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectFund",
 		"智能选基金。根据基金类型、业绩、基金经理、风险、持仓、资产配置等维度筛选公募基金，返回符合条件的相关基金数据。当用户询问基金筛选、选基金、基金排名等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：股票型基金有哪些、近一年收益率最高的基金、百亿规模基金等",
@@ -3791,10 +3776,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectFuturesOption",
 		"智能选期货期权。通过行情、波动率、产销、会员持仓、会员榜单、行权等多条件组合筛选期货期权，返回符合条件的相关期货期权数据。当用户询问期货筛选、期权筛选、期货期权组合等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：原油期货有哪些、黄金期货行情、多头持仓的期货等",
@@ -3829,10 +3814,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectHKStock",
 		"智能选港股。通过自然语言查询进行港股筛选，支持行情指标、财务指标、行业概念、陆港通等多条件组合筛选，返回符合条件的相关港股数据。当用户询问港股筛选、选港股、港股排行等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：港股科技股有哪些、港股银行股、北向资金增持的港股等",
@@ -3867,10 +3852,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"SelectUSStock",
 		"智能选美股。通过自然语言查询进行美股筛选，支持行情指标、财务指标、行业概念、业绩预测、研报评级等多条件组合筛选，返回符合条件的相关美股数据。当用户询问美股筛选、选美股、美股排行等问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言筛选条件，如：美股科技股有哪些、评级买入的美股、美股市盈率低于20等",
@@ -3905,10 +3890,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryFundFinance",
 		"基金理财查询。对基金做业绩、持仓、风险、评级、获奖、基金经理、基金公司综合分析，支持自然语言问句输入，返回相关基金理财数据结果。当用户询问基金查询、基金业绩、基金持仓、基金风险、基金评级、基金获奖、基金经理、基金公司分析等基金理财相关问题时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：业绩最好的基金有哪些、基金持仓明细、基金风险评级等",
@@ -3943,10 +3928,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"QueryBusinessData",
 		"公司经营数据查询。查询主营业务构成、主要客户、供应商、参控股公司、股权投资、重大合同等经营相关数据，支持自然语言问句输入，返回相关经营数据结果。当用户询问主营业务构成、主要客户、供应商信息、参控股公司、股权投资、重大合同等经营数据时使用此工具。数据来源于同花顺问财。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询语句，如：同花顺主营业务构成、主要客户、供应商信息、参控股公司等",
@@ -3981,10 +3966,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"StockEarningsReview",
 		"个股业绩点评。获取上市公司业绩点评报告，包含营收分析、利润分析、财务指标解读等深度内容。支持沪深京港美市场股票。当用户询问个股业绩点评、财报分析、业绩报告、营收利润分析等问题时使用此工具。数据来源于东方财富AI。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "股票名称或代码，如：贵州茅台、600519、宁德时代等",
@@ -4007,10 +3992,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"FinancialQA",
 		"金融智能问答。基于东方财富权威金融数据库，覆盖数据查询、资讯搜索、宏观分析、选股选基、金融百科、市场分析、热点解读等全链条智能问答服务。支持标准模式和深度思考模式。当用户提出自然语言金融问题，如'帮我查一下'、'分析一下'、'选股'、'XX怎么样'、'XX是什么'、'最新政策'、'宏观数据'等问答类请求时使用此工具。数据来源于东方财富AI。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"question": {
 				Type:     "string",
 				Desc:     "用户自然语言问题，如：今天A股市场表现如何、贵州茅台最新估值、近三年ROE最高的消费股有哪些等",
@@ -4033,10 +4018,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"IndustryResearch",
 		"行业研究报告生成。根据行业关键词生成深度行业研究报告，包含行业概况、市场规模、竞争格局、发展趋势、投资建议等内容。当用户要求生成行业研究报告、行业深度分析、产业分析、行业趋势分析等时使用此工具。数据来源于东方财富AI。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "行业关键词，如：半导体、新能源汽车、AI芯片、消费电子等",
@@ -4053,10 +4038,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"TrackingReport",
 		"个股/行业跟踪报告。根据用户输入的股票或行业关键词，生成跟踪报告，包含最新动态、核心观点、关键指标变化、重要事件梳理等内容。支持A股、港股、美股及行业板块。当用户要求生成跟踪报告、最新动态跟踪、个股跟踪、行业跟踪等时使用此工具。数据来源于东方财富AI。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "股票名称/代码或行业关键词，如：贵州茅台、600519、半导体行业等",
@@ -4073,10 +4058,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"FinanceDataQuery",
 		"金融数据查询。基于东方财富数据库，支持自然语言查询金融结构化数据，覆盖A股、港股、美股、基金、债券等多种资产，包含实时行情、公司信息、估值指标、财务报表等。单次查询最多支持5个实体。当用户需要查询具体的金融数据、指标数值、财务数据、行情数据等结构化数据时使用此工具。数据来源于东方财富妙想。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言查询，如：贵州茅台最近一年的营业收入和净利润、沪深300当前点位和成交额、东方财富和拼多多最近一年的营收等",
@@ -4093,10 +4078,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"FinanceSearch",
 		"金融资讯搜索。基于东方财富数据库，支持自然语言搜索全网最新公告、研报、财经新闻、交易所动态及官方政策等，覆盖全球市场标的。适用于热点捕捉、舆情监控、研报速览、公告精读及投资决策等场景。当用户需要搜索最新金融资讯、新闻、公告、研报等文本类信息时使用此工具。数据来源于东方财富妙想。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "自然语言搜索查询，如：格力电器最新研报与公告、商业航天板块近期新闻、美联储加息对A股影响等",
@@ -4133,10 +4118,10 @@ func GetAllDataTools() []tool.BaseTool {
 
 	for _, t := range f10Tools {
 		tool := t
-		tools = append(tools, NewDataToolWrapper(
+		result = append(result, NewDataToolWrapper(
 			tool.name,
 			tool.desc,
-			map[string]*schema.ParameterInfo{
+			map[string]*types.ParamDef{
 				"stockCode": {
 					Type:     "string",
 					Desc:     tool.paramDesc,
@@ -4153,10 +4138,10 @@ func GetAllDataTools() []tool.BaseTool {
 		))
 	}
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"ComparableCompanyAnalysis",
 		"可比公司分析(东方财富妙想)。对指定公司进行可比公司分析，包括财务指标对比和估值对比，帮助判断公司相对估值水平。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
 				Desc:     "公司名称或股票代码，如：贵州茅台、东方财富",
@@ -4172,10 +4157,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"HotspotDiscovery",
 		"市场热点发现(东方财富妙想)。发现当前A股市场热点板块和题材，包括热点逻辑分析和相关个股。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"question": {
 				Type:     "string",
 				Desc:     "热点的自然语言描述，如：今日热点、新能源热点、AI概念热点",
@@ -4191,10 +4176,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetUplimitLadder",
 		"获取连板梯队数据，包括连板统计（各层级数量）和连板梯队详情（最高连板到首板各层级的股票列表，含代码、名称、封单比、成交额、市值、概念板块等）。适用于分析连板高度、市场情绪、龙头股识别等场景。当用户提到连板、梯队、连板高度、最高板等关键词时使用此工具。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期，格式：2026-04-17，默认今天",
@@ -4284,10 +4269,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetWallstreetcnLives",
 		"获取华尔街见闻实时快讯。支持全球7x24、A股、美股、港股、外汇、商品、黄金、原油、债券、加密货币等频道。数据来源：华尔街见闻(wallstreetcn.com)。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"channel": {
 				Type:     "string",
 				Desc:     "频道：global-channel=全球7x24, a-stock-channel=A股, us-stock-channel=美股, hk-stock-channel=港股, forex-channel=外汇, commodity-channel=商品, goldc-channel=黄金, oil-channel=原油, bond-channel=债券, crypto-channel=加密货币",
@@ -4312,10 +4297,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetWallstreetcnMarketReal",
 		"获取华尔街见闻全球实时行情报价。包含美元指数、欧元/美元、美元/日元、离岸人民币、现货黄金、WTI原油等品种。数据来源：华尔街见闻(wallstreetcn.com)。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"prodCodes": {
 				Type:     "string",
 				Desc:     "品种代码(逗号分隔)，可选：DXY.OTC=美元指数, EURUSD.OTC=欧元美元, USDJPY.OTC=美元日元, USDCNH.OTC=离岸人民币, XAUUSD.OTC=现货黄金, USCL.OTC=WTI原油。留空返回全部。",
@@ -4332,10 +4317,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetWallstreetcnKline",
 		"获取华尔街见闻K线数据。支持美元指数、外汇、黄金、原油等品种。数据来源：华尔街见闻(wallstreetcn.com)。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"prodCode": {
 				Type:     "string",
 				Desc:     "品种代码：DXY.OTC=美元指数, EURUSD.OTC=欧元美元, USDJPY.OTC=美元日元, USDCNH.OTC=离岸人民币, XAUUSD.OTC=现货黄金, USCL.OTC=WTI原油",
@@ -4369,10 +4354,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetWallstreetcnCalendar",
 		"获取华尔街见闻财经日历。包含全球重要经济数据公布时间、预期值、前值等。数据来源：华尔街见闻(wallstreetcn.com)。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"days": {
 				Type:     "integer",
 				Desc:     "查看未来几天内的财经日历，默认3天",
@@ -4388,10 +4373,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetUplimitHotPlates",
 		"获取涨停热门板块排名和接力主线数据，包括板块热度得分、涨停数、炸板数、接力主线板块等。适用于分析板块轮动、市场热点方向、主线题材等场景。当用户提到热门板块、板块热度、板块轮动、主线题材、接力板块等关键词时使用此工具。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期，格式：2026-04-17，默认今天",
@@ -4459,10 +4444,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetUplimitHotStocks",
 		"获取涨停个股热度排行数据，包括股票代码、名称、热度得分、概念板块等。适用于分析个股受关注程度、市场人气股、热门标的等场景。当用户提到个股热度、热门个股、人气股、关注度等关键词时使用此工具。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期，格式：2026-04-17，默认今天",
@@ -4528,10 +4513,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetUplimitExplodedStocks",
 		"获取炸板股数据，即曾经涨停但未能封住的股票列表，包括代码、名称、炸板时间、概念板块等。适用于分析封板失败、市场分歧、抛压较重等场景。当用户提到炸板、封板失败、开板、破板等关键词时使用此工具。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
 				Desc:     "查询日期，格式：2026-04-17，默认今天",
@@ -4588,10 +4573,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetUplimitPlateStocks",
 		"获取指定板块的涨停股详情，包括板块内所有涨停股票的代码、名称、连板数、封单比、成交额、市值、概念板块等。适用于深入分析某个板块的涨停个股情况。当用户想查看某个板块的涨停股明细时使用此工具，必须提供板块名称参数。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"plate_name": {
 				Type:     "string",
 				Desc:     "板块名称，如：人工智能、机器人、芯片等",
@@ -4680,10 +4665,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetTdxCompanyInfo",
 		"通过通达信协议获取股票F10公司资料，包括公司简介、股本结构、财务摘要、除权除息等完整信息。当东方财富F10接口不可用或需要补充数据时可使用此工具。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码,如：600519.SH。上海证券交易所股票以.SH结尾，深圳证券交易所股票以.SZ结尾，北交所股票以.BJ结尾。多只时可用英文逗号分隔。",
@@ -4749,10 +4734,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetTdxFinanceInfo",
 		"通过通达信协议获取股票财务信息，包括每股收益、总资产、净资产、营业收入、净利润、股东人数等核心财务指标。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码,如：600519.SH。上海证券交易所股票以.SH结尾，深圳证券交易所股票以.SZ结尾，北交所股票以.BJ结尾。多只时可用英文逗号分隔。",
@@ -4797,10 +4782,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetTdxXDXRInfo",
 		"通过通达信协议获取股票除权除息信息，包括分红、配股、送转股等历史记录及股本变动情况。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码,如：600519.SH。上海证券交易所股票以.SH结尾，深圳证券交易所股票以.SZ结尾，北交所股票以.BJ结尾。多只时可用英文逗号分隔。",
@@ -4844,10 +4829,10 @@ func GetAllDataTools() []tool.BaseTool {
 		},
 	))
 
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetTdxCompanyCategory",
 		"通过通达信协议获取股票F10分类信息。不传category参数时返回所有可用分类名称列表；传入category参数时返回该分类的详细内容。可用分类包括：最新提示、公司概况、财务分析、股本结构、股东研究、机构持股、分红融资、高管治理、资金动向、资本运作、热点题材、公司公告、公司报道、经营分析、行业分析、研报评级。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码,如：600519.SH。上海证券交易所股票以.SH结尾，深圳证券交易所股票以.SZ结尾，北交所股票以.BJ结尾。多只时可用英文逗号分隔。",
@@ -4892,10 +4877,10 @@ func GetAllDataTools() []tool.BaseTool {
 	))
 
 	// GetTdxSymbolBelongBoard - 通过通达信MAC接口获取股票所属板块信息
-	tools = append(tools, NewDataToolWrapper(
+	result = append(result, NewDataToolWrapper(
 		"GetTdxSymbolBelongBoard",
 		"通过通达信MAC接口获取股票所属板块信息，包括行业板块、概念板块、地域板块、风格板块等，以及板块指数、涨停/跌停家数等数据。",
-		map[string]*schema.ParameterInfo{
+		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
 				Desc:     "股票代码,如：600519.SH。上海证券交易所股票以.SH结尾，深圳证券交易所股票以.SZ结尾，北交所股票以.BJ结尾，港股以.HK结尾。多只时可用英文逗号分隔。",
@@ -4917,12 +4902,10 @@ func GetAllDataTools() []tool.BaseTool {
 	))
 
 	// 根据 API Key 配置过滤工具，未配置对应 Key 的工具不注册
-	filtered := make([]tool.BaseTool, 0, len(tools))
-	for _, t := range tools {
-		if wrapper, ok := t.(*DataToolWrapper); ok {
-			if !data.IsToolKeyConfigured(wrapper.name) {
-				continue
-			}
+	var filtered []bladesTools.Tool
+	for _, t := range result {
+		if !data.IsToolKeyConfigured(t.Name()) {
+			continue
 		}
 		filtered = append(filtered, t)
 	}

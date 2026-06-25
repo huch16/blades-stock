@@ -10,6 +10,7 @@ type ChatMemory struct {
 	SessionID string    `gorm:"index;size:64" json:"sessionId"`
 	Role      string    `gorm:"size:20" json:"role"`
 	Content   string    `gorm:"type:text" json:"content"`
+	Embedding []byte    `gorm:"type:blob" json:"-"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

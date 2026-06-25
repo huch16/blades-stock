@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -203,22 +202,20 @@ func (a *App) ChatWithAgent(question string, aiConfigId int, sysPromptId *int, m
 	for msg := range ch {
 		runtime.EventsEmit(a.ctx, "agent-message", agentMessageToFrontendMap(msg))
 	}
-	runtime.EventsEmit(a.ctx, "agent-message", agentMessageToFrontendMap(&schema.Message{
-		Role:    schema.Assistant,
+	runtime.EventsEmit(a.ctx, "agent-message", agentMessageToFrontendMap(&agent.StreamMessage{
+		Role:    "assistant",
 		Content: "agent-DONE",
 	}))
 }
 
-// agentMessageToFrontendMap 用标准 JSON 将 schema.Message 转为 map 再 EventsEmit，
-// 保证与 json 标签一致（如 reasoning_content、extra），避免 Wails 直接传结构体时前端字段名不一致。
-func agentMessageToFrontendMap(msg *schema.Message) map[string]any {
+func agentMessageToFrontendMap(msg *agent.StreamMessage) map[string]any {
 	if msg == nil {
 		return map[string]any{}
 	}
 	b, err := json.Marshal(msg)
 	if err != nil {
 		return map[string]any{
-			"role":              string(msg.Role),
+			"role":              msg.Role,
 			"content":           msg.Content,
 			"reasoning_content": msg.ReasoningContent,
 		}
@@ -226,7 +223,7 @@ func agentMessageToFrontendMap(msg *schema.Message) map[string]any {
 	var m map[string]any
 	if err := json.Unmarshal(b, &m); err != nil {
 		return map[string]any{
-			"role":              string(msg.Role),
+			"role":              msg.Role,
 			"content":           msg.Content,
 			"reasoning_content": msg.ReasoningContent,
 		}
