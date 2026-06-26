@@ -41,7 +41,7 @@ func (o *OpenAi) NewSummaryStockNewsStreamWithTools(userQuestion string, sysProm
 		if sysPromptId == nil || *sysPromptId == 0 {
 			sysPrompt = o.Prompt
 		} else {
-			sysPrompt = NewPromptTemplateApi().GetPromptTemplateByID(*sysPromptId)
+			sysPrompt = o.Prompt
 		}
 		if sysPrompt == "" {
 			sysPrompt = o.Prompt
@@ -181,7 +181,7 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 		if sysPromptId == nil || *sysPromptId == 0 {
 			sysPrompt = o.Prompt
 		} else {
-			sysPrompt = NewPromptTemplateApi().GetPromptTemplateByID(*sysPromptId)
+			sysPrompt = o.Prompt
 		}
 		if sysPrompt == "" {
 			sysPrompt = o.Prompt
@@ -324,7 +324,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 		if sysPromptId == nil || *sysPromptId == 0 {
 			sysPrompt = o.Prompt
 		} else {
-			sysPrompt = NewPromptTemplateApi().GetPromptTemplateByID(*sysPromptId)
+			sysPrompt = o.Prompt
 		}
 		if sysPrompt == "" {
 			sysPrompt = o.Prompt
@@ -522,7 +522,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
-			if tools != nil && len(tools) > 0 {
+			if len(tools) > 0 {
 				return
 			}
 			if checkIsIndexBasic(stock) {
@@ -601,7 +601,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			"content": question,
 		})
 
-		if tools != nil && len(tools) > 0 {
+		if len(tools) > 0 {
 			AskAiWithTools(o, errors.New(""), msg, ch, question, tools, thinking)
 		} else {
 			AskAi(o, errors.New(""), msg, ch, question, thinking)

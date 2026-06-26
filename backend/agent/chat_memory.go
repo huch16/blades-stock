@@ -2,9 +2,11 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"go-stock/backend/db"
 	"go-stock/backend/logger"
 	"sort"
+	"time"
 )
 
 type ChatMemoryService struct {
@@ -179,6 +181,80 @@ func (s *ChatMemoryService) GetFormattedHistory() (string, error) {
 	return result, nil
 }
 
+func (s *ChatMemoryService) GetSummary() (string, error) {
+	summary, err := db.GetChatMemorySummary(s.sessionID)
+	if err != nil {
+		return "", nil
+	}
+	return summary.Summary, nil
+}
+
+func (s *ChatMemoryService) NeedsCompress() bool {
+	count, err := db.CountChatMemory(s.sessionID)
+	if err != nil {
+		logger.SugaredLogger.Warnf("count chat memory failed: %v", err)
+		return false
+	}
+	return count > 30
+}
+
+func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) ([]map[string]string, error) {
+	allMessages, err := db.GetRecentChatMemory(s.sessionID, 200)
+	if err != nil {
+		return latestMessages, err
+	}
+
+	targetCount := len(allMessages) / 2
+	if targetCount < 5 {
+		targetCount = 5
+	}
+
+	compressEnd := len(allMessages) - targetCount
+	if compressEnd <= 0 {
+		return latestMessages, nil
+	}
+
+	compressible := allMessages[:compressEnd]
+
+	var pairs []string
+	for _, m := range compressible {
+		if m.Role == "user" {
+			pairs = append(pairs, "用户: "+m.Content)
+		} else if m.Role == "assistant" {
+			pairs = append(pairs, "助手: "+m.Content)
+		}
+	}
+
+	if len(pairs) == 0 {
+		return latestMessages, nil
+	}
+
+	summaryText := fmt.Sprintf("以下是最初(%d轮)对话的摘要：\n", len(pairs)/2)
+	for _, p := range pairs {
+		summaryText += p + "\n"
+	}
+
+	for i := 0; i < compressEnd; i++ {
+		_ = allMessages[i].Delete()
+	}
+
+	_ = db.DeleteChatMemorySummary(s.sessionID)
+	_ = (&db.ChatMemorySummary{
+		SessionID: s.sessionID,
+		Summary:   summaryText,
+		CreatedAt: time.Now(),
+	}).Save()
+
+	logger.SugaredLogger.Infof("compressed %d messages into summary for session %s", len(compressible), s.sessionID)
+
+	summaryMsg := []map[string]string{{
+		"role":    "system",
+		"content": summaryText,
+	}}
+	return append(summaryMsg, latestMessages...), nil
+}
+
 func (s *ChatMemoryService) Clear() error {
+	_ = db.DeleteChatMemorySummary(s.sessionID)
 	return db.ClearChatMemory(s.sessionID)
 }

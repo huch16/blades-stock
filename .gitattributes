@@ -1,0 +1,48 @@
+# Auto detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Go source
+*.go text diff=golang
+
+# JavaScript
+*.js text
+*.jsx text
+*.mjs text
+*.cjs text
+*.vue text
+
+# Styles
+*.css text
+*.less text
+
+# Markdown
+*.md text diff=markdown
+*.json text
+
+# Configuration
+*.yml text
+*.yaml text
+*.toml text
+*.ini text
+
+# Batch and shell
+*.bat text eol=crlf
+*.ps1 text
+
+# Binaries
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+
+# Archives
+*.zip binary
+*.tar.gz binary
+*.7z binary
+*.gz binary

@@ -289,50 +289,6 @@ type Resp struct {
 	} `json:"error"`
 }
 
-type PromptTemplate struct {
-	ID        int `gorm:"primarykey"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	Name      string `json:"name"`
-	Content   string `json:"content"`
-	Type      string `json:"type"`
-}
-
-func (p PromptTemplate) TableName() string {
-	return "prompt_templates"
-}
-
-// PromptTemplateQuery 分页查询参数
-type PromptTemplateQuery struct {
-	Page     int    `form:"page" json:"page"`         // 页码
-	PageSize int    `form:"pageSize" json:"pageSize"` // 每页大小
-	Name     string `form:"name" json:"name"`         // 模板名称筛选
-	Type     string `form:"type" json:"type"`         // 模板类型筛选
-	Content  string `form:"content" json:"content"`   // 内容模糊搜索
-}
-
-// PromptTemplatePageResp 分页查询响应
-type PromptTemplatePageResp struct {
-	Code    int                    `json:"code"`
-	Message string                 `json:"message"`
-	Data    PromptTemplatePageData `json:"data"`
-}
-
-type PromptTemplatePageData struct {
-	List       []PromptTemplate `json:"list"`
-	Total      int64            `json:"total"`
-	Page       int              `json:"page"`
-	PageSize   int              `json:"pageSize"`
-	TotalPages int              `json:"totalPages"`
-}
-
-type Prompt struct {
-	ID      int    `json:"ID"`
-	Name    string `json:"name"`
-	Content string `json:"content"`
-	Type    string `json:"type"`
-}
-
 type Telegraph struct {
 	gorm.Model
 	Time            string          `json:"time"`
@@ -1739,6 +1695,70 @@ type ConceptFundFlow struct {
 
 func (ConceptFundFlow) TableName() string {
 	return "concept_fund_flow"
+}
+
+type ProjectAnalysis struct {
+	ID           uint      `json:"id" gorm:"primarykey"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+	SourceURL    string    `json:"sourceUrl" gorm:"size:500"`       // git clone URL or local path
+	LocalPath    string    `json:"localPath" gorm:"size:500"`       // 本地存储路径
+	Name         string    `json:"name" gorm:"size:255;not null"`   // 项目名
+	Language     string    `json:"language" gorm:"size:100"`        // 主语言
+	Summary      string    `json:"summary" gorm:"type:text"`        // 项目摘要
+	Structure    string    `json:"structure" gorm:"type:text"`      // 目录结构
+	Readme       string    `json:"readme" gorm:"type:text"`         // README 内容
+	EntryPoints  string    `json:"entryPoints" gorm:"type:text"`    // 入口文件列表
+	APISummary   string    `json:"apiSummary" gorm:"type:text"`     // API 路由摘要
+	ModelSummary string    `json:"modelSummary" gorm:"type:text"`   // 数据模型摘要
+	TechStack    string    `json:"techStack" gorm:"size:500"`       // 技术栈
+	SkillID      uint      `json:"skillId" gorm:"default:0"`       // 生成的 Skill ID
+	ChunkCount   int       `json:"chunkCount" gorm:"default:0"`    // 代码块数量
+	Status       string    `json:"status" gorm:"size:20;default:indexing"` // indexing/indexed/failed
+}
+
+func (ProjectAnalysis) TableName() string {
+	return "project_analysis"
+}
+
+type CodeChunk struct {
+	ID                uint      `json:"id" gorm:"primarykey"`
+	CreatedAt         time.Time `json:"createdAt"`
+	ProjectAnalysisID uint      `json:"projectAnalysisId" gorm:"index"`
+	FilePath          string    `json:"filePath" gorm:"size:500"`
+	Content           string    `json:"content" gorm:"type:text"`
+	Embedding         []byte    `json:"-" gorm:"type:blob"`
+	StartLine         int       `json:"startLine"`
+	EndLine           int       `json:"endLine"`
+	ChunkType         string    `json:"chunkType" gorm:"size:50"` // code, comment, doc, config
+	Summary           string    `json:"summary" gorm:"size:500"`
+}
+
+func (CodeChunk) TableName() string {
+	return "code_chunks"
+}
+
+// BacktestResult 分析报告回测结果 — 对比AI预测与市场真实走势
+type BacktestResult struct {
+	gorm.Model
+	ReportID     uint    `json:"reportId" gorm:"uniqueIndex"`                // 关联 ai_response_result.id
+	StockCode    string  `json:"stockCode" gorm:"size:20;index"`             // 股票代码
+	StockName    string  `json:"stockName" gorm:"size:100"`                  // 股票名称
+	AnalysisDate string  `json:"analysisDate" gorm:"size:10"`               // 分析日期 YYYY-MM-DD
+	Direction    string  `json:"direction" gorm:"size:20"`                  // 预测方向: 看涨/看跌/中性/震荡
+	TargetPrice  float64 `json:"targetPrice"`                                // 目标价
+	VerifyDate   string  `json:"verifyDate" gorm:"size:10"`                 // 验证日期
+	VerifyPrice  float64 `json:"verifyPrice"`                                // 验证日收盘价
+	PriceChange  float64 `json:"priceChange"`                                // 实际涨跌幅 %
+	MaxDrawdown  float64 `json:"maxDrawdown"`                                // 期间最大回撤 %
+	MaxUpside    float64 `json:"maxUpside"`                                  // 期间最大涨幅 %
+	IsAccurate   bool    `json:"isAccurate"`                                 // 方向判断是否正确
+	Confidence   float64 `json:"confidence"`                                 // 置信度 0-1
+	Summary      string  `json:"summary" gorm:"type:text"`                  // 摘要
+}
+
+func (BacktestResult) TableName() string {
+	return "backtest_results"
 }
 
 // ConceptFundFlowPoint 概念资金流向数据点（前端折线图用）

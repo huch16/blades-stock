@@ -120,7 +120,7 @@ func TestStockNotice(t *testing.T) {
 		if !ok {
 			continue
 		}
-		if m["columns"].([]any) != nil && len(m["columns"].([]any)) > 0 {
+		if len(m["columns"].([]any)) > 0 {
 			columns := m["columns"].([]any)[0].(map[string]any)
 			rows = append(rows, row{
 				Title:      convertor.ToString(m["title"]),

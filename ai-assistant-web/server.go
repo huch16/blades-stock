@@ -63,7 +63,6 @@ func Start() error {
 
 	mux.HandleFunc("/api/health", a.health)
 	mux.HandleFunc("/api/ai-configs", a.getAIConfigs)
-	mux.HandleFunc("/api/prompts", a.getPrompts)
 	mux.HandleFunc("/api/session", a.session)
 	mux.HandleFunc("/api/chat/summary-stream", a.summaryChatStream)
 	mux.HandleFunc("/api/share", a.shareText)
@@ -99,13 +98,6 @@ func (a *app) getAIConfigs(w http.ResponseWriter, _ *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-func (a *app) getPrompts(w http.ResponseWriter, r *http.Request) {
-	name := strings.TrimSpace(r.URL.Query().Get("name"))
-	promptType := strings.TrimSpace(r.URL.Query().Get("type"))
-	res := data.NewPromptTemplateApi().GetPromptTemplates(name, promptType)
-	writeJSON(w, http.StatusOK, res)
 }
 
 func (a *app) session(w http.ResponseWriter, r *http.Request) {
@@ -267,15 +259,9 @@ func parseHistory(historyJSON string) []map[string]interface{} {
 	return history
 }
 
-func (a *app) chatStream(w http.ResponseWriter, r *http.Request) {
-	// 保留旧接口兼容，转发到新的 summary 接口能力
-	a.summaryChatStream(w, r)
-}
-
 func autoMigrate() {
 	db.Dao.AutoMigrate(&data.Settings{})
 	db.Dao.AutoMigrate(&data.AIConfig{})
-	db.Dao.AutoMigrate(&models.PromptTemplate{})
 	db.Dao.AutoMigrate(&models.AiAssistantSession{})
 }
 

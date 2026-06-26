@@ -33,7 +33,7 @@ func NewAlertWindowsApi(AppID string, Title string, Content string, Icon string)
 }
 
 func (a AlertWindowsApi) SendNotification() bool {
-	if GetSettingConfig().LocalPushEnable == false {
+	if !GetSettingConfig().LocalPushEnable {
 		//logger.SugaredLogger.Error("本地推送未开启")
 		return false
 	}

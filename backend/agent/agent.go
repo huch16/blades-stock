@@ -8,6 +8,9 @@ import (
 	"go-stock/backend/db"
 	"go-stock/backend/logger"
 	"go-stock/backend/models"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -121,6 +124,8 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		blades.WithModel(modelProvider),
 		blades.WithTools(allTools...),
 		blades.WithMaxIterations(maxStep),
+		blades.WithInstruction(personalityPrompt()),
+		blades.WithMiddleware(ReasoningMiddleware),
 	)
 	if err != nil {
 		logger.SugaredLogger.Errorf("创建Blades Agent失败: %v", err)
@@ -132,6 +137,52 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		Mode:     mode,
 		AIConfig: aiConfig,
 	}
+}
+
+func personalityPrompt() string {
+	return `你叫"财智"，是一位拥有20年实战经验、性格鲜明的股票投资大师。
+
+## 人格特质
+- 风格：犀利、直率、一针见血，偶尔带点冷幽默，绝不拐弯抹角
+- 原则：始终秉持"风险控制第一"，看到用户忽视风险时会直接提醒
+- 特长：价值投资、趋势交易、量化分析多策略融合，对A股/港股/美股都有深刻理解
+- 语言：善用生活化的比喻解释复杂金融概念，让初学者也能听懂
+
+## 行为准则
+1. 必须调用工具获取实时数据，严禁凭记忆编造或使用过时数据
+2. 所有投资建议必须附带风险提示
+3. 数据获取失败时明确告知用户"当前未能获取到最新数据"，绝不伪造
+4. 对模糊的问题主动反问澄清意图`
+}
+
+func ReasoningMiddleware(next blades.Handler) blades.Handler {
+	return blades.HandleFunc(func(ctx context.Context, inv *blades.Invocation) blades.Generator[*blades.Message, error] {
+		question := inv.Message.Text()
+
+		mode, _ := inv.Message.Metadata["agent_mode"].(string)
+
+		var thinkingPrompt string
+		if mode == "plan_execute" {
+			thinkingPrompt = `请严格遵循以下思考框架回答问题：
+
+## 思考框架
+1. 拆解问题 → 确定需要哪些维度（行情、财务、新闻、宏观等）
+2. 规划数据需求 → 明确每一步需要调用什么工具
+3. 逐步执行 → 每次调用一个工具，分析返回结果
+4. 综合判断 → 将所有信息整合成完整结论
+5. 风险提示 → 给出明确的风险警告
+
+不要一次性调用所有工具，应该根据上一步的结果决定下一步的行动。`
+		} else {
+			thinkingPrompt = `请直接调用相关工具获取最新数据后回答。如果问题不明确，主动反问用户。`
+		}
+
+		newMsg := blades.UserMessage(question + "\n\n" + thinkingPrompt)
+		newMsg.Metadata = inv.Message.Metadata
+		inv.Message = newMsg
+
+		return next.Handle(ctx, inv)
+	})
 }
 
 func buildSkillPrompt(question string) string {
@@ -190,7 +241,12 @@ func GetAllTools() []bladesTools.Tool {
 
 	allTools = append(allTools, tools.GetHolidayTools()...)
 
+	allTools = append(allTools, tools.GetProjectTools()...)
+
 	allTools = append(allTools, tools.GetMCPServerTools()...)
+	allTools = append(allTools, tools.GetBacktestStatsTool())
+	allTools = append(allTools, tools.GetBacktestDetailTool())
+	allTools = append(allTools, tools.GetRunBacktestTool())
 
 	mcpTools := getMCPTools()
 	if len(mcpTools) > 0 {
@@ -211,7 +267,12 @@ func getToolsByQuestion(question string) []bladesTools.Tool {
 
 	allTools = append(allTools, tools.GetHolidayTools()...)
 
+	allTools = append(allTools, tools.GetProjectTools()...)
+
 	allTools = append(allTools, tools.GetMCPServerTools()...)
+	allTools = append(allTools, tools.GetBacktestStatsTool())
+	allTools = append(allTools, tools.GetBacktestDetailTool())
+	allTools = append(allTools, tools.GetRunBacktestTool())
 
 	mcpTools := getMCPTools()
 	if len(mcpTools) > 0 {
@@ -346,42 +407,6 @@ func getSkillMCPServerIDs() []uint {
 		}
 	}
 	return ids
-}
-
-func buildSystemPrompt(question, mode string) string {
-	var sb strings.Builder
-
-	sb.WriteString(`你现在扮演一位拥有20年实战经验的顶级股票投资大师，精通价值投资、趋势交易、量化分析等多种策略。`)
-	sb.WriteString(`你擅长结合宏观经济、行业周期和企业基本面进行全方位、精准的多维分析，`)
-	sb.WriteString(`尤其对A股、港股、美股市场有深刻理解，始终秉持"风险控制第一"的原则，善于用通俗易懂的方式传授投资智慧。`)
-
-	sb.WriteString(`
-
-【强制规则】你必须通过工具调用获取实时数据，严禁凭记忆编造或使用过时数据。以下场景必须调用工具：
-1. 股票/指数行情数据（价格、涨跌幅、成交量等）——必须调用工具获取最新实时数据
-2. 财务数据（营收、利润、市盈率等）——必须调用工具获取最新财报数据
-3. 新闻资讯——必须调用工具获取最新新闻
-4. 宏观经济数据——必须调用工具获取最新数据
-任何涉及具体数字的回答，都必须先通过工具查询确认，不得使用训练数据中的过时信息。如果你没有获取到最新数据，必须明确告知用户"当前未能获取到最新数据"，绝不能编造数据。`)
-
-	if mode == string(AgentModePlanExecute) {
-		sb.WriteString(`
-
-【深度分析模式】
-对于复杂分析任务，请遵循以下步骤：
-1. 拆解问题，分步骤获取所需数据
-2. 逐步分析每个维度
-3. 综合所有信息给出完整分析结论
-`)
-	}
-
-	skillPrompt := buildSkillPrompt(question)
-	if skillPrompt != "" {
-		sb.WriteString("\n\n")
-		sb.WriteString(skillPrompt)
-	}
-
-	return sb.String()
 }
 
 func safeTruncateString(s string, maxBytes int) string {
@@ -523,9 +548,7 @@ func isSkippableNoiseLine(s string) bool {
 	}
 	allSep := true
 	for _, r := range s {
-		switch r {
-		case '|', '-', ':', ' ', '\t':
-		default:
+		if r != '|' && r != '-' && r != ':' && r != ' ' && r != '\t' {
 			allSep = false
 			break
 		}
@@ -677,11 +700,7 @@ func isHeaderLine(line string) bool {
 		}
 	}
 
-	if containsKeyMetrics(line) {
-		return true
-	}
-
-	return false
+	return containsKeyMetrics(line)
 }
 
 func isDataLine(line string) bool {
@@ -764,31 +783,49 @@ func smartTruncateLinesFromEnd(lines []string, maxBytes int) []string {
 	return result
 }
 
-func cleanUserInput(input string) string {
-	if !utf8.ValidString(input) {
-		valid := make([]rune, 0, len(input))
-		for i, r := range input {
-			if r == utf8.RuneError {
-				logger.SugaredLogger.Warnf("发现无效UTF-8字符在位置 %d", i)
-				continue
+func init() {
+	tools.RegisterBacktestHandler(func() string {
+		bts := NewBacktestService()
+		count, err := bts.RunAllBacktests()
+		if err != nil {
+			return fmt.Sprintf("回测执行失败: %v", err)
+		}
+		if count == 0 {
+			return "所有分析报告已完成回测，无需重复执行"
+		}
+		stats := bts.GetOverallStats()
+		return fmt.Sprintf("✅ 完成 %d 份分析报告回测！\n当前综合准确率: %.1f%% (已验证 %d 次)", count, stats.AccuracyRate, stats.VerifiedCount)
+	})
+
+	tools.RegisterLearnProjectHandler(func(source, name string) string {
+		if name == "" {
+			parts := strings.Split(strings.TrimSuffix(source, ".git"), "/")
+			name = parts[len(parts)-1]
+		}
+
+		localPath := resolveProjectPath(source, name)
+
+		if strings.HasPrefix(source, "http") || strings.HasPrefix(source, "git@") {
+			cmd := exec.Command("git", "clone", source, localPath)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return fmt.Sprintf("git clone 失败: %s\n输出: %s", err.Error(), string(output))
 			}
-			valid = append(valid, r)
 		}
-		input = string(valid)
-	}
 
-	input = strings.TrimSpace(input)
-
-	var cleaned strings.Builder
-	for _, r := range input {
-		if r == '\n' || r == '\t' || r == '\r' {
-			cleaned.WriteRune(r)
-		} else if r >= 32 && r <= 126 {
-			cleaned.WriteRune(r)
-		} else if r > 126 {
-			cleaned.WriteRune(r)
+		es := &EmbeddingService{}
+		sg := NewSkillGenerator(es)
+		skill, err := sg.FullPipeline(source, localPath, name)
+		if err != nil {
+			return fmt.Sprintf("学习项目失败: %v", err)
 		}
-	}
 
-	return cleaned.String()
+		return fmt.Sprintf("✅ 成功学习项目「%s」并生成了 Skill「%s」！\n以后你可以直接问我关于 %s 项目的问题，我会用已学的知识回答。\n必要时我会使用 ReadProjectFile 等工具查阅最新的代码细节。", name, skill.Name, name)
+	})
+}
+
+func resolveProjectPath(source, name string) string {
+	base := filepath.Join(os.TempDir(), "go-stock-learned-projects")
+	os.MkdirAll(base, 0755)
+	return filepath.Join(base, name)
 }

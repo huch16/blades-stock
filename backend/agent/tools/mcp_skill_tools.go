@@ -119,8 +119,8 @@ func GetMCPServerTools() []bladesTools.Tool {
 				return fmt.Sprintf("未找到ID为 %d 的MCP服务器", id), nil
 			}
 			var md strings.Builder
-			md.WriteString(fmt.Sprintf("### MCP服务器详情\n\n"))
-			md.WriteString(fmt.Sprintf("| 项目 | 内容 |\n| --- | --- |\n"))
+			md.WriteString("### MCP服务器详情\n\n")
+			md.WriteString("| 项目 | 内容 |\n| --- | --- |\n")
 			md.WriteString(fmt.Sprintf("| ID | %d |\n", server.ID))
 			md.WriteString(fmt.Sprintf("| 名称 | %s |\n", server.Name))
 			md.WriteString(fmt.Sprintf("| 描述 | %s |\n", server.Description))
@@ -432,7 +432,7 @@ func GetMCPServerTools() []bladesTools.Tool {
 			}
 			var md strings.Builder
 			md.WriteString(fmt.Sprintf("### MCP工具详情：%s\n\n", found.ToolName))
-			md.WriteString(fmt.Sprintf("| 项目 | 内容 |\n| --- | --- |\n"))
+			md.WriteString("| 项目 | 内容 |\n| --- | --- |\n")
 			md.WriteString(fmt.Sprintf("| ID | %d |\n", found.ID))
 			md.WriteString(fmt.Sprintf("| 服务器ID | %d |\n", found.MCPServerID))
 			md.WriteString(fmt.Sprintf("| 工具名称 | %s |\n", found.ToolName))
@@ -557,7 +557,7 @@ func GetSkillTools() []bladesTools.Tool {
 			}
 			var md strings.Builder
 			md.WriteString(fmt.Sprintf("### 技能详情：%s\n\n", skill.Name))
-			md.WriteString(fmt.Sprintf("| 项目 | 内容 |\n| --- | --- |\n"))
+			md.WriteString("| 项目 | 内容 |\n| --- | --- |\n")
 			md.WriteString(fmt.Sprintf("| ID | %d |\n", skill.ID))
 			md.WriteString(fmt.Sprintf("| 名称 | %s |\n", skill.Name))
 			md.WriteString(fmt.Sprintf("| 分类 | %s |\n", skill.Category))

@@ -78,12 +78,6 @@ func (a *App) getCronEntry(key string) (cron.EntryID, bool) {
 	return id, exists
 }
 
-func (a *App) removeCronEntry(key string) {
-	a.cronEntrysMu.Lock()
-	delete(a.cronEntrys, key)
-	a.cronEntrysMu.Unlock()
-}
-
 func (a *App) GetMachineId() string {
 	return machineid.GetMachineId()
 }
@@ -805,7 +799,7 @@ func checkHKHolidayAPI(date string) (isHoliday bool, apiOk bool) {
 	if err != nil || resp.StatusCode() != 200 {
 		return false, false
 	}
-	if result.Data.Klines != nil && len(result.Data.Klines) > 0 {
+	if len(result.Data.Klines) > 0 {
 		return false, true
 	}
 	return true, true
@@ -1317,6 +1311,35 @@ func (a *App) shutdown(ctx context.Context) {
 	//logger.SugaredLogger.Infof("application shutdown Version:%s", Version)
 }
 
+// BatchGreet returns stock info for multiple stock codes in a single call
+func (a *App) BatchGreet(stockCodes []string) []*data.StockInfo {
+	if len(stockCodes) == 0 {
+		return nil
+	}
+
+	var follows []data.FollowedStock
+	db.Dao.Where("stock_code IN ?", stockCodes).Preload("Groups").Preload("Groups.GroupInfo").Find(&follows)
+	followMap := make(map[string]data.FollowedStock, len(follows))
+	for _, f := range follows {
+		followMap[f.StockCode] = f
+	}
+
+	stockInfos, err := data.NewStockDataApi().GetStockCodeRealTimeData(stockCodes...)
+	if err != nil || stockInfos == nil {
+		return nil
+	}
+
+	results := make([]*data.StockInfo, 0, len(*stockInfos))
+	for i := range *stockInfos {
+		info := &(*stockInfos)[i]
+		if follow, ok := followMap[info.Code]; ok {
+			addStockFollowData(follow, info)
+		}
+		results = append(results, info)
+	}
+	return results
+}
+
 // Greet returns a greeting for the given name
 func (a *App) Greet(stockCode string) *data.StockInfo {
 	//stockInfo, _ := data.NewStockDataApi().GetStockCodeRealTimeData(stockCode)
@@ -1546,13 +1569,6 @@ func getMsgTypeName(msgType int) string {
 	}
 }
 
-func onExit(a *App) {
-	// 清理操作
-	//logger.SugaredLogger.Infof("systray onExit")
-	//systray.Quit()
-	//runtime.Quit(a.ctx)
-}
-
 func (a *App) UpdateConfig(settingConfig *data.SettingConfig) string {
 	//s1, _ := json.Marshal(settingConfig)
 	//logger.SugaredLogger.Infof("UpdateConfig:%s", s1)
@@ -1695,27 +1711,14 @@ func (a *App) SaveAsMarkdown(stockCode, stockName string) string {
 		if err != nil {
 			return err.Error()
 		}
-		err = os.WriteFile(file, []byte(res.Content), 0644)
+		if err = os.WriteFile(file, []byte(res.Content), 0644); err != nil {
+			return "保存失败：" + err.Error()
+		}
 		return "已保存至：" + file
 	}
 	return "分析结果异常,无法保存。"
 }
 
-func (a *App) GetPromptTemplates(name, promptType string) *[]models.PromptTemplate {
-	return data.NewPromptTemplateApi().GetPromptTemplates(name, promptType)
-}
-func (a *App) AddPrompt(prompt models.Prompt) string {
-	promptTemplate := models.PromptTemplate{
-		ID:      prompt.ID,
-		Content: prompt.Content,
-		Name:    prompt.Name,
-		Type:    prompt.Type,
-	}
-	return data.NewPromptTemplateApi().AddPrompt(promptTemplate)
-}
-func (a *App) DelPrompt(id uint) string {
-	return data.NewPromptTemplateApi().DelPrompt(id)
-}
 func (a *App) SetStockAICron(cronText, stockCode string) {
 	data.NewStockDataApi().SetStockAICron(cronText, stockCode)
 	if strutil.HasPrefixAny(stockCode, []string{"gb_"}) {
@@ -2509,7 +2512,7 @@ func (a *App) UpdateCronTask(task *models.CronTask) string {
 //	@param id 任务 ID
 //	@return string 操作结果
 func (a *App) DeleteCronTask(id uint) string {
-	err := agent.NewCronTaskApi().Delete(id)
+	_ = agent.NewCronTaskApi().Delete(id)
 	task, err := agent.NewCronTaskApi().GetByID(id)
 	if err == nil {
 		if entryID, exists := a.getCronEntry(convertor.ToString(id) + "_" + task.Name); exists {
@@ -2551,7 +2554,7 @@ func (a *App) GetCronTaskList(query *models.CronTaskQuery) *models.CronTaskPageR
 //	@Description: 启用/禁用定时任务
 //	@receiver a
 func (a *App) EnableCronTask(id uint, enable bool) string {
-	err := agent.NewCronTaskApi().EnableTask(id, enable)
+	_ = agent.NewCronTaskApi().EnableTask(id, enable)
 	task, err := agent.NewCronTaskApi().GetByID(id)
 	if err == nil {
 		if entryID, exists := a.getCronEntry(convertor.ToString(id) + "_" + task.Name); exists {

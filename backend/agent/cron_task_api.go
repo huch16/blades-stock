@@ -249,8 +249,7 @@ func (a *CronTaskApi) executeStockAnalysis(ctx context.Context, task *models.Cro
 		}
 	}
 
-	prompt := fmt.Sprintf("分析总结市场资讯，针对%s[%s]，找出潜在投资机会", params.StockName, params.StockCode)
-	prompt = data.NewPromptTemplateApi().GetPromptTemplateByID(params.PromptId)
+	prompt := getPromptContentByID(params.PromptId)
 	var tools []data.Tool
 	tools = data.Tools(tools)
 	msgs := data.NewDeepSeekOpenAi(ctx, params.AiConfigId).NewChatStream(params.StockName, data.ConvertTushareCodeToStockCode(params.StockCode), prompt, &params.SysPromptId, tools, params.Thinking)
@@ -351,8 +350,10 @@ func (a *CronTaskApi) executeMarketAnalysis(ctx context.Context, task *models.Cr
 		}
 	}
 
-	prompt := "分析总结市场资讯，找出潜在投资机会"
-	prompt = data.NewPromptTemplateApi().GetPromptTemplateByID(params.PromptId)
+	prompt := getPromptContentByID(params.PromptId)
+	if prompt == "" {
+		prompt = "分析总结市场资讯，找出潜在投资机会"
+	}
 	content := &strings.Builder{}
 
 	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, params.AiConfigId, &params.SysPromptId, false, 0, false, params.AgentMode)
@@ -459,4 +460,13 @@ func isTradingTime() bool {
 	isAfternoon := currentTime >= afternoonStart && currentTime <= afternoonEnd
 
 	return isMorning || isAfternoon
+}
+
+func getPromptContentByID(id int) string {
+	if id <= 0 {
+		return ""
+	}
+	var content string
+	db.Dao.Table("prompt_templates").Select("content").Where("id=?", id).First(&content)
+	return content
 }

@@ -205,21 +205,6 @@ func stripToolMessages(messages []map[string]interface{}) []map[string]interface
 	return result
 }
 
-func removeRequestField(messages []map[string]interface{}, field string) []map[string]interface{} {
-	result := make([]map[string]interface{}, 0, len(messages))
-	for _, msg := range messages {
-		newMsg := make(map[string]interface{})
-		for k, v := range msg {
-			if k == field {
-				continue
-			}
-			newMsg[k] = v
-		}
-		result = append(result, newMsg)
-	}
-	return result
-}
-
 func openAIHTTPErrorMessage(statusCode int, bodyBytes []byte) string {
 	bodyText := strings.TrimSpace(string(bodyBytes))
 	if bodyText == "" {
@@ -272,21 +257,6 @@ func isUnsupportedToolError(msg string) bool {
 		strings.Contains(lower, "extra")
 }
 
-func isUnsupportedRequestFieldError(msg string, fields ...string) bool {
-	lower := strings.ToLower(msg)
-	for _, field := range fields {
-		if strings.Contains(lower, strings.ToLower(field)) {
-			return strings.Contains(lower, "unsupported") ||
-				strings.Contains(lower, "not support") ||
-				strings.Contains(lower, "invalid") ||
-				strings.Contains(lower, "unknown") ||
-				strings.Contains(lower, "unrecognized") ||
-				strings.Contains(lower, "extra")
-		}
-	}
-	return false
-}
-
 func openAIChatEndpoint(baseURL string) (string, string) {
 	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if base == "" {
@@ -319,7 +289,7 @@ func shouldHandleToolCalls(finishReason string) bool {
 	}
 }
 
-func AskAi(o *OpenAi, err error, messages []map[string]interface{}, ch chan map[string]any, question string, think bool) {
+func AskAi(o *OpenAi, _ error, messages []map[string]interface{}, ch chan map[string]any, question string, think bool) {
 	if o.TimeOut <= 0 {
 		o.TimeOut = 300
 	}
@@ -800,7 +770,7 @@ func AskAiWithToolsDepth(o *OpenAi, err error, messages []map[string]interface{}
 							"time":              time.Now().Format(time.DateTime),
 						}
 					}
-					if choice.Delta.ToolCalls != nil && len(choice.Delta.ToolCalls) > 0 {
+					if len(choice.Delta.ToolCalls) > 0 {
 						for _, call := range choice.Delta.ToolCalls {
 							idx := call.Index
 							tc, ok := toolCalls[idx]

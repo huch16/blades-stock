@@ -250,10 +250,10 @@ func GetSettingConfig() *SettingConfig {
 	settings := &Settings{}
 	aiConfigs := make([]*AIConfig, 0)
 	// 处理数据库查询可能返回的空结果
-	result := db.Dao.Model(&Settings{}).First(settings)
+	db.Dao.Model(&Settings{}).First(settings)
 	if settings.OpenAiEnable {
 		// 处理AI配置查询可能出现的错误
-		result = db.Dao.Model(&AIConfig{}).Find(&aiConfigs)
+		result := db.Dao.Model(&AIConfig{}).Find(&aiConfigs)
 		if result.Error != nil {
 			logger.SugaredLogger.Error("查询AI配置失败:", result.Error)
 		} else if len(aiConfigs) > 0 {

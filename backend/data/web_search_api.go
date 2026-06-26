@@ -35,7 +35,6 @@ type BrowserInstance struct {
 
 type BrowserManager struct {
 	instance *BrowserInstance
-	once     sync.Once
 	mu       sync.RWMutex
 }
 

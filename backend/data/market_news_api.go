@@ -8,6 +8,7 @@ import (
 	"go-stock/backend/models"
 	"go-stock/backend/util"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -350,7 +351,7 @@ func (m MarketNewsApi) GetSinaNews(crawlTimeOut uint) *[]models.Telegraph {
 			telegraph.Title = strutil.SubInBetween(data["rich_text"].(string), "【", "】")
 			telegraph.Time = strings.Split(data["create_time"].(string), " ")[1]
 			dataTime, _ := time.ParseInLocation("2006-01-02 15:04:05", data["create_time"].(string), time.Local)
-			if &dataTime != nil {
+			if !dataTime.IsZero() {
 				telegraph.DataTime = &dataTime
 			}
 			tags := data["tag"].([]any)
@@ -756,9 +757,9 @@ func (m MarketNewsApi) LongTiger(date string) *[]models.LongTigerRankData {
 	})
 	//logger.SugaredLogger.Info(js)
 	vm := otto.New()
-	_, err = vm.Run(js)
-	_, err = vm.Run("var data = JSON.stringify(data);")
-	value, err := vm.Get("data")
+	vm.Run(js)
+	vm.Run("var data = JSON.stringify(data);")
+	value, _ := vm.Get("data")
 	//logger.SugaredLogger.Infof("resp-json:%s", value.String())
 	data := gjson.Get(value.String(), "result.data")
 	//logger.SugaredLogger.Infof("resp:%v", data)
@@ -821,8 +822,8 @@ func (m MarketNewsApi) IndustryResearchReport(industryCode string, days int) []a
 	return respMap["data"].([]any)
 }
 func (m MarketNewsApi) StockResearchReport(stockCode string, days int) []any {
-	beginDate := time.Now().Add(-time.Duration(days) * 24 * time.Hour).Format("2006-01-02")
 	endDate := time.Now().Format("2006-01-02")
+	var beginDate string
 	if strutil.ContainsAny(stockCode, []string{"."}) {
 		stockCode = strings.Split(stockCode, ".")[0]
 		beginDate = time.Now().Add(-time.Duration(days) * 365 * time.Hour).Format("2006-01-02")
@@ -1148,7 +1149,7 @@ func (m MarketNewsApi) HotTopic(size int) []any {
 	}
 	//logger.SugaredLogger.Infof("HotTopic:%s", resp.Body())
 	respMap := map[string]any{}
-	err = json.Unmarshal(resp.Body(), &respMap)
+	json.Unmarshal(resp.Body(), &respMap)
 	return respMap["re"].([]any)
 
 }
@@ -1159,15 +1160,23 @@ func (m MarketNewsApi) InvestCalendar(yearMonth string) []any {
 	}
 
 	url := "https://app.jiuyangongshe.com/jystock-app/api/v1/timeline/list"
+	token := os.Getenv("JYGS_TOKEN")
+	if token == "" {
+		token = "1cc6380a05c652b922b3d85124c85473"
+	}
+	session := os.Getenv("JYGS_SESSION")
+	if session == "" {
+		session = "SESSION=NDZkNDU2ODYtODEwYi00ZGZkLWEyY2ItNjgxYzY4ZWMzZDEy"
+	}
 	resp, err := SharedHTTPClient.SetTimeout(time.Duration(30)*time.Second).R().
 		SetHeader("Host", "app.jiuyangongshe.com").
 		SetHeader("Origin", "https://www.jiuyangongshe.com").
 		SetHeader("Referer", "https://www.jiuyangongshe.com/").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
 		SetHeader("Content-Type", "application/json").
-		SetHeader("token", "1cc6380a05c652b922b3d85124c85473").
+		SetHeader("token", token).
 		SetHeader("platform", "3").
-		SetHeader("Cookie", "SESSION=NDZkNDU2ODYtODEwYi00ZGZkLWEyY2ItNjgxYzY4ZWMzZDEy").
+		SetHeader("Cookie", session).
 		SetHeader("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10)).
 		SetBody(map[string]string{
 			"date":  yearMonth,
@@ -1180,7 +1189,7 @@ func (m MarketNewsApi) InvestCalendar(yearMonth string) []any {
 	}
 	//logger.SugaredLogger.Infof("InvestCalendar:%s", resp.Body())
 	respMap := map[string]any{}
-	err = json.Unmarshal(resp.Body(), &respMap)
+	json.Unmarshal(resp.Body(), &respMap)
 	return respMap["data"].([]any)
 
 }
@@ -1198,7 +1207,7 @@ func (m MarketNewsApi) ClsCalendar() []any {
 		return []any{}
 	}
 	respMap := map[string]any{}
-	err = json.Unmarshal(resp.Body(), &respMap)
+	json.Unmarshal(resp.Body(), &respMap)
 	return respMap["data"].([]any)
 }
 
@@ -1346,10 +1355,9 @@ func (m MarketNewsApi) GetIndustryReportInfo(infoCode string) string {
 	}
 	body := resp.Body()
 	////logger.SugaredLogger.Debugf("GetIndustryReportInfo:%s", body)
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
+	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
 	title, _ := doc.Find("div.c-title").Html()
 	content, _ := doc.Find("div.ctx-content").Html()
-	//logger.SugaredLogger.Infof("GetIndustryReportInfo:\n%s\n%s", title, content)
 	markdown, err := util.HTMLToMarkdown(title + content)
 	if err != nil {
 		return ""
@@ -1396,12 +1404,10 @@ func (m MarketNewsApi) GetSecuritiesCompanyOpinionContent(OrgSName, encodeUrl st
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
 		Get(url)
 	body := resp.Body()
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
+	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
 	title, _ := doc.Find("div.c-title").Html()
 	content, _ := doc.Find("div.ctx-content").Html()
-	markdown, err := util.HTMLToMarkdown("<h1>" + OrgSName + "</h1>" + title + content)
-	if err != nil {
-	}
+	markdown, _ := util.HTMLToMarkdown("<h1>" + OrgSName + "</h1>" + title + content)
 	return markdown
 }
 

@@ -138,33 +138,14 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
-		sysPrompt := ""
-		if sysPromptOverride != "" {
-			sysPrompt = sysPromptOverride
-		} else if sysPromptId == nil || *sysPromptId == 0 {
-			sysPrompt = `你现在扮演一位拥有20年实战经验的顶级股票投资大师，精通价值投资、趋势交易、量化分析等多种策略。你擅长结合宏观经济、行业周期和企业基本面进行全方位、精准的多维分析，尤其对A股、港股、美股市场有深刻理解，始终秉持"风险控制第一"的原则，善于用通俗易懂的方式传授投资智慧。`
-		} else {
-			sysPrompt = data.NewPromptTemplateApi().GetPromptTemplateByID(*sysPromptId)
-		}
-
-		sysPrompt += `
-
-【强制规则】你必须通过工具调用获取实时数据，严禁凭记忆编造或使用过时数据。以下场景必须调用工具：
+		sysPrompt := sysPromptOverride
+		if sysPrompt == "" {
+			sysPrompt = `【强制规则】你必须通过工具调用获取实时数据，严禁凭记忆编造或使用过时数据。以下场景必须调用工具：
 1. 股票/指数行情数据（价格、涨跌幅、成交量等）——必须调用工具获取最新实时数据
 2. 财务数据（营收、利润、市盈率等）——必须调用工具获取最新财报数据
 3. 新闻资讯——必须调用工具获取最新新闻
 4. 宏观经济数据——必须调用工具获取最新数据
 任何涉及具体数字的回答，都必须先通过工具查询确认，不得使用训练数据中的过时信息。如果你没有获取到最新数据，必须明确告知用户"当前未能获取到最新数据"，绝不能编造数据。`
-
-		if stockAiAgent.instance.Mode == AgentModePlanExecute {
-			sysPrompt += `
-
-【深度分析模式】
-对于复杂分析任务，请遵循以下步骤：
-1. 拆解问题，分步骤获取所需数据
-2. 逐步分析每个维度
-3. 综合所有信息给出完整分析结论
-`
 		}
 
 		skillPrompt := buildSkillPrompt(question)
@@ -191,6 +172,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			historyMessages = trimHistoryMessages(historyMessages, historyBudget)
 		}
 
+		// auto-compress history when too long
+		if memoryService != nil && memoryService.NeedsCompress() {
+			historyMessages, _ = memoryService.CompressHistory(historyMessages)
+		}
+
 		var bladeHistory []*blades.Message
 		for _, hm := range historyMessages {
 			role := hm["role"]
@@ -205,6 +191,32 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
+		// inject conversation summary if available
+		if memoryService != nil {
+			if summary, err := memoryService.GetSummary(); err == nil && summary != "" {
+				bladeHistory = append([]*blades.Message{blades.SystemMessage("【对话摘要】" + summary)}, bladeHistory...)
+			}
+		}
+
+		// inject historical analysis memory (relevant past AI reports)
+		stockCode, stockName := extractStockInfo(question)
+		analysisMem := NewAnalysisMemoryService().BuildAutoInjectContext(stockCode, stockName)
+		if analysisMem != "" {
+			bladeHistory = append([]*blades.Message{blades.SystemMessage(analysisMem)}, bladeHistory...)
+		}
+
+		// inject backtest track record
+		bts := NewBacktestService()
+		if stockCode != "" {
+			if stats := bts.GetStockAccuracy(stockCode); stats.VerifiedCount > 0 {
+				trackRecord := fmt.Sprintf("【回测记录】你在 %s 上的历史分析准确率: %.1f%% (已验证 %d 次)", stockCode, stats.AccuracyRate, stats.VerifiedCount)
+				sysPrompt += "\n\n" + trackRecord
+			}
+		} else if overall := bts.GetOverallStats(); overall.VerifiedCount > 0 {
+			trackRecord := fmt.Sprintf("【回测记录】你的历史分析总体准确率: %.1f%% (已验证 %d 次, 共 %d 份报告)", overall.AccuracyRate, overall.VerifiedCount, overall.TotalReports)
+			sysPrompt += "\n\n" + trackRecord
+		}
+
 		if memoryService != nil {
 			if err := memoryService.AddUserMessage(question); err != nil {
 				logger.SugaredLogger.Errorf("failed to save user message: %v", err)
@@ -216,6 +228,9 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			Instruction: blades.SystemMessage(sysPrompt),
 			History:     bladeHistory,
 			Streamable:  true,
+		}
+		invocation.Message.Metadata = map[string]any{
+			"agent_mode": string(stockAiAgent.instance.Mode),
 		}
 
 		var fullResponse strings.Builder
@@ -290,158 +305,17 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 	return ch
 }
 
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
+// extractStockInfo 从用户问题中提取股票代码/名称（简单启发式匹配）
+func extractStockInfo(question string) (stockCode, stockName string) {
+	// 匹配股票代码: 6 位数字（A股），或 sh/SH/sz/SZ 前缀
+	codeRe := regexp.MustCompile(`(?:sh|SH|sz|SZ)?\d{6}`)
+	if m := codeRe.FindString(question); m != "" {
+		stockCode = m
 	}
-	return s[:maxLen] + "..."
-}
-
-func safeSend(ch chan *StreamMessage, msg *StreamMessage) {
-	defer func() {
-		if r := recover(); r != nil {
-			logger.SugaredLogger.Errorf("panic when sending to channel: %v", r)
-		}
-	}()
-	select {
-	case ch <- msg:
-	default:
-		logger.SugaredLogger.Warnf("channel full, message dropped")
+	// 匹配常见股票名称关键词（中文 2-4 字，出现在特定语境）
+	nameRe := regexp.MustCompile(`([\p{Han}]{2,4})(?:股票|股价|行情|走势|代码)`)
+	if m := nameRe.FindStringSubmatch(question); len(m) > 1 {
+		stockName = m[1]
 	}
-}
-
-func stripPlanJSON(content string) string {
-	if !strings.Contains(content, `"steps"`) {
-		return content
-	}
-	var b strings.Builder
-	b.Grow(len(content))
-	inCodeBlock := false
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") {
-			inCodeBlock = !inCodeBlock
-		}
-		if inCodeBlock && strings.Contains(trimmed, `"steps"`) && strings.Contains(trimmed, "[") {
-			continue
-		}
-		if !inCodeBlock && (strings.HasPrefix(trimmed, `{"steps":`) || strings.HasPrefix(trimmed, `{"steps" :`)) {
-			continue
-		}
-		if b.Len() > 0 {
-			b.WriteByte('\n')
-		}
-		b.WriteString(line)
-	}
-	result := strings.TrimRight(b.String(), "\n ")
-	if result == "" {
-		return ""
-	}
-	lines := strings.Split(result, "\n")
-	cleaned := make([]string, 0, len(lines))
-	skipEmpty := true
-	for _, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			if !skipEmpty {
-				cleaned = append(cleaned, l)
-			}
-			skipEmpty = true
-			continue
-		}
-		skipEmpty = false
-		cleaned = append(cleaned, l)
-	}
-	return strings.Join(cleaned, "\n")
-}
-
-func formatMarkdown(content string) string {
-	if content == "" {
-		return content
-	}
-
-	inCodeBlock := false
-	lines := strings.Split(content, "\n")
-	var result []string
-
-	for i, line := range lines {
-		trimmed := strings.TrimLeft(line, " \t")
-
-		if strings.HasPrefix(trimmed, "```") {
-			inCodeBlock = !inCodeBlock
-			if !inCodeBlock {
-				result = append(result, trimmed)
-				continue
-			}
-		}
-
-		if inCodeBlock {
-			result = append(result, line)
-			continue
-		}
-
-		if trimmed != line && trimmed != "" {
-			line = trimmed
-		}
-
-		if i > 0 && isBlockElement(trimmed) {
-			prev := ""
-			if len(result) > 0 {
-				prev = result[len(result)-1]
-			}
-			if prev != "" && !isBlockElement(strings.TrimLeft(prev, " \t")) {
-				result = append(result, "")
-			}
-		}
-
-		line = splitInlineHeading(line)
-
-		result = append(result, line)
-	}
-
-	return strings.Join(result, "\n")
-}
-
-var headingRe = regexp.MustCompile(`(#{1,6}\s+\S)`)
-
-func splitInlineHeading(line string) string {
-	idx := headingRe.FindStringIndex(line)
-	if idx == nil {
-		return line
-	}
-	if idx[0] == 0 {
-		return line
-	}
-	prefix := line[:idx[0]]
-	if strings.TrimSpace(prefix) == "" {
-		return line
-	}
-	return prefix + "\n\n" + line[idx[0]:]
-}
-
-func isBlockElement(line string) bool {
-	if len(line) == 0 {
-		return false
-	}
-	if line[0] == '#' {
-		return true
-	}
-	if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") || strings.HasPrefix(line, "+ ") {
-		return true
-	}
-	if strings.HasPrefix(line, "```") {
-		return true
-	}
-	if strings.HasPrefix(line, "> ") {
-		return true
-	}
-	if len(line) >= 2 && (line[0] >= '1' && line[0] <= '9') && line[1] == '.' {
-		return true
-	}
-	if strings.HasPrefix(line, "---") || strings.HasPrefix(line, "***") || strings.HasPrefix(line, "___") {
-		return true
-	}
-	if strings.HasPrefix(line, "|") {
-		return true
-	}
-	return false
+	return
 }

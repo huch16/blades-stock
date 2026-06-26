@@ -286,6 +286,8 @@ export function GlobalStockIndexes():Promise<Record<string, any>>;
 
 export function GlobalStockIndexesReadable():Promise<string>;
 
+export function BatchGreet(arg1:Array<string>):Promise<Array<data.StockInfo>>;
+
 export function Greet(arg1:string):Promise<data.StockInfo>;
 
 export function HideToTray():Promise<void>;

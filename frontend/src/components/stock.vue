@@ -33,8 +33,10 @@ import {
   ShareAnalysis,
   UnFollow,
   UpdateGroup,
-  UpdateGroupSort
+  UpdateGroupSort,
+  BatchGreet,
 } from '../../wailsjs/go/main/App'
+import StockCard from './StockCard.vue'
 import {
   NAvatar,
   NButton,
@@ -486,18 +488,22 @@ onMounted(() => {
   GetFollowList(currentGroupId.value).then(result => {
 
     followList.value = result
+    const codes = []
     for (const followedStock of result) {
-      if (followedStock.StockCode.startsWith("us")) {
-        followedStock.StockCode = "gb_" + followedStock.StockCode.replace("us", "").toLowerCase()
+      let code = followedStock.StockCode
+      if (code.startsWith("us")) {
+        code = "gb_" + code.replace("us", "").toLowerCase()
       }
-      if (!stocks.value.includes(followedStock.StockCode)) {
-        stocks.value.push(followedStock.StockCode)
+      if (!stocks.value.includes(code)) {
+        stocks.value.push(code)
       }
-      Greet(followedStock.StockCode).then(result => {
-        updateData(result)
-      })
+      codes.push(code)
     }
-    //monitor()
+    BatchGreet(codes).then(results => {
+      for (const r of results) {
+        updateData(r)
+      }
+    })
     message.destroyAll()
   })
 
@@ -853,11 +859,11 @@ async function monitor() {
   if (stocks.value && stocks.value.length === 0) {
     showPopover.value = true
   }
-  for (let code of stocks.value) {
-    Greet(code).then(result => {
-      updateData(result)
-    })
-  }
+  BatchGreet(stocks.value).then(results => {
+    for (const r of results) {
+      updateData(r)
+    }
+  })
 }
 
 
@@ -2350,301 +2356,38 @@ watch(modalShow6, (newVal) => {
     <n-tab-pane closable name="0" :tab="'全部'">
       <n-grid :x-gap="8" :cols="3" :y-gap="8">
         <n-gi :id="result['股票代码']+'_gi'" v-for="result in sortedResults" :key="result.key" style="margin-left: 2px;">
-          <n-card :data-sort="result.sort" :id="result['股票代码']" :data-code="result['股票代码']" :bordered="true"
-                  :title="result['股票名称']" :closable="false"
-                  @close="removeMonitor(result['股票代码'],result['股票名称'],result.key)">
-            <n-grid :cols="1" :y-gap="6">
-              <n-gi>
-                <n-text :type="result.type">
-                  <n-number-animation :duration="1000" :precision="2" :from="result['上次当前价格']"
-                                      :to="Number(result['当前价格'])"/>
-                  <n-tag size="small" :type="result.type" :bordered="false" v-if="result['盘前盘后']>0">
-                    ({{ result['盘前盘后'] }} {{ result['盘前盘后涨跌幅'] }}%)
-                  </n-tag>
-                </n-text>
-                <n-text style="padding-left: 10px;" :type="result.type">
-                  <n-number-animation :duration="1000" :precision="3" :from="result.lastChangePercent" :to="result.changePercent"/>
-                  %
-                </n-text>&nbsp;
-                <n-text size="small" v-if="result.costVolume>0" :type="result.type">
-                  <n-number-animation :duration="1000" :precision="2" :from="result.lastProfitAmountToday" :to="result.profitAmountToday"/>
-                </n-text>
-              </n-gi>
-            </n-grid>
-            <n-grid :cols="2" :y-gap="4" :x-gap="4">
-              <n-gi>
-                <n-text :type="'info'">{{ "最高 " + result["今日最高价"] + " " + result.highRate }}%</n-text>
-              </n-gi>
-              <n-gi>
-                <n-text :type="'info'">{{ "最低 " + result["今日最低价"] + " " + result.lowRate }}%</n-text>
-              </n-gi>
-              <n-gi>
-                <n-text :type="'info'">{{ "昨收 " + result["昨日收盘价"] }}</n-text>
-              </n-gi>
-              <n-gi>
-                <n-text :type="'info'">{{ "今开 " + result["今日开盘价"] }}</n-text>
-              </n-gi>
-            </n-grid>
-            <n-collapse accordion v-if="result['买一报价']>0">
-              <n-collapse-item title="盘口" name="1" v-if="result['买一报价']>0">
-                <template #header-extra>
-                  <n-flex justify="space-between">
-                    <n-text :type="'info'">{{ "买一 " + result["买一报价"] + '(' + result["买一申报"] + ")" }}</n-text>
-                    <n-text :type="'info'">{{ "卖一 " + result["卖一报价"] + '(' + result["卖一申报"] + ")" }}</n-text>
-                  </n-flex>
-                </template>
-                <n-grid :cols="2" :y-gap="4" :x-gap="4">
-                  <n-gi v-if="result['买一报价']>0">
-                    <n-text :type="'info'">{{ "买一 " + result["买一报价"] + '(' + result["买一申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖一报价']>0">
-                    <n-text :type="'info'">{{ "卖一 " + result["卖一报价"] + '(' + result["卖一申报"] + ")" }}</n-text>
-                  </n-gi>
-
-                  <n-gi v-if="result['买二报价']>0">
-                    <n-text :type="'info'">{{ "买二 " + result["买二报价"] + '(' + result["买二申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖二报价']>0">
-                    <n-text :type="'info'">{{ "卖二 " + result["卖二报价"] + '(' + result["卖二申报"] + ")" }}</n-text>
-                  </n-gi>
-
-                  <n-gi v-if="result['买三报价']>0">
-                    <n-text :type="'info'">{{ "买三 " + result["买三报价"] + '(' + result["买三申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖三报价']>0">
-                    <n-text :type="'info'">{{ "买三 " + result["卖三报价"] + '(' + result["卖三申报"] + ")" }}</n-text>
-                  </n-gi>
-
-                  <n-gi v-if="result['买四报价']>0">
-                    <n-text :type="'info'">{{ "买四 " + result["买四报价"] + '(' + result["买四申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖四报价']>0">
-                    <n-text :type="'info'">{{ "卖四 " + result["卖四报价"] + '(' + result["卖四申报"] + ")" }}</n-text>
-                  </n-gi>
-
-                  <n-gi v-if="result['买五报价']>0">
-                    <n-text :type="'info'">{{ "买五 " + result["买五报价"] + '(' + result["买五申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖五报价']>0">
-                    <n-text :type="'info'">{{ "卖五 " + result["卖五报价"] + '(' + result["卖五申报"] + ")" }}</n-text>
-                  </n-gi>
-                </n-grid>
-              </n-collapse-item>
-            </n-collapse>
-            <template #header-extra>
-
-              <n-tag size="small" :bordered="false">{{ result['股票代码'] }}</n-tag>&nbsp;
-              <n-button size="tiny" secondary type="primary"
-                        @click="removeMonitor(result['股票代码'],result['股票名称'],result.key)">
-                取消关注
-              </n-button>&nbsp;
-
-              <n-button size="tiny" v-if="data.openAiEnable" secondary type="warning"
-                        @click="aiCheckStock(result['股票名称'],result['股票代码'])">
-                AI分析
-              </n-button>
-            </template>
-            <template #footer>
-              <n-flex vertical :size="8">
-                <n-flex justify="center">
-                  <n-text :type="'info'">{{ result["日期"] + " " + result["时间"] }}</n-text>
-                  <n-tag size="small" v-if="result.volume>0" :type="result.profitType">{{ result.volume + "股" }}</n-tag>
-                  <n-tag size="small" v-if="result.costPrice>0" :type="result.profitType">
-                    {{
-                      "成本:" + result.costPrice + "*" + result.costVolume + " " + result.profit + "%" + " ( " + result.profitAmount + " ¥ )"
-                    }}
-                  </n-tag>
-                </n-flex>
-                <n-flex justify="center">
-                  <n-button size="tiny" type="primary" secondary
-                            @click="showLightweightKline(result['股票代码'],result['股票名称'])">
-                    多周期K线
-                  </n-button>
-                </n-flex>
-              </n-flex>
-            </template>
-            <template #action>
-              <n-flex justify="left">
-                <n-button size="tiny" type="warning" @click="setStock(result['股票代码'],result['股票名称'])"> 成本
-                </n-button>
-                <n-button size="tiny" type="error"
-                          @click="showFenshi(result['股票代码'],result['股票名称'],result.changePercent)"> 分时
-                </n-button>
-                <n-button size="tiny" type="error" @click="showK(result['股票代码'],result['股票名称'])"> 日K</n-button>
-                <n-button size="tiny" type="error" v-if="result['买一报价']>0"
-                          @click="showMoney(result['股票代码'],result['股票名称'])"> 资金
-                </n-button>
-                <n-button size="tiny" type="success" @click="search(result['股票代码'],result['股票名称'])"> 详情
-                </n-button>
-                <n-button v-if="result['买一报价']>0" size="tiny" type="success"
-                          @click="searchNotice(result['股票代码'])"> 公告
-                </n-button>
-                <n-button v-if="result['买一报价']>0" size="tiny" type="success"
-                          @click="searchStockReport(result['股票代码'])"> 研报
-                </n-button>
-                <n-flex justify="right">
-                  <n-dropdown trigger="click" :options="groupList" key-field="ID" label-field="name"
-                              @select="(groupId) => AddStockGroupInfo(groupId,result['股票代码'],result['股票名称'])">
-                    <n-button type="warning" size="tiny">设置分组</n-button>
-                  </n-dropdown>
-                </n-flex>
-              </n-flex>
-            </template>
-          </n-card>
+          <StockCard :result="result" :open-ai-enable="data.openAiEnable" :group-list="groupList"
+            @remove-monitor="removeMonitor"
+            @ai-check-stock="aiCheckStock"
+            @set-cost="setStock"
+            @show-fenshi="showFenshi"
+            @show-k="showK"
+            @show-money="showMoney"
+            @search-detail="search"
+            @search-notice="searchNotice"
+            @search-stock-report="searchStockReport"
+            @add-stock-group="AddStockGroupInfo"
+            @del-stock-group="delStockGroup"
+            @show-lightweight-kline="showLightweightKline" />
         </n-gi>
       </n-grid>
     </n-tab-pane>
     <n-tab-pane closable v-for="group in groupList" :group-id="group.ID" :name="String(group.ID)" :tab="group.name">
       <n-grid :x-gap="8" :cols="3" :y-gap="8">
         <n-gi :id="result['股票代码']+'_gi'" v-for="result in groupResults" :key="result.key" style="margin-left: 2px;">
-          <n-card :data-sort="result.sort" :id="result['股票代码']" :data-code="result['股票代码']" :bordered="true"
-                  :title="result['股票名称']" :closable="false"
-                  @close="removeMonitor(result['股票代码'],result['股票名称'],result.key)">
-            <n-grid :cols="12" :y-gap="6">
-              <n-gi :span="6">
-                <n-text :type="result.type">
-                  <n-number-animation :duration="1000" :precision="2" :from="result['上次当前价格']"
-                                      :to="Number(result['当前价格'])"/>
-                  <n-tag size="small" :type="result.type" :bordered="false" v-if="result['盘前盘后']>0">
-                    ({{ result['盘前盘后'] }} {{ result['盘前盘后涨跌幅'] }}%)
-                  </n-tag>
-                </n-text>
-                <n-text style="padding-left: 10px;" :type="result.type">
-                  <n-number-animation :duration="1000" :precision="3" :from="result.lastChangePercent" :to="result.changePercent"/>
-                  %
-                </n-text>&nbsp;
-                <n-text size="small" v-if="result.costVolume>0" :type="result.type">
-                  <n-number-animation :duration="1000" :precision="2" :from="result.lastProfitAmountToday" :to="result.profitAmountToday"/>
-                </n-text>
-              </n-gi>
-              <n-gi :span="6">
-                <stock-spark-line :last-price="Number(result['当前价格'])" :open-price="Number(result['昨日收盘价'])"
-                                  :stock-code="result['股票代码']" :stock-name="result['股票名称']"></stock-spark-line>
-              </n-gi>
-            </n-grid>
-            <n-grid :cols="2" :y-gap="4" :x-gap="4">
-              <n-gi>
-                <n-text :type="'info'">{{ "最高 " + result["今日最高价"] + " " + result.highRate }}%</n-text>
-              </n-gi>
-              <n-gi>
-                <n-text :type="'info'">{{ "最低 " + result["今日最低价"] + " " + result.lowRate }}%</n-text>
-              </n-gi>
-              <n-gi>
-                <n-text :type="'info'">{{ "昨收 " + result["昨日收盘价"] }}</n-text>
-              </n-gi>
-              <n-gi>
-                <n-text :type="'info'">{{ "今开 " + result["今日开盘价"] }}</n-text>
-              </n-gi>
-            </n-grid>
-            <n-collapse accordion v-if="result['买一报价']>0">
-              <n-collapse-item title="盘口" name="1" v-if="result['买一报价']>0">
-                <template #header-extra>
-                  <n-flex justify="space-between">
-                    <n-text :type="'info'">{{ "买一 " + result["买一报价"] + '(' + result["买一申报"] + ")" }}</n-text>
-                    <n-text :type="'info'">{{ "卖一 " + result["卖一报价"] + '(' + result["卖一申报"] + ")" }}</n-text>
-                  </n-flex>
-                </template>
-                <n-grid :cols="2" :y-gap="4" :x-gap="4">
-                  <n-gi v-if="result['买一报价']>0">
-                    <n-text :type="'info'">{{ "买一 " + result["买一报价"] + '(' + result["买一申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖一报价']>0">
-                    <n-text :type="'info'">{{ "卖一 " + result["卖一报价"] + '(' + result["卖一申报"] + ")" }}</n-text>
-                  </n-gi>
-
-                  <n-gi v-if="result['买二报价']>0">
-                    <n-text :type="'info'">{{ "买二 " + result["买二报价"] + '(' + result["买二申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖二报价']>0">
-                    <n-text :type="'info'">{{ "卖二 " + result["卖二报价"] + '(' + result["卖二申报"] + ")" }}</n-text>
-                  </n-gi>
-
-                  <n-gi v-if="result['买三报价']>0">
-                    <n-text :type="'info'">{{ "买三 " + result["买三报价"] + '(' + result["买三申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖三报价']>0">
-                    <n-text :type="'info'">{{ "买三 " + result["卖三报价"] + '(' + result["卖三申报"] + ")" }}</n-text>
-                  </n-gi>
-
-                  <n-gi v-if="result['买四报价']>0">
-                    <n-text :type="'info'">{{ "买四 " + result["买四报价"] + '(' + result["买四申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖四报价']>0">
-                    <n-text :type="'info'">{{ "卖四 " + result["卖四报价"] + '(' + result["卖四申报"] + ")" }}</n-text>
-                  </n-gi>
-
-                  <n-gi v-if="result['买五报价']>0">
-                    <n-text :type="'info'">{{ "买五 " + result["买五报价"] + '(' + result["买五申报"] + ")" }}</n-text>
-                  </n-gi>
-                  <n-gi v-if="result['卖五报价']>0">
-                    <n-text :type="'info'">{{ "卖五 " + result["卖五报价"] + '(' + result["卖五申报"] + ")" }}</n-text>
-                  </n-gi>
-                </n-grid>
-              </n-collapse-item>
-            </n-collapse>
-            <template #header-extra>
-
-              <n-tag size="small" :bordered="false">{{ result['股票代码'] }}</n-tag>&nbsp;
-              <n-button size="tiny" secondary type="primary"
-                        @click="removeMonitor(result['股票代码'],result['股票名称'],result.key)">
-                取消关注
-              </n-button>&nbsp;
-
-              <n-button size="tiny" v-if="data.openAiEnable" secondary type="warning"
-                        @click="aiCheckStock(result['股票名称'],result['股票代码'])">
-                AI分析
-              </n-button>
-              <n-button secondary type="error" size="tiny"
-                        @click="delStockGroup(result['股票代码'],result['股票名称'],group.ID)">移出分组
-              </n-button>
-            </template>
-            <template #footer>
-              <n-flex vertical :size="8">
-                <n-flex justify="center">
-                  <n-text :type="'info'">{{ result["日期"] + " " + result["时间"] }}</n-text>
-                  <n-tag size="small" v-if="result.volume>0" :type="result.profitType">{{ result.volume + "股" }}</n-tag>
-                  <n-tag size="small" v-if="result.costPrice>0" :type="result.profitType">
-                    {{
-                      "成本:" + result.costPrice + "*" + result.costVolume + " " + result.profit + "%" + " ( " + result.profitAmount + " ¥ )"
-                    }}
-                  </n-tag>
-                </n-flex>
-                <n-flex justify="center">
-                  <n-button size="tiny" type="primary" secondary
-                            @click="showLightweightKline(result['股票代码'],result['股票名称'])">
-                    多周期K线
-                  </n-button>
-                </n-flex>
-              </n-flex>
-            </template>
-            <template #action>
-              <n-flex justify="left">
-                <n-button size="tiny" type="warning" @click="setStock(result['股票代码'],result['股票名称'])"> 成本
-                </n-button>
-                <n-button size="tiny" type="error"
-                          @click="showFenshi(result['股票代码'],result['股票名称'],result.changePercent)"> 分时
-                </n-button>
-                <n-button size="tiny" type="error" @click="showK(result['股票代码'],result['股票名称'])"> 日K</n-button>
-                <n-button size="tiny" type="error" v-if="result['买一报价']>0"
-                          @click="showMoney(result['股票代码'],result['股票名称'])"> 资金
-                </n-button>
-                <n-button size="tiny" type="success" @click="search(result['股票代码'],result['股票名称'])"> 详情
-                </n-button>
-                <n-button v-if="result['买一报价']>0" size="tiny" type="success"
-                          @click="searchNotice(result['股票代码'])"> 公告
-                </n-button>
-                <n-button v-if="result['买一报价']>0" size="tiny" type="success"
-                          @click="searchStockReport(result['股票代码'])"> 研报
-                </n-button>
-                <n-flex justify="right">
-                  <n-dropdown trigger="click" :options="groupList" key-field="ID" label-field="name"
-                              @select="(groupId) => AddStockGroupInfo(groupId,result['股票代码'],result['股票名称'])">
-                    <n-button type="warning" size="tiny">设置分组</n-button>
-                  </n-dropdown>
-                </n-flex>
-              </n-flex>
-            </template>
-          </n-card>
+          <StockCard :result="result" :show-spark-line="true" :group-id="group.ID" :open-ai-enable="data.openAiEnable" :group-list="groupList"
+            @remove-monitor="removeMonitor"
+            @ai-check-stock="aiCheckStock"
+            @set-cost="setStock"
+            @show-fenshi="showFenshi"
+            @show-k="showK"
+            @show-money="showMoney"
+            @search-detail="search"
+            @search-notice="searchNotice"
+            @search-stock-report="searchStockReport"
+            @add-stock-group="AddStockGroupInfo"
+            @del-stock-group="delStockGroup"
+            @show-lightweight-kline="showLightweightKline" />
         </n-gi>
       </n-grid>
     </n-tab-pane>

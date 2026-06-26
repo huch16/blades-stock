@@ -17,6 +17,7 @@ const (
 	GroupNewsResearch  ToolGroup = "news_research"
 	GroupAIAnalysis    ToolGroup = "ai_analysis"
 	GroupOperations    ToolGroup = "operations"
+	GroupProject       ToolGroup = "project"
 )
 
 var toolGroupMap = map[string]ToolGroup{
@@ -132,12 +133,21 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetAIAnalysisHistory":           GroupAIAnalysis,
 	"GetAIAnalysisDetail":            GroupAIAnalysis,
 	"GetAIAnalysisContent":           GroupAIAnalysis,
+	"GetBacktestStats":               GroupAIAnalysis,
+	"GetBacktestDetail":              GroupAIAnalysis,
+	"RunBacktest":                    GroupAIAnalysis,
 	"SetTradingPrice":                GroupOperations,
 	"SendDingDingMessage":            GroupOperations,
 	"SendToDingDing":                 GroupOperations,
 	"SearchFund":                     GroupOperations,
 	"GetFundInfo":                    GroupOperations,
 	"GetEconomicData":                GroupOperations,
+
+	"ReadProjectFile":                GroupProject,
+	"ListProjectDir":                 GroupProject,
+	"SearchProjectFiles":             GroupProject,
+	"GitOperation":                   GroupProject,
+	"LearnProject":                   GroupProject,
 }
 
 type groupKeywords struct {
@@ -236,12 +246,22 @@ var groupKeywordsList = []groupKeywords{
 		"帮我查", "分析一下", "怎么样", "是什么", "解释一下", "总结一下",
 		"深度分析", "深度思考", "详细分析", "仔细想想",
 		"金融问答", "智能问答",
+		"回测", "准确率", "验证", "预测", "准不准",
+		"历史回顾", "复盘", "历史预测", "历史判断",
+		"track record", "accuracy", "backtest",
 	}},
 	{GroupOperations, []string{
 		"预警", "价位", "开仓", "止盈价", "止损价", "成本价",
 		"钉钉", "QQ", "通知", "推送", "发送消息",
 		"基金", "基金代码", "基金名称", "净值",
 		"GDP", "CPI", "PPI", "PMI", "宏观经济",
+	}},
+	{GroupProject, []string{
+		"项目", "代码", "源码", "仓库", "git", "Git", "github",
+		"学习", "吸收", "skill", "Skill", "技能", "知识库",
+		"文件读取", "目录结构", "看代码", "读代码", "项目结构",
+		"分析项目", "导入项目", "项目文件", "源代码",
+		"ReadProjectFile", "ListProjectDir", "GitOperation",
 	}},
 }
 

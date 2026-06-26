@@ -90,59 +90,6 @@ func (receiver *EastMoneyKLineApi) fetchKLineJSONBytesByHTTP(reqURL string) ([]b
 	return rawBody, nil
 }
 
-// Helper functions for error classification
-func isNetworkError(err error) bool {
-	return strings.Contains(err.Error(), "network") ||
-		strings.Contains(err.Error(), "connection") ||
-		strings.Contains(err.Error(), "timeout")
-}
-
-func isTimeoutError(err error) bool {
-	return strings.Contains(err.Error(), "timeout") ||
-		strings.Contains(err.Error(), "deadline")
-}
-
-func isBotDetected(resp *resty.Response) bool {
-	// Check for common bot detection indicators
-	body := string(resp.Body())
-
-	botIndicators := []string{
-		"bot", "robot", "crawler", "spider",
-		"验证", "验证码", "安全验证",
-		"access denied", "forbidden",
-		"请开启JavaScript", "enable javascript",
-	}
-
-	for _, indicator := range botIndicators {
-		if strings.Contains(strings.ToLower(body), strings.ToLower(indicator)) {
-			return true
-		}
-	}
-
-	// Check for CAPTCHA pages
-	if strings.Contains(body, "captcha") || strings.Contains(body, "recaptcha") {
-		return true
-	}
-
-	return false
-}
-
-func isValidResponse(body []byte) bool {
-	if len(body) == 0 {
-		return false
-	}
-
-	// Check if response contains valid JSON structure
-	var temp interface{}
-	if err := json.Unmarshal(body, &temp); err != nil {
-		// Not valid JSON, might be HTML error page
-		bodyStr := string(body)
-		return !(strings.Contains(bodyStr, "<html") || strings.Contains(bodyStr, "<!DOCTYPE"))
-	}
-
-	return true
-}
-
 // @Author spark
 // @Date 2026/3/15
 // @Desc 东方财富 K 线数据 API 工具
@@ -457,18 +404,6 @@ func (receiver *EastMoneyKLineApi) convertStockCode(stockCode string) string {
 	return stockCode
 }
 
-// getAdjustType 获取复权类型对应的数字
-func (receiver *EastMoneyKLineApi) getAdjustType(adjustFlag string) string {
-	switch strings.ToLower(adjustFlag) {
-	case "qfq":
-		return "1" // 前复权
-	case "hfq":
-		return "2" // 后复权
-	default:
-		return "0" // 不复权
-	}
-}
-
 // parseKLine 解析单条 K 线数据
 // K 线数据格式：日期，开盘价，收盘价，最高价，最低价，成交量，成交额，振幅，涨跌幅，涨跌额，换手率，市盈率 TTM
 func (receiver *EastMoneyKLineApi) parseKLine(klineStr, adjustFlag string) *KLineData {
@@ -706,7 +641,4 @@ func (receiver *EastMoneyKLineApi) GetKLineCount(stockCode string, kLineType str
 	return len(*kLines)
 }
 
-// init 函数添加随机数种子初始化
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
+

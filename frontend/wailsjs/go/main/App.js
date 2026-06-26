@@ -562,6 +562,10 @@ export function GlobalStockIndexesReadable() {
   return window['go']['main']['App']['GlobalStockIndexesReadable']();
 }
 
+export function BatchGreet(arg1) {
+  return window['go']['main']['App']['BatchGreet'](arg1);
+}
+
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }

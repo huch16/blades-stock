@@ -22,19 +22,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-type DataToolWrapper struct {
-	name        string
-	description string
-	params      map[string]*types.ParamDef
-	handler     func(args string) (string, error)
-}
-
 func NewDataToolWrapper(name, description string, params map[string]*types.ParamDef, handler func(args string) (string, error)) bladesTools.Tool {
 	return types.NewTool(name, description, params, handler)
-}
-
-func (t *DataToolWrapper) toTool() bladesTools.Tool {
-	return types.NewTool(t.name, t.description, t.params, t.handler)
 }
 
 func thsResultToMarkdown(res map[string]any, title string) string {
@@ -780,7 +769,7 @@ func GetAllDataTools() []bladesTools.Tool {
 				if !ok {
 					continue
 				}
-				if m["columns"].([]any) != nil && len(m["columns"].([]any)) > 0 {
+				if len(m["columns"].([]any)) > 0 {
 					columns := m["columns"].([]any)[0].(map[string]any)
 					rows = append(rows, row{
 						Title:      convertor.ToString(m["title"]),
@@ -1052,8 +1041,8 @@ func GetAllDataTools() []bladesTools.Tool {
 			}
 
 			var md strings.Builder
-			md.WriteString(fmt.Sprintf("### AI分析报告详情\n\n"))
-			md.WriteString(fmt.Sprintf("| 项目 | 内容 |\n| --- | --- |\n"))
+			md.WriteString("### AI分析报告详情\n\n")
+			md.WriteString("| 项目 | 内容 |\n| --- | --- |\n")
 			md.WriteString(fmt.Sprintf("| ID | %d |\n", result.ID))
 			md.WriteString(fmt.Sprintf("| 股票代码 | %s |\n", result.StockCode))
 			md.WriteString(fmt.Sprintf("| 股票名称 | %s |\n", result.StockName))
@@ -1090,7 +1079,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 			var md strings.Builder
 			md.WriteString(fmt.Sprintf("### %s (%s) AI分析报告\n\n", result.StockName, result.StockCode))
-			md.WriteString(fmt.Sprintf("| 项目 | 内容 |\n| --- | --- |\n"))
+			md.WriteString("| 项目 | 内容 |\n| --- | --- |\n")
 			md.WriteString(fmt.Sprintf("| 报告ID | %d |\n", result.ID))
 			md.WriteString(fmt.Sprintf("| 模型 | %s |\n", result.ModelName))
 			md.WriteString(fmt.Sprintf("| 分析时间 | %s |\n", result.CreatedAt.Format("2006-01-02 15:04:05")))
@@ -4967,21 +4956,6 @@ func getStockNameFromPlateStocks(plateStocks map[string]any, code string) string
 		}
 	}
 	return ""
-}
-
-func marketSentiment(upCount, downCount int) string {
-	ratio := float64(upCount) / float64(upCount+downCount)
-	if ratio > 0.7 {
-		return "极度乐观"
-	} else if ratio > 0.6 {
-		return "乐观"
-	} else if ratio > 0.4 {
-		return "中性"
-	} else if ratio > 0.3 {
-		return "悲观"
-	} else {
-		return "极度悲观"
-	}
 }
 
 func parseStockCodesFromArgs(args string, mainField string) []string {

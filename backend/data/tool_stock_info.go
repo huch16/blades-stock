@@ -202,7 +202,7 @@ func handleGetTdxCompanyInfo(o *OpenAi, funcArguments string, ctx *ToolContext) 
 		if bundle.Finance != nil {
 			f := bundle.Finance
 			sb.WriteString("### 财务摘要\n\n")
-			sb.WriteString(fmt.Sprintf("| 指标 | 值 |\n|---|---|\n"))
+			sb.WriteString("| 指标 | 值 |\n|---|---|\n")
 			sb.WriteString(fmt.Sprintf("| 股票代码 | %s |\n", f.Code))
 			if f.IPODate != "" {
 				sb.WriteString(fmt.Sprintf("| 上市日期 | %s |\n", f.IPODate))

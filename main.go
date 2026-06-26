@@ -1,11 +1,12 @@
 package main
 
 import (
-	"context"
 	"embed"
-	"encoding/json"
 	"fmt"
+	"time"
+
 	assistantweb "go-stock/ai-assistant-web"
+	"go-stock/backend/agent"
 	"go-stock/backend/data"
 	"go-stock/backend/db"
 	log "go-stock/backend/logger"
@@ -13,18 +14,14 @@ import (
 	"go-stock/backend/models"
 	"os"
 	"runtime/debug"
-	"strings"
-	"time"
 
 	"github.com/duke-git/lancet/v2/convertor"
-	"github.com/duke-git/lancet/v2/slice"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
 	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed frontend/dist
@@ -44,15 +41,6 @@ var wxpay []byte
 
 //go:embed build/screenshot/扫码_搜索联合传播样式-白色版.png
 var wxgzh []byte
-
-//go:embed build/stock_basic.json
-var stocksBin []byte
-
-//go:embed build/stock_base_info_hk.json
-var stocksBinHK []byte
-
-//go:embed build/stock_base_info_us.json
-var stocksBinUS []byte
 
 //go:embed docs/go-stock使用手册.md
 var userManual []byte
@@ -78,6 +66,16 @@ func main() {
 	db.Init("")
 	data.InitAnalyzeSentiment()
 	go AutoMigrate()
+	// 后台启动分析报告回测
+	go func() {
+		time.Sleep(10 * time.Second) // 等数据库和数据服务就绪
+		count, err := agent.NewBacktestService().RunAllBacktests()
+		if err != nil {
+			log.SugaredLogger.Errorf("auto backtest failed: %v", err)
+		} else if count > 0 {
+			log.SugaredLogger.Infof("auto backtest completed: %d reports", count)
+		}
+	}()
 
 	//db.Dao.Model(&data.Group{}).Where("id = ?", 0).FirstOrCreate(&data.Group{
 	//	Name: "默认分组",
@@ -236,36 +234,6 @@ func main() {
 
 }
 
-func cacheCookies(url string) {
-	log.SugaredLogger.Info("预缓存东财 Cookie...")
-	_, err := data.FetchEastMoneyCookiesViaChromedp("", 3*time.Minute, url)
-	if err != nil {
-		log.SugaredLogger.Warnf("预缓存东财 Cookie 失败：%v", err)
-	} else {
-		log.SugaredLogger.Info("东财 Cookie 预缓存完成")
-	}
-}
-
-func updateMultipleModel() {
-	oldSettings := &models.OldSettings{}
-	db.Dao.Model(oldSettings).First(oldSettings)
-	aiConfig := &data.AIConfig{}
-	db.Dao.Model(aiConfig).First(aiConfig)
-	if oldSettings.OpenAiEnable && oldSettings.OpenAiApiKey != "" && aiConfig.ID == 0 {
-		aiConfig.Name = oldSettings.OpenAiModelName
-		aiConfig.ApiKey = oldSettings.OpenAiApiKey
-		aiConfig.BaseUrl = oldSettings.OpenAiBaseUrl
-		aiConfig.ModelName = oldSettings.OpenAiModelName
-		aiConfig.Temperature = oldSettings.OpenAiTemperature
-		aiConfig.MaxTokens = oldSettings.OpenAiMaxTokens
-		aiConfig.TimeOut = oldSettings.OpenAiApiTimeOut
-		err := db.Dao.Model(aiConfig).Create(aiConfig).Error
-		if err != nil {
-			log.SugaredLogger.Error(err.Error())
-		}
-	}
-}
-
 func AutoMigrate() {
 	db.Dao.AutoMigrate(&data.StockInfo{})
 	db.Dao.AutoMigrate(&data.StockBasic{})
@@ -278,7 +246,6 @@ func AutoMigrate() {
 	db.Dao.AutoMigrate(&data.FollowedFund{})
 	db.Dao.AutoMigrate(&data.FollowedStock{})
 	db.Dao.AutoMigrate(&data.FundBasic{})
-	db.Dao.AutoMigrate(&models.PromptTemplate{})
 	db.Dao.AutoMigrate(&data.Group{})
 	db.Dao.AutoMigrate(&data.GroupStock{})
 	db.Dao.AutoMigrate(&models.Tags{})
@@ -301,6 +268,9 @@ func AutoMigrate() {
 	db.Dao.AutoMigrate(&models.CustomStrategy{})
 	db.Dao.AutoMigrate(&models.BKFundFlow{})
 	db.Dao.AutoMigrate(&models.ConceptFundFlow{})
+	db.Dao.AutoMigrate(&models.ProjectAnalysis{})
+	db.Dao.AutoMigrate(&models.CodeChunk{})
+	db.Dao.AutoMigrate(&models.BacktestResult{})
 
 	//updateMultipleModel()
 
@@ -333,59 +303,6 @@ func initGlobalStockIndexCacheTask() {
 
 }
 
-func initStockDataUS(ctx context.Context) {
-	defer func() {
-		go runtime.EventsEmit(ctx, "loadingMsg", "done")
-	}()
-	var v []models.StockInfoUS
-	err := json.Unmarshal(stocksBinUS, &v)
-	if err != nil {
-		log.SugaredLogger.Error(err.Error())
-		return
-	}
-	log.SugaredLogger.Infof("init stock data us %d", len(v))
-	var total int64
-	db.Dao.Model(&models.StockInfoUS{}).Count(&total)
-	if total != int64(len(v)) {
-		for _, item := range v {
-			var count int64
-			db.Dao.Model(&models.StockInfoUS{}).Where("code = ?", item.Code).Count(&count)
-			if count > 0 {
-				//log.SugaredLogger.Infof("stock data us %s exist", item.Code)
-				continue
-			}
-			db.Dao.Model(&models.StockInfoUS{}).Create(&item)
-		}
-	}
-}
-
-func initStockDataHK(ctx context.Context) {
-	defer func() {
-		go runtime.EventsEmit(ctx, "loadingMsg", "done")
-	}()
-	var v []models.StockInfoHK
-	err := json.Unmarshal(stocksBinHK, &v)
-	if err != nil {
-		log.SugaredLogger.Error(err.Error())
-		return
-	}
-	log.SugaredLogger.Infof("init stock data hk %d", len(v))
-	var total int64
-	db.Dao.Model(&models.StockInfoHK{}).Count(&total)
-	if total != int64(len(v)) {
-		for _, item := range v {
-			var count int64
-			db.Dao.Model(&models.StockInfoHK{}).Where("code = ?", item.Code).Count(&count)
-			if count > 0 {
-				//log.SugaredLogger.Infof("stock data hk %s exist", item.Code)
-				continue
-			}
-			db.Dao.Model(&models.StockInfoHK{}).Create(&item)
-		}
-	}
-
-}
-
 func updateBasicInfo() {
 	config := data.GetSettingConfig()
 	if config.UpdateBasicInfoOnStart {
@@ -395,77 +312,6 @@ func updateBasicInfo() {
 	}
 }
 
-func initStockData(ctx context.Context) {
-	defer func() {
-		go runtime.EventsEmit(ctx, "loadingMsg", "done")
-	}()
-	fields := "ts_code,symbol,name,area,industry,cnspell,market,list_date,act_name,act_ent_type,fullname,exchange,list_status,curr_type,enname,delist_date,is_hs"
-	log.SugaredLogger.Info("init stock data")
-	res := &data.TushareStockBasicResponse{}
-	err := json.Unmarshal(stocksBin, res)
-	if err != nil {
-		log.SugaredLogger.Error(err.Error())
-		return
-	}
-
-	for _, item := range res.Data.Items {
-		stock := &data.StockBasic{}
-		stockData := map[string]any{}
-		for _, field := range strings.Split(fields, ",") {
-			//logger.SugaredLogger.Infof("field: %s", field)
-			idx := slice.IndexOf(res.Data.Fields, field)
-			if idx == -1 {
-				continue
-			}
-			stockData[field] = item[idx]
-		}
-		jsonData, _ := json.Marshal(stockData)
-		err := json.Unmarshal(jsonData, stock)
-		if err != nil {
-			continue
-		}
-		stock.ID = 0
-		var count int64
-		db.Dao.Model(&data.StockBasic{}).Where("ts_code = ?", stock.TsCode).Count(&count)
-		if count > 0 {
-			continue
-		} else {
-			db.Dao.Create(stock)
-		}
-
-		//db.Dao.Model(&data.StockBasic{}).FirstOrCreate(stock, &data.StockBasic{TsCode: stock.TsCode}).Where("ts_code = ?", stock.TsCode).Updates(stock)
-	}
-
-	//for _, item := range res.Data.Items {
-	//	stock := &data.StockBasic{}
-	//	stock.Exchange = convertor.ToString(item[0])
-	//	stock.IsHs = convertor.ToString(item[1])
-	//	stock.Name = convertor.ToString(item[2])
-	//	stock.Industry = convertor.ToString(item[3])
-	//	stock.ListStatus = convertor.ToString(item[4])
-	//	stock.ActName = convertor.ToString(item[5])
-	//	stock.ID = uint(item[6].(float64))
-	//	stock.CurrType = convertor.ToString(item[7])
-	//	stock.Area = convertor.ToString(item[8])
-	//	stock.ListDate = convertor.ToString(item[9])
-	//	stock.DelistDate = convertor.ToString(item[10])
-	//	stock.ActEntType = convertor.ToString(item[11])
-	//	stock.TsCode = convertor.ToString(item[12])
-	//	stock.Symbol = convertor.ToString(item[13])
-	//	stock.Cnspell = convertor.ToString(item[14])
-	//	stock.Fullname = convertor.ToString(item[20])
-	//	stock.Ename = convertor.ToString(item[21])
-	//
-	//	var count int64
-	//	db.Dao.Model(&data.StockBasic{}).Where("ts_code = ?", stock.TsCode).Count(&count)
-	//	if count > 0 {
-	//		continue
-	//	} else {
-	//		db.Dao.Create(stock)
-	//	}
-	//}
-}
-
 func checkDir(dir string) {
 	_, err := os.Stat(dir)
 	if os.IsNotExist(err) {
@@ -473,7 +319,8 @@ func checkDir(dir string) {
 		log.SugaredLogger.Info("create dir: " + dir)
 	}
 	if BuildKey == "" {
-		BuildKey = "cc1e0d684e32f176c56ff1fcf384dcd9"
+		log.SugaredLogger.Warn("BUILD_KEY not set via ldflags, using dev fallback")
+		BuildKey = "dev-fallback-build-key"
 	}
 }
 

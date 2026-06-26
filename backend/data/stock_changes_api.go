@@ -393,20 +393,4 @@ func parseItemData(data string, item *StockChangeItem, changeType int) {
 	}
 }
 
-func formatVolume(vol int64) string {
-	if vol >= 100000000 {
-		return fmt.Sprintf("%.2f亿", float64(vol)/100000000)
-	} else if vol >= 10000 {
-		return fmt.Sprintf("%.2f万", float64(vol)/10000)
-	}
-	return fmt.Sprintf("%d", vol)
-}
 
-func formatAmount(amount float64) string {
-	if amount >= 100000000 {
-		return fmt.Sprintf("%.2f亿", amount/100000000)
-	} else if amount >= 10000 {
-		return fmt.Sprintf("%.2f万", amount/10000)
-	}
-	return fmt.Sprintf("%.2f", amount)
-}

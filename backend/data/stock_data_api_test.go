@@ -8,7 +8,6 @@ import (
 	"go-stock/backend/logger"
 	"go-stock/backend/models"
 	"go-stock/backend/util"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
@@ -246,13 +245,8 @@ func TestGetStockBaseInfo(t *testing.T) {
 	//}
 
 }
-func getSinaCode(code string) string {
-	c := strings.Split(code, ".")
-	return strings.ToLower(c[1]) + c[0]
-}
-
 func TestReadFile(t *testing.T) {
-	file, err := ioutil.ReadFile("../../stock_basic.json")
+	file, err := os.ReadFile("../../stock_basic.json")
 	if err != nil {
 		t.Log(err)
 		return
@@ -363,9 +357,8 @@ func Test11(t *testing.T) {
 			"rsh": ""
 	}`
 	resp, err := resty.New().R().
-		SetHeader("hexin-v", "AwdKLt3GIiwTSKag8Wve7senlrrUDN9ZNeNfTtnUJrC98S2u4dxrPkWw747q").
+		SetHeader("hexin-v", getIwencaiAPIKey(t)).
 		SetHeader("Content-Type", "application/json;charset=UTF-8").
-		//SetHeader("Cookie", "v=AwdKLt3GIiwTSKag8Wve7senlrrUDN9ZNeNfTtnUJrC98S2u4dxrPkWw747q; other_uid=Ths_iwencai_Xuangu_dt6xi9pjkvlje9ogva7vw9v24diwgcr4;").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36").
 		SetBody(body).Post(url)
 	if err != nil {

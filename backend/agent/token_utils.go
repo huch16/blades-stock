@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"strings"
 	"unicode"
 )
 
@@ -89,54 +88,6 @@ func trimHistoryMessages(historyMessages []map[string]string, maxTokens int) []m
 		result = []map[string]string{lastMsg}
 	}
 	return result
-}
-
-func trimToolResult(content string, maxTokens int) string {
-	if content == "" {
-		return content
-	}
-	estimatedTokens := estimateTokens(content)
-	if estimatedTokens <= maxTokens {
-		return content
-	}
-	maxChars := int(float64(maxTokens) * englishCharsPerToken * 0.8)
-	if maxChars > len(content) {
-		maxChars = len(content)
-	}
-	lines := strings.Split(content, "\n")
-	var result []string
-	charCount := 0
-	for i := len(lines) - 1; i >= 0; i-- {
-		lineLen := len(lines[i]) + 1
-		if charCount+lineLen > maxChars {
-			break
-		}
-		charCount += lineLen
-		result = append([]string{lines[i]}, result...)
-	}
-	if len(result) == 0 && len(lines) > 0 {
-		lastLine := lines[len(lines)-1]
-		if len(lastLine) > maxChars {
-			lastLine = lastLine[len(lastLine)-maxChars:]
-		}
-		result = []string{lastLine}
-	}
-	return strings.Join(result, "\n") + "\n\n...(内容过长，已截断显示)"
-}
-
-func isTokenLimitError(err error) bool {
-	if err == nil {
-		return false
-	}
-	errMsg := err.Error()
-	return strings.Contains(errMsg, "max_prompt_tokens") ||
-		strings.Contains(errMsg, "exceeded") ||
-		strings.Contains(errMsg, "token limit") ||
-		strings.Contains(errMsg, "context_length") ||
-		strings.Contains(errMsg, "maximum context") ||
-		strings.Contains(errMsg, "too many tokens") ||
-		strings.Contains(errMsg, "context window") ||
-		strings.Contains(errMsg, "400") && strings.Contains(errMsg, "token")
 }
 
 

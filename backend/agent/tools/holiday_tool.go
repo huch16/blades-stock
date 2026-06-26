@@ -84,10 +84,10 @@ func GetHolidayTools() []bladesTools.Tool {
 			md.WriteString("| 项目 | 内容 |\n| --- | --- |\n")
 
 			if result.Holiday.Holiday {
-				md.WriteString(fmt.Sprintf("| 是否节假日 | ✅ 是 |\n"))
+				md.WriteString("| 是否节假日 | ✅ 是 |\n")
 				md.WriteString(fmt.Sprintf("| 节假日名称 | %s |\n", result.Holiday.Name))
 			} else {
-				md.WriteString(fmt.Sprintf("| 是否节假日 | ❌ 否（工作日） |\n"))
+				md.WriteString("| 是否节假日 | ❌ 否（工作日） |\n")
 				if result.Holiday.Name != "" {
 					md.WriteString(fmt.Sprintf("| 备注 | %s |\n", result.Holiday.Name))
 				}
@@ -457,7 +457,7 @@ func GetHolidayTools() []bladesTools.Tool {
 			}
 
 			var md strings.Builder
-			md.WriteString(fmt.Sprintf("### 下一个交易日查询\n\n"))
+			md.WriteString("### 下一个交易日查询\n\n")
 			md.WriteString(fmt.Sprintf("**起始日期**: %s\n\n", currentDate.Format("2006-01-02")))
 
 			if nextTradingDay != nil {

@@ -56,12 +56,53 @@ func GetRecentChatMemory(sessionID string, limit int) ([]ChatMemory, error) {
 	return memories, err
 }
 
+func (c *ChatMemory) Delete() error {
+	return Dao.Delete(c).Error
+}
+
+func CountChatMemory(sessionID string) (int, error) {
+	var count int64
+	err := Dao.Model(&ChatMemory{}).Where("session_id = ?", sessionID).Count(&count).Error
+	return int(count), err
+}
+
 func ClearChatMemory(sessionID string) error {
 	return Dao.Where("session_id = ?", sessionID).Delete(&ChatMemory{}).Error
 }
 
+type ChatMemorySummary struct {
+	ID        uint      `gorm:"primarykey" json:"id"`
+	SessionID string    `gorm:"index;size:64" json:"sessionId"`
+	Summary   string    `gorm:"type:text" json:"summary"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+func (ChatMemorySummary) TableName() string {
+	return "chat_memory_summary"
+}
+
+func (s *ChatMemorySummary) Save() error {
+	return Dao.Create(s).Error
+}
+
+func GetChatMemorySummary(sessionID string) (*ChatMemorySummary, error) {
+	var summary ChatMemorySummary
+	err := Dao.Where("session_id = ?", sessionID).
+		Order("created_at DESC").
+		First(&summary).Error
+	if err != nil {
+		return nil, err
+	}
+	return &summary, nil
+}
+
+func DeleteChatMemorySummary(sessionID string) error {
+	return Dao.Where("session_id = ?", sessionID).Delete(&ChatMemorySummary{}).Error
+}
+
 func AutoMigrate() {
 	Dao.AutoMigrate(&ChatMemory{})
+	Dao.AutoMigrate(&ChatMemorySummary{})
 	Dao.AutoMigrate(&models.StockChangeHistory{})
 	Dao.AutoMigrate(&models.MarketStatistic{})
 }

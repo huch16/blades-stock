@@ -1,13 +1,11 @@
 package data
 
 import (
-	"bufio"
 	_ "embed"
 	"fmt"
 	"go-stock/backend/db"
 	"go-stock/backend/logger"
 	"go-stock/backend/models"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -68,9 +66,6 @@ var (
 
 //go:embed data/dict/base.txt
 var baseDict string
-
-//go:embed data/dict/zh/s_1.txt
-var zhDict string
 
 func InitAnalyzeSentiment() {
 	defer func() {
@@ -525,39 +520,6 @@ func GetSentimentDescription(category models.SentimentType) string {
 		return "中性"
 	default:
 		return "未知"
-	}
-}
-
-func main() {
-	// 从命令行读取输入
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("请输入要分析的股市相关文本（输入exit退出）：")
-
-	for {
-		fmt.Print("> ")
-		text, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Println("读取输入时出错:", err)
-			continue
-		}
-
-		// 去除换行符
-		text = strings.TrimSpace(text)
-
-		// 检查是否退出
-		if text == "exit" {
-			break
-		}
-
-		// 分析情感
-		result := AnalyzeSentiment(text)
-
-		// 输出结果
-		fmt.Printf("情感分析结果: %s (得分: %.2f, 正面词:%d, 负面词:%d)\n",
-			GetSentimentDescription(result.Category),
-			result.Score,
-			result.PositiveCount,
-			result.NegativeCount)
 	}
 }
 

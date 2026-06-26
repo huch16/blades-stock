@@ -130,8 +130,8 @@ func (receiver StockGroupApi) RemoveStockGroup(code string, name string, id int)
 }
 
 func (receiver StockGroupApi) RemoveGroup(id int) bool {
-	err := receiver.dao.Where("id = ?", id).Delete(&Group{}).Error
-	err = receiver.dao.Where("group_id = ?", id).Delete(&GroupStock{}).Error
+	receiver.dao.Where("id = ?", id).Delete(&Group{})
+	err := receiver.dao.Where("group_id = ?", id).Delete(&GroupStock{}).Error
 	return err == nil
 
 }

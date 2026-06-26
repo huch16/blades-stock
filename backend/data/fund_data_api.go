@@ -285,13 +285,11 @@ func (f *FundApi) setGrowthFromTable(doc *goquery.Document, selector string, fun
 				fund.NetGrowthAll = &toFloat
 			}
 		}
-		return
 	})
 }
 
 var (
 	reFSName      = regexp.MustCompile(`var\s+fS_name\s*=\s*"([^"]*)"`)
-	reFSCode      = regexp.MustCompile(`var\s+fS_code\s*=\s*"([^"]*)"`)
 	rePerformance = regexp.MustCompile(`var\s+Data_performance\s*=\s*(\{.+?\});`)
 	reFundManager = regexp.MustCompile(`var\s+Data_currentFundManager\s*=\s*(\[.+?\]);`)
 	reFluctuation = regexp.MustCompile(`var\s+Data_fluctuationScale\s*=\s*(\{.+?\});`)

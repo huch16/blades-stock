@@ -6,43 +6,12 @@ import (
 	"time"
 
 	"github.com/tidwall/gjson"
-
-	"go-stock/backend/util"
 )
 
 func init() {
 	//registerToolHandler("CailianpressWeb", handleCailianpressWeb)
 	registerToolHandler("GetSecuritiesCompanyOpinion", handleGetSecuritiesCompanyOpinion)
 	registerToolHandler("GetNewsListData", handleGetNewsListData)
-}
-
-// handleCailianpressWeb 处理 CailianpressWeb 工具调用
-func handleCailianpressWeb(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	ctx.Ch <- map[string]any{
-		"code":              1,
-		"question":          ctx.Question,
-		"chatId":            ctx.StreamResponseID,
-		"model":             ctx.Model,
-		"reasoning_content": "\r\n```\r\n🔧 开始调用工具：CailianpressWeb，\n参数：" + funcArguments + "\r\n```\r\n",
-		"time":              time.Now().Format(time.DateTime),
-	}
-
-	searchWords := gjson.Get(funcArguments, "searchWords").String()
-	res := NewMarketNewsApi().CailianpressWeb(searchWords)
-	md := util.MarkdownTableWithTitle("["+searchWords+"]-新闻资讯", res)
-	//logger.SugaredLogger.Infof("%s", md)
-
-	appendToolMessages(
-		ctx.Messages,
-		ctx.CurrentAIContent.String(),
-		ctx.ReasoningContentText.String(),
-		ctx.CurrentCallID,
-		ctx.FuncName,
-		funcArguments,
-		md,
-	)
-
-	return nil
 }
 
 // handleGetSecuritiesCompanyOpinion 处理 GetSecuritiesCompanyOpinion 工具调用

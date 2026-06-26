@@ -15,8 +15,7 @@ import {
   AnalyticsOutline,
   BarChartSharp, Bonfire, BonfireOutline, DiamondOutline, EaselSharp,
   ExpandOutline, Flag,
-  Flame, FlameSharp, FlaskOutline, GlobeOutline, InformationOutline,
-  ChatbubblesOutline,
+  Flame, FlameSharp, FlaskOutline, InformationOutline,
   NewspaperOutline,
   NewspaperSharp, Notifications,
   Pulse,
@@ -31,7 +30,7 @@ import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime
 import FloatingAiAssistant from "./components/FloatingAiAssistant.vue";
 import FloatingAgentAssistant from "./components/FloatingAgentAssistant.vue";
 import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
-import {Prompt, ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
+import {ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
 import {LocalFireDepartmentRound} from "@vicons/material";
 import {AppsList20Regular, BoxSearch20Regular, CommentNote20Filled} from "@vicons/fluent";
 import {FireFilled, MoneyCollectOutlined, NotificationFilled, StockOutlined} from "@vicons/antd";
@@ -671,75 +670,6 @@ const menuOptions = ref([
               ),
           key: 'uplimitLadder',
           icon: renderIcon(LocalFireDepartmentRound),
-        },
-        {
-          label: () =>
-              h(
-                  RouterLink,
-                  {
-                    to: {
-                      name: 'research',
-                      query: {
-                        name:"提示词模板",
-                      },
-                    },
-                    onClick: () => {
-                      activeKey.value = 'research'
-                      setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 3, name: '提示词模板'})
-                      }, 100)
-                    },
-                  },
-                  {default: () => '提示词模板'}
-              ),
-          key: 'research3',
-          icon: renderIcon(Prompt),
-        },
-        {
-          label: () =>
-              h(
-                  RouterLink,
-                  {
-                    to: {
-                      name: 'research',
-                      query: {
-                        name:"提示词广场",
-                      },
-                    },
-                    onClick: () => {
-                      activeKey.value = 'research'
-                      setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 10, name: '提示词广场'})
-                      }, 100)
-                    },
-                  },
-                  {default: () => '提示词广场'}
-              ),
-          key: 'promptPlaza',
-          icon: renderIcon(GlobeOutline),
-        },
-        {
-          label: () =>
-              h(
-                  RouterLink,
-                  {
-                    to: {
-                      name: 'research',
-                      query: {
-                        name:"问答广场",
-                      },
-                    },
-                    onClick: () => {
-                      activeKey.value = 'research'
-                      setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 11, name: '问答广场'})
-                      }, 100)
-                    },
-                  },
-                  {default: () => '问答广场'}
-              ),
-          key: 'promptQa',
-          icon: renderIcon(ChatbubblesOutline),
         },
         {
           label: () =>

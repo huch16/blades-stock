@@ -44,19 +44,6 @@ func InvalidateEastMoneyCookieCache() {
 	eastMoneyCookieCache.items = make(map[string]*cookieCacheItem)
 }
 
-// cleanExpiredCookies 清理过期的 Cookie 缓存项（内部调用，不暴露）
-func cleanExpiredCookies() {
-	eastMoneyCookieCache.mu.Lock()
-	defer eastMoneyCookieCache.mu.Unlock()
-
-	now := time.Now()
-	for key, item := range eastMoneyCookieCache.items {
-		if now.After(item.expiry) {
-			delete(eastMoneyCookieCache.items, key)
-		}
-	}
-}
-
 // GetEastMoneyCookieCacheInfo 获取当前 Cookie 缓存信息（用于调试/监控）
 func GetEastMoneyCookieCacheInfo() map[string]interface{} {
 	eastMoneyCookieCache.mu.Lock()

@@ -34,14 +34,11 @@ func TestNewDeepSeekOpenAiConfig(t *testing.T) {
 	//res := ai.NewChatStream("长电科技", "sh600584", "长电科技分析和总结", nil)
 	res := ai.NewSummaryStockNewsStreamWithTools("总结市场资讯，发掘潜力标的/行业/板块/概念，控制风险。调用工具函数验证", nil, tools, false, nil)
 
-	for {
-		select {
-		case msg := <-res:
-			if len(msg) > 0 {
-				t.Log(msg)
-				if msg["content"] == "DONE" {
-					return
-				}
+	for msg := range res {
+		if len(msg) > 0 {
+			t.Log(msg)
+			if msg["content"] == "DONE" {
+				return
 			}
 		}
 	}

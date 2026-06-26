@@ -584,7 +584,15 @@ func FetchKLineWithFallback(stockCode, stockName, klt string, limit int, end str
 		return &KLineSourceResult{Data: &[]KLineData{}, Source: ""}
 	}
 
-	logger.SugaredLogger.Warnf("EastMoney K线数据为空或失败，尝试新浪数据源: code=%s klt=%s", stockCode, klt)
+	logger.SugaredLogger.Warnf("EastMoney K线数据为空或失败，尝试Tushare数据源: code=%s klt=%s", stockCode, klt)
+
+	tushareResult := fetchFromTushare(stockCode, klt, limit)
+	if tushareResult != nil && tushareResult.Data != nil && len(*tushareResult.Data) > 0 {
+		tushareResult.Source = "tushare"
+		fillVolumeRatio(tushareResult.Data)
+		return tushareResult
+	}
+	logger.SugaredLogger.Warnf("Tushare K线数据也为空，尝试新浪数据源: code=%s klt=%s", stockCode, klt)
 
 	sinaResult := fetchFromSina(stockCode, klt, limit)
 	if sinaResult != nil && sinaResult.Data != nil && len(*sinaResult.Data) > 0 {
@@ -657,6 +665,12 @@ func fetchFromEastMoney(stockCode, stockName, klt string, limit int, end string)
 	} else {
 		data = api.GetKLineDataBefore(stockCode, klt, "", limit, end)
 	}
+	return &KLineSourceResult{Data: data}
+}
+
+func fetchFromTushare(stockCode, klt string, limit int) *KLineSourceResult {
+	api := NewTushareApi(GetSettingConfig())
+	data := api.GetKLineData(stockCode, klt, limit)
 	return &KLineSourceResult{Data: data}
 }
 

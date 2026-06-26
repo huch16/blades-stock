@@ -495,10 +495,6 @@ func f10SortedCols(data []map[string]any, ordered []string) []string {
 	return result
 }
 
-func f10GenericToMarkdown(title string, resp *F10GenericResp) string {
-	return f10GenericToMarkdownOrdered(title, resp, nil)
-}
-
 func f10GenericToMarkdownOrdered(title string, resp *F10GenericResp, colOrder []string) string {
 	if resp == nil || resp.Result == nil || len(resp.Result.Data) == 0 {
 		return fmt.Sprintf("## %s\n\n暂无数据", title)

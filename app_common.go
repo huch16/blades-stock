@@ -374,26 +374,6 @@ func (a *App) UpdateAiRecommendStocksAlert(id uint, enableAlert bool) string {
 	return "更新预警状态成功"
 }
 
-func (a *App) GetPromptTemplateList(query models.PromptTemplateQuery) *models.PromptTemplatePageData {
-	page, err := data.NewPromptTemplateApi().GetPromptTemplateList(&query)
-	if err != nil {
-		return &models.PromptTemplatePageData{}
-	}
-	return page
-}
-
-func (a *App) AddPromptTemplate(template models.PromptTemplate) string {
-	return data.NewPromptTemplateApi().AddPrompt(template)
-}
-
-func (a *App) UpdatePromptTemplate(template models.PromptTemplate) string {
-	return data.NewPromptTemplateApi().AddPrompt(template)
-}
-
-func (a *App) DeletePromptTemplate(id uint) string {
-	return data.NewPromptTemplateApi().DelPrompt(id)
-}
-
 func (a *App) GetAllStockInfoList(query data.AllStockInfoQuery) *data.AllStockInfoPageData {
 	page, err := data.NewStockDataApi().GetAllStockInfoList(&query)
 	if err != nil {

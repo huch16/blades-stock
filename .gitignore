@@ -112,6 +112,21 @@ ai-assistant-web/data/*.db*
 *.exe
 /build/bin/*
 frontend/package.json.md5
-/build/us.json
+
+# Generated data files
+/build/*.json
+/backend/data/stock_basic.json
+/backend/data/data/dict/jp/dict.txt
+
+# Build scripts
 /build-dev.bat
 /build-prod.bat
+
+# Screenshots
+/build/screenshot/*.png
+
+# Vite/Webpack cache
+frontend/node_modules/.vite/
+
+# Wails build artefacts
+wails.json

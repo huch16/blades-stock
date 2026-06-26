@@ -14,7 +14,7 @@ import (
 	"go-stock/backend/logger"
 	"go-stock/backend/models"
 	"io"
-	"io/ioutil"
+	"os"
 	url2 "net/url"
 	"reflect"
 	"strconv"
@@ -333,7 +333,7 @@ func (receiver StockDataApi) GetStockBaseInfo() {
 		SetResult(res).
 		Post(tushareApiUrl)
 	//logger.SugaredLogger.Infof("GetStockBaseInfo %s", string(resp.Body()))
-	ioutil.WriteFile("stock_basic.json", resp.Body(), 0666)
+	os.WriteFile("stock_basic.json", resp.Body(), 0666)
 	//logger.SugaredLogger.Infof("GetStockBaseInfo %+v", res)
 	if err != nil {
 		logger.SugaredLogger.Error(err.Error())
@@ -374,7 +374,7 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 		return strutil.HasPrefixAny(s, []string{"hk", "HK", "sh", "sz"})
 	})
 
-	if hkcodes != nil && len(hkcodes) > 0 {
+	if len(hkcodes) > 0 {
 		hkcodesStr := slice.JoinFunc(hkcodes, ",", func(s string) string {
 			if strutil.HasPrefixAny(s, []string{"hk", "HK"}) {
 				return "r_" + strings.ToLower(s)
@@ -789,10 +789,9 @@ func ParseTxStockData(data string) (*StockInfo, error) {
 	var result map[string]string
 	var err error
 	if strutil.ContainsAny(datas[0], []string{"v_r_hk", "v_hk", "v_sz", "v_sh"}) {
-		result, err = ParseTxHKStockData(datas)
+		result, _ = ParseTxHKStockData(datas)
 	}
 
-	//logger.SugaredLogger.Infof("股票数据解析完成: %v", result)
 	marshal, err := json.Marshal(result)
 	if err != nil {
 		logger.SugaredLogger.Errorf("json.Marshal error:%s", err.Error())
@@ -924,16 +923,15 @@ func ParseFullSingleStockData(data string) (*StockInfo, error) {
 	var result map[string]string
 	var err error
 	if strutil.ContainsAny(datas[0], []string{"hq_str_sz", "hq_str_sh", "hq_str_bj", "hq_str_sb"}) {
-		result, err = ParseSHSZStockData(datas)
+		result, _ = ParseSHSZStockData(datas)
 	}
 	if strutil.ContainsAny(datas[0], []string{"hq_str_hk"}) {
-		result, err = ParseHKStockData(datas)
+		result, _ = ParseHKStockData(datas)
 	}
 	if strutil.ContainsAny(datas[0], []string{"hq_str_gb"}) {
-		result, err = ParseUSStockData(datas)
+		result, _ = ParseUSStockData(datas)
 	}
 
-	//logger.SugaredLogger.Infof("股票数据解析完成: %v", result)
 	marshal, err := json.Marshal(result)
 	if err != nil {
 		logger.SugaredLogger.Errorf("json.Marshal error:%s", err.Error())
@@ -1590,21 +1588,6 @@ func (receiver StockDataApi) GetHK_KLineData(stockCode string, kLineType string,
 	return K
 }
 
-func getSinaStockInfo(receiver StockDataApi, page, pageSize int) *[]models.SinaStockInfo {
-	infos := &[]models.SinaStockInfo{}
-	url := "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHKStockData?page=%d&num=%d&sort=symbol&asc=1&node=qbgg_hk&_s_r_a=init"
-	_, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).SetProxy("http://localhost:10809").R().
-		SetHeader("Host", "vip.stock.finance.sina.com.cn").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
-		SetResult(infos).
-		Get(fmt.Sprintf(url, page, pageSize))
-
-	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
-	}
-	return infos
-}
-
 func (receiver StockDataApi) getDCStockInfo(market string, page, pageSize int) {
 	//m:105,m:106,m:107  //美股
 	//m:128+t:3,m:128+t:4,m:128+t:1,m:128+t:2 //港股
@@ -1637,9 +1620,9 @@ func (receiver StockDataApi) getDCStockInfo(market string, page, pageSize int) {
 		//logger.SugaredLogger.Errorf("vm.Run error:%v", err.Error())
 	}
 	value, _ := val.Object().Value().Export()
-	marshal, err := json.Marshal(value)
+	marshal, _ := json.Marshal(value)
 	data := make(map[string]any)
-	err = json.Unmarshal(marshal, &data)
+	json.Unmarshal(marshal, &data)
 	if err != nil {
 		//logger.SugaredLogger.Errorf("json.Unmarshal error:%v", err.Error())
 	}
@@ -1757,18 +1740,14 @@ func (receiver StockDataApi) GetHKStockInfo(pageSize int) {
 	}
 	js := "var " + string(resp.Body())
 	vm := otto.New()
-	_, err = vm.Run(js)
+	vm.Run(js)
 	_, err = vm.Run("var data = JSON.stringify(list_data);")
 	if err != nil {
 		return
 	}
-	value, err := vm.Get("data")
+	value, _ := vm.Get("data")
 	data := make(map[string]any)
-	err = json.Unmarshal([]byte(value.String()), &data)
-	if err != nil {
-		//logger.SugaredLogger.Errorf("json.Unmarshal error:%v", err.Error())
-	}
-	//logger.SugaredLogger.Infof("resp:%s", data)
+	json.Unmarshal([]byte(value.String()), &data)
 	if data["code"] != nil && data["code"].(float64) == 0 {
 		d := data["data"].(map[string]any)
 		saveHKStockInfo(d)
@@ -1788,17 +1767,14 @@ func (receiver StockDataApi) GetHKStockInfo(pageSize int) {
 				break
 			}
 			js = "var " + string(resp.Body())
-			_, err = vm.Run(js)
+			vm.Run(js)
 			_, err = vm.Run("var data = JSON.stringify(list_data);")
 			if err != nil {
 				return
 			}
-			value, err = vm.Get("data")
+			value, _ = vm.Get("data")
 			data = make(map[string]any)
-			err = json.Unmarshal([]byte(value.String()), &data)
-			if err != nil {
-				//logger.SugaredLogger.Errorf("json.Unmarshal error:%v", err.Error())
-			}
+			json.Unmarshal([]byte(value.String()), &data)
 			//logger.SugaredLogger.Infof("resp:%s", data)
 			if data != nil && data["code"] != nil && data["code"].(float64) == 0 {
 				if data["data"] != nil {

@@ -231,10 +231,6 @@ func (a *App) ShowFromTray() {
 	}
 }
 
-func getFrameless() bool {
-	return true
-}
-
 // getScreenResolution 返回主屏逻辑尺寸（考虑 Windows DPI 缩放），用于自适应窗口大小。
 // 返回：width, height, minWidth, minHeight。
 func getScreenResolution() (int, int, int, int, error) {

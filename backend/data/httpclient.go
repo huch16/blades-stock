@@ -15,7 +15,6 @@ var (
 	sharedHTTPClient    *http.Client
 	SharedHTTPClient    *resty.Client
 	httpConfigMutex     sync.RWMutex
-	currentProxyEnabled bool
 	currentProxyURL     string
 )
 
@@ -56,7 +55,6 @@ func UpdateHTTPClientProxy(proxyURL string) {
 
 	sharedTransport.Proxy = http.ProxyURL(parseProxyURL(proxyURL))
 	currentProxyURL = proxyURL
-	currentProxyEnabled = true
 }
 
 func DisableHTTPClientProxy() {
@@ -64,7 +62,6 @@ func DisableHTTPClientProxy() {
 	defer httpConfigMutex.Unlock()
 
 	sharedTransport.Proxy = nil
-	currentProxyEnabled = false
 	currentProxyURL = ""
 }
 

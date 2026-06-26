@@ -23,7 +23,6 @@ require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/go-toast/toast v0.0.0-20190211030409-01e6764cf0a4
 	github.com/google/jsonschema-go v0.4.3
-	github.com/inconshreveable/go-update v0.0.0-20160112193335-8152e7eb6ccf
 	github.com/lib4u/fake-useragent v1.0.6
 	github.com/mark3labs/mcp-go v0.54.1
 	github.com/robertkrimen/otto v0.5.1

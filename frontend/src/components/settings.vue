@@ -426,9 +426,9 @@ function deletePrompt(ID) {
       <n-space vertical size="large">
         <n-card :title="() => h(NTag, { type: 'primary', bordered: false }, () => '基础设置')" size="small">
           <n-grid :cols="24" :x-gap="24" style="text-align: left">
-<!--            <n-form-item-gi :span="10" label="Tushare Token：" path="tushareToken">
+            <n-form-item-gi :span="10" label="Tushare Token：" path="tushareToken">
               <n-input type="text" placeholder="Tushare api token" v-model:value="formValue.tushareToken" clearable/>
-            </n-form-item-gi>-->
+            </n-form-item-gi>
             <n-form-item-gi :span="4" label="启动时更新基础信息：" path="updateBasicInfoOnStart">
               <n-switch v-model:value="formValue.updateBasicInfoOnStart"/>
             </n-form-item-gi>
