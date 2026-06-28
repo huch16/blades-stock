@@ -1,79 +1,14 @@
 package agent
 
 import (
-	"context"
 	"fmt"
-	"go-stock/backend/data"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
 	"strings"
 	"testing"
-
-	"github.com/duke-git/lancet/v2/fileutil"
-	"github.com/go-kratos/blades"
 )
 
-func TestGetStockAiAgent(t *testing.T) {
-	ctx := context.Background()
-	db.Init("../../data/stock.db")
-	config := data.GetSettingConfig()
-	agentInstance := GetStockAiAgent(ctx, *config.AiConfigs[0], "分析当前市场情绪和热点", "")
-
-	if agentInstance == nil {
-		t.Fatal("agent instance is nil")
-	}
-
-	t.Logf("Agent mode: %s", agentInstance.Mode)
-
-	switch agentInstance.Mode {
-	case AgentModePlanExecute:
-		sysPrompt := config.Settings.Prompt
-		invocation := &blades.Invocation{
-			Message: blades.UserMessage(`结合以上提供的宏观经济数据/市场指数行情/国内外市场资讯/电报/会议/事件/投资者关注的问题，
-结合宏观经济，事件驱动，政策支持，投资者关注的问题，分析当前市场情绪和热点 找出有潜力/优质的板块/行业/概念/标的/主题，
-多因子深度分析计算上涨或下跌的逻辑和概率，
-最后按风险和投资周期给出具体推荐标的操作建议`),
-			Instruction: blades.SystemMessage(sysPrompt),
-			Streamable:  true,
-		}
-		md := strings.Builder{}
-		for msg, err := range agentInstance.Agent.Run(ctx, invocation) {
-			if err != nil {
-				t.Logf("agent error: %v", err)
-				break
-			}
-			if msg == nil {
-				continue
-			}
-			if msg.Role == blades.RoleAssistant {
-				text := msg.Text()
-				if text != "" {
-					md.WriteString(text)
-				}
-				if msg.Metadata != nil {
-					if rc, ok := msg.Metadata["reasoning_content"].(string); ok && rc != "" {
-						md.WriteString(rc)
-					}
-				}
-			}
-			for _, part := range msg.Parts {
-				if tp, ok := part.(*blades.ToolPart); ok {
-					t.Logf("[ToolCall] %s(%s)", tp.Name, tp.Request)
-				}
-			}
-		}
-		logger.SugaredLogger.Info(md.String())
-
-	default:
-		md := strings.Builder{}
-		ch := NewStockAiAgentApi().Chat("分析一下立讯精密", 2, nil)
-		for message := range ch {
-			logger.SugaredLogger.Infof("res:%s", message.Content)
-			md.WriteString(message.Content)
-		}
-		logger.SugaredLogger.Info(md.String())
-	}
-}
+// Pure unit tests for the agent's content-compression and classification
+// helpers. They exercise local code only and do not require a DB, network,
+// or external AI service.
 
 func TestCollapseLongMarkdownTableRunsIsolation(t *testing.T) {
 	run := make([]string, 0, 22)
@@ -108,7 +43,7 @@ func TestCollapseLongMarkdownTableRuns(t *testing.T) {
 }
 
 func TestSupplementaryFactLineKeepsStockDigits(t *testing.T) {
-	var parts []string
+	parts := make([]string, 0, 37)
 	for i := 0; i < 18; i++ {
 		parts = append(parts, "叙述性占位句子不含百分号。")
 	}
@@ -172,19 +107,6 @@ func TestClassifyComplexity(t *testing.T) {
 		if result != tt.expected {
 			status = "✗"
 		}
-		fmt.Printf("%s question=%q expected=%s got=%s\n", status, tt.question, tt.expected, result)
+		t.Logf("%s question=%q expected=%s got=%s", status, tt.question, tt.expected, result)
 	}
-}
-
-func TestAgent(t *testing.T) {
-	db.Init("../../data/stock.db")
-
-	md := strings.Builder{}
-	ch := NewStockAiAgentApi().Chat("分析一下立讯精密", 2, nil)
-	for message := range ch {
-		logger.SugaredLogger.Infof("res:%s", message.Content)
-		md.WriteString(message.Content)
-	}
-	logger.SugaredLogger.Info(md.String())
-	fileutil.WriteStringToFile("../../data/result.md", md.String(), false)
 }

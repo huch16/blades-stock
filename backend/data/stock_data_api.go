@@ -14,8 +14,8 @@ import (
 	"go-stock/backend/logger"
 	"go-stock/backend/models"
 	"io"
-	"os"
 	url2 "net/url"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -1520,17 +1520,52 @@ func (receiver StockDataApi) GetStockMinutePriceData(stockCode string) (*[]Minut
 	return minuteDatas, date
 }
 
+func sinaScaleFromKLineType(kLineType string) string {
+	switch kLineType {
+	case "day", "240":
+		return "240"
+	case "week", "1200":
+		return "1200"
+	case "month":
+		return "7200"
+	case "5":
+		return "5"
+	case "15":
+		return "15"
+	case "30":
+		return "30"
+	case "60":
+		return "60"
+	default:
+		return kLineType
+	}
+}
+
 func (receiver StockDataApi) GetKLineData(stockCode string, kLineType string, days int64) *[]KLineData {
-	url := fmt.Sprintf("http://quotes.sina.cn/cn/api/json_v2.php/CN_MarketDataService.getKLineData?symbol=%s&scale=%s&ma=yes&datalen=%d", stockCode, kLineType, days)
+	scale := sinaScaleFromKLineType(kLineType)
+	ts := time.Now().UnixMilli()
+	callback := fmt.Sprintf("callback_%d", ts)
+	url := fmt.Sprintf("https://quotes.sina.cn/cn/api/jsonp_v2.php/%s/CN_MarketDataService.getKLineData?symbol=%s&scale=%s&ma=no&datalen=%d", callback, stockCode, scale, days)
 	K := &[]KLineData{}
-	_, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
+	resp, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
 		SetHeader("Host", "quotes.sina.cn").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
-		SetResult(K).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("err:%s", err.Error())
 		return K
+	}
+	body := string(resp.Body())
+	// 解析 JSONP 响应：提取第一个 [ 到最后一个 ] 之间的内容
+	start := strings.Index(body, "[")
+	end := strings.LastIndex(body, "]")
+	if start < 0 || end <= start {
+		logger.SugaredLogger.Errorf("GetKLineData: no array found in response body: %s", truncateStr(body, 200))
+		return K
+	}
+	jsonStr := body[start : end+1]
+	if err := json.Unmarshal([]byte(jsonStr), K); err != nil {
+		logger.SugaredLogger.Errorf("GetKLineData: json unmarshal error: %v, body: %s", err, truncateStr(body, 200))
 	}
 	return K
 }
@@ -1588,6 +1623,7 @@ func (receiver StockDataApi) GetHK_KLineData(stockCode string, kLineType string,
 	return K
 }
 
+//lint:ignore U1000 getDCStockInfo is kept for legacy compatibility
 func (receiver StockDataApi) getDCStockInfo(market string, page, pageSize int) {
 	//m:105,m:106,m:107  //美股
 	//m:128+t:3,m:128+t:4,m:128+t:1,m:128+t:2 //港股

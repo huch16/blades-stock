@@ -2,15 +2,14 @@
   <div class="chat-box">
     <t-chat
         ref="chatRef"
-        :clear-history="chatList.length > 0 && !isStreamLoad"
+        :clear-history="chatList.length > 0 && isStreaming"
         :data="chatList"
-        :text-loading="loading"
-        :is-stream-load="isStreamLoad"
+        :text-loading="isStreaming"
+        :is-stream-load="isStreaming"
         style="height: 100%"
         @scroll="handleChatScroll"
         @clear="clearConfirm"
     >
-      <!-- eslint-disable vue/no-unused-vars -->
       <template #content="{ item, index }">
         <div v-if="item.role === 'assistant' && item.steps && item.steps.length > 0" class="agent-steps">
           <div class="agent-steps-header">📋 执行步骤 <span class="agent-steps-badge">{{ item.steps.length }}</span></div>
@@ -22,15 +21,15 @@
           </div>
         </div>
         <t-chat-reasoning v-if="item.role === 'assistant'"  expand-icon-placement="right">
-          <t-chat-loading v-if="isStreamLoad" text="思考中..." />
+          <t-chat-loading v-if="isStreaming" text="思考中..." />
           <t-chat-content v-if="item.reasoning.length > 0" :content="item.reasoning" />
         </t-chat-reasoning>
         <div v-if="item.role === 'assistant' && item.jsonMarkdown" class="agent-json-md">
-          <div class="agent-json-md-header" @click="toggleJsonMd(index)">
-            <svg :class="['agent-json-md-arrow', { 'agent-json-md-arrow-expanded': jsonMdExpandedMap[index] }]" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9 6l6 6-6 6z"/></svg>
+          <div class="agent-json-md-header" @click="toggleJsonMd(item.id)">
+            <svg :class="['agent-json-md-arrow', { 'agent-json-md-arrow-expanded': jsonMdExpandedMap[item.id] }]" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9 6l6 6-6 6z"/></svg>
             <span class="agent-json-md-title">📊 分析报告</span>
           </div>
-          <div v-show="jsonMdExpandedMap[index]" class="agent-json-md-content">
+          <div v-show="jsonMdExpandedMap[item.id]" class="agent-json-md-content">
             <t-chat-content :content="item.jsonMarkdown" />
           </div>
         </div>
@@ -44,7 +43,6 @@
         />
       </template>
       <template #footer>
-<!--        <t-chat-input :stop-disabled="isStreamLoad" @send="inputEnter" @stop="onStop"> </t-chat-input>-->
           <t-chat-sender
               ref="chatSenderRef"
               v-model="inputValue"
@@ -52,20 +50,19 @@
               :textarea-props="{
                 placeholder: '请输入消息...',
               }"
-              :loading="loading"
-              :stop-disabled="isStreamLoad"
+              :loading="isStreaming"
+              :stop-disabled="isStreaming"
               @send="inputEnter"
               @stop="onStop"
           >
             <template #suffix>
-              <!-- 监听键盘回车发送事件需要在sender组件监听 -->
               <t-button theme="default" variant="text" size="large" class="btn" @click="inputEnter"> 发送 </t-button>
             </template>
             <template #prefix>
               <NFlex>
                 <NSelect
-                    v-model:value="selectValue"
-                    :options="selectOptions"
+                    v-model:value="aiConfigStore.activeConfigId"
+                    :options="aiConfigStore.configs"
                     label-field="name" value-field="ID"
                     size="tiny"
                     style="width: 200px;"
@@ -90,47 +87,47 @@
   </div>
 </template>
 <script setup lang="ts">
-import {ref, onMounted, h, onBeforeUnmount, onBeforeMount} from 'vue';
+import {ref, onMounted, h, onBeforeUnmount, onBeforeMount, nextTick} from 'vue';
 import {ArrowDownIcon, CheckCircleIcon, SystemSumIcon} from 'tdesign-icons-vue-next';
-const fetchCancel = ref(null);
-const loading = ref(false);
+const isStreaming = ref(false);
 
 const inputValue = ref('');
-// 流式数据加载中
-const isStreamLoad = ref(false);
-let formatTimer = null
+let formatTimer: ReturnType<typeof setInterval> | null = null
 
 const chatRef = ref(null);
 const isShowToBottom = ref(false);
 
 const icon = ref('https://raw.githubusercontent.com/ArvinLovegood/go-stock/master/build/appicon.png');
 import {darkTheme, NFlex, NImage,NSelect} from "naive-ui";
-import {ChatWithAgent, GetAiConfigs, GetConfig, GetVersionInfo} from "../../wailsjs/go/main/App";
+import {ChatWithAgent, GetConfig, GetVersionInfo} from "../../wailsjs/go/main/App";
+import type { AIConfig } from '../../wailsjs/go/models'
+import { useAiConfigStore } from '../stores/aiConfig';
 import {EventsOff, EventsOn} from '../../wailsjs/runtime'
 import 'tdesign-vue-next/es/style/index.css';
 
-
+const aiConfigStore = useAiConfigStore()
 const allowToolTip = ref(true);
 const chatSenderRef = ref(null);
-const selectOptions = ref([]);
-const selectValue = ref("default");
 const agentMode = ref('auto')
 const agentModeOptions = [
   { label: '🤖 自动', value: 'auto' },
   { label: '⚡ 快速', value: 'react' },
   { label: '🧠 规划', value: 'plan_execute' },
 ]
-const jsonMdExpandedMap = ref({})
+const jsonMdExpandedMap = ref<Record<string, boolean>>({})
 
-function toggleJsonMd(index) {
+// 会话 ID 计数器，用于取消过期的流消息 (F-18)
+let sessionIdCounter = 0
+let currentSessionId = ''
+
+function toggleJsonMd(id: string) {
   jsonMdExpandedMap.value = {
     ...jsonMdExpandedMap.value,
-    [index]: !jsonMdExpandedMap.value[index]
+    [id]: !jsonMdExpandedMap.value[id]
   }
 }
 
-// 定义事件处理函数，方便在挂载和卸载时管理
-function getStepDotClass(step) {
+function getStepDotClass(step: string) {
   if (step.includes('✅')) return 'step-done'
   if (step.includes('🔧')) return 'step-tool'
   if (step.includes('⚡') || step.includes('🧠') || step.includes('📋') || step.includes('🔄')) return 'step-active'
@@ -156,20 +153,20 @@ function startFormatTimer() {
 }
 
 function stopFormatTimer() {
-  if (formatTimer) {
+  if (formatTimer !== null) {
     clearInterval(formatTimer)
     formatTimer = null
   }
 }
 
-function formatMarkdown(content) {
+function formatMarkdown(content: string) {
   if (!content) return { content: '', jsonMarkdown: '' }
 
   const { content: cleaned, jsonMarkdown } = wrapInlineJson(content)
 
   let inCodeBlock = false
   const lines = cleaned.split('\n')
-  const result = []
+  const result: string[] = []
 
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i]
@@ -210,7 +207,7 @@ function formatMarkdown(content) {
   }
 }
 
-function hasMarkdownContent(str) {
+function hasMarkdownContent(str: string) {
   if (!str || typeof str !== 'string') return false
   return /(^|\n)\s*#{1,6}\s/.test(str) ||
     /(^|\n)\s*\|/.test(str) ||
@@ -220,10 +217,10 @@ function hasMarkdownContent(str) {
     /(^|\n)\s*```/.test(str)
 }
 
-function extractMarkdownFromJson(obj) {
+function extractMarkdownFromJson(obj: any): string | null {
   if (typeof obj === 'string') return obj
   if (Array.isArray(obj)) {
-    const items = obj.map(item => typeof item === 'string' ? item : JSON.stringify(item, null, 2))
+    const items = obj.map((item: any) => typeof item === 'string' ? item : JSON.stringify(item, null, 2))
     return items.join('\n\n')
   }
   if (typeof obj === 'object' && obj !== null) {
@@ -245,15 +242,16 @@ function extractMarkdownFromJson(obj) {
   return null
 }
 
-function wrapInlineJson(content) {
+function wrapInlineJson(content: string) {
   if (!content) return { content: '', jsonMarkdown: '' }
-  const cleaned = []
-  const jsonParts = []
+  const cleaned: string[] = []
+  const jsonParts: string[] = []
   let i = 0
   const len = content.length
   let inCodeBlock = false
+  const MAX_SCAN = 500000 // (F-24) 最多扫描 50 万字符
 
-  while (i < len) {
+  while (i < len && i < MAX_SCAN) {
     if (content.substring(i, i + 3) === '```') {
       inCodeBlock = !inCodeBlock
       cleaned.push('```')
@@ -287,6 +285,10 @@ function wrapInlineJson(content) {
     cleaned.push(content[i])
     i++
   }
+  // 超出 MAX_SCAN 的字符直接追加 (F-24)
+  if (i < len) {
+    cleaned.push(content.substring(i))
+  }
 
   return {
     content: cleaned.join(''),
@@ -294,12 +296,14 @@ function wrapInlineJson(content) {
   }
 }
 
-function findJsonEnd(content, start) {
+function findJsonEnd(content: string, start: number) {
   let depth = 0
   let bracketDepth = 0
   let inStr = false
   let escape = false
-  for (let i = start; i < content.length; i++) {
+  const MAX_DEPTH = 10000 // (F-24) 最多扫描 1 万字符
+  const limit = Math.min(content.length, start + MAX_DEPTH)
+  for (let i = start; i < limit; i++) {
     const ch = content[i]
     if (escape) { escape = false; continue }
     if (ch === '\\' && inStr) { escape = true; continue }
@@ -316,17 +320,17 @@ function findJsonEnd(content, start) {
   return -1
 }
 
-function splitInlineHeading(line) {
+function splitInlineHeading(line: string) {
   const match = line.match(/(#{1,6}\s+\S)/)
   if (!match) return line
-  const idx = match.index
+  const idx = match.index!
   if (idx === 0) return line
   const prefix = line.substring(0, idx)
   if (prefix.trim() === '') return line
   return prefix + '\n\n' + line.substring(idx)
 }
 
-function isBlockElement(line) {
+function isBlockElement(line: string) {
   if (!line || line.length === 0) return false
   if (line[0] === '#') return true
   if (line.startsWith('- ') || line.startsWith('* ') || line.startsWith('+ ')) return true
@@ -338,7 +342,7 @@ function isBlockElement(line) {
   return false
 }
 
-function parseStepText(text) {
+function parseStepText(text: string) {
   if (!text) return [text]
   const trimmed = text.trim()
   if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return [text]
@@ -363,11 +367,24 @@ function parseStepText(text) {
   }
 }
 
-const handleAgentMessage = (data) => {
+let msgIdCounter = 0
+function nextMsgId(): string {
+  return `msg_${++msgIdCounter}_${Date.now()}`
+}
+
+const handleAgentMessage = (data: any) => {
   console.log(data)
-  if(data['role']==="assistant"){
-    loading.value = false;
-    const lastItem = chatList.value[0];
+  // 过滤过期会话消息 (F-18)
+  if (data?.sessionId && data.sessionId !== currentSessionId) {
+    return
+  }
+  if(data?.role==="assistant"){
+    isStreaming.value = false;
+    const lastItem = chatList.value[0]
+    if (!lastItem || lastItem.role !== 'assistant') { // (F-17)
+      console.warn('handleAgentMessage: no assistant placeholder found')
+      return
+    }
     if (data['reasoning_content']){
       const rc = data['reasoning_content']
       if (rc.startsWith('[STEP]')) {
@@ -396,10 +413,9 @@ const handleAgentMessage = (data) => {
     }
   }
   if(data['response_meta']&&data['response_meta'].finish_reason==="stop"){
-    isStreamLoad.value = false;
-    loading.value = false;
+    isStreaming.value = false;
     stopFormatTimer()
-    const lastItem = chatList.value[0];
+    const lastItem = chatList.value[0]
     if (lastItem) {
       if (lastItem.rawContent) {
         const fmt = formatMarkdown(lastItem.rawContent)
@@ -414,64 +430,67 @@ const handleAgentMessage = (data) => {
   }
 }
 
-onBeforeUnmount(() => {
-  EventsOff("agent-message", handleAgentMessage)
-})
-
+// (F-19/F-20) 统一注册/注销事件
 onBeforeMount(() => {
-  // 每次挂载前都重新注册事件监听
+  EventsOff("agent-message", handleAgentMessage)
   EventsOn("agent-message", handleAgentMessage)
-  GetAiConfigs().then(res=>{
-    console.log(res)
-    selectOptions.value = res
-    selectValue.value = res[0].ID
-  })
 })
 
 onMounted(() => {
-  //chatRef.value.scrollToBottom();
+  aiConfigStore.loadConfigs().catch(() => {})
 
   GetConfig().then((res) => {
     if (res.darkTheme) {
       document.documentElement.setAttribute("theme-mode", "dark");
     } else {
       document.documentElement.removeAttribute("theme-mode");    }
-  })
-
+  }).catch(() => {})
 
   GetVersionInfo().then((res) => {
     icon.value = res.icon;
-  });
-
+  }).catch(() => {})
 });
 
-// 滚动到底部
+onBeforeUnmount(() => {
+  stopFormatTimer()
+  EventsOff("agent-message", handleAgentMessage)
+})
+
 const backBottom = () => {
   chatRef.value.scrollToBottom({
     behavior: 'smooth',
   });
 };
-// 是否显示回到底部按钮
-const handleChatScroll = function ({ e }) {
+
+const handleChatScroll = function ({ e }: any) {
   const scrollTop = e.target.scrollTop;
   isShowToBottom.value = scrollTop < 0;
 };
-// 清空消息
+
 const clearConfirm = function () {
   chatList.value = [];
 };
-const handleOperation = function (type, options) {
+
+const handleOperation = function (type: string, options: any) {
   console.log('handleOperation', type, options);
+  if (type === 'copy' && options?.content) { // (F-28)
+    navigator.clipboard.writeText(options.content).then(() => {
+      // 使用 TDesign 的 MessagePlugin
+      import('tdesign-vue-next').then(({ MessagePlugin }) => {
+        MessagePlugin.success('已复制')
+      })
+    }).catch(() => {
+      import('tdesign-vue-next').then(({ MessagePlugin }) => {
+        MessagePlugin.error('复制失败')
+      })
+    })
+  }
 };
-// 倒序渲染
-const chatList = ref([
-  // {
-  //   content: `模型由<span>hunyuan</span>变为<span>GPT4</span>`,
-  //   role: 'model-change',
-  //   reasoning: '',
-  // },
+
+const chatList = ref<any[]>([
   {
-    avatar: h(NImage, { src: icon.value, height: '48px', width: '48px'}),
+    id: nextMsgId(),
+    avatar: '',
     name: 'Go-Stock AI',
     datetime: '',
     reasoning: '',
@@ -480,6 +499,7 @@ const chatList = ref([
     duration: 10,
   },
   {
+    id: nextMsgId(),
     avatar: 'https://tdesign.gtimg.com/site/avatar.jpg',
     name: '宇宙无敌大韭菜',
     datetime: '',
@@ -488,13 +508,12 @@ const chatList = ref([
     reasoning: '',
   },
 ]);
+// 动态更新头像 (F-26)
+chatList.value[0].avatar = h(NImage, { src: icon.value, height: '48px', width: '48px'})
 
 const onStop = function () {
-  if (fetchCancel.value) {
-    fetchCancel.value.controller.close();
-    loading.value = false;
-    isStreamLoad.value = false;
-  }
+  currentSessionId = '' // 标记当前会话已取消 (F-18)
+  isStreaming.value = false;
   stopFormatTimer()
   const lastItem = chatList.value[0]
   if (lastItem && lastItem.role === 'assistant') {
@@ -511,11 +530,20 @@ const onStop = function () {
 };
 
 const inputEnter = function () {
-  if (isStreamLoad.value) {
-    return;
+  if (isStreaming.value) return
+  if (!inputValue.value) return
+
+  // (F-21) 检查 AI 配置
+  const configId = aiConfigStore.activeConfigId
+  if (!configId || configId <= 0 || !aiConfigStore.activeConfig) {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => {
+      MessagePlugin.warning('请先选择或创建 AI 配置')
+    })
+    return
   }
-  if (!inputValue.value) return;
+
   const params = {
+    id: nextMsgId(),
     avatar: 'https://tdesign.gtimg.com/site/avatar.jpg',
     name: '宇宙无敌大韭菜',
     datetime: new Date().toDateString(),
@@ -523,9 +551,13 @@ const inputEnter = function () {
     role: 'user',
   };
   chatList.value.unshift(params);
-  // 空消息占位
+
+  // 创建新的会话 ID (F-18)
+  currentSessionId = `session_${++sessionIdCounter}_${Date.now()}`
+  const assisId = nextMsgId()
   const params2 = {
-    avatar:  h(NImage, { src: icon.value, height: '48px', width: '48px'}),
+    id: assisId,
+    avatar: '',
     name: 'Go-Stock AI',
     datetime: new Date().toDateString(),
     content: '',
@@ -534,17 +566,26 @@ const inputEnter = function () {
     rawReasoning: '',
     jsonMarkdown: '',
     role: 'assistant',
+    steps: [],
   };
+  params2.avatar = h(NImage, { src: icon.value, height: '48px', width: '48px'}) // (F-26)
   chatList.value.unshift(params2);
-  loading.value = true;
-  isStreamLoad.value = true;
+  isStreaming.value = true;
   startFormatTimer()
-  jsonMdExpandedMap.value = { ...jsonMdExpandedMap.value, [0]: true }
-  ChatWithAgent(inputValue.value,selectValue.value,0,false,0,false,agentMode.value === 'auto' ? '' : agentMode.value)
+  jsonMdExpandedMap.value = { ...jsonMdExpandedMap.value, [assisId]: true } // (F-23)
+
+  // (F-22) 确保占位已插入
+  nextTick(() => {
+    ChatWithAgent(inputValue.value, configId, 0, false, 0, false, agentMode.value === 'auto' ? '' : agentMode.value)
+      .catch((err: any) => {
+        console.error('ChatWithAgent error', err)
+        isStreaming.value = false
+        stopFormatTimer()
+      })
+  })
 };
 </script>
 <style lang="less">
-/* 应用滚动条样式 */
 ::-webkit-scrollbar-thumb {
   background-color: var(--td-scrollbar-color);
 }
@@ -671,7 +712,7 @@ const inputEnter = function () {
         align-items: center;
         justify-content: center;
         span {
-          margin-left: var(--td-comp-margin-xs);
+          margin-left: var(--td-comp-margin-s);
         }
       }
     }

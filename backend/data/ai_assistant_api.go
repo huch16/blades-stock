@@ -7,7 +7,8 @@ import (
 	"time"
 )
 
-const maxSavedMessages = 65535 * 10000
+// Limit saved messages to avoid excessively large payloads that can cause timeout or DB bloat.
+const maxSavedMessages = 2000 // keep last 2000 messages
 
 // GetAiAssistantSession 获取指定 sessionId 的会话消息列表，若 sessionId 为空则获取最新的
 func GetAiAssistantSession(sessionId string) (*models.AiAssistantSessionResp, error) {

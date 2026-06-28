@@ -293,6 +293,14 @@ func AskAi(o *OpenAi, _ error, messages []map[string]interface{}, ch chan map[st
 	if o.TimeOut <= 0 {
 		o.TimeOut = 300
 	}
+	if strings.TrimSpace(o.BaseUrl) == "" {
+		ch <- map[string]any{"code": 0, "question": question, "content": "AI 配置错误：Base URL 为空，请先在设置中配置 AI 服务地址"}
+		return
+	}
+	if strings.TrimSpace(o.ApiKey) == "" {
+		ch <- map[string]any{"code": 0, "question": question, "content": "AI 配置错误：API Key 为空，请先在设置中配置 API Key"}
+		return
+	}
 	timeout := time.Duration(o.TimeOut) * time.Second
 
 	var client *resty.Client
@@ -509,6 +517,14 @@ func AskAiWithToolsDepth(o *OpenAi, err error, messages []map[string]interface{}
 		return
 	}
 
+	if strings.TrimSpace(o.BaseUrl) == "" {
+		ch <- map[string]any{"code": 0, "question": question, "content": "AI 配置错误：Base URL 为空，请先在设置中配置 AI 服务地址"}
+		return
+	}
+	if strings.TrimSpace(o.ApiKey) == "" {
+		ch <- map[string]any{"code": 0, "question": question, "content": "AI 配置错误：API Key 为空，请先在设置中配置 API Key"}
+		return
+	}
 	if o.TimeOut <= 0 {
 		o.TimeOut = 300
 	}
@@ -849,6 +865,11 @@ func AskAiWithToolsDepth(o *OpenAi, err error, messages []map[string]interface{}
 }
 
 func (o *OpenAi) SaveAIResponseResult(stockCode, stockName, result, chatId, question string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Errorf("panic in SaveAIResponseResult: %v", r)
+		}
+	}()
 	err := db.Dao.Create(&models.AIResponseResult{
 		StockCode: stockCode,
 		StockName: stockName,

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -150,17 +152,142 @@ func (s *WebSearchApi) Search(query string, maxResults int) []WebSearchResult {
 		maxResults = 10
 	}
 
+	cfg := GetSettingConfig()
+	searxngUrl := strings.TrimSpace(cfg.SearxngUrl)
+	if searxngUrl == "" {
+		searxngUrl = "https://search.whohai.cfd"
+	}
+	useJson := cfg.SearxngJsonFormat || true // default to JSON API for private SearXNG
+
+	// First try SearXNG JSON API directly (avoids chromedp 401/bot detection)
+	results := s.searchSearxngWithHTTP(searxngUrl, query, maxResults, useJson)
+	if len(results) >= maxResults {
+		return results
+	}
+
+	// Fallback to browser-based engines if JSON API returns nothing
 	browser, err := GetBrowserManager().GetOrCreateBrowser()
 	if err != nil {
 		logger.SugaredLogger.Warnf("Failed to get browser: %v", err)
-		return nil
+		return results
 	}
 
-	results := s.searchBingWithBrowser(browser, query, maxResults)
+	if len(results) < maxResults {
+		whohaiResults := s.searchWhohaiWithBrowser(browser, query, maxResults-len(results), searxngUrl)
+		results = append(results, whohaiResults...)
+	}
 	if len(results) < maxResults {
 		baiduResults := s.searchBaiduWithBrowser(browser, query, maxResults-len(results))
 		results = append(results, baiduResults...)
 	}
+	return results
+}
+
+func (s *WebSearchApi) searchSearxngWithHTTP(searxngUrl, query string, maxResults int, jsonFormat bool) []WebSearchResult {
+	var results []WebSearchResult
+
+	u, err := url.Parse(strings.TrimRight(searxngUrl, "/"))
+	if err != nil {
+		logger.SugaredLogger.Errorf("Invalid SearXNG URL %q: %v", searxngUrl, err)
+		return results
+	}
+	u.Path = "/search"
+	q := u.Query()
+	q.Set("q", query)
+	if jsonFormat {
+		q.Set("format", "json")
+	}
+	u.RawQuery = q.Encode()
+
+	client := &http.Client{Timeout: time.Duration(s.timeout) * time.Second}
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		logger.SugaredLogger.Errorf("SearXNG HTTP request build failed: %v", err)
+		return results
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Accept", "application/json, text/html")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.SugaredLogger.Errorf("SearXNG HTTP request failed: %v", err)
+		return results
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.SugaredLogger.Errorf("SearXNG returned status %d", resp.StatusCode)
+		return results
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.SugaredLogger.Errorf("SearXNG read body failed: %v", err)
+		return results
+	}
+
+	if jsonFormat {
+		results = s.parseSearxngJSON(body, maxResults)
+	} else {
+		results = s.parseBingResultsWithGoquery(string(body), maxResults)
+	}
+	logger.SugaredLogger.Infof("SearXNG HTTP search found %d results for query: %s", len(results), query)
+	return results
+}
+
+func (s *WebSearchApi) parseSearxngJSON(body []byte, maxResults int) []WebSearchResult {
+	var results []WebSearchResult
+
+	type searxngResult struct {
+		Title   string `json:"title"`
+		Url     string `json:"url"`
+		Content string `json:"content"`
+		Engine  string `json:"engine"`
+	}
+	var payload struct {
+		Results []searxngResult `json:"results"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		logger.SugaredLogger.Errorf("SearXNG JSON parse failed: %v", err)
+		return results
+	}
+
+	for i, r := range payload.Results {
+		if i >= maxResults {
+			break
+		}
+		results = append(results, WebSearchResult{
+			Title:   r.Title,
+			Url:     r.Url,
+			Snippet: r.Content,
+			Source:  r.Engine,
+		})
+	}
+	return results
+}
+
+func (s *WebSearchApi) searchWhohaiWithBrowser(browser *BrowserInstance, query string, maxResults int, searxngUrl string) []WebSearchResult {
+	var results []WebSearchResult
+
+	tabCtx, tabCancel := browser.NewTab()
+	defer tabCancel()
+
+	encoded := url.QueryEscape(query)
+	searchUrl := fmt.Sprintf("%s/?q=%s", strings.TrimRight(searxngUrl, "/"), encoded)
+
+	var html string
+	err := chromedp.Run(tabCtx,
+		chromedp.Navigate(searchUrl),
+		chromedp.Sleep(randomSleep(2000, 3000)),
+		chromedp.InnerHTML("body", &html, chromedp.ByQuery),
+	)
+	if err != nil {
+		logger.SugaredLogger.Errorf("Whohai browser search failed: %v", err)
+		return results
+	}
+
+	results = s.parseBingResultsWithGoquery(html, maxResults)
+	logger.SugaredLogger.Infof("Whohai browser search found %d results for query: %s", len(results), query)
 	return results
 }
 
@@ -340,13 +467,14 @@ func (s *WebSearchApi) parseBaiduResultsWithGoquery(htmlContent string, maxResul
 	return results
 }
 
+//lint:ignore U1000 cleanText is unused but kept for possible future use
 func cleanText(text string) string {
 	text = strings.ReplaceAll(text, "\u00A0", " ")
 	text = strings.ReplaceAll(text, "&nbsp;", " ")
 	text = strings.ReplaceAll(text, "&amp;", "&")
 	text = strings.ReplaceAll(text, "&lt;", "<")
 	text = strings.ReplaceAll(text, "&gt;", ">")
-	text = strings.ReplaceAll(text, "&quot;", `"`)
+	text = strings.ReplaceAll(text, "&quot;", "\"")
 	text = strings.ReplaceAll(text, "&#39;", "'")
 
 	text = strings.ReplaceAll(text, "\r\n", "\n")

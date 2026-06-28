@@ -16,10 +16,6 @@ export function AddCronTask(arg1:data.FollowedStock):Promise<any>;
 
 export function AddGroup(arg1:data.Group):Promise<string>;
 
-export function AddPrompt(arg1:models.Prompt):Promise<string>;
-
-export function AddPromptTemplate(arg1:models.PromptTemplate):Promise<string>;
-
 export function AddStockGroup(arg1:number,arg2:string):Promise<string>;
 
 export function AddTradingRecord(arg1:data.TradingRecord):Promise<number>;
@@ -32,6 +28,8 @@ export function BatchDeleteAIResponseResult(arg1:Array<number>):Promise<string>;
 
 export function BatchDeleteAllStockInfo(arg1:Array<number>):Promise<string>;
 
+export function BatchGreet(arg1:Array<string>):Promise<Array<data.StockInfo>>;
+
 export function CalculateNextRunTime(arg1:string):Promise<string>;
 
 export function CalculateNextRunTimes(arg1:string,arg2:number):Promise<Array<string>>;
@@ -42,11 +40,9 @@ export function CheckDeviceBinding(arg1:string,arg2:string):Promise<Record<strin
 
 export function CheckFrequentTrading(arg1:string):Promise<Record<string, any>>;
 
-export function CheckSponsorCode(arg1:string):Promise<Record<string, any>>;
-
 export function CheckStockBaseInfo(arg1:context.Context):Promise<void>;
 
-export function CheckUpdate(arg1:number):Promise<void>;
+export function CleanupData(arg1:string):Promise<string>;
 
 export function ClsCalendar():Promise<Array<any>>;
 
@@ -55,8 +51,6 @@ export function CreateCronTask(arg1:models.CronTask):Promise<string>;
 export function CreateMCPServer(arg1:models.MCPServer):Promise<string>;
 
 export function CreateSkill(arg1:models.Skill):Promise<string>;
-
-export function DelPrompt(arg1:number):Promise<string>;
 
 export function DeleteAIResponseResult(arg1:number):Promise<string>;
 
@@ -69,8 +63,6 @@ export function DeleteCronTask(arg1:number):Promise<string>;
 export function DeleteCustomStrategy(arg1:number):Promise<string>;
 
 export function DeleteMCPServer(arg1:number):Promise<string>;
-
-export function DeletePromptTemplate(arg1:number):Promise<string>;
 
 export function DeleteSkill(arg1:number):Promise<string>;
 
@@ -170,8 +162,6 @@ export function GetDailyChangeStats(arg1:number):Promise<Array<data.DailyChangeS
 
 export function GetDailyDimensionStats(arg1:string,arg2:string,arg3:number):Promise<Array<data.DailyDimensionStats>>;
 
-export function GetEffectiveSponsorVip():Promise<Record<string, any>>;
-
 export function GetFollowList(arg1:number):Promise<any>;
 
 export function GetFollowedFund():Promise<Array<data.FollowedFund>>;
@@ -210,17 +200,13 @@ export function GetMarketStatisticByDate(arg1:string):Promise<Array<models.Marke
 
 export function GetMoneyRankSina(arg1:string):Promise<Array<Record<string, any>>>;
 
-export function GetPromptTemplateList(arg1:models.PromptTemplateQuery):Promise<models.PromptTemplatePageData>;
-
-export function GetPromptTemplates(arg1:string,arg2:string):Promise<any>;
+export function GetPromptTemplates(arg1:string,arg2:string):Promise<Array<main.PromptTemplateItem>>;
 
 export function GetRecentDaysMarketStatistic(arg1:number):Promise<Array<models.MarketStatistic>>;
 
 export function GetSkillByID(arg1:number):Promise<models.Skill>;
 
 export function GetSkillList(arg1:models.SkillQuery):Promise<models.SkillPageResp>;
-
-export function GetSponsorInfo():Promise<Record<string, any>>;
 
 export function GetStockChangeHistory(arg1:models.StockChangeHistoryQuery):Promise<models.StockChangeHistoryPageData>;
 
@@ -285,8 +271,6 @@ export function GetfundList(arg1:string):Promise<Array<data.FundBasic>>;
 export function GlobalStockIndexes():Promise<Record<string, any>>;
 
 export function GlobalStockIndexesReadable():Promise<string>;
-
-export function BatchGreet(arg1:Array<string>):Promise<Array<data.StockInfo>>;
 
 export function Greet(arg1:string):Promise<data.StockInfo>;
 
@@ -395,8 +379,6 @@ export function UpdateGroup(arg1:number,arg2:string):Promise<string>;
 export function UpdateGroupSort(arg1:number,arg2:number):Promise<boolean>;
 
 export function UpdateMCPServer(arg1:models.MCPServer):Promise<string>;
-
-export function UpdatePromptTemplate(arg1:models.PromptTemplate):Promise<string>;
 
 export function UpdateSkill(arg1:models.Skill):Promise<string>;
 

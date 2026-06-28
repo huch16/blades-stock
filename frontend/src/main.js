@@ -1,4 +1,5 @@
 import {createApp} from 'vue'
+import {createPinia} from 'pinia'
 import naive from 'naive-ui'
 import App from './App.vue'
 import router from './router/router'
@@ -6,6 +7,9 @@ import router from './router/router'
 import 'tdesign-vue-next/es/style/index.css';
 
 const app = createApp(App)
+const pinia = createPinia()
+
+app.use(pinia)
 
 app.config.errorHandler = (err) => {
   if (err.message && err.message.includes('ResizeObserver')) {

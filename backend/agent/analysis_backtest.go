@@ -185,7 +185,7 @@ func (s *BacktestService) RunAllBacktests() (int, error) {
 	count := 0
 	for _, r := range reports {
 		if _, err := s.RunSingleBacktest(r); err != nil {
-			logger.SugaredLogger.Errorf("backtest report %d failed: %v", r.ID, err)
+			logger.SugaredLogger.Warnf("backtest report %d skipped: %v", r.ID, err)
 			continue
 		}
 		count++
@@ -194,7 +194,25 @@ func (s *BacktestService) RunAllBacktests() (int, error) {
 }
 
 // RunSingleBacktest 对单个报告执行回测并保存结果
+func isValidStockCode(code string) bool {
+	if len(code) < 6 || len(code) > 12 {
+		return false
+	}
+	// 常见股票代码格式: sh/sz/bj 开头 + 数字, 或纯数字, 或 us/GB 开头
+	for _, prefix := range []string{"sh", "sz", "bj", "gb_", "GB_", "us"} {
+		if strings.HasPrefix(strings.ToLower(code), prefix) {
+			return len(code) > len(prefix)
+		}
+	}
+	// 纯数字（A股代码）
+	_, err := strconv.Atoi(code)
+	return err == nil
+}
+
 func (s *BacktestService) RunSingleBacktest(r models.AIResponseResult) (*models.BacktestResult, error) {
+	if !isValidStockCode(r.StockCode) {
+		return nil, fmt.Errorf("invalid stock code: %s", r.StockCode)
+	}
 	pred := extractPrediction(r.Content)
 	analysisDate := r.CreatedAt.Format("2006-01-02")
 

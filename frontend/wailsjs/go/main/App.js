@@ -22,14 +22,6 @@ export function AddGroup(arg1) {
   return window['go']['main']['App']['AddGroup'](arg1);
 }
 
-export function AddPrompt(arg1) {
-  return window['go']['main']['App']['AddPrompt'](arg1);
-}
-
-export function AddPromptTemplate(arg1) {
-  return window['go']['main']['App']['AddPromptTemplate'](arg1);
-}
-
 export function AddStockGroup(arg1, arg2) {
   return window['go']['main']['App']['AddStockGroup'](arg1, arg2);
 }
@@ -54,6 +46,10 @@ export function BatchDeleteAllStockInfo(arg1) {
   return window['go']['main']['App']['BatchDeleteAllStockInfo'](arg1);
 }
 
+export function BatchGreet(arg1) {
+  return window['go']['main']['App']['BatchGreet'](arg1);
+}
+
 export function CalculateNextRunTime(arg1) {
   return window['go']['main']['App']['CalculateNextRunTime'](arg1);
 }
@@ -74,16 +70,12 @@ export function CheckFrequentTrading(arg1) {
   return window['go']['main']['App']['CheckFrequentTrading'](arg1);
 }
 
-export function CheckSponsorCode(arg1) {
-  return window['go']['main']['App']['CheckSponsorCode'](arg1);
-}
-
 export function CheckStockBaseInfo(arg1) {
   return window['go']['main']['App']['CheckStockBaseInfo'](arg1);
 }
 
-export function CheckUpdate(arg1) {
-  return window['go']['main']['App']['CheckUpdate'](arg1);
+export function CleanupData(arg1) {
+  return window['go']['main']['App']['CleanupData'](arg1);
 }
 
 export function ClsCalendar() {
@@ -100,10 +92,6 @@ export function CreateMCPServer(arg1) {
 
 export function CreateSkill(arg1) {
   return window['go']['main']['App']['CreateSkill'](arg1);
-}
-
-export function DelPrompt(arg1) {
-  return window['go']['main']['App']['DelPrompt'](arg1);
 }
 
 export function DeleteAIResponseResult(arg1) {
@@ -128,10 +116,6 @@ export function DeleteCustomStrategy(arg1) {
 
 export function DeleteMCPServer(arg1) {
   return window['go']['main']['App']['DeleteMCPServer'](arg1);
-}
-
-export function DeletePromptTemplate(arg1) {
-  return window['go']['main']['App']['DeletePromptTemplate'](arg1);
 }
 
 export function DeleteSkill(arg1) {
@@ -330,10 +314,6 @@ export function GetDailyDimensionStats(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetDailyDimensionStats'](arg1, arg2, arg3);
 }
 
-export function GetEffectiveSponsorVip() {
-  return window['go']['main']['App']['GetEffectiveSponsorVip']();
-}
-
 export function GetFollowList(arg1) {
   return window['go']['main']['App']['GetFollowList'](arg1);
 }
@@ -410,10 +390,6 @@ export function GetMoneyRankSina(arg1) {
   return window['go']['main']['App']['GetMoneyRankSina'](arg1);
 }
 
-export function GetPromptTemplateList(arg1) {
-  return window['go']['main']['App']['GetPromptTemplateList'](arg1);
-}
-
 export function GetPromptTemplates(arg1, arg2) {
   return window['go']['main']['App']['GetPromptTemplates'](arg1, arg2);
 }
@@ -428,10 +404,6 @@ export function GetSkillByID(arg1) {
 
 export function GetSkillList(arg1) {
   return window['go']['main']['App']['GetSkillList'](arg1);
-}
-
-export function GetSponsorInfo() {
-  return window['go']['main']['App']['GetSponsorInfo']();
 }
 
 export function GetStockChangeHistory(arg1) {
@@ -560,10 +532,6 @@ export function GlobalStockIndexes() {
 
 export function GlobalStockIndexesReadable() {
   return window['go']['main']['App']['GlobalStockIndexesReadable']();
-}
-
-export function BatchGreet(arg1) {
-  return window['go']['main']['App']['BatchGreet'](arg1);
 }
 
 export function Greet(arg1) {
@@ -780,10 +748,6 @@ export function UpdateGroupSort(arg1, arg2) {
 
 export function UpdateMCPServer(arg1) {
   return window['go']['main']['App']['UpdateMCPServer'](arg1);
-}
-
-export function UpdatePromptTemplate(arg1) {
-  return window['go']['main']['App']['UpdatePromptTemplate'](arg1);
 }
 
 export function UpdateSkill(arg1) {

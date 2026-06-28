@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/go-resty/resty/v2"
 	"go-stock/backend/agent"
 	"go-stock/backend/agent/tools"
 	"go-stock/backend/data"
@@ -45,6 +46,9 @@ type App struct {
 	stockAlertMu       sync.Mutex
 	stockAlertLastSent map[string]time.Time
 	priceAtAlertReset  map[string]float64
+	memoryMgr          *agent.MemoryManager
+	evaluator          *agent.Evaluator
+	evolver            *agent.Evolver
 }
 
 // NewApp creates a new App application struct
@@ -62,6 +66,9 @@ func NewApp() *App {
 		AiTools:            tools,
 		stockAlertLastSent: make(map[string]time.Time),
 		priceAtAlertReset:  make(map[string]float64),
+		memoryMgr:          agent.NewMemoryManager(20),
+		evaluator:          agent.NewEvaluator(),
+		evolver:            agent.NewEvolver(),
 	}
 }
 
@@ -131,7 +138,6 @@ func (a *App) QuitApp() {
 		runtime.Quit(a.ctx)
 	}
 }
-
 
 func GetSource(tags []string) string {
 	if slice.ContainAny(tags, []string{"外媒简讯", "外媒资讯", "外媒"}) {
@@ -1608,6 +1614,11 @@ func (a *App) ExportConfig() string {
 	return "导出成功:" + file
 }
 
+// CleanupData 暴露给前端的清理入口
+func (a *App) CleanupData(cleanupType string) string {
+	return data.NewSettingsApi().CleanupData(cleanupType)
+}
+
 func (a *App) ShareAnalysis(stockCode, stockName string) string {
 	//http://go-stock.sparkmemory.top:16688/upload
 	res := data.NewDeepSeekOpenAi(a.ctx, 0).GetAIResponseResult(stockCode)
@@ -2199,8 +2210,9 @@ func (a *App) FetchAiModels(baseUrl, apiKey string) []string {
 		Data []modelItem `json:"data"`
 	}
 
-	client := data.SharedHTTPClient
+	client := resty.New()
 	client.SetBaseURL(baseUrl)
+	client.SetTimeout(10 * time.Second)
 
 	resp, err := client.R().
 		SetHeader("Authorization", "Bearer "+apiKey).
@@ -2887,4 +2899,14 @@ func (a *App) GetMCPToolsByServerID(serverID uint) []models.MCPServerTool {
 
 func (a *App) GetAllMCPTools() []models.MCPServerTool {
 	return data.NewMCPServerApi().GetAllTools()
+}
+
+type PromptTemplateItem struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+func (a *App) GetPromptTemplates(name, promptType string) []PromptTemplateItem {
+	return []PromptTemplateItem{}
 }

@@ -236,5 +236,3 @@ type User struct {
 	Phones  []string `md:"电话"`
 	Active  bool     `md:"活跃状态"`
 }
-
-

@@ -235,10 +235,14 @@ func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) 
 	}
 
 	for i := 0; i < compressEnd; i++ {
-		_ = allMessages[i].Delete()
+		if err := allMessages[i].Delete(); err != nil {
+			logger.SugaredLogger.Errorf("delete chat memory failed: %v", err)
+		}
 	}
 
-	_ = db.DeleteChatMemorySummary(s.sessionID)
+	if err := db.DeleteChatMemorySummary(s.sessionID); err != nil {
+		logger.SugaredLogger.Errorf("delete chat memory summary failed: %v", err)
+	}
 	_ = (&db.ChatMemorySummary{
 		SessionID: s.sessionID,
 		Summary:   summaryText,
@@ -255,6 +259,8 @@ func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) 
 }
 
 func (s *ChatMemoryService) Clear() error {
-	_ = db.DeleteChatMemorySummary(s.sessionID)
+	if err := db.DeleteChatMemorySummary(s.sessionID); err != nil {
+		logger.SugaredLogger.Errorf("delete chat memory summary failed in Clear: %v", err)
+	}
 	return db.ClearChatMemory(s.sessionID)
 }

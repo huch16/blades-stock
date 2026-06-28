@@ -118,7 +118,9 @@ onBeforeMount(() => {
 
   GetAiConfigs().then(res=>{
     aiConfigs.value = res
-    aiConfigId.value = res[0].ID
+    if (res && res.length > 0) {
+      aiConfigId.value = res[0].ID
+    }
   })
   GetTelegraphList("财联社电报").then((res) => {
     telegraphList.value = res
@@ -260,11 +262,19 @@ function industryRank() {
 }
 
 function reAiSummary() {
+  if (!aiConfigs.value || aiConfigs.value.length === 0) {
+    message.warning('请先在设置页面添加 AI 配置')
+    return
+  }
+  if (!aiConfigId.value) {
+    message.warning('请先选择 AI 模型服务配置')
+    return
+  }
   aiSummary.value = ""
   summaryModal.value = true
   loading.value = true
   analysisStatus.value = "正在连接AI服务..."
-  SummaryStockNews(question.value,aiConfigId.value, sysPromptId.value,enableTools.value,thinkingMode.value,"summaryStockNews","")
+  SummaryStockNews(question.value, aiConfigId.value, sysPromptId.value, enableTools.value, thinkingMode.value, "summaryStockNews", "")
 }
 
 function getAiSummary() {

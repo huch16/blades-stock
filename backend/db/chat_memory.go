@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+var AutoMigrateList []interface{}
+
 type ChatMemory struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	SessionID string    `gorm:"index;size:64" json:"sessionId"`
@@ -105,4 +107,7 @@ func AutoMigrate() {
 	Dao.AutoMigrate(&ChatMemorySummary{})
 	Dao.AutoMigrate(&models.StockChangeHistory{})
 	Dao.AutoMigrate(&models.MarketStatistic{})
+	for _, m := range AutoMigrateList {
+		Dao.AutoMigrate(m)
+	}
 }

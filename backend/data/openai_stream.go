@@ -310,6 +310,16 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			logger.SugaredLogger.Error("NewChatStream panic", err)
 		}
 	}()
+
+	if strings.TrimSpace(o.BaseUrl) == "" {
+		ch <- map[string]any{"code": 0, "question": userQuestion, "content": "AI 配置错误：Base URL 为空，请先在设置中配置 AI 服务地址"}
+		return ch
+	}
+	if strings.TrimSpace(o.ApiKey) == "" {
+		ch <- map[string]any{"code": 0, "question": userQuestion, "content": "AI 配置错误：API Key 为空，请先在设置中配置 API Key"}
+		return ch
+	}
+
 	go func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -594,7 +604,16 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			})
 		}()
 
-		wg.Wait()
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			logger.SugaredLogger.Warnf("NewChatStream data collection timeout for %s[%s], proceeding with partial data", stock, stockCode)
+		}
 
 		msg = append(msg, map[string]interface{}{
 			"role":    "user",

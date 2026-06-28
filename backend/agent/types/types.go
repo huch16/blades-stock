@@ -8,12 +8,12 @@ import (
 )
 
 type ParamDef struct {
-	Type        string
-	Desc        string
-	Required    bool
-	Enum        []string
-	ElemInfo    *ParamDef
-	SubParams   map[string]*ParamDef
+	Type      string
+	Desc      string
+	Required  bool
+	Enum      []string
+	ElemInfo  *ParamDef
+	SubParams map[string]*ParamDef
 }
 
 func paramToSchema(name string, p *ParamDef) *jsonschema.Schema {
@@ -100,10 +100,10 @@ type bladesTool struct {
 	handler     ToolFunc
 }
 
-func (t *bladesTool) Name() string                               { return t.name }
-func (t *bladesTool) Description() string                        { return t.description }
-func (t *bladesTool) InputSchema() *jsonschema.Schema            { return t.inputSchema }
-func (t *bladesTool) OutputSchema() *jsonschema.Schema           { return nil }
+func (t *bladesTool) Name() string                     { return t.name }
+func (t *bladesTool) Description() string              { return t.description }
+func (t *bladesTool) InputSchema() *jsonschema.Schema  { return t.inputSchema }
+func (t *bladesTool) OutputSchema() *jsonschema.Schema { return nil }
 func (t *bladesTool) Handle(_ context.Context, input string) (string, error) {
 	return t.handler(input)
 }

@@ -1,24 +1,59 @@
-<script setup>
-import {h, onBeforeUnmount, onMounted, ref} from "vue";
+<script setup lang="ts">
+import {h, onBeforeUnmount, onMounted, ref, computed, reactive, nextTick} from "vue";
 import {
-  AddPrompt,
-  DelPrompt,
   ExportConfig,
   GetConfig,
   GetPromptTemplates,
   SendDingDingMessageByType,
   UpdateConfig,
   FetchAiModels,
-  FetchAiModelInfo
+  FetchAiModelInfo,
+  CleanupData
 } from "../../wailsjs/go/main/App";
-import {NTag, NTooltip, NIcon, useMessage} from "naive-ui";
+import {NTag, NTooltip, NIcon, useMessage, useDialog} from "naive-ui";
 import {data, models} from "../../wailsjs/go/models";
+import type { AIConfig } from "../../wailsjs/go/models";
 import {EventsEmit} from "../../wailsjs/runtime";
 import {HelpCircleFilledIcon, HelpIcon} from "tdesign-icons-vue-next";
+import {useAiConfigStore} from "../stores/aiConfig";
 
 const message = useMessage()
+const dialog = useDialog()
+const aiConfigStore = useAiConfigStore()
 
 const formRef = ref(null)
+
+// ========================
+// AI 配置元数据（非业务字段，不入库）
+// ========================
+interface ConfigMeta {
+  loadingModels: boolean
+  modelOptions: { label: string; value: string }[]
+}
+const aiConfigMeta = reactive<Record<number, ConfigMeta>>({})
+function getMeta(index: number, id: number): ConfigMeta {
+  const key = id > 0 ? id : -index - 1
+  if (!aiConfigMeta[key]) {
+    aiConfigMeta[key] = { loadingModels: false, modelOptions: [] }
+  }
+  return aiConfigMeta[key]
+}
+
+// ========================
+// AI 相关状态
+// ========================
+const openAiEnable = ref(false)
+const aiConfigs = ref<AIConfig[]>([])
+const aiPrompt = ref('')
+const questionTemplate = ref('{{stockName}}分析和总结')
+const crawlTimeOut = ref(30)
+const kDays = ref(30)
+
+const aiConfigExpandedNames = ref([])
+
+// ========================
+// 其他设置状态
+// ========================
 const formValue = ref({
   ID: 1,
   tushareToken: '',
@@ -33,16 +68,6 @@ const formValue = ref({
   },
   updateBasicInfoOnStart: false,
   refreshInterval: 1,
-  openAI: {
-    enable: false,
-    aiConfigs: [], // AI配置列表
-    prompt: "",
-    questionTemplate: "{{stockName}}分析和总结",
-    crawlTimeOut: 30,
-    kDays: 30,
-    httpProxy:"",
-    httpProxyEnabled:false,
-  },
   enableDanmu: false,
   browserPath: '',
   enableNews: false,
@@ -57,44 +82,71 @@ const formValue = ref({
   promptPlazaApiBase: '',
 })
 
-// 添加一个新的AI配置到列表
+// ========================
+// 表单校验规则 (F-01)
+// ========================
+const formRules = {
+  tushareToken: [{ required: false }],
+}
+
+// ========================
+// AI 配置操作
+// ========================
+let nextTempId = -1
 function addAiConfig() {
-  formValue.value.openAI.aiConfigs.push(new data.AIConfig({
+  const id = aiConfigs.value.reduce((max, c) => Math.max(max, c.ID || 0), 0) + 1 || nextTempId--
+  aiConfigs.value.push(new data.AIConfig({
+    ID: id,
     name: '',
     baseUrl: 'https://api.deepseek.com',
     apiKey: '',
     modelName: 'deepseek-reasoner',
     temperature: 0.1,
     maxTokens: 8192,
-    timeOut: 6000,
+    timeOut: 300,
     httpProxy:"",
     httpProxyEnabled:false,
     thinking: true,
     embeddingEnabled: false,
     embeddingModelName: '',
-  }));
+  }))
+  const idx = aiConfigs.value.length - 1
+  // 展开新配置 (F-10)
+  nextTick(() => {
+    aiConfigExpandedNames.value = [String(idx)]
+  })
+  // 如果已配齐 baseUrl+apiKey，自动拉取模型列表
+  if (aiConfigs.value[idx].baseUrl && aiConfigs.value[idx].apiKey) {
+    fetchAiModels(aiConfigs.value[idx], idx)
+  }
 }
 
-// 从列表中移除一个AI配置
 function removeAiConfig(index) {
-  const originalCount = formValue.value.openAI.aiConfigs.length;
-  // 使用filter创建新数组确保响应式更新
-  formValue.value.openAI.aiConfigs = formValue.value.openAI.aiConfigs.filter((_, i) => i !== index);
+  aiConfigs.value = aiConfigs.value.filter((_, i) => i !== index)
+  // 同步折叠面板状态 (F-10)
+  aiConfigExpandedNames.value = aiConfigExpandedNames.value
+    .filter(n => Number(n) !== index)
+    .map(n => String(Number(n) > index ? Number(n) - 1 : Number(n)))
 }
 
-async function fetchAiModels(aiConfig) {
+// ========================
+// 模型列表获取（带请求去重）(F-04)
+// ========================
+let fetchModelsId = 0
+async function fetchAiModels(aiConfig, index) {
   if (!aiConfig.baseUrl || !aiConfig.apiKey) {
     message.warning('请先填写接口地址和 apiKey')
     return
   }
-  if (aiConfig._loadingModels) {
-    return
-  }
-  aiConfig._loadingModels = true
+  const meta = getMeta(index, aiConfig.ID)
+  if (meta.loadingModels) return
+  meta.loadingModels = true
+  const reqId = ++fetchModelsId
   try {
     const list = await FetchAiModels(aiConfig.baseUrl, aiConfig.apiKey)
+    if (reqId !== fetchModelsId) return // 已过期
     const options = (list || []).map(id => ({ label: id, value: id }))
-    aiConfig._modelOptions = options
+    meta.modelOptions = options
     if (!aiConfig.modelName && options.length > 0) {
       aiConfig.modelName = options[0].value
       onModelNameChange(aiConfig, aiConfig.modelName)
@@ -103,16 +155,17 @@ async function fetchAiModels(aiConfig) {
       message.warning('未从接口获取到可用模型，请检查地址和 apiKey')
     }
   } catch (e) {
+    if (reqId !== fetchModelsId) return
     console.error('FetchAiModels error', e)
     message.error('获取模型列表失败，请检查接口地址和 apiKey')
   } finally {
-    aiConfig._loadingModels = false
+    if (reqId === fetchModelsId) {
+      meta.loadingModels = false
+    }
   }
 }
 
-
 const promptTemplates = ref([])
-const aiConfigExpandedNames = ref([])
 
 const aiPlatformOptions = [
   { label: 'DeepSeek (https://api.deepseek.com)', value: 'https://api.deepseek.com' },
@@ -157,7 +210,7 @@ function onModelNameChange(aiConfig, newModelName) {
   if (!newModelName) return
   const platformName = getPlatformName(aiConfig.baseUrl)
   const baseName = platformName || 'AI'
-  
+
   if (!aiConfig.name) {
     aiConfig.name = baseName + '-' + newModelName
   } else if (aiConfig.name === platformName) {
@@ -175,17 +228,22 @@ function onModelNameChange(aiConfig, newModelName) {
   fetchModelInfo(aiConfig, newModelName)
 }
 
+let fetchModelInfoId = 0
 async function fetchModelInfo(aiConfig, modelName) {
   if (!modelName || !aiConfig.baseUrl) return
+  const reqId = ++fetchModelInfoId
   try {
     const info = await FetchAiModelInfo(aiConfig.baseUrl, aiConfig.apiKey || '', modelName)
+    if (reqId !== fetchModelInfoId) return
     if (info && info.maxTokens > 0) {
       aiConfig.maxTokens = info.maxTokens
       const sourceLabel = info.source === 'api' ? 'API' : '内置数据'
       message.success(`已自动设置 ${modelName} 的 MaxTokens 为 ${info.maxTokens}（来源：${sourceLabel}）`)
     }
   } catch (e) {
+    if (reqId !== fetchModelInfoId) return
     console.error('FetchAiModelInfo error', e)
+    message.warning('获取模型信息失败')
   }
 }
 
@@ -204,18 +262,29 @@ onMounted(() => {
     }
     formValue.value.updateBasicInfoOnStart = res.updateBasicInfoOnStart
     formValue.value.refreshInterval = res.refreshInterval
-    // 加载AI配置
-    formValue.value.openAI = {
-      enable: res.openAiEnable,
-      aiConfigs: res.aiConfigs || [],
-      prompt: res.prompt,
-      questionTemplate: res.questionTemplate ? res.questionTemplate : '{{stockName}}分析和总结',
-      crawlTimeOut: res.crawlTimeOut,
-      kDays: res.kDays,
-      httpProxy:"",
-      httpProxyEnabled:false,
+
+    openAiEnable.value = res.openAiEnable
+    aiConfigs.value = res.aiConfigs || []
+    aiPrompt.value = res.prompt || ''
+    questionTemplate.value = res.questionTemplate || '{{stockName}}分析和总结'
+    crawlTimeOut.value = res.crawlTimeOut || 30
+    kDays.value = res.kDays || 30
+
+    // 对已配齐 baseUrl+apiKey 的配置自动拉取模型列表
+    for (let i = 0; i < aiConfigs.value.length; i++) {
+      const cfg = aiConfigs.value[i]
+      if (cfg.baseUrl && cfg.apiKey) {
+        fetchAiModels(cfg, i)
+      }
     }
 
+    // 同步 AI 配置到 Pinia Store (F-08)
+    if (res.aiConfigs && res.aiConfigs.length > 0) {
+      aiConfigStore.configs = res.aiConfigs
+      if (!aiConfigStore.activeConfigId && res.aiConfigs[0]?.ID) {
+        aiConfigStore.setActiveConfigId(res.aiConfigs[0].ID)
+      }
+    }
 
     formValue.value.enableDanmu = res.enableDanmu
     formValue.value.browserPath = res.browserPath
@@ -229,20 +298,48 @@ onMounted(() => {
     formValue.value.enableAgent = res.enableAgent;
     formValue.value.qgqpBId = res.qgqpBId;
     formValue.value.promptPlazaApiBase = res.promptPlazaApiBase || '';
-
+  }).catch(err => {
+    message.error('加载配置失败: ' + (err?.message || err))
   })
 
   GetPromptTemplates("", "").then(res => {
     promptTemplates.value = res
+  }).catch(err => {
+    console.error('GetPromptTemplates error', err)
   })
 })
+
 onBeforeUnmount(() => {
   message.destroyAll()
 })
 
-function saveConfig() {
+async function saveConfig() {
+  // 表单校验 (F-01)
+  try {
+    await formRef.value?.validate()
+  } catch {
+    message.warning('请检查表单中的必填项')
+    return
+  }
+
+  // URL 校验 (F-13)
+  if (formValue.value.promptPlazaApiBase) {
+    try {
+      new URL(formValue.value.promptPlazaApiBase)
+    } catch {
+      message.warning('提示词广场地址格式错误')
+      return
+    }
+  }
+
+  // 数值范围校验 (F-09/F-16)
+  for (const cfg of aiConfigs.value) {
+    if (cfg.temperature < 0 || cfg.temperature > 2) { message.warning(`Temperature 应在 0-2 之间`); return }
+    if (cfg.maxTokens < 1 || cfg.maxTokens > 128000) { message.warning(`MaxTokens 应在 1-128000 之间`); return }
+    if (cfg.timeOut < 60 || cfg.timeOut > 600) { message.warning(`Timeout 应在 60-600 秒之间`); return }
+  }
+
   console.log('开始保存设置', formValue.value);
-  // 构建配置时，包含aiConfigs列表
   let config = new data.SettingConfig({
     ID: formValue.value.ID,
     dingPushEnable: formValue.value.dingPush.enable,
@@ -250,16 +347,15 @@ function saveConfig() {
     localPushEnable: formValue.value.localPush.enable,
     updateBasicInfoOnStart: formValue.value.updateBasicInfoOnStart,
     refreshInterval: formValue.value.refreshInterval,
-    openAiEnable: formValue.value.openAI.enable,
-    aiConfigs: formValue.value.openAI.aiConfigs,
-    // 序列化aiConfigs列表以传递给后端
+    openAiEnable: openAiEnable.value,
+    aiConfigs: aiConfigs.value,
     tushareToken: formValue.value.tushareToken,
     iwencaiApiKey: formValue.value.iwencaiApiKey,
     emApiKey: formValue.value.emApiKey,
-    prompt: formValue.value.openAI.prompt,
-    questionTemplate: formValue.value.openAI.questionTemplate,
-    crawlTimeOut: formValue.value.openAI.crawlTimeOut,
-    kDays: formValue.value.openAI.kDays,
+    prompt: aiPrompt.value,
+    questionTemplate: questionTemplate.value,
+    crawlTimeOut: crawlTimeOut.value,
+    kDays: kDays.value,
     enableDanmu: formValue.value.enableDanmu,
     browserPath: formValue.value.browserPath,
     enableNews: formValue.value.enableNews,
@@ -274,16 +370,20 @@ function saveConfig() {
     promptPlazaApiBase: formValue.value.promptPlazaApiBase,
   })
 
-  UpdateConfig(config).then(res => {
+  try {
+    const res = await UpdateConfig(config)
     if (res === '保存成功！') {
       message.success(res)
+      // 保存成功后刷新 Store (F-08/F-32)
+      await aiConfigStore.loadConfigs()
     } else {
       message.error(res)
     }
     EventsEmit("updateSettings", config);
-  })
+  } catch (err) {
+    message.error('保存失败: ' + (err?.message || err))
+  }
 }
-
 
 function getHeight() {
   return document.documentElement.clientHeight
@@ -304,12 +404,45 @@ function sendTestNotice() {
 
   SendDingDingMessageByType(msg, "test-" + new Date().getTime(), 1).then(res => {
     message.info(res)
+  }).catch(err => {
+    message.error('发送测试通知失败: ' + (err?.message || err))
   })
 }
 
 function exportConfig() {
   ExportConfig().then(res => {
     message.info(res)
+  }).catch(err => {
+    message.error('导出失败: ' + (err?.message || err))
+  })
+}
+
+async function cleanup(type) {
+  const typeNameMap = {
+    'logs': '日志',
+    'chat_sessions': 'AI对话历史',
+    'ai_results': 'AI分析结果',
+    'test_images': '测试图片',
+    'browser_temp': '浏览器临时目录',
+    'all': '所有中间数据'
+  }
+  const typeName = typeNameMap[type] || type
+  try {
+    const confirm = await dialog.warning({
+      title: '确认清理',
+      content: `确定要清理${typeName}吗？此操作不可恢复。`,
+      positiveText: '确认清理',
+      negativeText: '取消',
+      closable: false
+    })
+    if (!confirm) return
+  } catch {
+    return
+  }
+  CleanupData(type).then(res => {
+    message.success(res)
+  }).catch(err => {
+    message.error('清理失败: ' + (err?.message || err))
   })
 }
 
@@ -318,62 +451,72 @@ function importConfig() {
   input.type = 'file';
   input.accept = '.json';
   input.onchange = (e) => {
-    let file = e.target.files[0];
+    let file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return
     let reader = new FileReader();
     reader.onload = (e) => {
-      let config = JSON.parse(e.target.result);
-      formValue.value.ID = config.ID
-      formValue.value.tushareToken = config.tushareToken
+      let config: any
+      try {
+        config = JSON.parse(e.target?.result as string) // (F-02)
+      } catch {
+        message.error('配置文件格式错误')
+        return
+      }
+      // 字段校验 (F-07)
+      if (!config || typeof config !== 'object') {
+        message.error('无效的配置文件')
+        return
+      }
+      formValue.value.ID = config.ID ?? 1
+      formValue.value.tushareToken = config.tushareToken ?? ''
       formValue.value.iwencaiApiKey = config.iwencaiApiKey || ''
       formValue.value.emApiKey = config.emApiKey || ''
       formValue.value.dingPush = {
-        enable: config.dingPushEnable,
-        dingRobot: config.dingRobot
+        enable: !!config.dingPushEnable,
+        dingRobot: config.dingRobot ?? '',
       }
       formValue.value.localPush = {
-        enable: config.localPushEnable,
+        enable: config.localPushEnable !== false,
       }
-      formValue.value.updateBasicInfoOnStart = config.updateBasicInfoOnStart
-      formValue.value.refreshInterval = config.refreshInterval
-      // 导入AI配置
-      formValue.value.openAI = {
-        enable: config.openAiEnable,
-        aiConfigs: config.aiConfigs || [],
-        prompt: config.prompt,
-        questionTemplate: config.questionTemplate,
-        crawlTimeOut: config.crawlTimeOut,
-        kDays: config.kDays
-      }
-      formValue.value.enableDanmu = config.enableDanmu
-      formValue.value.browserPath = config.browserPath
-      formValue.value.enableNews = config.enableNews
-      formValue.value.darkTheme = config.darkTheme
-      formValue.value.enableFund = config.enableFund
-      formValue.value.enablePushNews = config.enablePushNews
-      formValue.value.enableOnlyPushRedNews = config.enableOnlyPushRedNews
-      formValue.value.httpProxy=config.httpProxy
-      formValue.value.httpProxyEnabled=config.httpProxyEnabled
-      formValue.value.enableAgent = config.enableAgent
-      formValue.value.qgqpBId = config.qgqpBId
+      formValue.value.updateBasicInfoOnStart = !!config.updateBasicInfoOnStart
+      formValue.value.refreshInterval = config.refreshInterval ?? 1
+      openAiEnable.value = !!config.openAiEnable
+      aiConfigs.value = (config.aiConfigs || []).map(c => new data.AIConfig({
+        ...{ ID: 0, name: '', baseUrl: '', apiKey: '', modelName: '', temperature: 0.1, maxTokens: 8192, timeOut: 300, httpProxy: '', httpProxyEnabled: false, thinking: false, embeddingEnabled: false, embeddingModelName: '' },
+        ...c,
+        temperature: Number(c.temperature) || 0.1,
+        maxTokens: Number(c.maxTokens) || 8192,
+        timeOut: Number(c.timeOut) || 300,
+      }))
+      aiPrompt.value = config.prompt ?? ''
+      questionTemplate.value = config.questionTemplate ?? '{{stockName}}分析和总结'
+      crawlTimeOut.value = config.crawlTimeOut ?? 30
+      kDays.value = config.kDays ?? 30
+      formValue.value.enableDanmu = !!config.enableDanmu
+      formValue.value.browserPath = config.browserPath ?? ''
+      formValue.value.enableNews = !!config.enableNews
+      formValue.value.darkTheme = config.darkTheme !== false
+      formValue.value.enableFund = !!config.enableFund
+      formValue.value.enablePushNews = config.enablePushNews !== false
+      formValue.value.enableOnlyPushRedNews = config.enableOnlyPushRedNews !== false
+      formValue.value.httpProxy = config.httpProxy ?? ''
+      formValue.value.httpProxyEnabled = !!config.httpProxyEnabled
+      formValue.value.enableAgent = !!config.enableAgent
+      formValue.value.qgqpBId = config.qgqpBId ?? ''
       formValue.value.updateChannel = config.updateChannel || 'release'
+      // 导入后同步 Store (F-08)
+      if (aiConfigs.value.length > 0) {
+        aiConfigStore.configs = aiConfigs.value
+        if (!aiConfigStore.activeConfigId && aiConfigs.value[0]?.ID) {
+          aiConfigStore.setActiveConfigId(aiConfigs.value[0].ID)
+        }
+      }
+      message.success('导入成功')
     };
     reader.readAsText(file);
   };
   input.click();
 }
-
-
-window.onerror = function (event, source, lineno, colno, error) {
-  EventsEmit("frontendError", {
-    page: "settings.vue",
-    message: event,
-    source: source,
-    lineno: lineno,
-    colno: colno,
-    error: error ? error.stack : null
-  });
-  return true;
-};
 
 const showManagePromptsModal = ref(false)
 const promptTypeOptions = [
@@ -392,14 +535,19 @@ function managePrompts() {
   showManagePromptsModal.value = true
 }
 
-function savePrompt() {
-  AddPrompt(formPrompt.value).then(res => {
+async function savePrompt() {
+  if (!formPrompt.value.Name?.trim() || !formPrompt.value.Content?.trim() || !formPrompt.value.Type) {
+    message.warning('请填写名称、类型和内容')
+    return
+  }
+  try {
+    const res = await AddPrompt(formPrompt.value)
     message.success(res)
-    GetPromptTemplates("", "").then(res => {
-      promptTemplates.value = res
-    })
+    promptTemplates.value = await GetPromptTemplates("", "")
     showManagePromptsModal.value = false
-  })
+  } catch (err) {
+    message.error('保存提示词失败: ' + (err?.message || err))
+  }
 }
 
 function editPrompt(prompt) {
@@ -410,19 +558,20 @@ function editPrompt(prompt) {
   showManagePromptsModal.value = true
 }
 
-function deletePrompt(ID) {
-  DelPrompt(ID).then(res => {
+async function deletePrompt(ID) {
+  try {
+    const res = await DelPrompt(ID)
     message.success(res)
-    GetPromptTemplates("", "").then(res => {
-      promptTemplates.value = res
-    })
-  })
+    promptTemplates.value = await GetPromptTemplates("", "")
+  } catch (err) {
+    message.error('删除提示词失败: ' + (err?.message || err))
+  }
 }
 </script>
 
 <template>
   <n-flex justify="left" style="text-align: left; --wails-draggable:no-drag">
-    <n-form ref="formRef" :label-placement="'left'" :label-align="'left'">
+    <n-form ref="formRef" :rules="formRules" :label-placement="'left'" :label-align="'left'">
       <n-space vertical size="large">
         <n-card :title="() => h(NTag, { type: 'primary', bordered: false }, () => '基础设置')" size="small">
           <n-grid :cols="24" :x-gap="24" style="text-align: left">
@@ -433,7 +582,7 @@ function deletePrompt(ID) {
               <n-switch v-model:value="formValue.updateBasicInfoOnStart"/>
             </n-form-item-gi>
             <n-form-item-gi :span="4" label="数据刷新间隔：" path="refreshInterval">
-              <n-input-number v-model:value="formValue.refreshInterval" placeholder="请输入数据刷新间隔(秒)">
+              <n-input-number v-model:value="formValue.refreshInterval" placeholder="请输入数据刷新间隔(秒)" :min="1" :max="3600">
                 <template #suffix>秒</template>
               </n-input-number>
             </n-form-item-gi>
@@ -446,9 +595,6 @@ function deletePrompt(ID) {
            <n-form-item-gi :span="3" label="指数基金：" path="enableFund">
               <n-switch v-model:value="formValue.enableFund"/>
             </n-form-item-gi>
-            <!--      <n-form-item-gi :span="3" label="AI智能体：" path="enableAgent">
-                   <n-switch v-model:value="formValue.enableAgent"/>
-                 </n-form-item-gi>-->
             <n-form-item-gi :span="11" label="东财唯一标识：" path="qgqpBId">
               <n-input type="text" placeholder="东财唯一标识" v-model:value="formValue.qgqpBId" clearable/>
               <n-tooltip placement="top">
@@ -568,16 +714,16 @@ function deletePrompt(ID) {
         <n-card :title="() => h(NTag, { type: 'primary', bordered: false }, () => 'AI设置')" size="small">
           <n-grid :cols="24" :x-gap="24" style="text-align: left;">
             <n-form-item-gi :span="24" label="AI诊股：" path="openAI.enable">
-              <n-switch v-model:value="formValue.openAI.enable"/>
+              <n-switch v-model:value="openAiEnable"/>
             </n-form-item-gi>
 
-            <n-form-item-gi :span="6" v-if="formValue.openAI.enable" label="Crawler Timeout(秒)"
+            <n-form-item-gi :span="6" v-if="openAiEnable" label="Crawler Timeout(秒)"
                             title="资讯采集超时时间(秒)" path="openAI.crawlTimeOut">
-              <n-input-number min="30" step="1" v-model:value="formValue.openAI.crawlTimeOut"/>
+              <n-input-number :min="30" :max="300" step="1" v-model:value="crawlTimeOut"/>
             </n-form-item-gi>
-            <n-form-item-gi :span="4" v-if="formValue.openAI.enable" title="天数越多消耗tokens越多"
+            <n-form-item-gi :span="4" v-if="openAiEnable" title="天数越多消耗tokens越多"
                             label="日K线数据(天)" path="openAI.kDays">
-              <n-input-number min="30" step="1" max="60" v-model:value="formValue.openAI.kDays"/>
+              <n-input-number :min="5" step="1" :max="60" v-model:value="kDays"/>
             </n-form-item-gi>
             <n-form-item-gi :span="2" label="爬虫http代理" path="httpProxyEnabled">
               <n-switch v-model:value="formValue.httpProxyEnabled"/>
@@ -588,27 +734,27 @@ function deletePrompt(ID) {
             </n-form-item-gi>
 
 
-            <n-gi :span="24" v-if="formValue.openAI.enable">
+            <n-gi :span="24" v-if="openAiEnable">
               <n-divider title-placement="left">默认提示词设置</n-divider>
             </n-gi>
-            <n-form-item-gi :span="12" v-if="formValue.openAI.enable" label="默认系统提示词" path="openAI.prompt">
-              <n-input v-model:value="formValue.openAI.prompt" type="textarea" :show-count="true"
+            <n-form-item-gi :span="12" v-if="openAiEnable" label="默认系统提示词" path="openAI.prompt">
+              <n-input v-model:value="aiPrompt" type="textarea" :show-count="true"
                        placeholder="请输入系统提示词" :autosize="{ minRows: 4, maxRows: 8 }"/>
             </n-form-item-gi>
-            <n-form-item-gi :span="12" v-if="formValue.openAI.enable" label="默认个股分析提示词"
+            <n-form-item-gi :span="12" v-if="openAiEnable" label="默认个股分析提示词"
                             path="openAI.questionTemplate">
-              <n-input v-model:value="formValue.openAI.questionTemplate" type="textarea" :show-count="true"
+              <n-input v-model:value="questionTemplate" type="textarea" :show-count="true"
                        placeholder="请输入个股分析提示词:例如{{stockName}}[{{stockCode}}]分析和总结"
                        :autosize="{ minRows: 4, maxRows: 8 }"/>
             </n-form-item-gi>
 
-            <n-gi :span="24" v-if="formValue.openAI.enable">
+            <n-gi :span="24" v-if="openAiEnable">
               <n-divider title-placement="left">AI模型服务配置</n-divider>
             </n-gi>
-            <n-gi :span="24" v-if="formValue.openAI.enable">
+            <n-gi :span="24" v-if="openAiEnable">
               <n-space vertical>
                 <n-collapse v-model:expanded-names="aiConfigExpandedNames" accordion>
-                  <n-collapse-item v-for="(aiConfig, index) in formValue.openAI.aiConfigs" :key="index" :name="String(index)">
+                  <n-collapse-item v-for="(aiConfig, index) in aiConfigs" :key="aiConfig.ID || index" :name="String(index)">
                     <template #header>
                       <n-flex justify="space-between" align="center" style="width: 100%;">
                         <n-text>{{ aiConfig.name || `AI 配置 #${index + 1}` }}</n-text>
@@ -643,23 +789,23 @@ function deletePrompt(ID) {
                       <n-form-item-gi :span="8" label="模型名称" :path="`openAI.aiConfigs[${index}].modelName`">
                         <n-select
                           v-model:value="aiConfig.modelName"
-                          :options="aiConfig._modelOptions || []"
+                          :options="getMeta(index, aiConfig.ID).modelOptions"
                           filterable
                           tag
-                          :loading="aiConfig._loadingModels"
+                          :loading="getMeta(index, aiConfig.ID).loadingModels"
                           placeholder="点击获取模型列表或手动输入"
-                          @click="fetchAiModels(aiConfig)"
+                          @click="fetchAiModels(aiConfig, index)"
                           @update:value="(val) => onModelNameChange(aiConfig, val)"
                         />
                       </n-form-item-gi>
                       <n-form-item-gi :span="5" label="Temperature" :path="`openAI.aiConfigs[${index}].temperature`">
-                        <n-input-number placeholder="temperature" v-model:value="aiConfig.temperature" :step="0.1"/>
+                        <n-input-number placeholder="temperature" v-model:value="aiConfig.temperature" :step="0.1" :min="0" :max="2"/>
                       </n-form-item-gi>
                       <n-form-item-gi :span="5" label="MaxTokens" :path="`openAI.aiConfigs[${index}].maxTokens`">
-                        <n-input-number placeholder="maxTokens" v-model:value="aiConfig.maxTokens"/>
+                        <n-input-number placeholder="maxTokens" v-model:value="aiConfig.maxTokens" :min="1" :max="128000"/>
                       </n-form-item-gi>
                       <n-form-item-gi :span="5" label="Timeout(秒)" :path="`openAI.aiConfigs[${index}].timeOut`">
-                        <n-input-number min="60" step="1" placeholder="超时(秒)" v-model:value="aiConfig.timeOut"/>
+                        <n-input-number :min="60" :max="600" step="1" placeholder="超时(秒)" v-model:value="aiConfig.timeOut"/>
                       </n-form-item-gi>
                       <n-form-item-gi :span="12" label="深度思考">
                         <n-switch v-model:value="aiConfig.thinking"/>
@@ -716,27 +862,34 @@ function deletePrompt(ID) {
             </n-gi>
 
             <n-gi :span="24">
+              <n-divider title-placement="left">数据清理</n-divider>
+            </n-gi>
+
+            <n-gi :span="24">
+              <n-space vertical>
+                <n-text depth="3">清理应用运行过程中产生的中间文件、日志、缓存和历史记录</n-text>
+                <n-space justify="center" wrap>
+                  <n-button type="warning" ghost @click="cleanup('logs')">清理日志</n-button>
+                  <n-button type="warning" ghost @click="cleanup('chat_sessions')">清理AI对话</n-button>
+                  <n-button type="warning" ghost @click="cleanup('ai_results')">清理分析结果</n-button>
+                  <n-button type="warning" ghost @click="cleanup('test_images')">清理测试图片</n-button>
+                  <n-button type="warning" ghost @click="cleanup('browser_temp')">清理浏览器临时目录</n-button>
+                  <n-button type="error" @click="cleanup('all')">一键清理全部</n-button>
+                </n-space>
+              </n-space>
+            </n-gi>
+
+            <n-gi :span="24">
               <n-divider/>
             </n-gi>
 
             <n-gi :span="24">
               <n-space vertical>
                 <n-space justify="center">
-<!--                  <n-button type="warning" @click="managePrompts">管理提示词模板</n-button>-->
                   <n-button type="primary" strong @click="saveConfig">保存设置</n-button>
                   <n-button type="info" @click="exportConfig">导出配置</n-button>
                   <n-button type="error" @click="importConfig">导入配置</n-button>
                 </n-space>
-
-<!--                <n-flex justify="start" style="margin-top: 10px" v-if="promptTemplates.length > 0">-->
-<!--                  <n-tag :bordered="false" type="warning">提示词模板:</n-tag>-->
-<!--                  <n-tag size="medium" secondary v-for="prompt in promptTemplates" closable-->
-<!--                         @close="deletePrompt(prompt.ID)" @click="editPrompt(prompt)" :title="prompt.content"-->
-<!--                         :type="prompt.type === '模型系统Prompt' ? 'success' : 'info'" :bordered="false">{{-->
-<!--                      prompt.name-->
-<!--                    }}-->
-<!--                  </n-tag>-->
-<!--                </n-flex>-->
               </n-space>
             </n-gi>
 

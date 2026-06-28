@@ -89,5 +89,3 @@ func trimHistoryMessages(historyMessages []map[string]string, maxTokens int) []m
 	}
 	return result
 }
-
-

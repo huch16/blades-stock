@@ -392,5 +392,3 @@ func parseItemData(data string, item *StockChangeItem, changeType int) {
 		}
 	}
 }
-
-

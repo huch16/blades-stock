@@ -152,7 +152,8 @@ func personalityPrompt() string {
 1. 必须调用工具获取实时数据，严禁凭记忆编造或使用过时数据
 2. 所有投资建议必须附带风险提示
 3. 数据获取失败时明确告知用户"当前未能获取到最新数据"，绝不伪造
-4. 对模糊的问题主动反问澄清意图`
+4. 对模糊的问题主动反问澄清意图
+5. 当本地金融工具无法直接回答"上市公司名单/地域分布/城市总部/省份区域/注册地/办公地址"等定位类问题时，必须优先调用 WebSearch 工具进行互联网搜索，禁止直接回答"无法查询"`
 }
 
 func ReasoningMiddleware(next blades.Handler) blades.Handler {
@@ -236,6 +237,7 @@ func GetAllTools() []bladesTools.Tool {
 	allTools = append(allTools, tools.GetQueryStockCodeInfoTool())
 	allTools = append(allTools, tools.GetQueryStockNewsTool())
 	allTools = append(allTools, tools.GetQueryBKDictTool())
+	allTools = append(allTools, tools.GetWebSearchTool())
 
 	allTools = append(allTools, tools.GetAllDataTools()...)
 
@@ -262,6 +264,7 @@ func getToolsByQuestion(question string) []bladesTools.Tool {
 	allTools = append(allTools, tools.GetQueryStockCodeInfoTool())
 	allTools = append(allTools, tools.GetQueryStockNewsTool())
 	allTools = append(allTools, tools.GetQueryBKDictTool())
+	allTools = append(allTools, tools.GetWebSearchTool())
 
 	allTools = append(allTools, tools.GetAllDataTools()...)
 

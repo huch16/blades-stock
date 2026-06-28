@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	sharedTransport     *http.Transport
-	sharedHTTPClient    *http.Client
-	SharedHTTPClient    *resty.Client
-	httpConfigMutex     sync.RWMutex
-	currentProxyURL     string
+	sharedTransport  *http.Transport
+	sharedHTTPClient *http.Client
+	SharedHTTPClient *resty.Client
+	httpConfigMutex  sync.RWMutex
+	currentProxyURL  string
 )
 
 func init() {

@@ -102,7 +102,7 @@ require (
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-sqlite3 v1.14.24 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.3.1 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.4.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d // indirect
@@ -159,5 +159,3 @@ require (
 
 // v1.38.0 does not compile against invopop/jsonschema v0.14 (mixes wk8 vs pb33f ordered-map in schemautil.go).
 exclude github.com/anthropics/anthropic-sdk-go v1.38.0
-
-// replace github.com/wailsapp/wails/v2 v2.9.2 => C:\Users\spark\go\pkg\mod

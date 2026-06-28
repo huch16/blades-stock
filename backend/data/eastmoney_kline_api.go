@@ -640,5 +640,3 @@ func (receiver *EastMoneyKLineApi) GetKLineCount(stockCode string, kLineType str
 	kLines := receiver.GetKLineData(stockCode, kLineType, "", 365) // 默认获取一年数据
 	return len(*kLines)
 }
-
-

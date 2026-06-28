@@ -1,11 +1,11 @@
-<script setup>
+<script setup lang="ts">
 import {computed, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import * as echarts from 'echarts';
+import type { AIConfig } from '../../wailsjs/go/models'
 import {
   AddGroup,
   AddStockGroup,
   Follow,
-  GetAiConfigs,
   GetAIResponseResult,
   GetConfig,
   GetFollowList,
@@ -37,6 +37,7 @@ import {
   BatchGreet,
 } from '../../wailsjs/go/main/App'
 import StockCard from './StockCard.vue'
+import { useAiConfigStore } from '../stores/aiConfig'
 import {
   NAvatar,
   NButton,
@@ -78,6 +79,9 @@ import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 
 const route = useRoute()
 const router = useRouter()
+
+// Pinia Store - AI 配置全局管理
+const aiConfigStore = useAiConfigStore()
 
 const danmus = ref([])
 const ws = ref(null)
@@ -142,7 +146,6 @@ const formModel = ref({
 })
 
 const promptTemplates = ref([])
-const aiConfigs = ref([])
 const sysPromptOptions = ref([])
 const userPromptOptions = ref([])
 const data = reactive({
@@ -357,12 +360,8 @@ onBeforeMount(() => {
 
   }).catch(err => { console.error("GetPromptTemplates error:", err) })
 
-  GetAiConfigs().then(res => {
-    aiConfigs.value = res
-    if (res && res.length > 0) {
-      data.aiConfigId = res[0].ID
-    }
-  }).catch(err => { console.error("GetAiConfigs error:", err) })
+  // 从 Store 加载 AI 配置（Pinia 统一管理）
+  aiConfigStore.loadConfigs()
 
   EventsOn("loadingDone", (data) => {
     message.loading("刷新股票基础数据...")
@@ -401,7 +400,7 @@ onBeforeMount(() => {
         clearTimeout(aiAnalysisTimeout.value)
         aiAnalysisTimeout.value = null
       }
-      SaveAIResponseResult(data.code, data.name, data.airesult, data.chatId, data.question, data.aiConfigId)
+      SaveAIResponseResult(data.code, data.name, data.airesult, data.chatId, data.question, aiConfigStore.activeConfigId)
       data.loading = false
       data.analysisStatus = "分析完成"
       message.destroyAll()
@@ -1866,7 +1865,7 @@ function checkPriceLineAlerts(result) {
 }
 
 function aiReCheckStock(stock, stockCode) {
-  if (!data.aiConfigId) {
+  if (!aiConfigStore.activeConfigId) {
     message.error("请先选择AI模型配置")
     return
   }
@@ -1889,7 +1888,7 @@ function aiReCheckStock(stock, stockCode) {
   //
 
   //message.info("sysPromptId:"+data.sysPromptId)
-  NewChatStream(stock, stockCode, data.question, data.aiConfigId, data.sysPromptId, enableTools.value,thinkingMode.value)
+  NewChatStream(stock, stockCode, data.question, aiConfigStore.activeConfigId, data.sysPromptId, enableTools.value,thinkingMode.value)
     .catch(err => {
       data.loading = false
       data.analysisStatus = ""
@@ -2617,8 +2616,8 @@ watch(modalShow6, (newVal) => {
         </n-gradient-text>
       </n-flex>
       <n-flex justify="space-between" style="margin-bottom: 10px">
-        <n-select style="width: 31%" v-model:value="data.aiConfigId" label-field="name" value-field="ID"
-                  :options="aiConfigs" placeholder="请选择AI模型服务配置"/>
+        <n-select style="width: 31%" v-model:value="aiConfigStore.activeConfigId" label-field="name" value-field="ID"
+                  :options="aiConfigStore.configs" placeholder="请选择AI模型服务配置"/>
         <n-select style="width: 31%" v-model:value="data.sysPromptId" label-field="name" value-field="ID"
                   :options="sysPromptOptions" placeholder="请选择系统提示词"/>
         <n-select style="width: 31%" v-model:value="data.question" label-field="name" value-field="content"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
-	machineidlib 	"github.com/denisbrodbeck/machineid"
+	machineidlib "github.com/denisbrodbeck/machineid"
 )
 
 var buildKey string

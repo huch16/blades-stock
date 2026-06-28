@@ -72,7 +72,11 @@ func NewBrowserPool(size int) *BrowserPool {
 }
 
 // Get 从池中获取浏览器实例
+// Get retrieves a browser instance from the pool. Although channel reads are safe,
+// we acquire the mutex for symmetry and to guard against future modifications.
 func (pool *BrowserPool) Get() *context.Context {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
 	return <-pool.pool
 }
 
