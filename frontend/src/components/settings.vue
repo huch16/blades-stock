@@ -3,7 +3,6 @@ import {h, onBeforeUnmount, onMounted, ref, computed, reactive, nextTick} from "
 import {
   ExportConfig,
   GetConfig,
-  GetPromptTemplates,
   SendDingDingMessageByType,
   UpdateConfig,
   FetchAiModels,
@@ -165,8 +164,6 @@ async function fetchAiModels(aiConfig, index) {
   }
 }
 
-const promptTemplates = ref([])
-
 const aiPlatformOptions = [
   { label: 'DeepSeek (https://api.deepseek.com)', value: 'https://api.deepseek.com' },
   { label: '硅基流动 (https://api.siliconflow.cn/v1)', value: 'https://api.siliconflow.cn/v1' },
@@ -302,11 +299,6 @@ onMounted(() => {
     message.error('加载配置失败: ' + (err?.message || err))
   })
 
-  GetPromptTemplates("", "").then(res => {
-    promptTemplates.value = res
-  }).catch(err => {
-    console.error('GetPromptTemplates error', err)
-  })
 })
 
 onBeforeUnmount(() => {
@@ -518,55 +510,7 @@ function importConfig() {
   input.click();
 }
 
-const showManagePromptsModal = ref(false)
-const promptTypeOptions = [
-  {label: "模型系统Prompt", value: '模型系统Prompt'},
-  {label: "模型用户Prompt", value: '模型用户Prompt'},]
-const formPromptRef = ref(null)
-const formPrompt = ref({
-  ID: 0,
-  Name: '',
-  Content: '',
-  Type: '',
-})
 
-function managePrompts() {
-  formPrompt.value.ID = 0
-  showManagePromptsModal.value = true
-}
-
-async function savePrompt() {
-  if (!formPrompt.value.Name?.trim() || !formPrompt.value.Content?.trim() || !formPrompt.value.Type) {
-    message.warning('请填写名称、类型和内容')
-    return
-  }
-  try {
-    const res = await AddPrompt(formPrompt.value)
-    message.success(res)
-    promptTemplates.value = await GetPromptTemplates("", "")
-    showManagePromptsModal.value = false
-  } catch (err) {
-    message.error('保存提示词失败: ' + (err?.message || err))
-  }
-}
-
-function editPrompt(prompt) {
-  formPrompt.value.ID = prompt.ID
-  formPrompt.value.Name = prompt.name
-  formPrompt.value.Content = prompt.content
-  formPrompt.value.Type = prompt.type
-  showManagePromptsModal.value = true
-}
-
-async function deletePrompt(ID) {
-  try {
-    const res = await DelPrompt(ID)
-    message.success(res)
-    promptTemplates.value = await GetPromptTemplates("", "")
-  } catch (err) {
-    message.error('删除提示词失败: ' + (err?.message || err))
-  }
-}
 </script>
 
 <template>
@@ -898,30 +842,6 @@ async function deletePrompt(ID) {
       </n-space>
     </n-form>
   </n-flex>
-
-  <n-modal v-model:show="showManagePromptsModal" closable :mask-closable="false">
-    <n-card style="width: 800px; height: 600px; text-align: left" :bordered="false"
-            :title="(formPrompt.ID > 0 ? '修改' : '添加') + '提示词'" size="huge" role="dialog" aria-modal="true">
-      <n-form ref="formPromptRef" :label-placement="'left'" :label-align="'left'">
-        <n-form-item label="名称">
-          <n-input v-model:value="formPrompt.Name" placeholder="请输入提示词名称"/>
-        </n-form-item>
-        <n-form-item label="类型">
-          <n-select v-model:value="formPrompt.Type" :options="promptTypeOptions" placeholder="请选择提示词类型"/>
-        </n-form-item>
-        <n-form-item label="内容">
-          <n-input v-model:value="formPrompt.Content" type="textarea" :show-count="true" placeholder="请输入prompt"
-                   :autosize="{ minRows: 12, maxRows: 12, }"/>
-        </n-form-item>
-      </n-form>
-      <template #footer>
-        <n-flex justify="end">
-          <n-button type="primary" @click="savePrompt">保存</n-button>
-          <n-button type="warning" @click="showManagePromptsModal = false">取消</n-button>
-        </n-flex>
-      </template>
-    </n-card>
-  </n-modal>
 </template>
 
 <style scoped>

@@ -58,12 +58,26 @@ func (o *OpenAi) NewSummaryStockNewsStreamWithTools(userQuestion string, sysProm
 
 		sysPrompt += "最后必须调用CreateAiRecommendStocks工具函数保存ai股票推荐记录。"
 
+		sysPrompt += `
+
+## 股票筛选方法论（核心！避免仅推荐大公司）
+进行市场资讯分析和股票推荐时，必须按以下步骤筛选，避免只看大盘龙头：
+
+第1步 - 锁定方向：根据新闻热点确定目标板块概念
+第2步 - 多维度筛选：使用 SearchStockByIndicators 工具，概念关键字 + 至少 3 个筛选条件叠加，例如：
+  示例：SearchStockByIndicators("机器人概念,流通市值20亿~200亿,市盈率>0,营收增长率>10%,股价站上20日均线")
+  常用筛选维度：流通市值(优先20~200亿中小盘)、市盈率PE>0、营收增长>10%、技术面站上均线
+第3步 - 核查：用 GetStockInfo 确认实时行情和财务数据真实性
+第4步 - 聚焦细分龙头：目标板块中市值50~200亿、有技术壁垒、业绩确定的中小盘标的
+第5步 - 推荐3~5只覆盖不同子方向，用 BatchCreateAiRecommendStocks 批量保存`
+
 		msg := []map[string]interface{}{
 			{
 				"role":    "system",
 				"content": sysPrompt,
 			},
 		}
+		var msgMu sync.Mutex
 		msg = append(msg, map[string]interface{}{
 			"role":    "user",
 			"content": "当前时间",
@@ -104,6 +118,7 @@ func (o *OpenAi) NewSummaryStockNewsStreamWithTools(userQuestion string, sysProm
 			md4 := util.MarkdownTableWithTitle("采购经理人指数(PMI)", res4.PMIResult.Data)
 			market.WriteString(md4)
 
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "国内宏观经济数据",
@@ -113,6 +128,7 @@ func (o *OpenAi) NewSummaryStockNewsStreamWithTools(userQuestion string, sysProm
 				"reasoning_content": "使用工具查询",
 				"content":           "\n# 国内宏观经济数据：\n" + market.String(),
 			})
+			msgMu.Unlock()
 		})
 
 		wg.Go(func() {
@@ -132,6 +148,7 @@ func (o *OpenAi) NewSummaryStockNewsStreamWithTools(userQuestion string, sysProm
 					return true
 				})
 			}
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "近期重大事件/会议",
@@ -141,6 +158,7 @@ func (o *OpenAi) NewSummaryStockNewsStreamWithTools(userQuestion string, sysProm
 				"reasoning_content": "使用工具查询",
 				"content":           "近期重大事件/会议如下：\n" + md.String(),
 			})
+			msgMu.Unlock()
 		})
 
 		wg.Wait()
@@ -193,6 +211,7 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 				"content": sysPrompt,
 			},
 		}
+		var msgMu sync.Mutex
 		msg = append(msg, map[string]interface{}{
 			"role":    "user",
 			"content": "当前时间",
@@ -217,11 +236,11 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 				md.WriteString("\n### 事件/会议日期：" + date.String())
 				list := gjson.Get(string(bytes), "items")
 				list.ForEach(func(key, value gjson.Result) bool {
-					//logger.SugaredLogger.Debugf("key: %+v,value: %+v", key.String(), gjson.Get(value.String(), "title"))
 					md.WriteString("\n- " + gjson.Get(value.String(), "title").String())
 					return true
 				})
 			}
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "近期重大事件/会议",
@@ -231,12 +250,14 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 				"reasoning_content": "使用工具查询",
 				"content":           "近期重大事件/会议如下：\n" + md.String(),
 			})
+			msgMu.Unlock()
 		}()
 
 		go func() {
 			defer wg.Done()
 			datas := NewMarketNewsApi().InteractiveAnswer(1, 100, "")
 			content := util.MarkdownTableWithTitle("当前最新投资者互动数据", datas.Results)
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "投资者互动数据",
@@ -245,6 +266,7 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 				"role":    "assistant",
 				"content": content,
 			})
+			msgMu.Unlock()
 		}()
 
 		go func() {
@@ -258,6 +280,7 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 				data.Chg = mathutil.RoundToFloat(100*data.Chg, 2)
 			}
 			markdownTable = util.MarkdownTableWithTitle("当前热门选股策略", strategy.Data)
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "当前热门选股策略",
@@ -266,6 +289,7 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 				"role":    "assistant",
 				"content": markdownTable,
 			})
+			msgMu.Unlock()
 		}()
 
 		wg.Wait()
@@ -347,6 +371,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			},
 		}
 
+		var msgMu sync.Mutex
 		msg = append(msg, map[string]interface{}{
 			"role":    "user",
 			"content": "当前时间",
@@ -396,6 +421,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			defer wg.Done()
 			datas := NewMarketNewsApi().InteractiveAnswer(1, 100, stock)
 			content := util.MarkdownTableWithTitle("当前最新投资者互动数据", datas.Results)
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "投资者互动数据",
@@ -405,6 +431,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				"reasoning_content": "使用工具查询",
 				"content":           content,
 			})
+			msgMu.Unlock()
 		}()
 
 		go func() {
@@ -447,11 +474,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				md.WriteString("\n### 事件/会议日期：" + date.String())
 				list := gjson.Get(string(bytes), "items")
 				list.ForEach(func(key, value gjson.Result) bool {
-					//logger.SugaredLogger.Debugf("key: %+v,value: %+v", key.String(), gjson.Get(value.String(), "title"))
 					md.WriteString("\n- " + gjson.Get(value.String(), "title").String())
 					return true
 				})
 			}
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "近期重大事件/会议",
@@ -461,6 +488,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				"reasoning_content": "使用工具查询",
 				"content":           "近期重大事件/会议如下：\n" + md.String(),
 			})
+			msgMu.Unlock()
 		}()
 
 		go func() {
@@ -468,7 +496,6 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			//logger.SugaredLogger.Infof("NewChatStream getKLineData stock:%s stockCode:%s", stock, stockCode)
 			if strutil.HasPrefixAny(stockCode, []string{"sz", "sh", "hk", "us", "gb_"}) {
 				K := &[]KLineData{}
-				//logger.SugaredLogger.Infof("NewChatStream getKLineData stock:%s stockCode:%s", stock, stockCode)
 				if strutil.HasPrefixAny(stockCode, []string{"sz", "sh"}) {
 					K = NewStockDataApi().GetKLineData(stockCode, "240", o.KDays)
 				}
@@ -489,6 +516,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				}
 				jsonData, _ := json.Marshal(Kmap)
 				markdownTable, _ := JSONToMarkdownTable(jsonData)
+				msgMu.Lock()
 				msg = append(msg, map[string]interface{}{
 					"role":    "user",
 					"content": stock + "日K数据",
@@ -497,7 +525,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 					"role":    "assistant",
 					"content": "## " + stock + "日K数据如下：\n" + markdownTable,
 				})
-				//logger.SugaredLogger.Infof("getKLineData=\n%s", markdownTable)
+				msgMu.Unlock()
 			}
 		}()
 
@@ -518,6 +546,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			for _, message := range *messages {
 				price += message + ";"
 			}
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": stock + "股价数据",
@@ -526,8 +555,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				"role":    "assistant",
 				"content": "\n## " + stock + "股价数据：\n" + price,
 			})
-			//logger.SugaredLogger.Infof("SearchStockPriceInfo stock:%s stockCode:%s", stock, stockCode)
-			//logger.SugaredLogger.Infof("SearchStockPriceInfo assistant:%s", "\n## "+stock+"股价数据：\n"+price)
+			msgMu.Unlock()
 		}()
 
 		go func() {
@@ -549,6 +577,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				go runtime.EventsEmit(o.ctx, "warnMsg", "❗获取股票财报失败,分析结果可能不准确")
 				return
 			}
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": stock + "财报数据",
@@ -559,6 +588,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 					"content": stock + message,
 				})
 			}
+			msgMu.Unlock()
 		}()
 
 		go func() {
@@ -573,6 +603,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				messageText.WriteString("## " + telegraph.Time + ":" + "\n")
 				messageText.WriteString("### " + telegraph.Content + "\n")
 			}
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "市场资讯",
@@ -581,6 +612,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				"role":    "assistant",
 				"content": messageText.String(),
 			})
+			msgMu.Unlock()
 		}()
 
 		go func() {
@@ -594,6 +626,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			for _, message := range *messages {
 				newsText.WriteString(message + "\n")
 			}
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": stock + "相关新闻资讯",
@@ -602,6 +635,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				"role":    "assistant",
 				"content": newsText.String(),
 			})
+			msgMu.Unlock()
 		}()
 
 		done := make(chan struct{})

@@ -6,13 +6,22 @@ import router from './router/router'
 // 引入组件库的少量全局样式变量
 import 'tdesign-vue-next/es/style/index.css';
 
+// 抑制无害的 ResizeObserver 警告（WebView2 在窗口创建时的常见产物）
+;(function() {
+  const origError = console.error
+  console.error = function(...args) {
+    if (args.some(a => typeof a === 'string' && a.includes('ResizeObserver'))) return
+    return origError.apply(this, args)
+  }
+})()
+
 const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
 
 app.config.errorHandler = (err) => {
-  if (err.message && err.message.includes('ResizeObserver')) {
+  if (err && err.message && err.message.includes('ResizeObserver')) {
     return
   }
   console.error(err)

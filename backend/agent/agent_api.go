@@ -140,17 +140,16 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		sysPrompt := sysPromptOverride
 		if sysPrompt == "" {
-			sysPrompt = `【强制规则】你必须通过工具调用获取实时数据，严禁凭记忆编造或使用过时数据。以下场景必须调用工具：
+			skillPrompt := buildSkillPrompt(question)
+			if skillPrompt != "" {
+				sysPrompt = skillPrompt + "\n\n"
+			}
+			sysPrompt += `【强制规则】你必须通过工具调用获取实时数据，严禁凭记忆编造或使用过时数据。以下场景必须调用工具：
 1. 股票/指数行情数据（价格、涨跌幅、成交量等）——必须调用工具获取最新实时数据
 2. 财务数据（营收、利润、市盈率等）——必须调用工具获取最新财报数据
 3. 新闻资讯——必须调用工具获取最新新闻
 4. 宏观经济数据——必须调用工具获取最新数据
 任何涉及具体数字的回答，都必须先通过工具查询确认，不得使用训练数据中的过时信息。如果你没有获取到最新数据，必须明确告知用户"当前未能获取到最新数据"，绝不能编造数据。`
-		}
-
-		skillPrompt := buildSkillPrompt(question)
-		if skillPrompt != "" {
-			sysPrompt += "\n\n" + skillPrompt
 		}
 
 		settingConfig := data.GetSettingConfig()
@@ -259,10 +258,17 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if msg.Role == blades.RoleAssistant {
 				text := msg.Text()
 				if text != "" {
-					fullResponse.WriteString(text)
-					ch <- &StreamMessage{
-						Role:    "assistant",
-						Content: text,
+					// Skip if this is the final accumulated message (openai stream
+					// yields both delta chunks and the final full text — appending
+					// the full text again causes duplication in the frontend).
+					if fullResponse.Len() > 0 && text == fullResponse.String() {
+						// final accumulated message, already streamed as deltas
+					} else {
+						fullResponse.WriteString(text)
+						ch <- &StreamMessage{
+							Role:    "assistant",
+							Content: text,
+						}
 					}
 				}
 

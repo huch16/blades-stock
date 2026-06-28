@@ -2207,6 +2207,39 @@ func Tools(tools []Tool) []Tool {
 		},
 	})
 
+	// FinGenius 式高级分析工具：游资追踪、筹码分析、资金博弈
+	// 不需要外部 API Key，直接调用东方财富 F10 免费接口
+	for _, def := range []struct {
+		name        string
+		description string
+	}{
+		{"AnalyzeHotMoneyActivity", "游资活跃度追踪分析：针对指定股票，综合龙虎榜买入/卖出数据、营业部买卖明细，分析哪些游资营业部在参与、买卖力度、游资风格（一日游/趋势/接力），辅助判断游资动向和资金博弈格局。"},
+		{"AnalyzeChipConcentration", "筹码集中度与主力动向分析：针对指定股票，综合股东户数趋势、大宗交易折溢价、资金流向（主力/超大单/大单净额）、融资融券余额变化等多维度数据，判断筹码是集中还是分散，识别主力可能的建仓、洗盘、出货行为。"},
+		{"AnalyzeCapitalGame", "资金博弈分析：针对指定股票，综合历史资金流向（主力净额、超大单、大单、中单、小单的净流入/流出）、龙虎榜买卖力度、融资融券余额变化等多维度，分析多空双方力量对比、主力与散户的博弈格局，判断当前主导资金性质。"},
+	} {
+		tools = append(tools, Tool{
+			Type: "function",
+			Function: ToolFunction{
+				Name:        def.name,
+				Description: def.description,
+				Parameters: &FunctionParameters{
+					Type: "object",
+					Properties: map[string]any{
+						"stockCode": map[string]any{
+							"type":        "string",
+							"description": "股票代码，如 600519、000001.SZ",
+						},
+						"days": map[string]any{
+							"type":        "integer",
+							"description": "回溯天数，AnalyzeHotMoneyActivity 默认30天，AnalyzeCapitalGame 默认20个交易日",
+						},
+					},
+					Required: []string{"stockCode"},
+				},
+			},
+		})
+	}
+
 	tools = appendAgentParityTools(tools)
 
 	// 根据 API Key 配置过滤工具，未配置对应 Key 的工具不注册
@@ -2281,10 +2314,13 @@ var dataToolGroupMap = map[string]dataToolGroup{
 	"QueryManagement":             dataToolGroupStockAnalysis,
 	"QueryFundFinance":            dataToolGroupStockAnalysis,
 	"QueryBusinessData":           dataToolGroupStockAnalysis,
-	"StockEarningsReview":         dataToolGroupStockAnalysis,
-	"IndustryResearch":            dataToolGroupStockAnalysis,
-	"TrackingReport":              dataToolGroupStockAnalysis,
-	"FinanceDataQuery":            dataToolGroupStockAnalysis,
+	"StockEarningsReview":              dataToolGroupStockAnalysis,
+	"IndustryResearch":                 dataToolGroupStockAnalysis,
+	"TrackingReport":                   dataToolGroupStockAnalysis,
+	"FinanceDataQuery":                 dataToolGroupStockAnalysis,
+	"AnalyzeHotMoneyActivity":          dataToolGroupStockAnalysis,
+	"AnalyzeChipConcentration":         dataToolGroupStockAnalysis,
+	"AnalyzeCapitalGame":               dataToolGroupStockAnalysis,
 
 	"GetMarketData":              dataToolGroupMarket,
 	"GlobalStockIndexesReadable": dataToolGroupMarket,
@@ -2374,6 +2410,7 @@ var dataToolGroupKeywordsList = []dataToolGroupKeywords{
 		"供应商", "经营数据", "业绩点评", "财报分析", "行业研究", "跟踪报告", "金融数据查询",
 		"研报", "研究报告", "机构预测", "券商预测", "目标价", "可比公司", "同行对比",
 		"分析", "诊断", "评估", "怎么样", "怎么看", "能买吗", "值得买吗",
+		"游资", "龙虎榜", "筹码", "建仓", "洗盘", "出货", "资金博弈", "多空", "主力", "资金流向",
 	}},
 	{dataToolGroupMarket, []string{
 		"大盘", "市场", "指数", "涨跌分布", "涨停", "跌停", "上涨家数", "下跌家数", "异动",

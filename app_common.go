@@ -202,10 +202,7 @@ func (a *App) ChatWithAgent(question string, aiConfigId int, sysPromptId *int, m
 	for msg := range ch {
 		runtime.EventsEmit(a.ctx, "agent-message", agentMessageToFrontendMap(msg))
 	}
-	runtime.EventsEmit(a.ctx, "agent-message", agentMessageToFrontendMap(&agent.StreamMessage{
-		Role:    "assistant",
-		Content: "agent-DONE",
-	}))
+	// agent-DONE is already emitted inside ChatWithContext before closing the channel
 }
 
 func agentMessageToFrontendMap(msg *agent.StreamMessage) map[string]any {

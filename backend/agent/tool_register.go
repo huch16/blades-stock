@@ -47,4 +47,5 @@ func GetEnabledTools() []bladesTools.Tool {
 
 func init() {
 	RegisterTool("WebSearch", tools.GetWebSearchTool())
+	RegisterTool("LearnSkillFromProject", tools.GetLearnSkillTool())
 }

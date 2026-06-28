@@ -4890,6 +4890,9 @@ func GetAllDataTools() []bladesTools.Tool {
 		},
 	))
 
+	// 注册游资追踪、筹码分析、资金博弈等高阶分析工具
+	result = append(result, GetHotMoneyChipTools()...)
+
 	// 根据 API Key 配置过滤工具，未配置对应 Key 的工具不注册
 	var filtered []bladesTools.Tool
 	for _, t := range result {

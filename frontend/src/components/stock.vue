@@ -1968,7 +1968,7 @@ function getHeight() {
 }
 
 window.onerror = function (msg, source, lineno, colno, error) {
-  // 将错误信息发送给后端
+  if (typeof msg === 'string' && msg.includes('ResizeObserver')) return true
   EventsEmit("frontendError", {
     page: "stock.vue",
     message: msg,
@@ -1983,7 +1983,6 @@ window.onerror = function (msg, source, lineno, colno, error) {
     stocks: stocks,
     formModel: formModel,
   });
-  message.error("发生错误:" + msg)
   return true;
 };
 

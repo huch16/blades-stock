@@ -115,7 +115,9 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 		})
 
 	default:
-		extraFields := map[string]any{}
+		extraFields := map[string]any{
+			"max_tokens": maxTok,
+		}
 		if aiConfig.Thinking {
 			extraFields["reasoning_effort"] = "medium"
 		}

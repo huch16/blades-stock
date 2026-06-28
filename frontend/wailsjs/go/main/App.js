@@ -586,6 +586,10 @@ export function IsUSTradingTime() {
   return window['go']['main']['App']['IsUSTradingTime']();
 }
 
+export function LearnSkillFromProject(arg1, arg2) {
+  return window['go']['main']['App']['LearnSkillFromProject'](arg1, arg2);
+}
+
 export function LongTigerRank(arg1) {
   return window['go']['main']['App']['LongTigerRank'](arg1);
 }

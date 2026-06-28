@@ -36,9 +36,10 @@ import (
 )
 
 const sinaStockUrl = "http://hq.sinajs.cn/rn=%d&list=%s"
-const txStockUrl = "http://qt.gtimg.cn/?_=%d&q=%s"
 
+const txStockUrl = "http://qt.gtimg.cn/?_=%d&q=%s"
 const tushareApiUrl = "http://api.tushare.pro"
+const eastMoneyUTParam = "b2884a393a59ad64002292a3e90d46a5"
 
 type StockDataApi struct {
 	client *resty.Client
@@ -1926,7 +1927,7 @@ func (receiver StockDataApi) GetStockHistoryMoneyData(stockCode string) []models
 	params.Set("klt", "101")
 	params.Set("fields1", "f1,f2,f3,f7")
 	params.Set("fields2", "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65")
-	params.Set("ut", "b2884a393a59ad64002292a3e90d46a5")
+	params.Set("ut", eastMoneyUTParam)
 	params.Set("secid", stockCode)
 	params.Set("_", fmt.Sprintf("%d", time.Now().UnixMilli()))
 	reqURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())

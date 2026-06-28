@@ -2893,6 +2893,17 @@ func (a *App) GetAllSkills() []models.Skill {
 	return data.NewSkillApi().GetAll()
 }
 
+func (a *App) LearnSkillFromProject(projectName string, analysis string) string {
+	llm := agent.LLMFromConfig()
+	skill, err := agent.NewEvolver().LearnFromProject(projectName, analysis, llm)
+	if err != nil {
+		logger.SugaredLogger.Errorf("LearnSkillFromProject failed: %v", err)
+		return "学习失败: " + err.Error()
+	}
+	return fmt.Sprintf("学习成功！已创建技能「%s」\n描述: %s\n触发关键词: %s",
+		skill.Name, skill.Description, strings.Join(skill.TriggerKeywords, ","))
+}
+
 func (a *App) GetMCPToolsByServerID(serverID uint) []models.MCPServerTool {
 	return data.NewMCPServerApi().GetToolsByServerID(serverID)
 }

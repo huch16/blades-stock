@@ -153,7 +153,15 @@ func personalityPrompt() string {
 2. 所有投资建议必须附带风险提示
 3. 数据获取失败时明确告知用户"当前未能获取到最新数据"，绝不伪造
 4. 对模糊的问题主动反问澄清意图
-5. 当本地金融工具无法直接回答"上市公司名单/地域分布/城市总部/省份区域/注册地/办公地址"等定位类问题时，必须优先调用 WebSearch 工具进行互联网搜索，禁止直接回答"无法查询"`
+5. 当本地金融工具无法直接回答"上市公司名单/地域分布/城市总部/省份区域/注册地/办公地址"等定位类问题时，必须优先调用 WebSearch 工具进行互联网搜索，禁止直接回答"无法查询"
+
+## 股票推荐方法论（核心！避免仅推荐大公司）
+进行市场资讯分析和股票推荐时，必须使用 SearchStockByIndicators 工具按以下维度筛选：
+- 先用概念关键词锁定板块（如"机器人概念""半导体""AI算力"等）
+- 叠加至少 3 个筛选条件：市值范围(20~200亿中小盘优先)、市盈率>0、营收增长>10%、技术面信号等
+- 重点寻找"细分龙头"——市值适中(50~200亿)、有技术壁垒、业绩确定的中小盘标的，而非全行业最大的公司
+- 筛选后用 GetStockInfo 核实实时行情和财务数据
+- 推荐 3~5 只覆盖不同子方向，使用 BatchCreateAiRecommendStocks 批量保存`
 }
 
 func ReasoningMiddleware(next blades.Handler) blades.Handler {
@@ -173,7 +181,33 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 4. 综合判断 → 将所有信息整合成完整结论
 5. 风险提示 → 给出明确的风险警告
 
-不要一次性调用所有工具，应该根据上一步的结果决定下一步的行动。`
+不要一次性调用所有工具，应该根据上一步的结果决定下一步的行动。
+
+## 股票筛选方法论（进行市场分析/新闻总结/推荐股票时必须遵守）
+当需要从市场资讯中挖掘投资机会时，必须按以下步骤使用筛选工具，避免只看大公司：
+
+第1步 - 锁定方向：根据新闻热点确定目标板块（如：机器人、半导体、AI、消费电子等），用 SearchBk 或 SearchETF 确认板块内个股范围
+
+第2步 - 多维筛选：使用 SearchStockByIndicators 按以下维度组合筛选（至少使用 3 个筛选条件）：
+  - 市值范围：排除超大盘股（流通市值>500亿），重点关注中小盘（流通市值 20亿~200亿）
+  - 估值区间：市盈率PE >0 且 <60（剔除亏损和泡沫）
+  - 业绩增长：营收增长率>10% 或 净利润增长率>20%（择一即可）
+  - 技术面：股价站上20日均线 或 MACD金叉
+  - 概念匹配：归属目标板块概念（如"机器人概念""芯片概念""AI概念"）
+  示例：SearchStockByIndicators("机器人概念,流通市值20亿~200亿,市盈率>0,营收增长率>10%,股价站上20日均线")
+
+第3步 - 交叉验证：筛选结果出来后，用 GetStockInfo 查看具体个股的实时行情，用 GetStockFinancialInfo 核实财务数据真实性
+
+第4步 - 聚焦细分龙头：优先选择目标板块中"市值适中(50~200亿)、业绩确定、有技术壁垒"的细分龙头，而非全行业最大的公司
+
+第5步 - 精炼推荐：最终推荐 3~5 只最具性价比的标的，覆盖不同子方向（如同时覆盖机器人、半导体、消费电子），使用 BatchCreateAiRecommendStocks 批量保存
+
+## 高级分析工具（个股深度诊断时使用）
+以下工具用于对特定个股进行深度分析，在用户问及以下场景时使用：
+
+1. **AnalyzeHotMoneyActivity(股票代码)** — 当用户问"这只股票有没有游资参与""谁在炒作"时，分析龙虎榜判断游资风格和参与度
+2. **AnalyzeChipConcentration(股票代码)** — 当用户问"主力在建仓还是出货""筹码集中还是分散"时，综合股东户数/大宗交易/资金流向判断主力意图
+3. **AnalyzeCapitalGame(股票代码)** — 当用户问"资金博弈如何""主力散户谁在买"时，分析多空资金力量对比和博弈格局`
 		} else {
 			thinkingPrompt = `请直接调用相关工具获取最新数据后回答。如果问题不明确，主动反问用户。`
 		}
@@ -213,22 +247,23 @@ func buildSkillPrompt(question string) string {
 	}
 
 	var sb strings.Builder
-	sb.WriteString("## 你具备以下专业技能：\n")
+	sb.WriteString("\n===== 【专业技能 - 必须严格遵守】 =====\n")
 	for _, skill := range matched {
-		sb.WriteString(fmt.Sprintf("\n### %s\n", skill.Name))
+		sb.WriteString(fmt.Sprintf("\n--- %s ---\n", skill.Name))
 		if skill.Description != "" {
 			sb.WriteString(fmt.Sprintf("描述：%s\n", skill.Description))
 		}
 		if skill.SystemPrompt != "" {
-			sb.WriteString(fmt.Sprintf("%s\n", skill.SystemPrompt))
+			sb.WriteString(fmt.Sprintf("【规则指令】\n%s\n", skill.SystemPrompt))
 		}
 		if skill.TriggerKeywords != "" {
 			sb.WriteString(fmt.Sprintf("触发关键词：%s\n", skill.TriggerKeywords))
 		}
 		if skill.Examples != "" {
-			sb.WriteString(fmt.Sprintf("示例对话：\n%s\n", skill.Examples))
+			sb.WriteString(fmt.Sprintf("【行为示例】\n%s\n", skill.Examples))
 		}
 	}
+	sb.WriteString("\n===== 专业技能指令结束 =====\n")
 	return sb.String()
 }
 

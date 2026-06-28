@@ -400,8 +400,12 @@ const handleAgentMessage = (data: any) => {
       }
     }
     if (data['content']){
-      lastItem.rawContent = (lastItem.rawContent || '') + data['content']
-      lastItem.content = lastItem.rawContent
+      if (data['content'] === 'agent-DONE') {
+        // terminal signal, not displayable content
+      } else {
+        lastItem.rawContent = (lastItem.rawContent || '') + data['content']
+        lastItem.content = lastItem.rawContent
+      }
     }
     if(data['tool_calls']){
       for (const tool of  data['tool_calls']) {

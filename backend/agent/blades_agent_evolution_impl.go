@@ -1,9 +1,14 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"go-stock/backend/data"
 	"go-stock/backend/db"
+	"go-stock/backend/models"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -28,9 +33,7 @@ type EvolutionPlan struct {
 	Suggestions     []string `json:"suggestions"`
 }
 
-type Evolver struct {
-	db          bool
-}
+type Evolver struct{}
 
 func NewEvolver() *Evolver {
 	return &Evolver{}
@@ -197,10 +200,140 @@ func (ev *Evolver) ProposeEvolutionPlan() *EvolutionPlan {
 	}
 }
 
+type LearnedSkill struct {
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	TriggerKeywords []string `json:"triggerKeywords"`
+	SystemPrompt    string   `json:"systemPrompt"`
+	Examples        string   `json:"examples"`
+}
+
+func (ev *Evolver) LearnFromProject(projectName, analysis string, llm LLMOptimizerFunc) (*LearnedSkill, error) {
+	if llm == nil {
+		return nil, fmt.Errorf("llm function required for learning")
+	}
+
+	prompt := fmt.Sprintf(`你是一个技能提取专家。根据以下对 "%s" 项目的分析报告，提取出一个可复用的 Agent 技能。
+
+## 项目分析报告
+%s
+
+## 要求
+输出 JSON 格式（仅输出 JSON，不要包含其他内容）：
+{
+  "name": "技能名称（简洁，如"Serenity式投研"）",
+  "description": "技能描述（一句话说明这个技能做什么）",
+  "triggerKeywords": ["关键词1", "关键词2", "关键词3"],
+  "systemPrompt": "技能的系统提示词（完整描述该技能的工作流、规则、输出格式要求，直接可注入 Agent）",
+  "examples": "使用示例（当用户说类似的话时，Agent 应该如何回应的示例）"
+}
+
+注意：systemPrompt 要完整、可直接使用，包含工作流步骤、判断标准、输出规范。`, projectName, analysis)
+
+	raw, err := llm("你是一个技能提取专家，以 JSON 格式输出。", prompt)
+	if err != nil {
+		return nil, fmt.Errorf("llm learn failed: %w", err)
+	}
+	raw = extractJSON(raw)
+
+	var skill LearnedSkill
+	if err := json.Unmarshal([]byte(raw), &skill); err != nil {
+		return nil, fmt.Errorf("parse skill JSON failed: %w, raw: %s", err, raw)
+	}
+	if skill.Name == "" {
+		return nil, fmt.Errorf("learned skill has empty name")
+	}
+
+	dbSkill := &models.Skill{
+		Name:            skill.Name,
+		Description:     skill.Description,
+		Category:        "learned",
+		SystemPrompt:    skill.SystemPrompt,
+		Examples:        skill.Examples,
+		TriggerKeywords: strings.Join(skill.TriggerKeywords, ","),
+		Enable:          true,
+	}
+	if err := data.NewSkillApi().Create(dbSkill); err != nil {
+		return nil, fmt.Errorf("save skill failed: %w", err)
+	}
+
+	return &skill, nil
+}
+
 func (ev *Evolver) CleanupToolRanks(days int) (int, error) {
 	cutoff := time.Now().AddDate(0, 0, -days)
 	r := db.Dao.Where("updated_at < ?", cutoff).Delete(&ToolRank{})
 	return int(r.RowsAffected), r.Error
+}
+
+// LLMFromConfig creates an LLM callback from the first enabled AI config.
+func LLMFromConfig() LLMOptimizerFunc {
+	return func(systemPrompt, userMessage string) (string, error) {
+		settingConfig := data.GetSettingConfig()
+		if settingConfig == nil || len(settingConfig.AiConfigs) == 0 {
+			return "", fmt.Errorf("no AI configs available")
+		}
+		var cfg *data.AIConfig
+		for _, c := range settingConfig.AiConfigs {
+			if c.BaseUrl != "" && c.ApiKey != "" {
+				cfg = c
+				break
+			}
+		}
+		if cfg == nil {
+			return "", fmt.Errorf("no enabled AI config with API key")
+		}
+		baseURL := strings.TrimSuffix(strings.TrimSpace(cfg.BaseUrl), "/")
+		baseURL = strings.TrimSuffix(baseURL, "/chat/completions")
+		modelName := cfg.ModelName
+		if modelName == "" {
+			modelName = "gpt-4o"
+		}
+
+		body := map[string]any{
+			"model": modelName,
+			"messages": []map[string]string{
+				{"role": "system", "content": systemPrompt},
+				{"role": "user", "content": userMessage},
+			},
+			"temperature": 0.3,
+			"max_tokens":  4096,
+		}
+		bodyBytes, _ := json.Marshal(body)
+
+		req, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+		if err != nil {
+			return "", fmt.Errorf("create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("http call: %w", err)
+		}
+		defer resp.Body.Close()
+
+		respBytes, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != 200 {
+			return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBytes))
+		}
+
+		var result struct {
+			Choices []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal(respBytes, &result); err != nil {
+			return "", fmt.Errorf("parse response: %w", err)
+		}
+		if len(result.Choices) == 0 {
+			return "", fmt.Errorf("no choices in response")
+		}
+		return result.Choices[0].Message.Content, nil
+	}
 }
 
 var _ = fmt.Sprintf

@@ -813,9 +813,6 @@ const menuOptions = ref([
             {
               to: {
                 name: 'settings',
-                query: {
-                  name:"设置",
-                },
                 onClick: () => {
                   activeKey.value = 'settings'
                 },
@@ -968,7 +965,7 @@ onBeforeUnmount(() => {
 })
 
 window.onerror = function (msg, source, lineno, colno, error) {
-  // 将错误信息发送给后端
+  if (typeof msg === 'string' && msg.includes('ResizeObserver')) return true
   EventsEmit("frontendError", {
     page: "App.vue",
     message: msg,

@@ -291,38 +291,6 @@ func (s *WebSearchApi) searchWhohaiWithBrowser(browser *BrowserInstance, query s
 	return results
 }
 
-func (s *WebSearchApi) searchBingWithBrowser(browser *BrowserInstance, query string, maxResults int) []WebSearchResult {
-	var results []WebSearchResult
-
-	tabCtx, tabCancel := browser.NewTab()
-	defer tabCancel()
-
-	encodedQuery := url.QueryEscape(query)
-	searchUrl := fmt.Sprintf("https://www.bing.com/search?q=%s", encodedQuery)
-
-	var htmlContent string
-	err := chromedp.Run(tabCtx,
-		chromedp.Navigate("https://www.bing.com"),
-		chromedp.Sleep(randomSleep(1000, 2000)),
-		stealthScripts(),
-		chromedp.Sleep(randomSleep(500, 1000)),
-		chromedp.Navigate(searchUrl),
-		chromedp.Sleep(randomSleep(2000, 3000)),
-		chromedp.WaitVisible("#b_results", chromedp.ByID),
-		chromedp.Sleep(randomSleep(1000, 2000)),
-		chromedp.InnerHTML("#b_results", &htmlContent),
-	)
-	if err != nil {
-		logger.SugaredLogger.Errorf("Bing search failed: %v", err)
-		return results
-	}
-
-	results = s.parseBingResultsWithGoquery(htmlContent, maxResults)
-	logger.SugaredLogger.Infof("Bing search found %d results for query: %s", len(results), query)
-
-	return results
-}
-
 func (s *WebSearchApi) searchBaiduWithBrowser(browser *BrowserInstance, query string, maxResults int) []WebSearchResult {
 	var results []WebSearchResult
 
