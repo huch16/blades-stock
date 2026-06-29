@@ -3,8 +3,8 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/agent/types"
-	"go-stock/backend/logger"
+	"blades-stock/backend/agent/types"
+	"blades-stock/backend/logger"
 	"os"
 	"os/exec"
 	"path/filepath"

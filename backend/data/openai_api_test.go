@@ -4,8 +4,8 @@ package data
 
 import (
 	"context"
-	"go-stock/backend/db"
-	log "go-stock/backend/logger"
+	"blades-stock/backend/db"
+	log "blades-stock/backend/logger"
 	"testing"
 )
 

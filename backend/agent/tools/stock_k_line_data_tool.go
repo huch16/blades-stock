@@ -3,9 +3,9 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/agent/types"
-	"go-stock/backend/data"
-	"go-stock/backend/logger"
+	"blades-stock/backend/agent/types"
+	"blades-stock/backend/data"
+	"blades-stock/backend/logger"
 	"strconv"
 	"strings"
 

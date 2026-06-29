@@ -1,8 +1,8 @@
 package data
 
 import (
-	"go-stock/backend/db"
-	"go-stock/backend/models"
+	"blades-stock/backend/db"
+	"blades-stock/backend/models"
 )
 
 type CustomStrategyApi struct{}

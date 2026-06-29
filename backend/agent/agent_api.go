@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 	"fmt"
-	"go-stock/backend/data"
-	"go-stock/backend/logger"
+	"blades-stock/backend/data"
+	"blades-stock/backend/logger"
 	"regexp"
 	"strings"
 
@@ -122,8 +122,12 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			memoryService = NewChatMemoryService(stockAiAgent.sessionID, memoryCount)
 
 			if stockAiAgent.instance.AIConfig.EmbeddingEnabled && stockAiAgent.instance.AIConfig.EmbeddingModelName != "" {
+				embedBaseUrl := stockAiAgent.instance.AIConfig.EmbeddingBaseUrl
+				if embedBaseUrl == "" {
+					embedBaseUrl = stockAiAgent.instance.AIConfig.BaseUrl
+				}
 				es := NewEmbeddingService(
-					stockAiAgent.instance.AIConfig.BaseUrl,
+					embedBaseUrl,
 					stockAiAgent.instance.AIConfig.ApiKey,
 					stockAiAgent.instance.AIConfig.EmbeddingModelName,
 				)
@@ -138,11 +142,16 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
+		settingConfig := data.GetSettingConfig()
+
 		sysPrompt := sysPromptOverride
 		if sysPrompt == "" {
+			if settingConfig.Prompt != "" {
+				sysPrompt = settingConfig.Prompt + "\n\n"
+			}
 			skillPrompt := buildSkillPrompt(question)
 			if skillPrompt != "" {
-				sysPrompt = skillPrompt + "\n\n"
+				sysPrompt += skillPrompt + "\n\n"
 			}
 			sysPrompt += `【强制规则】你必须通过工具调用获取实时数据，严禁凭记忆编造或使用过时数据。以下场景必须调用工具：
 1. 股票/指数行情数据（价格、涨跌幅、成交量等）——必须调用工具获取最新实时数据
@@ -152,7 +161,6 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 任何涉及具体数字的回答，都必须先通过工具查询确认，不得使用训练数据中的过时信息。如果你没有获取到最新数据，必须明确告知用户"当前未能获取到最新数据"，绝不能编造数据。`
 		}
 
-		settingConfig := data.GetSettingConfig()
 		aiConfig, _ := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
 			return uint(aiConfigId) == item.ID
 		})

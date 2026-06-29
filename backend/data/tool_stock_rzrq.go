@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"go-stock/backend/util"
+	"blades-stock/backend/util"
 )
 
 func init() {

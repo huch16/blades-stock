@@ -2,8 +2,8 @@ package data
 
 import (
 	"fmt"
-	"go-stock/backend/logger"
-	"go-stock/backend/util"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/util"
 	"strings"
 
 	"github.com/tidwall/gjson"

@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"strings"
 
 	"github.com/go-resty/resty/v2"

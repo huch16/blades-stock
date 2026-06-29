@@ -6,10 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
-	"go-stock/backend/util"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
+	"blades-stock/backend/util"
 	"os"
 	"regexp"
 	"strings"
@@ -301,7 +301,7 @@ func TestName(t *testing.T) {
 
 	stockBasics := &[]StockBasic{}
 	resty.New().SetProxy("").R().
-		SetHeader("user", "go-stock").
+		SetHeader("user", "blades-stock").
 		SetResult(stockBasics).
 		Get("http://8.134.249.145:18080/go-stock/stock_basic.json")
 

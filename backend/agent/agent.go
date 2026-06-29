@@ -3,11 +3,11 @@ package agent
 import (
 	"context"
 	"fmt"
-	"go-stock/backend/agent/tools"
-	"go-stock/backend/data"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
+	"blades-stock/backend/agent/tools"
+	"blades-stock/backend/data"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -273,6 +273,7 @@ func GetAllTools() []bladesTools.Tool {
 	allTools = append(allTools, tools.GetQueryStockNewsTool())
 	allTools = append(allTools, tools.GetQueryBKDictTool())
 	allTools = append(allTools, tools.GetWebSearchTool())
+	allTools = append(allTools, tools.GetFetchWebPageTool())
 
 	allTools = append(allTools, tools.GetAllDataTools()...)
 
@@ -300,6 +301,7 @@ func getToolsByQuestion(question string) []bladesTools.Tool {
 	allTools = append(allTools, tools.GetQueryStockNewsTool())
 	allTools = append(allTools, tools.GetQueryBKDictTool())
 	allTools = append(allTools, tools.GetWebSearchTool())
+	allTools = append(allTools, tools.GetFetchWebPageTool())
 
 	allTools = append(allTools, tools.GetAllDataTools()...)
 
@@ -863,7 +865,7 @@ func init() {
 }
 
 func resolveProjectPath(source, name string) string {
-	base := filepath.Join(os.TempDir(), "go-stock-learned-projects")
+	base := filepath.Join(os.TempDir(), "blades-stock-learned-projects")
 	os.MkdirAll(base, 0755)
 	return filepath.Join(base, name)
 }

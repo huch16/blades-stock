@@ -3,7 +3,7 @@ package data
 import (
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"net/url"
 	"regexp"
 	"strconv"

@@ -1,9 +1,9 @@
 package tools
 
 import (
-	"go-stock/backend/agent/types"
-	"go-stock/backend/data"
-	"go-stock/backend/util"
+	"blades-stock/backend/agent/types"
+	"blades-stock/backend/data"
+	"blades-stock/backend/util"
 
 	bladesTools "github.com/go-kratos/blades/tools"
 	"github.com/tidwall/gjson"

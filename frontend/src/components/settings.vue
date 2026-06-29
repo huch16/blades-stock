@@ -78,7 +78,6 @@ const formValue = ref({
   httpProxyEnabled:false,
   enableAgent: false,
   qgqpBId: '',
-  promptPlazaApiBase: '',
 })
 
 // ========================
@@ -108,6 +107,7 @@ function addAiConfig() {
     thinking: true,
     embeddingEnabled: false,
     embeddingModelName: '',
+    embeddingBaseUrl: '',
   }))
   const idx = aiConfigs.value.length - 1
   // 展开新配置 (F-10)
@@ -294,7 +294,6 @@ onMounted(() => {
     formValue.value.httpProxyEnabled=res.httpProxyEnabled;
     formValue.value.enableAgent = res.enableAgent;
     formValue.value.qgqpBId = res.qgqpBId;
-    formValue.value.promptPlazaApiBase = res.promptPlazaApiBase || '';
   }).catch(err => {
     message.error('加载配置失败: ' + (err?.message || err))
   })
@@ -312,16 +311,6 @@ async function saveConfig() {
   } catch {
     message.warning('请检查表单中的必填项')
     return
-  }
-
-  // URL 校验 (F-13)
-  if (formValue.value.promptPlazaApiBase) {
-    try {
-      new URL(formValue.value.promptPlazaApiBase)
-    } catch {
-      message.warning('提示词广场地址格式错误')
-      return
-    }
   }
 
   // 数值范围校验 (F-09/F-16)
@@ -359,7 +348,6 @@ async function saveConfig() {
     httpProxyEnabled:formValue.value.httpProxyEnabled,
     enableAgent: formValue.value.enableAgent,
     qgqpBId: formValue.value.qgqpBId,
-    promptPlazaApiBase: formValue.value.promptPlazaApiBase,
   })
 
   try {
@@ -382,11 +370,11 @@ function getHeight() {
 }
 
 function sendTestNotice() {
-  let markdown = "### go-stock test\n" + new Date()
+  let markdown = "### blades-stock test\n" + new Date()
   let msg = '{' +
       '     "msgtype": "markdown",' +
       '     "markdown": {' +
-      '         "title":"go-stock' + new Date() + '",' +
+      '         "title":"blades-stock' + new Date() + '",' +
       '         "text": "' + markdown + '"' +
       '     },' +
       '      "at": {' +
@@ -474,7 +462,7 @@ function importConfig() {
       formValue.value.refreshInterval = config.refreshInterval ?? 1
       openAiEnable.value = !!config.openAiEnable
       aiConfigs.value = (config.aiConfigs || []).map(c => new data.AIConfig({
-        ...{ ID: 0, name: '', baseUrl: '', apiKey: '', modelName: '', temperature: 0.1, maxTokens: 8192, timeOut: 300, httpProxy: '', httpProxyEnabled: false, thinking: false, embeddingEnabled: false, embeddingModelName: '' },
+        ...{ ID: 0, name: '', baseUrl: '', apiKey: '', modelName: '', temperature: 0.1, maxTokens: 8192, timeOut: 300, httpProxy: '', httpProxyEnabled: false, thinking: false, embeddingEnabled: false, embeddingModelName: '', embeddingBaseUrl: '' },
         ...c,
         temperature: Number(c.temperature) || 0.1,
         maxTokens: Number(c.maxTokens) || 8192,
@@ -603,25 +591,6 @@ function importConfig() {
               </n-tooltip>
             </n-form-item-gi>
 
-            <n-form-item-gi :span="11" label="提示词广场地址：" path="promptPlazaApiBase">
-              <n-input type="text" placeholder="http://go-stock.sparkmemory.top:1918/api" v-model:value="formValue.promptPlazaApiBase" clearable/>
-              <n-tooltip placement="top">
-                <template #trigger>
-                  <n-icon color="#0e7a0d" size="20">
-                    <HelpCircleFilledIcon />
-                  </n-icon>
-                </template>
-                <template #default>
-                  <n-gradient-text :type="'warning'">
-                  <div style="max-width: 400px;text-align: left">
-                    提示词广场服务接口地址<br>
-                    默认: http://go-stock.sparkmemory.top:1918/api<br>
-                    如已部署提示词广场服务，可修改为实际地址
-                  </div>
-                  </n-gradient-text>
-                </template>
-              </n-tooltip>
-            </n-form-item-gi>
           </n-grid>
         </n-card>
 
@@ -797,6 +766,9 @@ function importConfig() {
                       </n-form-item-gi>
                       <n-form-item-gi :span="12" v-if="aiConfig.embeddingEnabled" label="Embedding模型名" :path="`openAI.aiConfigs[${index}].embeddingModelName`">
                         <n-input type="text" placeholder="bge-m3" v-model:value="aiConfig.embeddingModelName" clearable/>
+                      </n-form-item-gi>
+                      <n-form-item-gi :span="12" v-if="aiConfig.embeddingEnabled" label="Embedding服务地址" :path="`openAI.aiConfigs[${index}].embeddingBaseUrl`">
+                        <n-input type="text" placeholder="留空则使用AI服务地址" v-model:value="aiConfig.embeddingBaseUrl" clearable/>
                       </n-form-item-gi>
                     </n-grid>
                   </n-collapse-item>

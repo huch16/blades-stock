@@ -2,8 +2,8 @@ package agent
 
 import (
 	"context"
-	"go-stock/backend/data"
-	"go-stock/backend/logger"
+	"blades-stock/backend/data"
+	"blades-stock/backend/logger"
 	"strings"
 	"time"
 

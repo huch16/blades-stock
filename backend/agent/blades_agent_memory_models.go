@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"go-stock/backend/db"
+	"blades-stock/backend/db"
 	"time"
 )
 

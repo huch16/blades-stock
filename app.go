@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-resty/resty/v2"
-	"go-stock/backend/agent"
-	"go-stock/backend/agent/tools"
-	"go-stock/backend/data"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/machineid"
-	"go-stock/backend/models"
+	"blades-stock/backend/agent"
+	"blades-stock/backend/agent/tools"
+	"blades-stock/backend/data"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/machineid"
+	"blades-stock/backend/models"
 	"os"
 	"path/filepath"
 	"strings"
@@ -433,7 +433,7 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 	}()
 	stockBasics := &[]data.StockBasic{}
 	data.SharedHTTPClient.R().
-		SetHeader("user", "go-stock").
+		SetHeader("user", "blades-stock").
 		SetResult(stockBasics).
 		Get("http://8.134.249.145:18080/go-stock/stock_basic.json")
 
@@ -468,7 +468,7 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 
 	stockHKBasics := &[]models.StockInfoHK{}
 	data.SharedHTTPClient.R().
-		SetHeader("user", "go-stock").
+		SetHeader("user", "blades-stock").
 		SetResult(stockHKBasics).
 		Get("http://8.134.249.145:18080/go-stock/stock_base_info_hk.json")
 
@@ -494,7 +494,7 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 	//}
 	stockUSBasics := &[]models.StockInfoUS{}
 	data.SharedHTTPClient.R().
-		SetHeader("user", "go-stock").
+		SetHeader("user", "blades-stock").
 		SetResult(stockUSBasics).
 		Get("http://8.134.249.145:18080/go-stock/stock_base_info_us.json")
 
@@ -972,12 +972,12 @@ func MonitorAiRecommendStockPrices(a *App) {
 				plainContent := fmt.Sprintf("%s(%s)\n当前价格: %.2f\n建议买入价: %.2f-%.2f",
 					aiStock.StockName, aiStock.StockCode, currentPrice, aiStock.RecommendBuyPriceMin, aiStock.RecommendBuyPriceMax)
 				if a.canSendAlert(buyAlertKey, 5*time.Minute) {
-					go data.NewAlertWindowsApi("go-stock价格预警", title, content, "").SendNotification()
+					go data.NewAlertWindowsApi("Blades Stock价格预警", title, content, "").SendNotification()
 					go data.NewDingDingAPI().SendToDingDing(title, content)
 					go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
 						"time":    title,
 						"isRed":   true,
-						"source":  "go-stock",
+						"source":  "blades-stock",
 						"content": plainContent,
 					})
 					a.updateAlertSentTime(buyAlertKey)
@@ -1004,12 +1004,12 @@ func MonitorAiRecommendStockPrices(a *App) {
 				plainContent := fmt.Sprintf("%s(%s)\n当前价格: %.2f\n建议止盈价: %.2f-%.2f",
 					aiStock.StockName, aiStock.StockCode, currentPrice, aiStock.RecommendStopProfitPriceMin, aiStock.RecommendStopProfitPriceMax)
 				if a.canSendAlert(profitAlertKey, 5*time.Minute) {
-					go data.NewAlertWindowsApi("go-stock价格预警", title, content, "").SendNotification()
+					go data.NewAlertWindowsApi("Blades Stock价格预警", title, content, "").SendNotification()
 					go data.NewDingDingAPI().SendToDingDing(title, content)
 					go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
 						"time":    title,
 						"isRed":   true,
-						"source":  "go-stock",
+						"source":  "blades-stock",
 						"content": plainContent,
 					})
 					a.updateAlertSentTime(profitAlertKey)
@@ -1037,12 +1037,12 @@ func MonitorAiRecommendStockPrices(a *App) {
 				plainContent := fmt.Sprintf("%s(%s)\n当前价格: %.2f\n建议止损价: %s",
 					aiStock.StockName, aiStock.StockCode, currentPrice, aiStock.RecommendStopLossPrice)
 				if a.canSendAlert(stopLossAlertKey, 5*time.Minute) {
-					go data.NewAlertWindowsApi("go-stock价格预警", title, content, "").SendNotification()
+					go data.NewAlertWindowsApi("Blades Stock价格预警", title, content, "").SendNotification()
 					go data.NewDingDingAPI().SendToDingDing(title, content)
 					go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
 						"time":    title,
 						"isRed":   true,
-						"source":  "go-stock",
+						"source":  "blades-stock",
 						"content": plainContent,
 					})
 					a.updateAlertSentTime(stopLossAlertKey)
@@ -1121,12 +1121,12 @@ func MonitorFollowedStockCostPrices(a *App) {
 				plainContent := fmt.Sprintf("%s(%s)\n当前价格: %.2f\n成本价: %.2f\n亏损: %.2f%%",
 					followedStock.Name, followedStock.StockCode, currentPrice, costPrice, dropPercent)
 				if a.canSendAlert(alertKey, 5*time.Minute) {
-					go data.NewAlertWindowsApi("go-stock价格预警", title, content, "").SendNotification()
+					go data.NewAlertWindowsApi("Blades Stock价格预警", title, content, "").SendNotification()
 					go data.NewDingDingAPI().SendToDingDing(title, content)
 					go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
 						"time":    title,
 						"isRed":   true,
-						"source":  "go-stock",
+						"source":  "blades-stock",
 						"content": plainContent,
 					})
 					a.updateAlertSentTime(alertKey)
@@ -1426,12 +1426,12 @@ func (a *App) SendDingDingMessageByType(message string, stockCode string, msgTyp
 	}
 	stockInfo := &data.StockInfo{}
 	db.Dao.Model(stockInfo).Where("code = ?", stockCode).First(stockInfo)
-	go data.NewAlertWindowsApi("go-stock消息通知", getMsgTypeName(msgType), GenNotificationMsg(stockInfo), "").SendNotification()
+	go data.NewAlertWindowsApi("Blades Stock消息通知", getMsgTypeName(msgType), GenNotificationMsg(stockInfo), "").SendNotification()
 
 	go runtime.EventsEmit(a.ctx, "newsPush", map[string]any{
 		"time":    "📈 " + getMsgTypeName(msgType),
 		"isRed":   true,
-		"source":  "go-stock",
+		"source":  "blades-stock",
 		"content": GenNotificationMsg(stockInfo),
 	})
 
@@ -1625,7 +1625,7 @@ func (a *App) ShareAnalysis(stockCode, stockName string) string {
 	if res != nil && len(res.Content) > 100 {
 		analysisTime := res.CreatedAt.Format("2006/01/02")
 		//logger.SugaredLogger.Infof("%s analysisTime:%s", res.CreatedAt, analysisTime)
-		response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "go-stock").SetFormData(map[string]string{
+		response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "blades-stock").SetFormData(map[string]string{
 			"text":         res.Content,
 			"stockCode":    stockCode,
 			"stockName":    stockName,
@@ -1651,7 +1651,7 @@ func (a *App) ShareText(text, title string) string {
 		title = "AI助手"
 	}
 	analysisTime := time.Now().Format("2006/01/02")
-	response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "go-stock").SetFormData(map[string]string{
+	response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "blades-stock").SetFormData(map[string]string{
 		"text":         text,
 		"stockCode":    title,
 		"stockName":    title,

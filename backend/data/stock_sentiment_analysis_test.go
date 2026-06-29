@@ -2,8 +2,8 @@ package data
 
 import (
 	"fmt"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
 	"strings"
 	"testing"
 

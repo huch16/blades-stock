@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"

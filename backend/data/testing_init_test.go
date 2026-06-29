@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"go-stock/backend/db"
+	"blades-stock/backend/db"
 )
 
 // TestMain initializes the SQLite test database once per package run so that
@@ -15,7 +15,7 @@ import (
 // We point the database at a temp file (rather than ./data/stock.db) so the
 // host project database is never mutated by `go test`.
 func TestMain(m *testing.M) {
-	tmpDir, err := os.MkdirTemp("", "go-stock-test-")
+	tmpDir, err := os.MkdirTemp("", "blades-stock-test-")
 	if err != nil {
 		panic("test setup: mkdir temp: " + err.Error())
 	}

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/duke-git/lancet/v2/convertor"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"strings"
 )
 

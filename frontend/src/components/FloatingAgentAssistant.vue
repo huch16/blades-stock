@@ -4,7 +4,7 @@
       v-if="showButton"
       :class="['edge-trigger', { 'edge-trigger-busy': hasBackgroundTask }]"
       @click="togglePanel"
-      :title="hasBackgroundTask ? 'go-stock AI Agent 助手正在后台分析...' : 'go-stock AI Agent 助手'"
+      :title="hasBackgroundTask ? 'Blades Stock AI Agent 助手正在后台分析...' : 'Blades Stock AI Agent 助手'"
     >
       <div class="edge-trigger-inner">
         <NIcon :component="SparklesOutline" size="18" />
@@ -26,7 +26,7 @@
         >
           <template #header>
             <div class="panel-header">
-              <span class="panel-title">go-stock AI Agent 助手</span>
+              <span class="panel-title">Blades Stock AI Agent 助手</span>
               <div class="panel-actions">
                 <NButton size="small" quaternary @click="startNewChat" title="开始新对话">
                   新对话
@@ -215,31 +215,6 @@
                   :menu-props="{ style: { zIndex: 10002 } }"
                   class="chat-footer-select"
                 />
-                <NSelect
-                  v-model:value="sysPromptId"
-                  :options="sysPromptOptions"
-                  size="small"
-                  clearable
-                  to="body"
-                  placement="top-start"
-                  placeholder="系统提示词"
-                  :consistent-menu-width="false"
-                  :menu-props="{ style: { zIndex: 10002 } }"
-                  class="chat-footer-prompt"
-                />
-                <NSelect
-                  v-model:value="userPromptId"
-                  :options="userPromptOptions"
-                  size="small"
-                  clearable
-                  to="body"
-                  placement="top-start"
-                  placeholder="用户提示词"
-                  :consistent-menu-width="false"
-                  :menu-props="{ style: { zIndex: 10002 } }"
-                  class="chat-footer-prompt"
-                  @update:value="onUserPromptChange"
-                />
                 <div class="chat-footer-thinking">
                   <span class="chat-footer-thinking-label">思考模式</span>
                   <NSwitch v-model:value="thinkingMode" size="small" />
@@ -326,7 +301,6 @@ import {
   ChatWithAgent,
   GetAiConfigs,
   GetConfig,
-  GetPromptTemplates,
   SaveAiAssistantSession,
   GetAiAssistantSession,
   ShareText,
@@ -339,7 +313,7 @@ import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 import html2canvas from 'html2canvas'
 
-const STORAGE_KEY_MODEL_ID = 'go-stock-agent-last-model-id'
+const STORAGE_KEY_MODEL_ID = 'blades-stock-agent-last-model-id'
 
 const route = useRoute()
 const message = useMessage()
@@ -364,17 +338,6 @@ function modelLabelForConfig(configId) {
   return found?.label != null ? String(found.label) : ''
 }
 
-const sysPromptTemplates = ref([])
-const sysPromptOptions = computed(() =>
-  sysPromptTemplates.value.map(t => ({ label: t.name ?? '', value: t.ID ?? t.id }))
-)
-const sysPromptId = ref(null)
-
-const userPromptTemplates = ref([])
-const userPromptOptions = computed(() =>
-  userPromptTemplates.value.map(t => ({ label: t.name ?? '', value: t.ID ?? t.id }))
-)
-const userPromptId = ref(null)
 const thinkingMode = ref(true)
 const memoryMode = ref(false)
 const memoryCount = ref(1)
@@ -416,11 +379,6 @@ watch(aiConfigId, (val) => {
   }
 })
 
-function onUserPromptChange(id) {
-  if (!id) return
-  const t = userPromptTemplates.value.find(x => (x.ID ?? x.id) === id)
-  if (t?.content) inputValue.value = t.content
-}
 
 const canSend = computed(() => !!inputValue.value.trim())
 const scrollbarRef = ref(null)
@@ -595,7 +553,7 @@ function shareAiContent(msg) {
     shareTipVisible.value = true
     return
   }
-  shareTextToCommunity(text, 'go-stock AI Agent助手')
+  shareTextToCommunity(text, 'Blades Stock AI Agent助手')
 }
 
 function getLastAssistantContent() {
@@ -616,7 +574,7 @@ function shareAiToCommunity() {
     shareTipVisible.value = true
     return
   }
-  shareTextToCommunity(text, 'go-stock AI Agent助手')
+  shareTextToCommunity(text, 'Blades Stock AI Agent助手')
 }
 
 async function exportAiReplyImage(assistantIndex, evt) {
@@ -684,7 +642,7 @@ async function exportAiReplyImage(assistantIndex, evt) {
     const dataUrl = canvas.toDataURL('image/png')
     const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
     const safeTime = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')
-    const result = await SaveImage(`go-stock-agent-${safeTime}`, base64)
+    const result = await SaveImage(`blades-stock-agent-${safeTime}`, base64)
     if (result && !result.includes('异常') && !result.includes('无法')) {
       shareTipText.value = '已导出为 PNG 图片：' + result
     } else {
@@ -773,7 +731,7 @@ function openPanel() {
     messages.value = [
       {
         role: 'assistant',
-        content: '我是 go-stock AI Agent 助手，可以帮您分析股票、查询市场数据、获取研究报告等。请问有什么可以帮您的？',
+        content: '我是 Blades Stock AI Agent 助手，可以帮您分析股票、查询市场数据、获取研究报告等。请问有什么可以帮您的？',
         time: new Date().toLocaleString(),
         modelName: '',
         reasoning: ''
@@ -853,7 +811,7 @@ function sendMessage() {
     }
     scrollToBottom()
   })
-  ChatWithAgent(text, configId, sysPromptId.value, memoryMode.value, memoryCount.value, thinkingMode.value, agentMode.value === 'auto' ? '' : agentMode.value)
+  ChatWithAgent(text, configId, null, memoryMode.value, memoryCount.value, thinkingMode.value, agentMode.value === 'auto' ? '' : agentMode.value)
 }
 
 function startNewChat() {
@@ -1149,17 +1107,8 @@ function onAgentMessage(msg) {
   }
 }
 
-function loadPromptTemplates() {
-  GetPromptTemplates('', '').then(res => {
-    const list = Array.isArray(res) ? res : []
-    sysPromptTemplates.value = list.filter(t => t.type === '模型系统Prompt')
-    userPromptTemplates.value = list.filter(t => t.type === '模型用户Prompt')
-  })
-}
-
 watch(panelVisible, (v) => {
   if (v) {
-    loadPromptTemplates()
     nextTick(scrollToBottom)
   }
 })
@@ -1195,7 +1144,6 @@ onMounted(() => {
       }
     }
   })
-  loadPromptTemplates()
 })
 
 watch(aiConfigId, (newId) => {

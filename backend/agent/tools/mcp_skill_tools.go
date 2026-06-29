@@ -3,9 +3,9 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/agent/types"
-	"go-stock/backend/data"
-	"go-stock/backend/models"
+	"blades-stock/backend/agent/types"
+	"blades-stock/backend/data"
+	"blades-stock/backend/models"
 	"strings"
 
 	bladesTools "github.com/go-kratos/blades/tools"

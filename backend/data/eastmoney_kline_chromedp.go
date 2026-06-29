@@ -3,7 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"net/url"
 	"strings"
 	"sync"

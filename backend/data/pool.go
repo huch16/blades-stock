@@ -2,7 +2,7 @@ package data
 
 import (
 	"context"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"sync"
 	"time"
 

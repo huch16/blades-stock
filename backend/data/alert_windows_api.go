@@ -4,7 +4,7 @@
 package data
 
 import (
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 
 	"github.com/go-toast/toast"
 )

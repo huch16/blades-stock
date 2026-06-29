@@ -4,7 +4,7 @@
 package data
 
 import (
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"testing"
 
 	"github.com/go-toast/toast"
@@ -17,7 +17,7 @@ import (
 
 func TestAlert(t *testing.T) {
 	notification := toast.Notification{
-		AppID:    "go-stock",
+		AppID:    "blades-stock",
 		Title:    "Hello, World!",
 		Message:  "This is a toast notification.",
 		Icon:     "../../build/appicon.png",

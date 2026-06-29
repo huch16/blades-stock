@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"go-stock/backend/agent/types"
-	"go-stock/backend/data"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
-	"go-stock/backend/util"
+	"blades-stock/backend/agent/types"
+	"blades-stock/backend/data"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
+	"blades-stock/backend/util"
 
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/random"
@@ -1116,7 +1116,7 @@ func GetAllDataTools() []bladesTools.Tool {
 		map[string]*types.ParamDef{
 			"title": {
 				Type:     "string",
-				Desc:     "消息标题，会显示为「go-stock {title}」",
+				Desc:     "消息标题，会显示为「Blades Stock {title}」",
 				Required: true,
 			},
 			"message": {

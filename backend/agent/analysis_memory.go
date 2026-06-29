@@ -2,8 +2,8 @@ package agent
 
 import (
 	"fmt"
-	"go-stock/backend/db"
-	"go-stock/backend/models"
+	"blades-stock/backend/db"
+	"blades-stock/backend/models"
 	"strings"
 )
 

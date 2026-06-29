@@ -97,7 +97,7 @@ let formatTimer: ReturnType<typeof setInterval> | null = null
 const chatRef = ref(null);
 const isShowToBottom = ref(false);
 
-const icon = ref('https://raw.githubusercontent.com/ArvinLovegood/go-stock/master/build/appicon.png');
+const icon = ref('');
 import {darkTheme, NFlex, NImage,NSelect} from "naive-ui";
 import {ChatWithAgent, GetConfig, GetVersionInfo} from "../../wailsjs/go/main/App";
 import type { AIConfig } from '../../wailsjs/go/models'
@@ -495,7 +495,7 @@ const chatList = ref<any[]>([
   {
     id: nextMsgId(),
     avatar: '',
-    name: 'Go-Stock AI',
+    name: 'Blades-Stock AI',
     datetime: '',
     reasoning: '',
     content: '我是您的AI赋能股票分析助手,您可以问我任何关于股票投资方面的问题。',
@@ -562,7 +562,7 @@ const inputEnter = function () {
   const params2 = {
     id: assisId,
     avatar: '',
-    name: 'Go-Stock AI',
+    name: 'Blades-Stock AI',
     datetime: new Date().toDateString(),
     content: '',
     rawContent: '',

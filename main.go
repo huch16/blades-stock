@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	assistantweb "go-stock/ai-assistant-web"
-	"go-stock/backend/agent"
-	"go-stock/backend/data"
-	"go-stock/backend/db"
-	log "go-stock/backend/logger"
-	"go-stock/backend/machineid"
-	"go-stock/backend/models"
+	assistantweb "blades-stock/ai-assistant-web"
+	"blades-stock/backend/agent"
+	"blades-stock/backend/data"
+	"blades-stock/backend/db"
+	log "blades-stock/backend/logger"
+	"blades-stock/backend/machineid"
+	"blades-stock/backend/models"
 	"os"
 	"runtime/debug"
 
@@ -42,7 +42,7 @@ var wxpay []byte
 //go:embed build/screenshot/扫码_搜索联合传播样式-白色版.png
 var wxgzh []byte
 
-//go:embed docs/go-stock使用手册.md
+//go:embed docs/blades-stock使用手册.md
 var userManual []byte
 
 //go:generate cp -R ./data ./build/bin
@@ -158,7 +158,7 @@ func main() {
 	log.SugaredLogger.Info("screen resolution: " + convertor.ToString(width) + "x" + convertor.ToString(height))
 	log.SugaredLogger.Info("window size: " + convertor.ToString(appWidth) + "x" + convertor.ToString(appHeight))
 
-	// 作为 go-stock 子组件启动独立 Web 服务
+	// 作为 blades-stock 子组件启动独立 Web 服务
 	// 端口默认由 AI_ASSISTANT_WEB_ADDR 决定。
 	go func() {
 		if err := assistantweb.Start(); err != nil {
@@ -168,7 +168,7 @@ func main() {
 
 	// Create application with options
 	err = wails.Run(&options.App{
-		Title: "go-stock：AI赋能股票分析✨ " + OFFICIAL_STATEMENT,
+		Title: "Blades Stock：AI赋能股票分析✨ " + OFFICIAL_STATEMENT,
 		// 默认窗口大小：自适应但保留明显边距
 		Width:  appWidth,
 		Height: appHeight,
@@ -194,7 +194,7 @@ func main() {
 		OnShutdown:               app.shutdown,
 		WindowStartState:         options.Normal,
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId:               "go-stock",
+			UniqueId:               "blades-stock",
 			OnSecondInstanceLaunch: OnSecondInstanceLaunch,
 		},
 		Bind: []interface{}{
@@ -221,8 +221,8 @@ func main() {
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			About: &mac.AboutInfo{
-				Title:   "go-stock",
-				Message: "go-stock：AI赋能股票分析✨ ",
+				Title:   "Blades Stock",
+				Message: "Blades Stock：AI赋能股票分析✨ ",
 				Icon:    icon,
 			},
 		},

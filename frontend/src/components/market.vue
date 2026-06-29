@@ -42,7 +42,7 @@ import BKFundFlowChart from "./bkFundFlowChart.vue";
 import ConceptFundFlowChart from "./conceptFundFlowChart.vue";
 
 const route = useRoute()
-const icon = ref('https://raw.githubusercontent.com/ArvinLovegood/go-stock/master/build/appicon.png');
+const icon = ref('');
 
 const message = useMessage()
 const notify = useNotification()

@@ -1,4 +1,4 @@
-module go-stock
+module blades-stock
 
 go 1.26.0
 

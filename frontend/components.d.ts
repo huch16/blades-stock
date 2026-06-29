@@ -12,7 +12,6 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AgentChat: typeof import('./src/components/agent-chat.vue')['default']
-    AgentChat_bk: typeof import('./src/components/agent-chat_bk.vue')['default']
     AiRecommendStocksList: typeof import('./src/components/aiRecommendStocksList.vue')['default']
     AllStockInfoList: typeof import('./src/components/allStockInfoList.vue')['default']
     AllStockList: typeof import('./src/components/allStockList.vue')['default']

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"io"
 	"net/http"
 	"strings"

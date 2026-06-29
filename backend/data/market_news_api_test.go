@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
-	"go-stock/backend/util"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
+	"blades-stock/backend/util"
 
 	"github.com/coocood/freecache"
 	"github.com/duke-git/lancet/v2/convertor"

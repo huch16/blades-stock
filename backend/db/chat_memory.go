@@ -1,7 +1,7 @@
 package db
 
 import (
-	"go-stock/backend/models"
+	"blades-stock/backend/models"
 	"time"
 )
 

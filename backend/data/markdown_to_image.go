@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"html"
 	"regexp"
 	"strings"
@@ -380,9 +380,9 @@ body.light .disclaimer {
 </head>
 <body class="{{.ThemeClass}}">
 <div class="header">
-    <div class="avatar"><img src="{{.AvatarSrc}}" alt="Go-Stock"></div>
+    <div class="avatar"><img src="{{.AvatarSrc}}" alt="Blades Stock"></div>
     <div class="info">
-        <div class="name">Go-Stock AI</div>
+        <div class="name">Blades Stock AI</div>
         <div class="time">{{.Time}}</div>
     </div>
 </div>

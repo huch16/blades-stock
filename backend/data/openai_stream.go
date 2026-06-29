@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
-	"go-stock/backend/util"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
+	"blades-stock/backend/util"
 
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/mathutil"

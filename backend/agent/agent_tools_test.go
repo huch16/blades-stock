@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"go-stock/backend/agent/tools"
+	"blades-stock/backend/agent/tools"
 )
 
 func TestGetAllTools(t *testing.T) {

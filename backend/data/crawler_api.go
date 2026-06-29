@@ -3,7 +3,7 @@ package data
 import (
 	"context"
 	"github.com/chromedp/chromedp"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"time"
 )
 

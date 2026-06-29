@@ -2,7 +2,7 @@ package data
 
 import (
 	"fmt"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"strings"
 	"time"
 

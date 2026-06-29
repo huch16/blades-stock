@@ -5,7 +5,7 @@
       v-if="showButton"
       :class="['edge-trigger', { 'edge-trigger-busy': hasBackgroundTask }]"
       @click="togglePanel"
-      :title="hasBackgroundTask ? 'go-stock AI 助手正在后台分析...' : 'go-stock AI 助手'"
+      :title="hasBackgroundTask ? 'Blades Stock AI 助手正在后台分析...' : 'Blades Stock AI 助手'"
     >
       <div class="edge-trigger-inner">
         <NIcon :component="ChatbubbleEllipsesOutline" size="22" />
@@ -27,7 +27,7 @@
         >
           <template #header>
             <div class="panel-header">
-              <span class="panel-title">go-stock AI 助手</span>
+              <span class="panel-title">Blades Stock AI 助手</span>
               <div class="panel-actions">
                 <NButton size="small" quaternary @click="startNewChat" title="开始新对话">
                   新对话
@@ -221,31 +221,6 @@
                   :menu-props="{ style: { zIndex: 10002 } }"
                   class="chat-footer-select"
                 />
-                <NSelect
-                  v-model:value="sysPromptId"
-                  :options="sysPromptOptions"
-                  size="small"
-                  clearable
-                  to="body"
-                  placement="top-start"
-                  placeholder="系统提示词"
-                  :consistent-menu-width="false"
-                  :menu-props="{ style: { zIndex: 10002 } }"
-                  class="chat-footer-prompt"
-                />
-                <NSelect
-                  v-model:value="userPromptId"
-                  :options="userPromptOptions"
-                  size="small"
-                  clearable
-                  to="body"
-                  placement="top-start"
-                  placeholder="用户提示词"
-                  :consistent-menu-width="false"
-                  :menu-props="{ style: { zIndex: 10002 } }"
-                  class="chat-footer-prompt"
-                  @update:value="onUserPromptChange"
-                />
                 <div class="chat-footer-thinking">
                   <span class="chat-footer-thinking-label">思考模式</span>
                   <NSwitch v-model:value="thinkingMode" size="small" />
@@ -316,7 +291,7 @@ import {
   ShareSocialOutline,
   ImageOutline
 } from '@vicons/ionicons5'
-import { AbortSummaryStockNews, GetAiAssistantSession, GetAiConfigs, GetConfig, GetPromptTemplates, GetVersionInfo, SaveAiAssistantSession, ShareText, SummaryStockNews } from '../../wailsjs/go/main/App'
+import { AbortSummaryStockNews, GetAiAssistantSession, GetAiConfigs, GetConfig, GetVersionInfo, SaveAiAssistantSession, ShareText, SummaryStockNews } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
@@ -324,7 +299,7 @@ import html2canvas from 'html2canvas'
 
 const DEFAULT_VISIBLE_COUNT = 20
 const COLLAPSE_CHAR_LIMIT = 200
-const STORAGE_KEY_MODEL_ID = 'go-stock-ai-last-model-id'
+const STORAGE_KEY_MODEL_ID = 'blades-stock-ai-last-model-id'
 
 const route = useRoute()
 // 注意：抽屉遮罩层 z-index 很高，使用全局 notification/message 可能被遮罩盖住。
@@ -375,12 +350,6 @@ const memoryCountOptions = [
   { label: '30 条', value: 30 },
   { label: '50 条', value: 50 }
 ]
-
-function onUserPromptChange(id) {
-  if (!id) return
-  const t = userPromptTemplates.value.find(x => (x.ID ?? x.id) === id)
-  if (t?.content) inputValue.value = t.content
-}
 
 const canSend = computed(() => !!inputValue.value.trim())
 const scrollbarRef = ref(null)
@@ -498,7 +467,7 @@ async function exportAiReplyImage(displayFromIndex, index, evt) {
     const link = document.createElement('a')
     const safeTime = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')
     link.href = canvas.toDataURL('image/png')
-    link.download = `go-stock-ai-${safeTime}.png`
+    link.download = `blades-stock-ai-${safeTime}.png`
     link.click()
     shareTipText.value = '已导出为 PNG 图片'
     shareTipVisible.value = true
@@ -629,7 +598,7 @@ function openPanel() {
     messages.value = [
       {
         role: 'assistant',
-        content: '我是 go-stock AI 助手，可随时在这里提问。支持股票、市场、投资等相关问题。',
+        content: '我是 Blades Stock AI 助手，可随时在这里提问。支持股票、市场、投资等相关问题。',
         reasoning: '',
         time: new Date().toLocaleString(),
         modelName: ''
@@ -692,7 +661,7 @@ function sendMessage() {
   sentFromFloating.value = true
   saveHistory()
   // 系统提示词：传递模板 ID，后端根据 ID 读取 System Prompt
-  const sysId = sysPromptId.value != null ? Number(sysPromptId.value) : null
+  const sysId = null
   // 记忆模式：带上最近 N 条对话（排除当前这条空的 assistant 占位）
   let historyJSON = ''
   if (memoryMode.value) {
@@ -759,24 +728,13 @@ function ensureSummaryEvent() {
   hasSummaryEvent = true
 }
 
-const PROMPT_TEMPLATES_CHANGED = 'promptTemplatesChanged'
 onBeforeUnmount(() => {
   EventsOff(AI_ASSISTANT_EVENT)
-  EventsOff(PROMPT_TEMPLATES_CHANGED)
   hasSummaryEvent = false
 })
 
-function loadPromptTemplates() {
-  GetPromptTemplates('', '').then(res => {
-    const list = Array.isArray(res) ? res : []
-    sysPromptTemplates.value = list.filter(t => t.type === '模型系统Prompt')
-    userPromptTemplates.value = list.filter(t => t.type === '模型用户Prompt')
-  })
-}
-
 watch(panelVisible, (v) => {
   if (v) {
-    loadPromptTemplates()
     nextTick(scrollToBottom)
   }
 })

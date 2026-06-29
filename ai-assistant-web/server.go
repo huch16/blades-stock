@@ -4,10 +4,10 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"go-stock/backend/data"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
+	"blades-stock/backend/data"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 	"io/fs"
 	"net/http"
 	"os"
@@ -223,7 +223,7 @@ func (a *app) shareText(w http.ResponseWriter, r *http.Request) {
 		req.Title = "AI助手"
 	}
 	analysisTime := time.Now().Format("2006/01/02")
-	resp, err := data.SharedHTTPClient.SetHeader("ua-x", "go-stock").R().SetFormData(map[string]string{
+	resp, err := data.SharedHTTPClient.SetHeader("ua-x", "blades-stock").R().SetFormData(map[string]string{
 		"text":         req.Text,
 		"stockCode":    req.Title,
 		"stockName":    req.Title,

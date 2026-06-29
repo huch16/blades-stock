@@ -13,8 +13,8 @@ import (
 	"github.com/duke-git/lancet/v2/fileutil"
 	"github.com/go-kratos/blades"
 
-	"go-stock/backend/data"
-	"go-stock/backend/logger"
+	"blades-stock/backend/data"
+	"blades-stock/backend/logger"
 )
 
 func TestGetStockAiAgent(t *testing.T) {

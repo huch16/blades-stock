@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"math/big"
 	"net/http"
 	"strings"

@@ -2,8 +2,8 @@ package tools
 
 import (
 	"encoding/json"
-	"go-stock/backend/agent/types"
-	"go-stock/backend/data"
+	"blades-stock/backend/agent/types"
+	"blades-stock/backend/data"
 	"time"
 
 	bladesTools "github.com/go-kratos/blades/tools"

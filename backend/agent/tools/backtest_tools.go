@@ -2,9 +2,9 @@ package tools
 
 import (
 	"fmt"
-	"go-stock/backend/agent/types"
-	"go-stock/backend/db"
-	"go-stock/backend/models"
+	"blades-stock/backend/agent/types"
+	"blades-stock/backend/db"
+	"blades-stock/backend/models"
 	"strings"
 
 	bladesTools "github.com/go-kratos/blades/tools"

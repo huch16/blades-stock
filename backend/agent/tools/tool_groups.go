@@ -113,6 +113,7 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetIndustryMoneyRank":        GroupMoneyFlow,
 	"QueryStockNewsTool":          GroupNewsResearch,
 	"WebSearch":                   GroupNewsResearch,
+	"FetchWebPage":                GroupNewsResearch,
 	"GetNewsListData":             GroupNewsResearch,
 	"GetStockResearchReport":      GroupNewsResearch,
 	"GetIndustryResearchReport":   GroupNewsResearch,

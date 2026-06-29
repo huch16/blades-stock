@@ -1,7 +1,7 @@
 package data
 
 import (
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 
 	"github.com/duke-git/lancet/v2/strutil"
 	"github.com/go-resty/resty/v2"
@@ -59,7 +59,7 @@ func (DingDingAPI) SendToDingDing(title, message string) string {
 		SetBody(&Message{
 			Msgtype: "markdown",
 			Markdown: Markdown{
-				Title: "go-stock " + title,
+				Title: "Blades Stock " + title,
 				Text:  message,
 			},
 			At: At{

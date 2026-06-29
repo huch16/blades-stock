@@ -4,7 +4,7 @@
 package main
 
 import (
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"os"
 	"unsafe"
 

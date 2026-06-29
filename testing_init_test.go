@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"go-stock/backend/db"
+	"blades-stock/backend/db"
 )
 
 // TestMain initializes a temp SQLite database for the root package tests so
 // that NewApp() and other data.* APIs that read settings on first call have
 // a valid db.Dao to talk to.
 func TestMain(m *testing.M) {
-	tmpDir, err := os.MkdirTemp("", "go-stock-root-test-")
+	tmpDir, err := os.MkdirTemp("", "blades-stock-root-test-")
 	if err != nil {
 		panic("test setup: mkdir temp: " + err.Error())
 	}

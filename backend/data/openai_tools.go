@@ -4,15 +4,15 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/db"
+	"blades-stock/backend/db"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/strutil"

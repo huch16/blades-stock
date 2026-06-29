@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"go-stock/backend/models"
-	"go-stock/backend/util"
+	"blades-stock/backend/models"
+	"blades-stock/backend/util"
 
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/random"

@@ -1,7 +1,7 @@
 <template>
   <div class="page">
         <div class="header">
-          <div class="title">go-stock AI 助手（Web）</div>
+          <div class="title">Blades Stock AI 助手（Web）</div>
           <div class="motto">「{{ currentMotto }}」</div>
           <div class="toolbar">
             <NButton size="small" type="primary" class="new-chat-btn" @click="startNewChat">
@@ -303,7 +303,7 @@ async function saveBubbleAsImage(msgIndex: number) {
 
     const link = document.createElement("a");
     const ts = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
-    link.download = `go-stock_ai_${ts}_msg_${msgIndex}.png`;
+    link.download = `blades-stock_ai_${ts}_msg_${msgIndex}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
     message.success("图片已保存");
@@ -332,7 +332,7 @@ function startNewChat() {
   messages.value = [
     {
       role: "assistant",
-      content: "你好，我是 go-stock AI 助手（Web 版）。",
+      content: "你好，我是 Blades Stock AI 助手（Web 版）。",
       reasoning: "",
       time: nowText(),
     },

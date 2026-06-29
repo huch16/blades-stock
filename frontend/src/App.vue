@@ -96,7 +96,7 @@ function updateMarketStatus() {
     parts.push(hk ? '港股交易中' : '港股休市')
     parts.push(us ? '美股交易中' : '美股休市')
     marketStatus.value = parts.join(' | ')
-    WindowSetTitle("go-stock " + marketStatus.value + " " + officialStatement.value + "  「" + currentMotto.value + "」  [数据来源于网络，仅供参考；投资有风险，入市需谨慎]")
+    WindowSetTitle("Blades Stock " + marketStatus.value + " " + officialStatement.value + "  「" + currentMotto.value + "」  [数据来源于网络，仅供参考；投资有风险，入市需谨慎]")
   })
 }
 const menuOptions = ref([
@@ -802,7 +802,7 @@ const menuOptions = ref([
               ),
           key: 'skills',
           icon: renderIcon(FlashOutline),
-          show: false,
+          show: true,
         },
       ],
     },
@@ -1060,7 +1060,7 @@ onMounted(() => {
           content: () => h('div',{type:"info",style:{
             "text-align":"left",
               "font-size":"14px",
-              "color": data.source==="go-stock"?"#F98C24":"#549EC8"
+              "color": data.source==="blades-stock"?"#F98C24":"#549EC8"
             }}, { default: () => data.content }),
           meta: () => h(NText,{type:"warning"}, { default: () => data.source}),
           duration:1000*30 ,

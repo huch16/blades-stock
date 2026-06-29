@@ -2,15 +2,15 @@ package agent
 
 import (
 	"fmt"
-	"go-stock/backend/db"
-	"go-stock/backend/models"
+	"blades-stock/backend/db"
+	"blades-stock/backend/models"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
 
-	"go-stock/backend/data"
-	"go-stock/backend/logger"
+	"blades-stock/backend/data"
+	"blades-stock/backend/logger"
 )
 
 // BacktestService 负责将 AI 分析报告与市场真实走势对比 → 回测验证

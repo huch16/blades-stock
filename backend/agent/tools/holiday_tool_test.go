@@ -2,7 +2,7 @@ package tools
 
 import (
 	"context"
-	"go-stock/backend/agent/types"
+	"blades-stock/backend/agent/types"
 	"strings"
 	"testing"
 

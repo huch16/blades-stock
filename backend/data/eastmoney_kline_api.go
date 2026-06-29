@@ -5,7 +5,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"io"
 	"math/rand"
 	"net/url"

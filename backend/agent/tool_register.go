@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"go-stock/backend/agent/tools"
+	"blades-stock/backend/agent/tools"
 
 	bladesTools "github.com/go-kratos/blades/tools"
 )
@@ -47,5 +47,6 @@ func GetEnabledTools() []bladesTools.Tool {
 
 func init() {
 	RegisterTool("WebSearch", tools.GetWebSearchTool())
+	RegisterTool("FetchWebPage", tools.GetFetchWebPageTool())
 	RegisterTool("LearnSkillFromProject", tools.GetLearnSkillTool())
 }

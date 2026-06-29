@@ -4,9 +4,9 @@
 package data
 
 import (
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/util"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/util"
 	"testing"
 )
 

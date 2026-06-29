@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
 	"sort"
 	"strings"
 	"time"

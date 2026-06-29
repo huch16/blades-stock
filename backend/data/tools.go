@@ -591,7 +591,7 @@ func Tools(tools []Tool) []Tool {
 				Properties: map[string]any{
 					"title": map[string]any{
 						"type":        "string",
-						"description": "消息标题，会显示为「go-stock {title}」",
+						"description": "消息标题，会显示为「Blades Stock {title}」",
 					},
 					"message": map[string]any{
 						"type":        "string",

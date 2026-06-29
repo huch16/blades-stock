@@ -3,9 +3,9 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 	"os"
 	"path/filepath"
 	"sort"

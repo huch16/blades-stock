@@ -6,9 +6,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"go-stock/backend/data"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
+	"blades-stock/backend/data"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
 	"syscall"
 	"time"
 	"unsafe"
@@ -35,8 +35,8 @@ func InitSystray(a *App) {
 
 		systray.Run(func() {
 			systray.SetIcon(icon2)
-			systray.SetTitle("go-stock")
-			systray.SetTooltip("go-stock：AI赋能股票分析")
+			systray.SetTitle("Blades Stock")
+			systray.SetTooltip("Blades Stock：AI赋能股票分析")
 
 			mShow := systray.AddMenuItem("显示窗口", "显示主窗口")
 			mQuit := systray.AddMenuItem("退出程序", "退出应用程序")
@@ -100,8 +100,8 @@ func (a *App) startup(ctx context.Context) {
 
 func OnSecondInstanceLaunch(secondInstanceData options.SecondInstanceData) {
 	notification := toast.Notification{
-		AppID:    "go-stock",
-		Title:    "go-stock",
+		AppID:    "blades-stock",
+		Title:    "Blades Stock",
 		Message:  "程序已经在运行了",
 		Icon:     "",
 		Duration: "short",
@@ -162,7 +162,7 @@ func MonitorStockPrices(a *App) {
 
 	}
 	//if total != 0 {
-	//	title := "go-stock " + time.Now().Format(time.DateTime) + fmt.Sprintf("  %.2f¥", total)
+	//	title := "Blades Stock " + time.Now().Format(time.DateTime) + fmt.Sprintf("  %.2f¥", total)
 	//	go func() {
 	//		defer PanicHandler()
 	//		systray.SetTooltip(title)
@@ -172,7 +172,7 @@ func MonitorStockPrices(a *App) {
 	go runtime.EventsEmit(a.ctx, "realtime_profit", fmt.Sprintf("  %.2f", total))
 
 	if total != 0 {
-		title := "go-stock " + time.Now().Format(time.DateTime) + fmt.Sprintf("  %.2f¥", total)
+		title := "Blades Stock " + time.Now().Format(time.DateTime) + fmt.Sprintf("  %.2f¥", total)
 		go func() {
 			defer PanicHandler()
 			UpdateSystrayTooltip(title)
@@ -197,7 +197,7 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 
 		dialog, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
 			Type:         runtime.QuestionDialog,
-			Title:        "go-stock",
+			Title:        "Blades Stock",
 			Message:      "确定关闭吗？",
 			Buttons:      []string{"确定", "取消"},
 			Icon:         icon2,

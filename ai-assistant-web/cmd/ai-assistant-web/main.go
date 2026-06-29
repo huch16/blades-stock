@@ -1,7 +1,7 @@
 package main
 
 import (
-	assistantweb "go-stock/ai-assistant-web"
+	assistantweb "blades-stock/ai-assistant-web"
 	"log"
 )
 

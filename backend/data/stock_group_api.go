@@ -1,7 +1,7 @@
 package data
 
 import (
-	"go-stock/backend/db"
+	"blades-stock/backend/db"
 	"gorm.io/gorm"
 )
 

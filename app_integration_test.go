@@ -14,11 +14,11 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
-	"go-stock/backend/data"
-	"go-stock/backend/db"
-	"go-stock/backend/logger"
-	"go-stock/backend/models"
-	"go-stock/backend/util"
+	"blades-stock/backend/data"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
+	"blades-stock/backend/util"
 )
 
 func TestCheckStockBaseInfo(t *testing.T) {
@@ -62,7 +62,7 @@ func TestUpdateCheck(t *testing.T) {
 		SetResult(releaseVersion).
 		SetHeader("Accept", "application/vnd.github+json").
 		SetHeader("X-GitHub-Api-Version", "2022-11-28").
-		Get("https://api.github.com/repos/ArvinLovegood/go-stock/releases/latest")
+		Get("https://api.github.com/repos/huch16/blades-stock/releases/latest")
 	if err != nil {
 		t.Fatalf("github release: %v", err)
 	}

@@ -1,7 +1,7 @@
 package data
 
 import (
-	"go-stock/backend/logger"
+	"blades-stock/backend/logger"
 	"regexp"
 	"strings"
 

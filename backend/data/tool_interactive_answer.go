@@ -1,7 +1,7 @@
 package data
 
 import (
-	"go-stock/backend/util"
+	"blades-stock/backend/util"
 	"time"
 
 	"github.com/duke-git/lancet/v2/convertor"

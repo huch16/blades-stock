@@ -4,7 +4,7 @@ package data
 
 import (
 	"fmt"
-	"go-stock/backend/db"
+	"blades-stock/backend/db"
 	"testing"
 )
 
