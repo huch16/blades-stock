@@ -6,6 +6,7 @@ import (
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,16 @@ type ReflectionResult struct {
 	Insight      string `json:"insight"`
 	Improvement  string `json:"improvement"`
 	CreatedAt    string `json:"createdAt"`
+}
+
+var defaultEvaluator *Evaluator
+var evaluatorOnce sync.Once
+
+func DefaultEvaluator() *Evaluator {
+	evaluatorOnce.Do(func() {
+		defaultEvaluator = NewEvaluator()
+	})
+	return defaultEvaluator
 }
 
 type Evaluator struct{}

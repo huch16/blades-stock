@@ -10,6 +10,18 @@ import (
 	"time"
 )
 
+var (
+	defaultMemoryManager *MemoryManager
+	memoryManagerOnce    sync.Once
+)
+
+func DefaultMemoryManager() *MemoryManager {
+	memoryManagerOnce.Do(func() {
+		defaultMemoryManager = NewMemoryManager(20)
+	})
+	return defaultMemoryManager
+}
+
 type MemoryManager struct {
 	mu            sync.RWMutex
 	workingMem    []workingEntry

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,16 @@ type EvolutionPlan struct {
 	TopTools        []ToolRank `json:"topTools"`
 	Improvements    []string `json:"improvements"`
 	Suggestions     []string `json:"suggestions"`
+}
+
+var defaultEvolver *Evolver
+var evolverOnce sync.Once
+
+func DefaultEvolver() *Evolver {
+	evolverOnce.Do(func() {
+		defaultEvolver = NewEvolver()
+	})
+	return defaultEvolver
 }
 
 type Evolver struct{}

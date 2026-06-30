@@ -569,31 +569,20 @@ func (a *App) NewsPush(news *[]models.Telegraph) {
 func (a *App) AddCronTask(follow data.FollowedStock) func() {
 	return func() {
 		go runtime.EventsEmit(a.ctx, "warnMsg", "开始自动分析"+follow.Name+"_"+follow.StockCode)
-		ai := data.NewDeepSeekOpenAi(a.ctx, follow.AiConfigId)
-		thinking := data.GetSettingConfig().GetAIConfigThinking(follow.AiConfigId)
-		msgs := ai.NewChatStream(follow.Name, follow.StockCode, "", nil, a.AiTools, thinking)
+		question := fmt.Sprintf("全面分析%s(%s)的技术面、基本面、消息面和资金面", follow.Name, follow.StockCode)
 		var res strings.Builder
-
-		chatId := ""
-		question := ""
-		for msg := range msgs {
-			if v, ok := msg["extraContent"].(string); ok && v != "" {
-				res.WriteString(v + "\n")
+		thinking := data.GetSettingConfig().GetAIConfigThinking(follow.AiConfigId)
+		for msg := range agent.NewStockAiAgentApi().ChatWithContext(a.ctx, question, follow.AiConfigId, nil, false, 0, thinking, "") {
+			if msg == nil {
+				continue
 			}
-			if v, ok := msg["content"].(string); ok && v != "" {
-				res.WriteString(v)
+			if msg.ReasoningContent != "" {
+				res.WriteString(msg.ReasoningContent)
 			}
-			if v, ok := msg["chatId"].(string); ok {
-				chatId = v
-			}
-			if v, ok := msg["question"].(string); ok {
-				question = v
-			}
+			res.WriteString(msg.Content)
 		}
-
-		data.NewDeepSeekOpenAi(a.ctx, follow.AiConfigId).SaveAIResponseResult(follow.StockCode, follow.Name, res.String(), chatId, question)
+		data.NewDeepSeekOpenAi(a.ctx, follow.AiConfigId).SaveAIResponseResult(follow.StockCode, follow.Name, res.String(), "", question)
 		go runtime.EventsEmit(a.ctx, "warnMsg", "AI分析完成："+follow.Name+"_"+follow.StockCode)
-
 	}
 }
 
@@ -1438,6 +1427,36 @@ func (a *App) SendDingDingMessageByType(message string, stockCode string, msgTyp
 	return data.NewDingDingAPI().SendDingDingMessage(message)
 }
 
+// preFetchStockAnalysisData collects real-time market data for the given stock
+// and returns a formatted reference string for the agent's system prompt.
+func preFetchStockAnalysisData(stockCode string) string {
+	if stockCode == "" {
+		return ""
+	}
+	api := data.NewStockDataApi()
+	var parts []string
+
+	// Real-time quote
+	if info, err := api.GetStockCodeRealTimeData(stockCode); err == nil && info != nil && len(*info) > 0 {
+		s := (*info)[0]
+		changePercent := s.ChangePercent
+		changePrice := s.ChangePrice
+		parts = append(parts, fmt.Sprintf("【实时行情】%s(%s) 当前价:%s 涨跌幅:%.2f%% 涨跌额:%.2f 开盘:%s 最高:%s 最低:%s 昨收:%s 成交量:%s 成交额:%s",
+			s.Name, s.Code, s.Price, changePercent, changePrice, s.Open, s.High, s.Low, s.PreClose, s.Volume, s.Amount))
+	}
+
+	// Latest financial data
+	financeMd := api.GetStockLatestFinanceToMarkdown(stockCode)
+	if financeMd != "" && !strings.HasPrefix(financeMd, "获取") {
+		parts = append(parts, financeMd)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -1449,14 +1468,24 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 			runtime.EventsEmit(a.ctx, "newChatStream", "DONE")
 		}
 	}()
-	var msgs <-chan map[string]any
-	if enableTools {
-		msgs = data.NewDeepSeekOpenAi(a.ctx, aiConfigId).NewChatStream(stock, stockCode, question, sysPromptId, a.AiTools, think)
-	} else {
-		msgs = data.NewDeepSeekOpenAi(a.ctx, aiConfigId).NewChatStream(stock, stockCode, question, sysPromptId, []data.Tool{}, think)
+	// Pre-fetch real-time stock data as reference context for the agent
+	preFetchCtx := preFetchStockAnalysisData(stockCode)
+
+	analysisQuestion := question
+	if analysisQuestion == "" {
+		analysisQuestion = fmt.Sprintf("请对%s(%s)进行全方位深度分析，从技术面、基本面、消息面、资金面四个维度综合研判，给出明确的多空判断和操作建议。", stock, stockCode)
 	}
-	for msg := range msgs {
-		runtime.EventsEmit(a.ctx, "newChatStream", msg)
+	if preFetchCtx != "" {
+		analysisQuestion = analysisQuestion + "\n\n【预采集参考数据】以下数据由系统预先采集，可供直接引用分析，无需再重复查询：\n" + preFetchCtx
+	}
+	for msg := range agent.NewStockAiAgentApi().ChatWithContext(a.ctx, analysisQuestion, aiConfigId, sysPromptId, true, 5, think, "plan_execute") {
+		if msg == nil {
+			continue
+		}
+		runtime.EventsEmit(a.ctx, "newChatStream", map[string]any{
+			"content":           msg.Content,
+			"reasoning_content": msg.ReasoningContent,
+		})
 	}
 	runtime.EventsEmit(a.ctx, "newChatStream", "DONE")
 }
@@ -2002,7 +2031,6 @@ func (a *App) GlobalStockIndexesReadable() string {
 func (a *App) SummaryStockNews(question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool, eventName string, historyJSON string) {
 	ctx, cancel := context.WithCancel(a.ctx)
 
-	// 保存当前会话的 cancel，用于前端中断
 	a.summaryMu.Lock()
 	if a.summaryCancel != nil {
 		a.summaryCancel()
@@ -2010,36 +2038,62 @@ func (a *App) SummaryStockNews(question string, aiConfigId int, sysPromptId *int
 	a.summaryCancel = cancel
 	a.summaryMu.Unlock()
 
-	// 允许前端自定义事件名，避免不同页面之间的事件冲突
 	if strings.TrimSpace(eventName) == "" {
 		eventName = "summaryStockNews"
 	}
 
-	// 解析对话历史（AI 助手记忆）：空字符串或解析失败则无历史
-	var history []map[string]interface{}
-	if strings.TrimSpace(historyJSON) != "" {
-		var list []models.AiAssistantMessage
-		if err := json.Unmarshal([]byte(historyJSON), &list); err == nil && len(list) > 0 {
-			history = make([]map[string]interface{}, 0, len(list))
-			for _, m := range list {
-				item := map[string]interface{}{"role": m.Role, "content": m.Content}
-				if m.Role == "assistant" && m.Reasoning != "" {
-					item["reasoning_content"] = m.Reasoning
-				}
-				history = append(history, item)
-			}
-		}
+	// Pre-fetch market index data as reference context
+	preFetchCtx := preFetchMarketSummaryData()
+	if preFetchCtx != "" {
+		preFetchCtx = "\n\n【预采集参考数据】以下为当前市场概况，可供直接引用：\n" + preFetchCtx
 	}
 
-	var msgs <-chan map[string]any
-	if enableTools {
-		msgs = data.NewDeepSeekOpenAi(ctx, aiConfigId).NewSummaryStockNewsStreamWithTools(question, sysPromptId, a.AiTools, think, history)
+	q := strings.TrimSpace(question)
+	if q == "" {
+		q = `请对当前A股市场进行全面的AI资讯总结和分析。
+
+## 执行步骤
+### 第1步：获取市场整体数据
+- 用 GetMarketData 获取大盘指数行情、涨跌家数、涨跌分布
+- 用 GlobalStockIndexesReadable 获取全球主要指数表现
+- 用 GetStockChanges 获取今日异动数据（火箭发射、大笔买入等）
+
+### 第2步：捕捉市场热点
+- 用 GetUplimitHotPlates 获取今日涨停板块热度排名
+- 用 HotStockTable 获取热门股票排名
+- 用 GetUplimitHotStocks 获取涨停个股列表
+- 用 HotspotDiscovery 发现当前市场热点题材
+
+### 第3步：消息面分析
+- 用 GetNewsListData 获取当天重要财经新闻
+- 用 GetWallstreetcnLives 获取华尔街见闻7x24快讯
+- 用 WebSearch 搜索最新的重要政策/行业消息
+
+### 第4步：资金面分析
+- 用 GetStockMoneyData 查看个股资金流入排名
+- 用 GetIndustryMoneyRank 查看行业资金流向
+- 用 GetMutualTop10Deal 查看北向资金动向
+
+### 第5步：综合分析
+- 当前市场整体趋势判断（多头/空头/震荡）
+- 主线热点板块和持续性分析
+- 资金偏好方向（大盘/小盘，价值/成长）
+- 潜在风险和关注点
+- 建议关注的方向/板块/个股
+
+注意：每一步都必须调用对应的工具获取最新数据，严禁凭记忆编造。即使某些工具调用失败，也要基于已成功获取的数据进行分析，不要反复追问用户补充信息。` + preFetchCtx
 	} else {
-		msgs = data.NewDeepSeekOpenAi(ctx, aiConfigId).NewSummaryStockNewsStream(question, sysPromptId, think, history)
+		q = q + preFetchCtx
 	}
 
-	for msg := range msgs {
-		runtime.EventsEmit(a.ctx, eventName, msg)
+	for msg := range agent.NewStockAiAgentApi().ChatWithContext(ctx, q, aiConfigId, sysPromptId, false, 0, think, "plan_execute") {
+		if msg == nil {
+			continue
+		}
+		runtime.EventsEmit(a.ctx, eventName, map[string]any{
+			"content":           msg.Content,
+			"reasoning_content": msg.ReasoningContent,
+		})
 	}
 
 	a.summaryMu.Lock()
@@ -2047,6 +2101,20 @@ func (a *App) SummaryStockNews(question string, aiConfigId int, sysPromptId *int
 	a.summaryMu.Unlock()
 
 	runtime.EventsEmit(a.ctx, eventName, "DONE")
+}
+
+// preFetchMarketSummaryData collects macro-level market data for the AI market summary feature.
+func preFetchMarketSummaryData() string {
+	api := data.NewMarketNewsApi()
+	var parts []string
+
+	// Global indexes
+	indexes := api.GlobalStockIndexesReadable(30)
+	if indexes != "" {
+		parts = append(parts, indexes)
+	}
+
+	return strings.Join(parts, "\n\n")
 }
 func (a *App) GetIndustryRank(sort string, cnt int) []any {
 	res := data.NewMarketNewsApi().GetIndustryRank(sort, cnt)

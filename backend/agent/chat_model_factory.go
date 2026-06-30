@@ -5,6 +5,7 @@ import (
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/duke-git/lancet/v2/strutil"
@@ -14,6 +15,34 @@ import (
 	"github.com/go-kratos/blades/contrib/openai"
 	"google.golang.org/genai"
 )
+
+var (
+	modelProviderCache sync.Map
+)
+
+type cachedProvider struct {
+	provider blades.ModelProvider
+}
+
+func providerCacheKey(cfg data.AIConfig) string {
+	var b strings.Builder
+	b.WriteString(cfg.BaseUrl)
+	b.WriteByte('\n')
+	b.WriteString(cfg.ApiKey)
+	b.WriteByte('\n')
+	b.WriteString(cfg.ModelName)
+	b.WriteByte('\n')
+	b.WriteString(cfg.UpdatedAt.String())
+	return b.String()
+}
+
+func InvalidateModelProviderCache() {
+	modelProviderCache.Range(func(k, _ interface{}) bool {
+		modelProviderCache.Delete(k)
+		return true
+	})
+	logger.SugaredLogger.Info("model provider cache cleared")
+}
 
 type chatModelProvider int
 
@@ -91,8 +120,17 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 		maxTok = 4096
 	}
 
+	key := providerCacheKey(aiConfig)
+	if cached, ok := modelProviderCache.Load(key); ok {
+		logger.SugaredLogger.Infof("reusing cached model provider for config %d (%s)", aiConfig.ID, aiConfig.ModelName)
+		return cached.(cachedProvider).provider, nil
+	}
+
 	p := detectChatModelProvider(baseLower, aiConfig.ModelName)
 	logger.SugaredLogger.Infof("createChatModel provider=%d base=%q model=%q", p, aiConfig.BaseUrl, aiConfig.ModelName)
+
+	var provider blades.ModelProvider
+	var err error
 
 	switch p {
 	case providerAnthropic:
@@ -100,16 +138,16 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 		if maxOut <= 0 {
 			maxOut = 8192
 		}
-		return anthropic.NewModel(aiConfig.ModelName, anthropic.Config{
+		provider = anthropic.NewModel(aiConfig.ModelName, anthropic.Config{
 			APIKey:          aiConfig.ApiKey,
 			BaseURL:         baseURL,
 			MaxOutputTokens: int64(maxOut),
 			Temperature:     temperature,
-		}), nil
+		})
 
 	case providerGemini:
 		cc := &genai.ClientConfig{APIKey: aiConfig.ApiKey}
-		return gemini.NewModel(ctx, aiConfig.ModelName, gemini.Config{
+		provider, err = gemini.NewModel(ctx, aiConfig.ModelName, gemini.Config{
 			ClientConfig: *cc,
 			Temperature:  float32(temperature),
 		})
@@ -128,6 +166,13 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 			MaxOutputTokens: int64(maxTok),
 			ExtraFields:     extraFields,
 		}
-		return openai.NewModel(aiConfig.ModelName, cfg), nil
+		provider = openai.NewModel(aiConfig.ModelName, cfg)
 	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	modelProviderCache.Store(key, cachedProvider{provider: provider})
+	return provider, nil
 }

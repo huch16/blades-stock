@@ -7,6 +7,7 @@ import (
 	"blades-stock/backend/logger"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/go-kratos/blades"
 	bladesTools "github.com/go-kratos/blades/tools"
@@ -230,6 +231,15 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
+		// parallel pre-fetch: for multi-group questions, run sub-agents
+		// concurrently to gather data before the main agent loop.
+		if prefetched := preFetchInParallel(ctx, question, stockAiAgent.instance.AllTools, stockAiAgent.instance.AIConfig); prefetched != nil {
+			parallelCtx := buildParallelContext(prefetched)
+			if parallelCtx != "" {
+				sysPrompt = parallelCtx + "\n\n" + sysPrompt
+			}
+		}
+
 		invocation := &blades.Invocation{
 			Message:     blades.UserMessage(question),
 			Instruction: blades.SystemMessage(sysPrompt),
@@ -241,6 +251,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		}
 
 		var fullResponse strings.Builder
+		var toolNames []string
 		for msg, err := range stockAiAgent.instance.Agent.Run(ctx, invocation) {
 			if err != nil {
 				logger.SugaredLogger.Errorf("agent run error: %v", err)
@@ -293,6 +304,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 			for _, part := range msg.Parts {
 				if tp, ok := part.(*blades.ToolPart); ok {
+					toolNames = append(toolNames, tp.Name)
 					logger.SugaredLogger.Infof("[ToolCall] %s(%s)", tp.Name, tp.Request)
 					ch <- &StreamMessage{
 						Role:             "assistant",
@@ -309,6 +321,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
+		// fire-and-forget post-processing: memory, evaluation, tool ranking
+		if fullResponse.Len() > 0 && stockAiAgent != nil && stockAiAgent.sessionID != "" {
+			go postProcessResponse(stockAiAgent.sessionID, question, fullResponse.String(), toolNames)
+		}
+
 		ch <- &StreamMessage{
 			Role:    "assistant",
 			Content: "agent-DONE",
@@ -317,6 +334,39 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 	}()
 
 	return ch
+}
+
+// postProcessResponse runs memory storage, evaluation, and tool ranking in
+// parallel after the agent response is complete. It is fire-and-forget and
+// must not block the response stream.
+func postProcessResponse(sessionID, question, response string, toolNames []string) {
+	var wg sync.WaitGroup
+
+	// 1. Store working memory
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		DefaultMemoryManager().Add(sessionID, "user", question)
+		DefaultMemoryManager().Add(sessionID, "assistant", response)
+	}()
+
+	// 2. Score and store reflection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		DefaultEvaluator().GenerateReflection(sessionID, question, response, 0, nil)
+	}()
+
+	// 3. Record tool usage
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for _, name := range toolNames {
+			DefaultEvolver().RecordToolUse(name, true, 0)
+		}
+	}()
+
+	wg.Wait()
 }
 
 // extractStockInfo 从用户问题中提取股票代码/名称（简单启发式匹配）

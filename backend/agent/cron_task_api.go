@@ -250,14 +250,18 @@ func (a *CronTaskApi) executeStockAnalysis(ctx context.Context, task *models.Cro
 	}
 
 	prompt := getPromptContentByID(params.PromptId)
-	var tools []data.Tool
-	tools = data.Tools(tools)
-	msgs := data.NewDeepSeekOpenAi(ctx, params.AiConfigId).NewChatStream(params.StockName, data.ConvertTushareCodeToStockCode(params.StockCode), prompt, &params.SysPromptId, tools, params.Thinking)
+	if prompt == "" {
+		prompt = fmt.Sprintf("全面分析%s(%s)的技术面、基本面、消息面和资金面", params.StockName, params.StockCode)
+	}
 	content := &strings.Builder{}
-	for msg := range msgs {
-		if v, ok := msg["content"].(string); ok {
-			content.WriteString(v)
+	for msg := range NewStockAiAgentApi().ChatWithContext(ctx, prompt, params.AiConfigId, &params.SysPromptId, false, 0, params.Thinking, params.AgentMode) {
+		if msg == nil {
+			continue
 		}
+		if msg.ReasoningContent != "" {
+			content.WriteString(msg.ReasoningContent)
+		}
+		content.WriteString(msg.Content)
 	}
 	logger.SugaredLogger.Infof("content:%s", content.String())
 	data.NewDeepSeekOpenAi(ctx, params.AiConfigId).SaveAIResponseResult(params.StockCode, params.StockName, content.String(), "", prompt)
