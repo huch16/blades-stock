@@ -387,3 +387,7 @@ export function UpdateSkill(arg1:models.Skill):Promise<string>;
 export function UpdateTradingRecord(arg1:data.TradingRecord):Promise<void>;
 
 export function ValidateCronExpr(arg1:string):Promise<string>;
+
+export function RunVectorBacktest(arg1:string,arg2:string,arg3:any):Promise<any>;
+
+export function RunVectorGridSearch(arg1:string,arg2:string):Promise<any>;

@@ -806,23 +806,40 @@ const menuOptions = ref([
         },
       ],
     },
-  {
-    label: () =>
-        h(
-            RouterLink,
-            {
-              to: {
-                name: 'settings',
-                onClick: () => {
-                  activeKey.value = 'settings'
-                },
-              }
-            },
-            {default: () => '设置'}
-        ),
-    key: 'settings',
-    icon: renderIcon(SettingsOutline),
-  },
+        {
+          label: () =>
+              h(
+                  RouterLink,
+                  {
+                    to: {
+                      name: 'settings',
+                      onClick: () => {
+                        activeKey.value = 'settings'
+                      },
+                    }
+                  },
+                  {default: () => '设置'}
+              ),
+          key: 'settings',
+          icon: renderIcon(SettingsOutline),
+        },
+        {
+          label: () =>
+              h(
+                  RouterLink,
+                  {
+                    to: {
+                      name: 'vectorbt',
+                      onClick: () => {
+                        activeKey.value = 'vectorbt'
+                      },
+                    }
+                  },
+                  {default: () => '回测引擎'}
+              ),
+          key: 'vectorbt',
+          icon: renderIcon(StatsChartOutline),
+        },
   {
     show:false,
     label: () => h("a", {

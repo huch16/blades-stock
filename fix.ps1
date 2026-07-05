@@ -1,0 +1,1 @@
+(Get-Content -Raw -Path 'G:\stock\blades-stock\main.go') -replace [char]0, '' | Set-Content -Path 'G:\stock\blades-stock\main.go' -Encoding UTF8

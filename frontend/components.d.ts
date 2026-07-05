@@ -64,5 +64,6 @@ declare module 'vue' {
     TChatSender: typeof import('@tdesign-vue-next/chat')['ChatSender']
     TradingRecordManager: typeof import('./src/components/TradingRecordManager.vue')['default']
     UplimitLadder: typeof import('./src/components/uplimitLadder.vue')['default']
+    VectorBTPanel: typeof import('./src/components/VectorBTPanel.vue')['default']
   }
 }

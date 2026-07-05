@@ -159,3 +159,5 @@ require (
 
 // v1.38.0 does not compile against invopop/jsonschema v0.14 (mixes wk8 vs pb33f ordered-map in schemautil.go).
 exclude github.com/anthropics/anthropic-sdk-go v1.38.0
+
+replace github.com/go-kratos/blades => ./vendor-blades/github.com/go-kratos/blades

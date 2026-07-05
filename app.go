@@ -13,6 +13,7 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/machineid"
 	"blades-stock/backend/models"
+	"blades-stock/backend/quant"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -2993,4 +2994,25 @@ type PromptTemplateItem struct {
 
 func (a *App) GetPromptTemplates(name, promptType string) []PromptTemplateItem {
 	return []PromptTemplateItem{}
+}
+
+// ============================================================================
+// VectorBT 向量化回测 API - Wails 暴露接口
+// ============================================================================
+
+// VectorBTResult 向量化回测结果
+type VectorBTResult struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+// RunVectorBacktest 运行单次回测
+func (a *App) RunVectorBacktest(stockCode, strategyType string, params map[string]any) map[string]any {
+	return quant.VectorBTHandler(stockCode, strategyType, params)
+}
+
+// RunVectorGridSearch 运行参数网格扫描
+func (a *App) RunVectorGridSearch(stockCode, strategyType string) map[string]any {
+	return quant.VectorBTGridSearchHandler(stockCode, strategyType)
 }

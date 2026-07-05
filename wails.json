@@ -1,8 +1,8 @@
 {
   "name": "blades-stock",
   "outputfilename": "blades-stock",
-  "frontend:install": "echo skip",
-  "frontend:build": "echo skip",
+  "frontend:install": "cmd /c cd .",
+  "frontend:build": "npm.cmd run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "http://localhost:5173",
   "genSettings": {

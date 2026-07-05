@@ -765,3 +765,11 @@ export function UpdateTradingRecord(arg1) {
 export function ValidateCronExpr(arg1) {
   return window['go']['main']['App']['ValidateCronExpr'](arg1);
 }
+
+export function RunVectorBacktest(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RunVectorBacktest'](arg1, arg2, arg3);
+}
+
+export function RunVectorGridSearch(arg1, arg2) {
+  return window['go']['main']['App']['RunVectorGridSearch'](arg1, arg2);
+}
