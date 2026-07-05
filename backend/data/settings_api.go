@@ -41,14 +41,17 @@ type Settings struct {
 	HttpProxy              string `json:"httpProxy"`
 	HttpProxyEnabled       bool   `json:"httpProxyEnabled"`
 	EnableAgent            bool   `json:"enableAgent"`
-	SearxngUrl             string `json:"searxngUrl"`
-	SearxngJsonFormat      bool   `json:"searxngJsonFormat"`
 	QgqpBId                string `json:"qgqpBId" gorm:"column:qgqp_b_id"`
 	IwencaiApiKey          string `json:"iwencaiApiKey" gorm:"column:iwencai_api_key"`
+	TickFlowAPIKey        string `json:"tickFlowAPIKey" gorm:"column:tickflow_api_key"`
+	AkshareServiceUrl      string `json:"akshareServiceUrl" gorm:"column:akshare_service_url"`
 	EmApiKey               string `json:"emApiKey" gorm:"column:em_api_key"`
 	WindowWidth            int    `json:"windowWidth"`
 	WindowHeight           int    `json:"windowHeight"`
-	PromptPlazaApiBase     string `json:"promptPlazaApiBase" gorm:"column:prompt_plaza_api_base"`
+	PromptPlazaApiBase     string  `json:"promptPlazaApiBase" gorm:"column:prompt_plaza_api_base"`
+	BacktestAccuracyThreshold float64 `json:"backtestAccuracyThreshold" gorm:"column:backtest_accuracy_threshold;default:5.0"`
+	BacktestVerifyDays        int64   `json:"backtestVerifyDays" gorm:"column:backtest_verify_days;default:2"`
+	BacktestEnabled           bool    `json:"backtestEnabled" gorm:"column:backtest_enabled;default:true"`
 }
 
 func (receiver Settings) TableName() string {
@@ -73,6 +76,8 @@ type AIConfig struct {
 	EmbeddingEnabled   bool    `json:"embeddingEnabled"`
 	EmbeddingModelName string  `json:"embeddingModelName"`
 	EmbeddingBaseUrl   string  `json:"embeddingBaseUrl"`
+	LLMConcurrencyLimit int    `json:"llmConcurrencyLimit"` // 并发限制，默认 2
+	SubAgentTimeout    int     `json:"subAgentTimeout"`    // 子Agent超时秒，默认 20
 }
 
 func (AIConfig) TableName() string {
@@ -88,6 +93,12 @@ func (c *AIConfig) SetDefaults() {
 	}
 	if c.TimeOut <= 0 {
 		c.TimeOut = 300
+	}
+	if c.LLMConcurrencyLimit <= 0 {
+		c.LLMConcurrencyLimit = 2
+	}
+	if c.SubAgentTimeout <= 0 {
+		c.SubAgentTimeout = 20
 	}
 }
 
@@ -322,6 +333,8 @@ func UpdateConfig(s *SettingConfig) string {
 				"qgqp_b_id":                  s.QgqpBId,
 				"iwencai_api_key":            s.IwencaiApiKey,
 				"em_api_key":                 s.EmApiKey,
+			"tickflow_api_key":           s.TickFlowAPIKey,
+			"akshare_service_url":        s.AkshareServiceUrl,
 				"window_width":               s.WindowWidth,
 				"window_height":              s.WindowHeight,
 				"prompt_plaza_api_base":      s.PromptPlazaApiBase,

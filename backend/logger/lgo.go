@@ -24,8 +24,9 @@ func InitLogger() {
 	highPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { //error级别
 		return lev >= zap.ErrorLevel
 	})
-	lowPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { //info和debug级别,debug级别是最低的
-		return lev < zap.ErrorLevel && lev >= zap.DebugLevel
+	// 将低优先级日志限制为 INFO~WARN（去除 DEBUG）
+	lowPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { //info级别及以上，排除 Debug
+		return lev < zap.ErrorLevel && lev >= zap.InfoLevel
 	})
 
 	//info文件WriteSyncer

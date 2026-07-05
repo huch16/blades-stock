@@ -292,7 +292,7 @@ func initGlobalStockIndexCacheTask() {
 	if count == 0 {
 		task := &models.CronTask{
 			Name:        "全球指数缓存",
-			CronExpr:    "0 0/5 * * * *", // 每分钟执行一次
+			CronExpr:    "0 0/5 * * * *", // 每5分钟执行一次
 			TaskType:    "global_stock_index_cache",
 			Target:      "",
 			Params:      `{"crawlTimeOut": 30}`,

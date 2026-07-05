@@ -394,7 +394,7 @@ func (a *CronTaskApi) executeStockChangeSave(ctx context.Context, task *models.C
 	logger.SugaredLogger.Infof("执行异动数据保存任务：%s", task.Name)
 
 	if !isTradingTime() {
-		logger.SugaredLogger.Info("当前不在A股交易时间，跳过异动数据保存")
+		logger.SugaredLogger.Debug("当前不在A股交易时间，跳过异动数据保存")
 		return nil
 	}
 

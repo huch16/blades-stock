@@ -1,0 +1,90 @@
+package main
+
+import (
+	"fmt"
+	"blades-stock/backend/agent"
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"os"
+)
+
+func main() {
+	// Initialize database
+	db.Init("data/stock.db")
+
+	// Initialize logger
+	logger.InitLogger()
+
+	fmt.Println("=== Backtest Test Tool ===")
+	fmt.Println()
+
+	// Create BacktestService
+	svc := agent.NewBacktestService()
+
+	// Check if there are reports needing backtest
+	needBacktest := svc.NeedBacktest()
+	fmt.Printf("Reports pending backtest: %v\n", needBacktest)
+
+	if !needBacktest {
+		fmt.Println("No reports need backtest. Checking existing results...")
+		// Show existing backtest results
+		results := svc.GetLatestBacktestResults(10)
+		if len(results) == 0 {
+			fmt.Println("No backtest results found.")
+		} else {
+			fmt.Printf("\nRecent %d backtest results:\n", len(results))
+			for _, r := range results {
+				fmt.Printf("  ID=%d, Stock=%s(%s), Direction=%s, Accurate=%v, Change=%.2f%%\n",
+					r.ReportID, r.StockCode, r.StockName, r.Direction, r.IsAccurate, r.PriceChange)
+			}
+		}
+
+		// Show overall stats
+		stats := svc.GetOverallStats()
+		fmt.Printf("\n=== Overall Backtest Statistics ===\n")
+		fmt.Printf("Total reports: %d\n", stats.TotalReports)
+		fmt.Printf("Verified reports: %d\n", stats.VerifiedCount)
+		fmt.Printf("Accurate predictions: %d\n", stats.AccurateCount)
+		fmt.Printf("Accuracy rate: %.2f%%\n", stats.AccuracyRate)
+		fmt.Printf("Average confidence: %.2f\n", stats.AvgConfidence)
+
+		os.Exit(0)
+	}
+
+	// Run backtest
+	fmt.Println("\nRunning backtest...")
+	count, err := svc.RunAllBacktests()
+	if err != nil {
+		fmt.Printf("Error running backtest: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Backtest completed: %d reports processed\n", count)
+
+	// Show results
+	results := svc.GetLatestBacktestResults(10)
+	fmt.Printf("\nRecent %d backtest results:\n", len(results))
+	for _, r := range results {
+		fmt.Printf("  ID=%d, Stock=%s(%s), Direction=%s, Accurate=%v, Change=%.2f%%\n",
+			r.ReportID, r.StockCode, r.StockName, r.Direction, r.IsAccurate, r.PriceChange)
+	}
+
+	// Show overall stats
+	stats := svc.GetOverallStats()
+	fmt.Printf("\n=== Overall Backtest Statistics ===\n")
+	fmt.Printf("Total reports: %d\n", stats.TotalReports)
+	fmt.Printf("Verified reports: %d\n", stats.VerifiedCount)
+	fmt.Printf("Accurate predictions: %d\n", stats.AccurateCount)
+	fmt.Printf("Accuracy rate: %.2f%%\n", stats.AccuracyRate)
+	fmt.Printf("Average confidence: %.2f\n", stats.AvgConfidence)
+
+	// Show direction stats
+	if len(stats.DirectionStats) > 0 {
+		fmt.Printf("\nDirection breakdown:\n")
+		for dir, ds := range stats.DirectionStats {
+			fmt.Printf("  %s: %d/%d (%.2f%%)\n", dir, ds.Accurate, ds.Count, ds.Rate)
+		}
+	}
+
+	fmt.Println("\n=== Backtest Test Completed ===")
+}

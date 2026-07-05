@@ -117,22 +117,26 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			stockAiAgent.sessionID = sessionIDOverride
 		}
 
+		// Build embedding service for both memory and skill matching
+		var embedService *EmbeddingService
+		if stockAiAgent.instance.AIConfig.EmbeddingEnabled && stockAiAgent.instance.AIConfig.EmbeddingModelName != "" {
+			embedBaseUrl := stockAiAgent.instance.AIConfig.EmbeddingBaseUrl
+			if embedBaseUrl == "" {
+				embedBaseUrl = stockAiAgent.instance.AIConfig.BaseUrl
+			}
+			embedService = NewEmbeddingService(
+				embedBaseUrl,
+				stockAiAgent.instance.AIConfig.ApiKey,
+				stockAiAgent.instance.AIConfig.EmbeddingModelName,
+			)
+		}
+
 		var memoryService *ChatMemoryService
 		var historyMessages []map[string]string
 		if memoryMode && stockAiAgent.sessionID != "" {
 			memoryService = NewChatMemoryService(stockAiAgent.sessionID, memoryCount)
-
-			if stockAiAgent.instance.AIConfig.EmbeddingEnabled && stockAiAgent.instance.AIConfig.EmbeddingModelName != "" {
-				embedBaseUrl := stockAiAgent.instance.AIConfig.EmbeddingBaseUrl
-				if embedBaseUrl == "" {
-					embedBaseUrl = stockAiAgent.instance.AIConfig.BaseUrl
-				}
-				es := NewEmbeddingService(
-					embedBaseUrl,
-					stockAiAgent.instance.AIConfig.ApiKey,
-					stockAiAgent.instance.AIConfig.EmbeddingModelName,
-				)
-				memoryService.SetEmbeddingService(es)
+			if embedService != nil {
+				memoryService.SetEmbeddingService(embedService)
 			}
 
 			var err error
@@ -150,7 +154,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if settingConfig.Prompt != "" {
 				sysPrompt = settingConfig.Prompt + "\n\n"
 			}
-			skillPrompt := buildSkillPrompt(question)
+			skillPrompt := buildSkillPrompt(question, embedService)
 			if skillPrompt != "" {
 				sysPrompt += skillPrompt + "\n\n"
 			}

@@ -37,18 +37,7 @@ func init() {
 	registerToolHandler("GetFundKLine", handleGetFundKLine)
 	registerToolHandler("GetFundHistoryNetValue", handleGetFundHistoryNetValue)
 	registerToolHandler("GetFundTop10Holdings", handleGetFundTop10Holdings)
-	registerToolHandler("QueryIwencai", handleQueryIwencai)
-	registerToolHandler("SelectAStock", handleSelectAStock)
-	registerToolHandler("SelectSector", handleSelectSector)
-	registerToolHandler("QueryMacro", handleQueryMacro)
-	registerToolHandler("QueryZhishu", handleQueryZhishu)
-	registerToolHandler("QueryEvent", handleQueryEvent)
-	registerToolHandler("SearchNews", handleSearchNews)
-	registerToolHandler("SearchInvestor", handleSearchInvestor)
-	registerToolHandler("SearchReport", handleSearchReport)
-	registerToolHandler("QueryInsResearch", handleQueryInsResearch)
-	registerToolHandler("FinanceSearch", handleFinanceSearch)
-	registerToolHandler("FinancialQA", handleFinancialQA)
+	// 问财工具已移除，改用 TickFlow API（见 backend/agent/tools/tickflow_tools.go）
 	registerToolHandler("GetStockLatestFinance", handleGetStockLatestFinance)
 	registerToolHandler("GetStockQtrMainFinance", handleGetStockQtrMainFinance)
 	registerToolHandler("GetStockOrgPredict", handleGetStockOrgPredict)
@@ -74,7 +63,7 @@ func init() {
 
 func sendToolCallLog(ctx *ToolContext, toolName, args string) {
 	ctx.Ch <- map[string]any{
-		"code":              1,
+		"code":             1,
 		"question":          ctx.Question,
 		"chatId":            ctx.StreamResponseID,
 		"model":             ctx.Model,
@@ -452,158 +441,6 @@ func handleGetFundTop10Holdings(o *OpenAi, funcArguments string, ctx *ToolContex
 	return nil
 }
 
-func handleQueryIwencai(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "QueryIwencai", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	page := gjson.Get(funcArguments, "page").Int()
-	limit := gjson.Get(funcArguments, "limit").Int()
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-	md := NewIwencaiAPI().QueryToMarkdown(query, int(page), int(limit))
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleSelectAStock(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "SelectAStock", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	page := gjson.Get(funcArguments, "page").Int()
-	limit := gjson.Get(funcArguments, "limit").Int()
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-	md := NewIwencaiAPI().QueryToMarkdown(query, int(page), int(limit))
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleSelectSector(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "SelectSector", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	page := gjson.Get(funcArguments, "page").Int()
-	limit := gjson.Get(funcArguments, "limit").Int()
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-	md := NewIwencaiAPI().QueryToMarkdown(query, int(page), int(limit))
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleQueryMacro(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "QueryMacro", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	page := gjson.Get(funcArguments, "page").Int()
-	limit := gjson.Get(funcArguments, "limit").Int()
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-	md := NewIwencaiAPI().QueryToMarkdown(query, int(page), int(limit))
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleQueryZhishu(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "QueryZhishu", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	page := gjson.Get(funcArguments, "page").Int()
-	limit := gjson.Get(funcArguments, "limit").Int()
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-	md := NewIwencaiAPI().QueryToMarkdown(query, int(page), int(limit))
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleQueryEvent(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "QueryEvent", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	page := gjson.Get(funcArguments, "page").Int()
-	limit := gjson.Get(funcArguments, "limit").Int()
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-	md := NewIwencaiAPI().QueryToMarkdown(query, int(page), int(limit))
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleSearchNews(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "SearchNews", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	md := NewIwencaiAPI().QueryToMarkdown(query, 1, 10)
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleSearchInvestor(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "SearchInvestor", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	md := NewIwencaiAPI().QueryToMarkdown(query, 1, 10)
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleSearchReport(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "SearchReport", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	md := NewIwencaiAPI().QueryToMarkdown(query, 1, 10)
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleQueryInsResearch(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "QueryInsResearch", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	page := gjson.Get(funcArguments, "page").Int()
-	limit := gjson.Get(funcArguments, "limit").Int()
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-	md := NewIwencaiAPI().QueryToMarkdown(query, int(page), int(limit))
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleFinanceSearch(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "FinanceSearch", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	md := NewIwencaiAPI().QueryToMarkdown(query, 1, 10)
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
-func handleFinancialQA(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "FinancialQA", funcArguments)
-	question := gjson.Get(funcArguments, "question").String()
-	md := NewIwencaiAPI().QueryToMarkdown(question, 1, 10)
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, md)
-	return nil
-}
-
 func handleF10ToolCall(funcName string, funcArguments string, ctx *ToolContext, fn func(string) string) error {
 	sendToolCallLog(ctx, funcName, funcArguments)
 	stockCode := gjson.Get(funcArguments, "stockCode").String()
@@ -742,8 +579,7 @@ func handleGetDailyChangeStats(o *OpenAi, funcArguments string, ctx *ToolContext
 
 func handleGetChangeRank(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 	sendToolCallLog(ctx, "GetChangeRank", funcArguments)
-	tradeDate := gjson.Get(funcArguments, "tradeDate").String()
-	_ = tradeDate
+	_ = gjson.Get(funcArguments, "tradeDate").String()
 	days := 1
 	topN := 20
 	res, _ := NewStockChangeHistoryService().GetChangeRank(days, topN)

@@ -15,6 +15,7 @@ import (
 	"blades-stock/backend/models"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -877,7 +878,7 @@ func checkUSHolidayAPI(date string) (isHoliday bool, apiOk bool) {
 func MonitorFundPrices(a *App) {
 	// 检查 A 股是否开市（基金交易时间与 A 股一致）
 	if !isTradingTime(time.Now()) {
-		logger.SugaredLogger.Debugf("当前 A 股未开市，跳过基金价格监控")
+		// logger.SugaredLogger.Debugf("当前 A 股未开市，跳过基金价格监控") // suppressed to reduce noise
 		return
 	}
 
@@ -1292,18 +1293,22 @@ func addStockFollowData(follow data.FollowedStock, stockData *data.StockInfo) {
 
 // shutdown is called at application termination
 func (a *App) shutdown(ctx context.Context) {
-	defer PanicHandler()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("[shutdown] recovered from panic: %v\n", r)
+			debug.PrintStack()
+		}
+	}()
 	// 记录当前窗口大小，供下次启动时还原
 	if a.ctx != nil {
-		if w, h := runtime.WindowGetSize(a.ctx); w > 0 && h > 0 {
+		w, h := runtime.WindowGetSize(a.ctx)
+		if w > 0 && h > 0 {
 			cfg := data.GetSettingConfig()
 			cfg.WindowWidth = w
 			cfg.WindowHeight = h
 			data.UpdateConfig(cfg)
-			//logger.SugaredLogger.Infof("save window size: %dx%d", w, h)
 		}
 	}
-	//logger.SugaredLogger.Infof("application shutdown Version:%s", Version)
 }
 
 // BatchGreet returns stock info for multiple stock codes in a single call
@@ -2492,11 +2497,11 @@ func (a *App) InitCronTasks() {
 	if !cronApi.ExistsByTaskType("stock_change_save") {
 		task := &models.CronTask{
 			Name:        "异动数据保存",
-			CronExpr:    "0 */1 * * * *",
+			CronExpr:    "0 */10 * * * *",
 			TaskType:    "stock_change_save",
 			Enable:      true,
 			Status:      "active",
-			Description: "每分钟自动保存A股异动数据（火箭发射、快速反弹、大笔买入、封涨停板等），交易时间外自动跳过",
+			Description: "每10分钟自动保存A股异动数据（火箭发射、快速反弹、大笔买入、封涨停板等），交易时间外自动跳过",
 		}
 		err := cronApi.Create(task)
 		if err != nil {

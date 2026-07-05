@@ -1,0 +1,72 @@
+// ── TickFlow API 工具 handler（替代问财）────────────────────────────
+
+func handleTickFlowKlines(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "TickFlowKlines", funcArguments)
+	symbol := gjson.Get(funcArguments, "symbol").String()
+	period := gjson.Get(funcArguments, "period").String()
+	count := int(gjson.Get(funcArguments, "count").Int())
+	adjust := gjson.Get(funcArguments, "adjust").String()
+	if symbol == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请提供symbol参数")
+		return nil
+	}
+	client := NewTickFlowClient()
+	result := client.GetKlinesAsMarkdown(symbol, period, count, adjust)
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, result)
+	return nil
+}
+
+func handleTickFlowKlinesBatch(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "TickFlowKlinesBatch", funcArguments)
+	symbolsStr := gjson.Get(funcArguments, "symbols").String()
+	period := gjson.Get(funcArguments, "period").String()
+	count := int(gjson.Get(funcArguments, "count").Int())
+	if symbolsStr == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请提供symbols参数")
+		return nil
+	}
+	symbols := strings.Split(symbolsStr, ",")
+	for i, s := range symbols {
+		symbols[i] = strings.TrimSpace(s)
+	}
+	client := NewTickFlowClient()
+	results := client.GetKlinesBatch(symbols, period, count, "")
+	var sb strings.Builder
+	for _, sym := range symbols {
+		if d, ok := results[sym]; ok && d != nil {
+			sb.WriteString(client.GetKlinesAsMarkdown(sym, period, count, ""))
+			sb.WriteString("\n\n")
+		} else {
+			sb.WriteString(fmt.Sprintf("### %s\n获取失败或无数据\n\n", sym))
+		}
+	}
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, sb.String())
+	return nil
+}
+
+func handleTickFlowUniverse(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "TickFlowUniverse", funcArguments)
+	name := gjson.Get(funcArguments, "name").String()
+	limit := int(gjson.Get(funcArguments, "limit").Int())
+	if name == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请提供name参数（标的池名称）")
+		return nil
+	}
+	client := NewTickFlowClient()
+	result := client.GetUniverseAsMarkdown(name, limit)
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, result)
+	return nil
+}
+
+func handleTickFlowInstrument(o *OpenAi, funcArguments string, ctx *ToolContext) error {
+	sendToolCallLog(ctx, "TickFlowInstrument", funcArguments)
+	symbol := gjson.Get(funcArguments, "symbol").String()
+	if symbol == "" {
+		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请提供symbol参数")
+		return nil
+	}
+	client := NewTickFlowClient()
+	result := client.GetInstrumentAsMarkdown(symbol)
+	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, result)
+	return nil
+}

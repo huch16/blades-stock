@@ -252,9 +252,12 @@ func isUnsupportedToolError(msg string) bool {
 		strings.Contains(lower, "not support") ||
 		strings.Contains(lower, "not_supported") ||
 		strings.Contains(lower, "invalid parameter") ||
+		strings.Contains(lower, "invalid params") || // MiniMax: "invalid params, function name or parameters is empty (2013)"
 		strings.Contains(lower, "unknown parameter") ||
 		strings.Contains(lower, "unrecognized") ||
-		strings.Contains(lower, "extra")
+		strings.Contains(lower, "extra") ||
+		strings.Contains(lower, "empty") || // MiniMax: "function name or parameters is empty"
+		strings.Contains(lower, "2013") // MiniMax error code for empty function name/parameters
 }
 
 func openAIChatEndpoint(baseURL string) (string, string) {

@@ -7,6 +7,7 @@ import (
 	"blades-stock/backend/logger"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1063,6 +1064,23 @@ type EmSearchNewsResult struct {
 	Content string
 }
 
+// getCodeVal 安全提取 JSON 中的 code/status，支持 float64 / string / json.Number
+func getCodeVal(v any) float64 {
+	switch val := v.(type) {
+	case float64:
+		return val
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+		if err == nil {
+			return f
+		}
+	case json.Number:
+		f, _ := val.Float64()
+		return f
+	}
+	return -1 // 未知类型，标记为异常
+}
+
 func (api *EmAPI) FinanceSearch(query string) (*EmSearchNewsResult, error) {
 	if api.getApiKey() == "" {
 		return nil, fmt.Errorf("东方财富API Key未配置，请在设置中填写em_api_key")
@@ -1088,31 +1106,49 @@ func (api *EmAPI) FinanceSearch(query string) (*EmSearchNewsResult, error) {
 		return nil, fmt.Errorf("金融资讯搜索响应解析失败: %v", err)
 	}
 
-	code, _ := raw["code"].(float64)
-	status, _ := raw["status"].(float64)
+	code := getCodeVal(raw["code"])
+	status := getCodeVal(raw["status"])
 	if (code != 0 && code != 200) || (status != 0 && status != 200) {
 		msg, _ := raw["message"].(string)
+		// 403 → 过期密钥
+		if code == 403 {
+			return nil, fmt.Errorf("东方财富 API Key 已失效，请前往 https://ai.eastmoney.com/skills 重新获取")
+		}
 		return nil, fmt.Errorf("金融资讯搜索接口返回异常: code=%.0f, status=%.0f, message=%s", code, status, msg)
 	}
 
 	content := extractSearchContent(raw)
 	if content == "" {
+		// 日志输出完整响应体方便排查
+		logger.SugaredLogger.Debugf("金融资讯搜索返回空内容，原始响应: %s", string(resp.Body()))
 		return nil, fmt.Errorf("未搜索到相关金融资讯")
 	}
 
 	return &EmSearchNewsResult{Content: content}, nil
 }
 
+// extractSearchContent 从 API 响应中提取可读文本，支持嵌套旧格式（字符串摘要）和新格式（结构化新闻数组）
 func extractSearchContent(raw map[string]any) string {
+	// 1. 从 data.key 中找字符串摘要（旧格式）
 	if data, ok := raw["data"].(map[string]any); ok {
 		for _, key := range []string{"llmSearchResponse", "searchResponse", "content", "answer", "summary"} {
 			if v, ok := data[key].(string); ok && strings.TrimSpace(v) != "" {
 				return strings.TrimSpace(v)
 			}
 		}
+
+		// 2. llmSearchResponse.data 为新闻数组（新格式）
+		if llmResp, ok := data["llmSearchResponse"].(map[string]any); ok {
+			if items, ok := llmResp["data"].([]any); ok && len(items) > 0 {
+				return formatNewsItems(items)
+			}
+		}
+
+		// 3. 递归深入
 		return extractSearchContent(data)
 	}
 
+	// 4. 顶层 key 找字符串
 	for _, key := range []string{"llmSearchResponse", "searchResponse", "content", "answer", "summary"} {
 		if v, ok := raw[key].(string); ok && strings.TrimSpace(v) != "" {
 			return strings.TrimSpace(v)
@@ -1120,6 +1156,38 @@ func extractSearchContent(raw map[string]any) string {
 	}
 
 	return ""
+}
+
+// formatNewsItems 将新闻数组格式化为 Markdown 文本
+func formatNewsItems(items []any) string {
+	var b strings.Builder
+	for i, item := range items {
+		news, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		title, _ := news["title"].(string)
+		content, _ := news["content"].(string)
+		date, _ := news["date"].(string)
+		source, _ := news["source"].(string)
+		jumpURL, _ := news["jumpUrl"].(string)
+
+		if i > 0 {
+			b.WriteString("\n\n---\n\n")
+		}
+		b.WriteString(fmt.Sprintf("### %s\n", title))
+		if source != "" {
+			b.WriteString(fmt.Sprintf("> 来源：%s | %s\n\n", source, date))
+		} else {
+			b.WriteString(fmt.Sprintf("> %s\n\n", date))
+		}
+		b.WriteString(content)
+		if jumpURL != "" {
+			b.WriteString(fmt.Sprintf("\n[阅读原文](%s)", jumpURL))
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func (api *EmAPI) FinanceSearchToMarkdown(query string) string {

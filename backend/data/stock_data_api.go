@@ -436,6 +436,7 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 	url := fmt.Sprintf(sinaStockUrl, time.Now().Unix(), codes)
 	//logger.SugaredLogger.Infof("GetStockCodeRealTimeData %s", url)
 	resp, err := receiver.client.R().
+		SetContext(context.Background()).
 		SetHeader("Host", "hq.sinajs.cn").
 		SetHeader("Referer", "https://finance.sina.com.cn/").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").

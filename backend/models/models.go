@@ -29,7 +29,7 @@ type StockChangeHistory struct {
 	Amount     float64   `json:"amount" gorm:"uniqueIndex:idx_unique_change" md:"金额"`                     // 金额
 	Industry   string    `json:"industry" gorm:"size:100" md:"所属行业"`                                      // 所属行业
 	Concept    string    `json:"concept" gorm:"size:500" md:"所属概念"`                                       // 所属概念
-	CreatedAt  time.Time `json:"createdAt" gorm:"autoCreateTime" md:"-"`
+	CreatedAt  time.Time `json:"createdAt" gorm:"autoCreateTime" md:"-" wails:"-"`
 }
 
 func (StockChangeHistory) TableName() string {
@@ -97,8 +97,8 @@ type GitHubReleaseVersion struct {
 	Name            string    `json:"name"`
 	Draft           bool      `json:"draft"`
 	Prerelease      bool      `json:"prerelease"`
-	CreatedAt       time.Time `json:"created_at"`
-	PublishedAt     time.Time `json:"published_at"`
+	CreatedAt       time.Time `json:"created_at" wails:"-"`
+	PublishedAt     time.Time `json:"published_at" wails:"-"`
 	Assets          []struct {
 		Url      string `json:"url"`
 		Id       int    `json:"id"`
@@ -130,8 +130,8 @@ type GitHubReleaseVersion struct {
 		State              string    `json:"state"`
 		Size               int       `json:"size"`
 		DownloadCount      int       `json:"download_count"`
-		CreatedAt          time.Time `json:"created_at"`
-		UpdatedAt          time.Time `json:"updated_at"`
+		CreatedAt          time.Time `json:"created_at" wails:"-"`
+		UpdatedAt          time.Time `json:"updated_at" wails:"-"`
 		BrowserDownloadUrl string    `json:"browser_download_url"`
 	} `json:"assets"`
 	TarballUrl string `json:"tarball_url"`
@@ -160,12 +160,12 @@ type Commit struct {
 	Author  struct {
 		Name  string    `json:"name"`
 		Email string    `json:"email"`
-		Date  time.Time `json:"date"`
+		Date  time.Time `json:"date" wails:"-"`
 	} `json:"author"`
 	Committer struct {
 		Name  string    `json:"name"`
 		Email string    `json:"email"`
-		Date  time.Time `json:"date"`
+		Date  time.Time `json:"date" wails:"-"`
 	} `json:"committer"`
 	Tree struct {
 		Sha string `json:"sha"`
@@ -292,7 +292,7 @@ type Resp struct {
 type Telegraph struct {
 	gorm.Model
 	Time            string          `json:"time"`
-	DataTime        *time.Time      `json:"dataTime" gorm:"index"`
+	DataTime        *time.Time      `json:"dataTime" gorm:"index" wails:"-"`
 	Title           string          `json:"title" gorm:"index"`
 	Content         string          `json:"content" gorm:"index"`
 	SubjectTags     []string        `json:"subjects" gorm:"-:all"`
@@ -590,7 +590,7 @@ type ReutersNews struct {
 			TotalSize    int    `json:"total_size"`
 			Orderby      string `json:"orderby"`
 		} `json:"pagination"`
-		DateModified time.Time `json:"date_modified"`
+		DateModified time.Time `json:"date_modified" wails:"-"`
 		FetchType    string    `json:"fetch_type"`
 		Articles     []struct {
 			Id                          string    `json:"id"`
@@ -598,8 +598,8 @@ type ReutersNews struct {
 			Website                     string    `json:"website"`
 			Web                         string    `json:"web"`
 			Native                      string    `json:"native"`
-			UpdatedTime                 time.Time `json:"updated_time"`
-			PublishedTime               time.Time `json:"published_time"`
+			UpdatedTime                 time.Time `json:"updated_time" wails:"-"`
+			PublishedTime               time.Time `json:"published_time" wails:"-"`
 			ArticleType                 string    `json:"article_type"`
 			DisplayMyNews               bool      `json:"display_my_news"`
 			DisplayNewsletterSignup     bool      `json:"display_newsletter_signup"`
@@ -646,7 +646,7 @@ type ReutersNews struct {
 				Height                int       `json:"height"`
 				Subtitle              string    `json:"subtitle"`
 				Slug                  string    `json:"slug,omitempty"`
-				UpdatedAt             time.Time `json:"updated_at"`
+				UpdatedAt             time.Time `json:"updated_at" wails:"-"`
 				Company               string    `json:"company,omitempty"`
 				PurchaseLicensingPath string    `json:"purchase_licensing_path,omitempty"`
 			} `json:"thumbnail"`
@@ -670,7 +670,7 @@ type ReutersNews struct {
 				TopicUrl    string `json:"topic_url,omitempty"`
 				Role        string `json:"role,omitempty"`
 			} `json:"authors"`
-			DisplayTime   time.Time `json:"display_time"`
+			DisplayTime   time.Time `json:"display_time" wails:"-"`
 			ThumbnailDark struct {
 				Url        string    `json:"url"`
 				Type       string    `json:"type"`
@@ -680,7 +680,7 @@ type ReutersNews struct {
 				Width      int       `json:"width"`
 				Height     int       `json:"height"`
 				Subtitle   string    `json:"subtitle"`
-				UpdatedAt  time.Time `json:"updated_at"`
+				UpdatedAt  time.Time `json:"updated_at" wails:"-"`
 			} `json:"thumbnail_dark,omitempty"`
 		} `json:"articles"`
 		Section struct {
@@ -781,7 +781,7 @@ func (b BKDict) TableName() string {
 
 type WordAnalyze struct {
 	gorm.Model
-	DataTime *time.Time `json:"dataTime" gorm:"index;autoCreateTime"`
+	DataTime *time.Time `json:"dataTime" gorm:"index;autoCreateTime" wails:"-"`
 	WordFreqWithWeight
 }
 
@@ -804,7 +804,7 @@ type SentimentResult struct {
 
 type SentimentResultAnalyze struct {
 	gorm.Model
-	DataTime *time.Time `json:"dataTime" gorm:"index;autoCreateTime"`
+	DataTime *time.Time `json:"dataTime" gorm:"index;autoCreateTime" wails:"-"`
 	SentimentResult
 }
 
@@ -976,7 +976,7 @@ type StockConceptInfo struct {
 
 type AiRecommendStocks struct {
 	gorm.Model                  `md:"-"`
-	DataTime                    *time.Time `json:"dataTime" gorm:"index;autoCreateTime" md:"推荐时间"`
+	DataTime                    *time.Time `json:"dataTime" gorm:"index;autoCreateTime" md:"推荐时间" wails:"-"`
 	ModelName                   string     `json:"modelName" md:"模型名称"`
 	Rating                      string     `json:"rating" md:"评级"`
 	StockCode                   string     `json:"stockCode" md:"股票代码"`
@@ -1411,16 +1411,16 @@ type SecuritiesCompanyOpinionData struct {
 
 type CronTask struct {
 	ID            uint       `json:"id" gorm:"primarykey"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     time.Time  `json:"updatedAt"`
+	CreatedAt     time.Time  `json:"createdAt" wails:"-"`
+	UpdatedAt     time.Time  `json:"updatedAt" wails:"-"`
 	Name          string     `json:"name" gorm:"size:255;not null"`
 	CronExpr      string     `json:"cronExpr" gorm:"size:100;not null"`
 	TaskType      string     `json:"taskType" gorm:"size:50;not null"` // stock_analysis, fund_analysis, news_fetch, custom
 	Target        string     `json:"target" gorm:"size:255"`           // 股票代码或其他目标
 	Params        string     `json:"params" gorm:"type:text"`          // JSON 格式的任务参数
 	Enable        bool       `json:"enable" gorm:"default:true"`
-	LastRunAt     *time.Time `json:"lastRunAt"`
-	NextRunAt     *time.Time `json:"nextRunAt"`
+	LastRunAt     *time.Time `json:"lastRunAt" wails:"-"`
+	NextRunAt     *time.Time `json:"nextRunAt" wails:"-"`
 	RunCount      int64      `json:"runCount" gorm:"default:0"`
 	Status        string     `json:"status" gorm:"size:20;default:active"` // active, paused, error
 	Description   string     `json:"description" gorm:"size:500"`
@@ -1456,8 +1456,8 @@ type CronTaskPageData struct {
 type AiAssistantSession struct {
 	ID        uint      `json:"id" gorm:"primarykey"`
 	SessionId string    `json:"sessionId" gorm:"index;size:64"` // 会话ID，时间戳格式
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	CreatedAt time.Time `json:"createdAt" wails:"-"`
+	UpdatedAt time.Time `json:"updatedAt" wails:"-"`
 	Messages  string    `json:"messages" gorm:"type:text"` // JSON 数组，每项 { role, content, reasoning, time, modelName }
 }
 
@@ -1548,7 +1548,7 @@ type MarketStatistic struct {
 	ShDownCount   int       `json:"shDownCount"`                   // 上海下跌家数
 	SzUpCount     int       `json:"szUpCount"`                     // 深圳上涨家数
 	SzDownCount   int       `json:"szDownCount"`                   // 深圳下跌家数
-	CreatedAt     time.Time `json:"createdAt" gorm:"autoCreateTime"`
+	CreatedAt     time.Time `json:"createdAt" gorm:"autoCreateTime" wails:"-"`
 }
 
 func (MarketStatistic) TableName() string {
@@ -1557,8 +1557,8 @@ func (MarketStatistic) TableName() string {
 
 type MCPServer struct {
 	ID          uint      `json:"id" gorm:"primarykey"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	CreatedAt   time.Time `json:"createdAt" wails:"-"`
+	UpdatedAt   time.Time `json:"updatedAt" wails:"-"`
 	Name        string    `json:"name" gorm:"size:255;not null"`
 	Description string    `json:"description" gorm:"size:500"`
 	URL         string    `json:"url" gorm:"size:500"`
@@ -1591,8 +1591,8 @@ type MCPServerPageResp struct {
 
 type MCPServerTool struct {
 	ID           uint      `json:"id" gorm:"primarykey"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	CreatedAt    time.Time `json:"createdAt" wails:"-"`
+	UpdatedAt    time.Time `json:"updatedAt" wails:"-"`
 	MCPServerID  uint      `json:"mcpServerId" gorm:"index;not null"`
 	ToolName     string    `json:"toolName" gorm:"size:255;not null"`
 	Description  string    `json:"description" gorm:"type:text"`
@@ -1605,12 +1605,15 @@ func (MCPServerTool) TableName() string {
 
 type Skill struct {
 	ID              uint      `json:"id" gorm:"primarykey"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	CreatedAt       time.Time `json:"createdAt" wails:"-"`
+	UpdatedAt       time.Time `json:"updatedAt" wails:"-"`
 	Name            string    `json:"name" gorm:"size:255;not null"`
 	Description     string    `json:"description" gorm:"size:500"`
 	Category        string    `json:"category" gorm:"size:50"`
 	SystemPrompt    string    `json:"systemPrompt" gorm:"type:text"`
+	// Directive is a short (~800 char) summary of SystemPrompt, used for bge-m3 embedding.
+	// Stored separately to avoid storing large duplicated content.
+	Directive       string    `json:"directive" gorm:"type:text"`
 	Examples        string    `json:"examples" gorm:"type:text"`
 	TriggerKeywords string    `json:"triggerKeywords" gorm:"size:500"`
 	MCPServerIDs    string    `json:"mcpServerIds" gorm:"size:500"`
@@ -1637,8 +1640,8 @@ type SkillPageResp struct {
 
 type CustomStrategy struct {
 	ID          uint      `json:"id" gorm:"primarykey"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	CreatedAt   time.Time `json:"createdAt" wails:"-"`
+	UpdatedAt   time.Time `json:"updatedAt" wails:"-"`
 	Name        string    `json:"name" gorm:"size:255;not null"`
 	Query       string    `json:"query" gorm:"type:text;not null"`
 	Description string    `json:"description" gorm:"size:500"`
@@ -1670,7 +1673,7 @@ type BKFundFlow struct {
 	Name      string    `json:"name" gorm:"size:50"`                            // 板块名称
 	NetInflow int64     `json:"netInflow"`                                      // 主力净流入金额（元）
 	SnapTime  string    `json:"snapTime" gorm:"size:19;index:idx_bk_code_time"` // 快照时间 YYYY-MM-DD HH:MM:SS
-	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime"`
+	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime" wails:"-"`
 }
 
 func (BKFundFlow) TableName() string {
@@ -1690,7 +1693,7 @@ type ConceptFundFlow struct {
 	Name      string    `json:"name" gorm:"size:50"`                                 // 概念名称
 	NetInflow int64     `json:"netInflow"`                                           // 主力净流入金额（元）
 	SnapTime  string    `json:"snapTime" gorm:"size:19;index:idx_concept_code_time"` // 快照时间 YYYY-MM-DD HH:MM:SS
-	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime"`
+	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime" wails:"-"`
 }
 
 func (ConceptFundFlow) TableName() string {
@@ -1699,8 +1702,8 @@ func (ConceptFundFlow) TableName() string {
 
 type ProjectAnalysis struct {
 	ID           uint      `json:"id" gorm:"primarykey"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	CreatedAt    time.Time `json:"createdAt" wails:"-"`
+	UpdatedAt    time.Time `json:"updatedAt" wails:"-"`
 	SourceURL    string    `json:"sourceUrl" gorm:"size:500"`              // git clone URL or local path
 	LocalPath    string    `json:"localPath" gorm:"size:500"`              // 本地存储路径
 	Name         string    `json:"name" gorm:"size:255;not null"`          // 项目名
@@ -1723,7 +1726,7 @@ func (ProjectAnalysis) TableName() string {
 
 type CodeChunk struct {
 	ID                uint      `json:"id" gorm:"primarykey"`
-	CreatedAt         time.Time `json:"createdAt"`
+	CreatedAt         time.Time `json:"createdAt" wails:"-"`
 	ProjectAnalysisID uint      `json:"projectAnalysisId" gorm:"index"`
 	FilePath          string    `json:"filePath" gorm:"size:500"`
 	Content           string    `json:"content" gorm:"type:text"`

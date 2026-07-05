@@ -84,7 +84,7 @@ func (sg *SkillGenerator) buildSkillRecord(req *SkillGenerationRequest) *models.
 	}
 	skillName := fmt.Sprintf("%s 专家助手", name)
 
-	description := fmt.Sprintf("你精通 %s 项目的架构设计、代码实现和技术细节", name)
+	description := fmt.Sprintf("你是一位精通 %s 的资深工程师，深入理解其架构设计、核心实现和技术选型。你可以帮助用户理解代码、定位问题、规划改进。", name)
 	if req.Description != "" {
 		description = req.Description
 	}

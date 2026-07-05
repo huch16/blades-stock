@@ -33,34 +33,11 @@ func registerToolHandler(name string, handler ToolHandler) {
 // toolRequiredKey 工具名与所需 API Key 类型的映射
 // key 为工具名，value 为所需的 API Key 类型标识
 var toolRequiredKey = map[string]string{
-	// IwencaiApiKey 依赖的工具（同花顺问财）
-	"QueryIwencai":          "IwencaiApiKey",
-	"SearchReport":          "IwencaiApiKey",
-	"QueryInsResearch":      "IwencaiApiKey",
-	"QueryZhishu":           "IwencaiApiKey",
-	"QueryEvent":            "IwencaiApiKey",
-	"SearchNews":            "IwencaiApiKey",
-	"SearchInvestor":        "IwencaiApiKey",
-	"SelectAStock":          "IwencaiApiKey",
-	"QueryMacro":            "IwencaiApiKey",
-	"SelectSector":          "IwencaiApiKey",
-	"QueryBasicInfo":        "IwencaiApiKey",
-	"QueryFinance":          "IwencaiApiKey",
-	"QueryIndustry":         "IwencaiApiKey",
-	"QueryFutures":          "IwencaiApiKey",
-	"SelectETF":             "IwencaiApiKey",
-	"QueryManagement":       "IwencaiApiKey",
-	"QueryStockConnect":     "IwencaiApiKey",
-	"SelectFundManager":     "IwencaiApiKey",
-	"SelectConvertibleBond": "IwencaiApiKey",
-	"SelectFundCompany":     "IwencaiApiKey",
-	"SelectFund":            "IwencaiApiKey",
-	"SelectFuturesOption":   "IwencaiApiKey",
-	"SelectHKStock":         "IwencaiApiKey",
-	"SelectUSStock":         "IwencaiApiKey",
-	"QueryFundFinance":      "IwencaiApiKey",
-	"QueryBusinessData":     "IwencaiApiKey",
-	"SearchAnnouncement":    "IwencaiApiKey",
+	// TickFlowAPIKey 依赖的工具（替代同花顺问财）
+	"TickFlowKlines":      "TickFlowAPIKey",
+	"TickFlowKlinesBatch": "TickFlowAPIKey",
+	"TickFlowUniverse":    "TickFlowAPIKey",
+	"TickFlowInstrument":  "TickFlowAPIKey",
 
 	// EmApiKey 依赖的工具（东方财富妙想）
 	"StockEarningsReview":       "EmApiKey",
@@ -89,8 +66,8 @@ func isApiKeyConfigured(keyType string) bool {
 		return false
 	}
 	switch keyType {
-	case "IwencaiApiKey":
-		return strings.TrimSpace(config.IwencaiApiKey) != ""
+	case "TickFlowAPIKey":
+		return strings.TrimSpace(config.TickFlowAPIKey) != ""
 	case "EmApiKey":
 		return strings.TrimSpace(config.EmApiKey) != ""
 	case "QgqpBId":

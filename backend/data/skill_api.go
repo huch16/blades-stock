@@ -27,6 +27,7 @@ func (a *SkillApi) Update(skill *models.Skill) error {
 		"description":      skill.Description,
 		"category":         skill.Category,
 		"system_prompt":    skill.SystemPrompt,
+		"directive":        skill.Directive,
 		"examples":         skill.Examples,
 		"trigger_keywords": skill.TriggerKeywords,
 		"mcp_server_ids":   skill.MCPServerIDs,

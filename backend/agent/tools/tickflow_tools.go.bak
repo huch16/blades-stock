@@ -1,0 +1,135 @@
+package tools
+
+import (
+	"fmt"
+	"strings"
+
+	"blades-stock/backend/data"
+	bladesTools "github.com/go-kratos/blades/tools"
+)
+
+// ── TickFlow K 线查询 ─────────────────────────────────────────────────────
+// 替代原同花顺问财的行情数据查询，稳定无 Cookie 过期问题。
+
+func init() {
+	// 1. TickFlow 历史 K 线查询（日线/周线/月线/分钟线）
+	RegisterTool("TickFlowKlines",
+		bladesTools.NewTool(
+			"TickFlowKlines",
+			"TickFlow 历史K线查询。获取A股/港股/美股/ETF的历史K线数据（开高低收量额），支持复权、多周期。数据来源于 TickFlow 正规 API，稳定无 Cookie 过期问题。常用于获取个股/ETF 历史价格数据、计算技术指标等场景。",
+			func(query string, period string, count int, adjust string) string {
+				// query: 标的代码，如 "600000.SH", "000001.SZ", "600519.SH"
+				// period: "1d"(日线),"1w"(周线),"1M"(月线),"5m","15m","30m","60m"
+				// count:  返回多少根K线（日线最多10000，分钟线视付费档位）
+				// adjust: 复权方式，"forward"(前复权),"backward"(后复权),"none"(不复权)，留空默认前复权
+				symbol := strings.TrimSpace(query)
+				if symbol == "" {
+					return "请提供标的代码，例如：600000.SH"
+				}
+				if period == "" {
+					period = "1d"
+				}
+				if count <= 0 {
+					count = 200
+				}
+				return data.NewTickFlowClient().GetKlinesAsMarkdown(symbol, period, count, adjust)
+			},
+		))
+
+	// 2. TickFlow 批量 K 线查询（多标的）
+	RegisterTool("TickFlowKlinesBatch",
+		bladesTools.NewTool(
+			"TickFlowKlinesBatch",
+			"TickFlow 批量K线查询。同时获取多只股票/ETF的历史K线数据，用于批量回测、批量计算指标等场景。传入逗号分隔的标的代码列表。",
+			func(symbols string, period string, count int, adjust string) string {
+				symList := parseSymbolList(symbols)
+				if len(symList) == 0 {
+					return "请提供标的代码列表，逗号分隔，例如：600000.SH,000001.SZ,600519.SH"
+				}
+				if period == "" {
+					period = "1d"
+				}
+				if count <= 0 {
+					count = 200
+				}
+
+				client := data.NewTickFlowClient()
+				results := client.GetKlinesBatch(symList, period, count, adjust)
+
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("### TickFlow 批量K线（%s，%d 只标的）\n\n", period, len(symList)))
+				for _, sym := range symList {
+					if d, ok := results[sym]; ok && d != nil && len(d.Timestamp) > 0 {
+						latest := len(d.Timestamp) - 1
+						ts := ""
+						if d.Timestamp[latest] > 0 {
+							ts = fmt.Sprintf("%d", d.Timestamp[latest])
+						}
+						sb.WriteString(fmt.Sprintf("- %s: 最新收盘 %.2f（%s）✅\n", sym, d.Close[latest], ts))
+					} else {
+						sb.WriteString(fmt.Sprintf("- %s: ❌ 无数据\n", sym))
+					}
+				}
+				sb.WriteString("\n> 数据来源: TickFlow API\n")
+				return sb.String()
+			},
+		))
+
+	// 3. TickFlow 标的池查询（全市场股票列表）
+	RegisterTool("TickFlowUniverse",
+		bladesTools.NewTool(
+			"TickFlowUniverse",
+			"TickFlow 标的池查询。获取指定市场的全部标的代码列表，支持 A 股（CN_Equity_A）、北交所（CN_Equity_BJ）、港股（HK_Equity）、美股（US_Equity）、ETF（CN_ETF）等。常用于全市场扫描、批量筛选前获取标的列表。",
+			func(universe string) string {
+				// universe: "CN_Equity_A"(沪深A股),"CN_Equity_BJ"(北交所),"HK_Equity"(港股),"US_Equity"(美股),"CN_ETF"(A股ETF)
+				if universe == "" {
+					universe = "CN_Equity_A"
+				}
+				return data.NewTickFlowClient().GetUniverseAsMarkdown(universe, 50)
+			},
+		))
+
+	// 4. TickFlow 标的基本信息
+	RegisterTool("TickFlowInstrument",
+		bladesTools.NewTool(
+			"TickFlowInstrument",
+			"TickFlow 标的信息查询。获取单只股票/ETF/指数的基本信息，包括名称、市场、类型、上市日期、所属行业等。",
+			func(symbol string) string {
+				symbol = strings.TrimSpace(symbol)
+				if symbol == "" {
+					return "请提供标的代码，例如：600000.SH"
+				}
+				return data.NewTickFlowClient().GetInstrumentAsMarkdown(symbol)
+			},
+		))
+}
+
+// parseSymbolList 解析逗号/空格/换行分隔的标的代码列表
+func parseSymbolList(input string) []string {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return nil
+	}
+	// 尝试逗号分隔
+	parts := strings.Split(input, ",")
+	if len(parts) > 1 {
+		result := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				result = append(result, p)
+			}
+		}
+		return result
+	}
+	// 尝试空格分隔
+	parts = strings.Fields(input)
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
+}

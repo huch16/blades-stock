@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"blades-stock/backend/db"
 	"blades-stock/backend/models"
@@ -13,26 +14,69 @@ func main() {
 
 	tushareToken := "dca1afb47b186d365ea451cd07e61806ea3d98a82abfc7839a568dbd"
 
-	// 更新 悟道数据 -> available
-	db.Dao.Model(&models.MCPServer{}).Where("name = ?", "悟道数据").Update("status", "available")
+	wudaoHeaders, _ := json.Marshal(map[string]string{
+		"Authorization": "Bearer lb_e5b90ef9a52baf4ccaff18106c190d3f2907dd036f0dd50d2ed547a2be664d8d",
+	})
 
-	// 配置 smart-financial-mcp
+	var wdCount int64
+	if err := db.Dao.Model(&models.MCPServer{}).Where("name = ?", "悟道数据").Count(&wdCount).Error; err != nil {
+		fmt.Fprintf(os.Stderr, "查询 悟道数据 失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	if wdCount > 0 {
+		if err := db.Dao.Model(&models.MCPServer{}).Where("name = ?", "悟道数据").Updates(map[string]any{
+			"url":         "https://stock.quicktiny.cn/api/mcp",
+			"headers":     string(wudaoHeaders),
+			"type":        "",
+			"enable":      true,
+			"status":      "untested",
+			"description": "悟道A股MCP数据服务，提供股票行情、财务数据、市场分析等工具",
+		}).Error; err != nil {
+			fmt.Fprintf(os.Stderr, "更新 悟道数据 失败: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("[OK] 悟道数据 已更新 URL/Headers")
+	} else {
+		server := models.MCPServer{
+			Name:        "悟道数据",
+			Description: "悟道A股MCP数据服务，提供股票行情、财务数据、市场分析等工具",
+			URL:         "https://stock.quicktiny.cn/api/mcp",
+			Headers:     string(wudaoHeaders),
+			Type:        "",
+			Enable:      true,
+			Status:      "untested",
+		}
+		if err := db.Dao.Create(&server).Error; err != nil {
+			fmt.Fprintf(os.Stderr, "创建 悟道数据 失败: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("[OK] 悟道数据 已添加，ID=%d\n", server.ID)
+	}
+
 	env, _ := json.Marshal(map[string]string{
 		"TUSHARE_TOKEN": tushareToken,
 	})
 
-	var count int64
-	db.Dao.Model(&models.MCPServer{}).Where("name = ?", "smart-financial-mcp").Count(&count)
-	if count > 0 {
-		db.Dao.Model(&models.MCPServer{}).Where("name = ?", "smart-financial-mcp").Updates(map[string]any{
+	var sfCount int64
+	if err := db.Dao.Model(&models.MCPServer{}).Where("name = ?", "smart-financial-mcp").Count(&sfCount).Error; err != nil {
+		fmt.Fprintf(os.Stderr, "查询 smart-financial-mcp 失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	if sfCount > 0 {
+		if err := db.Dao.Model(&models.MCPServer{}).Where("name = ?", "smart-financial-mcp").Updates(map[string]any{
 			"env":    string(env),
 			"status": "available",
-		})
-		fmt.Println("smart-financial-mcp 已更新 Token")
+		}).Error; err != nil {
+			fmt.Fprintf(os.Stderr, "更新 smart-financial-mcp 失败: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("[OK] smart-financial-mcp 已更新 Token")
 	} else {
 		server := models.MCPServer{
 			Name:        "smart-financial-mcp",
-			Description: "基于 Tushare Pro 的智能股票数据 MCP 服务器，提供行情、财务、指标等数据查询",
+			Description: "基于 Tushare Pro 的智能股票数据 MCP 服务器",
 			Type:        "stdio",
 			Command:     "uvx",
 			Args:        `["smart-financial-mcp"]`,
@@ -41,11 +85,12 @@ func main() {
 			Status:      "available",
 		}
 		if err := db.Dao.Create(&server).Error; err != nil {
-			fmt.Printf("创建 smart-financial-mcp 失败: %v\n", err)
-			return
+			fmt.Fprintf(os.Stderr, "创建 smart-financial-mcp 失败: %v\n", err)
+			os.Exit(1)
 		}
-		fmt.Printf("smart-financial-mcp 已添加，ID=%d\n", server.ID)
+		fmt.Printf("[OK] smart-financial-mcp 已添加，ID=%d\n", server.ID)
 	}
 
-	fmt.Println("配置完成！重启 blades-stock 后生效")
+	fmt.Println("\n配置完成！重启 blades-stock 后生效")
+	fmt.Println("提示: 启动后在 研究中心 → MCP服务 中点击 \"测试\" 验证连接")
 }

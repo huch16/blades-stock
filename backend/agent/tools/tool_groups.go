@@ -1,4 +1,4 @@
-package tools
+﻿package tools
 
 import (
 	"strings"
@@ -112,7 +112,7 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetStockHistoryMoneyData":    GroupMoneyFlow,
 	"GetIndustryMoneyRank":        GroupMoneyFlow,
 	"QueryStockNewsTool":          GroupNewsResearch,
-	"WebSearch":                   GroupNewsResearch,
+	// WebSearch intentionally omitted from toolGroupMap — always available to all questions
 	"FetchWebPage":                GroupNewsResearch,
 	"GetNewsListData":             GroupNewsResearch,
 	"GetStockResearchReport":      GroupNewsResearch,
@@ -153,6 +153,19 @@ var toolGroupMap = map[string]ToolGroup{
 	"SearchProjectFiles": GroupProject,
 	"GitOperation":       GroupProject,
 	"LearnProject":       GroupProject,
+
+	// AKShare 工具（走本地 AKShare 服务）
+	"GetAkshareFuturesSpot":      GroupMarket,
+	"GetAkshareETFSpot":          GroupMarket,
+	"GetAkshareBoardConcept":     GroupMarket,
+	"GetAkshareBoardIndustry":    GroupMarket,
+	"GetAkshareMacroCPI":        GroupMarket,
+	"GetAkshareMacroGDP":         GroupMarket,
+	"GetAkshareMacroPMI":         GroupMarket,
+	"GetAkshareMacroMoneySupply": GroupMarket,
+	"GetAkshareLongHuToday":      GroupMarket,
+	"GetAkshareConvertibleBondSpot": GroupMarket,
+	"CallAkshareFunction":        GroupMarket,
 }
 
 type groupKeywords struct {

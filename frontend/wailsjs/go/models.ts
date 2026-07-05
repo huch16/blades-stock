@@ -20,6 +20,8 @@ export namespace data {
 	    embeddingEnabled: boolean;
 	    embeddingModelName: string;
 	    embeddingBaseUrl: string;
+	    llmConcurrencyLimit: number;
+	    subAgentTimeout: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AIConfig(source);
@@ -44,6 +46,8 @@ export namespace data {
 	        this.embeddingEnabled = source["embeddingEnabled"];
 	        this.embeddingModelName = source["embeddingModelName"];
 	        this.embeddingBaseUrl = source["embeddingBaseUrl"];
+	        this.llmConcurrencyLimit = source["llmConcurrencyLimit"];
+	        this.subAgentTimeout = source["subAgentTimeout"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -910,10 +914,10 @@ export namespace data {
 	    httpProxy: string;
 	    httpProxyEnabled: boolean;
 	    enableAgent: boolean;
-	    searxngUrl: string;
-	    searxngJsonFormat: boolean;
 	    qgqpBId: string;
 	    iwencaiApiKey: string;
+	    tickFlowAPIKey: string;
+	    akshareServiceUrl: string;
 	    emApiKey: string;
 	    windowWidth: number;
 	    windowHeight: number;
@@ -954,10 +958,10 @@ export namespace data {
 	        this.httpProxy = source["httpProxy"];
 	        this.httpProxyEnabled = source["httpProxyEnabled"];
 	        this.enableAgent = source["enableAgent"];
-	        this.searxngUrl = source["searxngUrl"];
-	        this.searxngJsonFormat = source["searxngJsonFormat"];
 	        this.qgqpBId = source["qgqpBId"];
 	        this.iwencaiApiKey = source["iwencaiApiKey"];
+	        this.tickFlowAPIKey = source["tickFlowAPIKey"];
+	        this.akshareServiceUrl = source["akshareServiceUrl"];
 	        this.emApiKey = source["emApiKey"];
 	        this.windowWidth = source["windowWidth"];
 	        this.windowHeight = source["windowHeight"];
@@ -2727,6 +2731,7 @@ export namespace models {
 	    description: string;
 	    category: string;
 	    systemPrompt: string;
+	    directive: string;
 	    examples: string;
 	    triggerKeywords: string;
 	    mcpServerIds: string;
@@ -2746,6 +2751,7 @@ export namespace models {
 	        this.description = source["description"];
 	        this.category = source["category"];
 	        this.systemPrompt = source["systemPrompt"];
+	        this.directive = source["directive"];
 	        this.examples = source["examples"];
 	        this.triggerKeywords = source["triggerKeywords"];
 	        this.mcpServerIds = source["mcpServerIds"];

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/data"
@@ -294,24 +295,36 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 	})
 }
 
-func buildSkillPrompt(question string) string {
+// buildSkillPrompt uses bge-m3 semantic matching (via EmbeddingService) to select relevant skills.
+// When EmbeddingService is nil or skill has no Directive, falls back to keyword + full SystemPrompt.
+// Target prompt size: ~800 chars per skill (Directive mode), ~2000+ chars (full SystemPrompt mode).
+func buildSkillPrompt(question string, embedSvc *EmbeddingService) string {
 	skills := data.NewSkillApi().GetEnabledSkills()
 	if len(skills) == 0 {
 		return ""
 	}
 
 	var matched []models.Skill
-	for _, skill := range skills {
-		if skill.TriggerKeywords == "" {
-			matched = append(matched, skill)
-			continue
-		}
-		keywords := strings.Split(skill.TriggerKeywords, ",")
-		for _, kw := range keywords {
-			kw = strings.TrimSpace(kw)
-			if kw != "" && strings.Contains(question, kw) {
+	if embedSvc != nil {
+		// bge-m3 semantic matching
+		skillEmbedSvc := GetSkillEmbeddingService(embedSvc)
+		matched = skillEmbedSvc.MatchSkills(question, 3)
+	}
+
+	// Fallback: keyword match
+	if len(matched) == 0 {
+		for _, skill := range skills {
+			if skill.TriggerKeywords == "" {
 				matched = append(matched, skill)
-				break
+				continue
+			}
+			keywords := strings.Split(skill.TriggerKeywords, ",")
+			for _, kw := range keywords {
+				kw = strings.TrimSpace(kw)
+				if kw != "" && strings.Contains(question, kw) {
+					matched = append(matched, skill)
+					break
+				}
 			}
 		}
 	}
@@ -327,7 +340,10 @@ func buildSkillPrompt(question string) string {
 		if skill.Description != "" {
 			sb.WriteString(fmt.Sprintf("描述：%s\n", skill.Description))
 		}
-		if skill.SystemPrompt != "" {
+		// Priority: Directive (short ~800 chars) > SystemPrompt (full)
+		if skill.Directive != "" {
+			sb.WriteString(fmt.Sprintf("【规则指令】\n%s\n", skill.Directive))
+		} else if skill.SystemPrompt != "" {
 			sb.WriteString(fmt.Sprintf("【规则指令】\n%s\n", skill.SystemPrompt))
 		}
 		if skill.TriggerKeywords != "" {
@@ -359,6 +375,8 @@ func GetAllTools() []bladesTools.Tool {
 	allTools = append(allTools, tools.GetBacktestStatsTool())
 	allTools = append(allTools, tools.GetBacktestDetailTool())
 	allTools = append(allTools, tools.GetRunBacktestTool())
+	allTools = append(allTools, tools.GetVectorBacktestTool())
+	allTools = append(allTools, tools.GetVectorGridSearchTool())
 
 	mcpTools := getMCPTools()
 	if len(mcpTools) > 0 {
@@ -387,6 +405,8 @@ func getToolsByQuestion(question string) []bladesTools.Tool {
 	allTools = append(allTools, tools.GetBacktestStatsTool())
 	allTools = append(allTools, tools.GetBacktestDetailTool())
 	allTools = append(allTools, tools.GetRunBacktestTool())
+	allTools = append(allTools, tools.GetVectorBacktestTool())
+	allTools = append(allTools, tools.GetVectorGridSearchTool())
 
 	mcpTools := getMCPTools()
 	if len(mcpTools) > 0 {
@@ -496,12 +516,56 @@ func getMCPTools() []bladesTools.Tool {
 		}
 
 		if len(toolList) > 0 {
-			logger.SugaredLogger.Infof("从MCP服务器 [%s] 加载了 %d 个工具", server.Name, len(toolList))
+			// tushareMcp: 仅加载白名单工具，避免 LLM 乱试权限不足的接口
+			if server.Name == "tushareMcp" {
+				allowed := data.TushareAllowListMap()
+				filtered := make([]bladesTools.Tool, 0, len(toolList))
+				for _, t := range toolList {
+					if allowed[t.Name()] {
+						filtered = append(filtered, t)
+					}
+				}
+				toolList = filtered
+				logger.SugaredLogger.Infof("从MCP服务器 [%s] 白名单过滤后加载了 %d/%d 个工具", server.Name, len(toolList), len(toolList))
+			} else {
+				logger.SugaredLogger.Infof("从MCP服务器 [%s] 加载了 %d 个工具", server.Name, len(toolList))
+			}
+			// Wrap MCP handlers to return errors as tool responses, not Go errors.
+			// This prevents MCP tool call failures from killing the entire sub-agent.
+			for i := range toolList {
+				toolList[i] = wrapMCPToolHandler(toolList[i], server.Name)
+			}
 			mcpTools = append(mcpTools, toolList...)
 		}
 	}
 
 	return mcpTools
+}
+
+// wrapMCPToolHandler wraps an MCP tool's handler to return call errors as structured JSON
+// responses instead of propagating them as Go errors. This prevents a single bad MCP tool call
+// from killing the entire sub-agent (the LLM sees the error text and can retry or switch tools).
+func wrapMCPToolHandler(original bladesTools.Tool, serverName string) bladesTools.Tool {
+	return bladesTools.NewTool(
+		original.Name(),
+		original.Description(),
+		bladesTools.HandleFunc(func(ctx context.Context, input string) (string, error) {
+			result, err := original.Handle(ctx, input)
+			if err != nil {
+				errMsg := fmt.Sprintf("⚠️ MCP [%s] 工具调用失败: %v", serverName, err)
+				logger.SugaredLogger.Warnf("MCP工具错误 [%s/%s]: %v", serverName, original.Name(), err)
+				errResp, _ := json.Marshal(map[string]interface{}{
+					"error":   true,
+					"message": errMsg,
+					"tool":    original.Name(),
+				})
+				return string(errResp), nil
+			}
+			return result, nil
+		}),
+		bladesTools.WithInputSchema(original.InputSchema()),
+		bladesTools.WithOutputSchema(original.OutputSchema()),
+	)
 }
 
 func parseMCPArgs(argsStr string) []string {

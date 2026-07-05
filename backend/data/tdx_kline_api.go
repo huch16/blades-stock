@@ -128,6 +128,19 @@ func (t *TdxKLineApi) reconnectMACEx() error {
 	return nil
 }
 
+// tdxRetryDelay sleeps with exponential backoff before a retry attempt.
+// attempt=0 returns immediately, attempt=1 → 1s, attempt=2 → 2s, attempt=3 → 4s, capped at 8s.
+func tdxRetryDelay(attempt int) {
+	if attempt <= 0 {
+		return
+	}
+	d := time.Duration(1<<uint(attempt-1)) * time.Second
+	if d > 8*time.Second {
+		d = 8 * time.Second
+	}
+	time.Sleep(d)
+}
+
 func tdxMarketFromStockCode(stockCode string) (uint8, string) {
 	code := strings.ToUpper(strings.TrimSpace(stockCode))
 	if strings.Contains(code, ".") {
@@ -255,15 +268,26 @@ func (t *TdxKLineApi) GetCallAuction(stockCode string, start uint32, count uint3
 
 	if err != nil {
 		logger.SugaredLogger.Warnf("TdxKLine StockAuction error: %v, reconnecting...", err)
-		if reconnectErr := t.reconnect(); reconnectErr != nil {
-			logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", reconnectErr)
-			return result
+		for attempt := 1; attempt <= 3; attempt++ {
+			if err := t.reconnect(); err != nil {
+				logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", err)
+				if attempt < 3 {
+					tdxRetryDelay(attempt)
+					continue
+				}
+				return result
+			}
+			t.mu.Lock()
+			list, err = t.client.StockAuction(market, code, start, count)
+			t.mu.Unlock()
+			if err == nil {
+				break
+			}
+			logger.SugaredLogger.Warnf("TdxKLine StockAuction retry #%d error: %v", attempt+1, err)
+			tdxRetryDelay(attempt)
 		}
-		t.mu.Lock()
-		list, err = t.client.StockAuction(market, code, start, count)
-		t.mu.Unlock()
 		if err != nil {
-			logger.SugaredLogger.Errorf("TdxKLine StockAuction retry error: %v", err)
+			logger.SugaredLogger.Errorf("TdxKLine StockAuction exhaust retry: %v", err)
 			return result
 		}
 	}
@@ -336,15 +360,26 @@ func (t *TdxKLineApi) GetKLineData(stockCode string, klt string, limit int) *[]K
 
 	if err != nil {
 		logger.SugaredLogger.Warnf("TdxKLine StockKLine error: %v, reconnecting...", err)
-		if reconnectErr := t.reconnect(); reconnectErr != nil {
-			logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", reconnectErr)
-			return result
+		for attempt := 1; attempt <= 3; attempt++ {
+			if err := t.reconnect(); err != nil {
+				logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", err)
+				if attempt < 3 {
+					tdxRetryDelay(attempt)
+					continue
+				}
+				return result
+			}
+			t.mu.Lock()
+			bars, err = t.client.StockKLine(uint16(klineType), market, code, 0, uint16(fetchCount), 0, types.AdjustQFQ)
+			t.mu.Unlock()
+			if err == nil {
+				break
+			}
+			logger.SugaredLogger.Warnf("TdxKLine StockKLine retry #%d error: %v", attempt+1, err)
+			tdxRetryDelay(attempt)
 		}
-		t.mu.Lock()
-		bars, err = t.client.StockKLine(uint16(klineType), market, code, 0, uint16(fetchCount), 0, types.AdjustQFQ)
-		t.mu.Unlock()
 		if err != nil {
-			logger.SugaredLogger.Errorf("TdxKLine StockKLine retry error: %v", err)
+			logger.SugaredLogger.Errorf("TdxKLine StockKLine exhaust retry: %v", err)
 			return result
 		}
 	}
@@ -462,15 +497,26 @@ func (t *TdxKLineApi) getMACMainKLineDataEx(stockCode string, klt string, limit 
 
 	if err != nil {
 		logger.SugaredLogger.Warnf("TdxKLine MACSymbolBars error: %v, reconnecting...", err)
-		if reconnectErr := t.reconnectMAC(); reconnectErr != nil {
-			logger.SugaredLogger.Errorf("TdxKLine reconnectMAC error: %v", reconnectErr)
-			return result
+		for attempt := 1; attempt <= 3; attempt++ {
+			if err := t.reconnectMAC(); err != nil {
+				logger.SugaredLogger.Errorf("TdxKLine reconnectMAC error: %v", err)
+				if attempt < 3 {
+					tdxRetryDelay(attempt)
+					continue
+				}
+				return result
+			}
+			t.macMu.Lock()
+			bars, err = t.macClient.MACSymbolBars(market, code, uint16(klineType), 1, 0, fetchCount, types.AdjustQFQ)
+			t.macMu.Unlock()
+			if err == nil {
+				break
+			}
+			logger.SugaredLogger.Warnf("TdxKLine MACSymbolBars retry #%d error: %v", attempt+1, err)
+			tdxRetryDelay(attempt)
 		}
-		t.macMu.Lock()
-		bars, err = t.macClient.MACSymbolBars(market, code, uint16(klineType), 1, 0, fetchCount, types.AdjustQFQ)
-		t.macMu.Unlock()
 		if err != nil {
-			logger.SugaredLogger.Errorf("TdxKLine MACSymbolBars retry error: %v", err)
+			logger.SugaredLogger.Errorf("TdxKLine MACSymbolBars exhaust retry: %v", err)
 			return result
 		}
 	}
@@ -570,15 +616,26 @@ func (t *TdxKLineApi) getMACExKLineData(market uint8, code string, klt string, l
 
 	if err != nil {
 		logger.SugaredLogger.Warnf("TdxKLine MACEx ExKLine2 error: %v, reconnecting...", err)
-		if reconnectErr := t.reconnectMACEx(); reconnectErr != nil {
-			logger.SugaredLogger.Errorf("TdxKLine reconnectMACEx error: %v", reconnectErr)
-			return result
+		for attempt := 1; attempt <= 3; attempt++ {
+			if err := t.reconnectMACEx(); err != nil {
+				logger.SugaredLogger.Errorf("TdxKLine reconnectMACEx error: %v", err)
+				if attempt < 3 {
+					tdxRetryDelay(attempt)
+					continue
+				}
+				return result
+			}
+			t.macExMu.Lock()
+			items, err = t.macExClient.ExKLine2(market, code, uint16(klineType), 0, fetchCount, 1)
+			t.macExMu.Unlock()
+			if err == nil {
+				break
+			}
+			logger.SugaredLogger.Warnf("TdxKLine MACEx ExKLine2 retry #%d error: %v", attempt+1, err)
+			tdxRetryDelay(attempt)
 		}
-		t.macExMu.Lock()
-		items, err = t.macExClient.ExKLine2(market, code, uint16(klineType), 0, fetchCount, 1)
-		t.macExMu.Unlock()
 		if err != nil {
-			logger.SugaredLogger.Errorf("TdxKLine MACEx ExKLine2 retry error: %v", err)
+			logger.SugaredLogger.Errorf("TdxKLine MACEx ExKLine2 exhaust retry: %v", err)
 			return result
 		}
 	}
@@ -780,15 +837,26 @@ func (t *TdxKLineApi) GetF10Data(stockCode string) *TdxCompanyInfoBundle {
 
 	if err != nil {
 		logger.SugaredLogger.Warnf("TdxKLine StockF10 error: %v, reconnecting...", err)
-		if reconnectErr := t.reconnect(); reconnectErr != nil {
-			logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", reconnectErr)
-			return result
+		for attempt := 1; attempt <= 3; attempt++ {
+			if err := t.reconnect(); err != nil {
+				logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", err)
+				if attempt < 3 {
+					tdxRetryDelay(attempt)
+					continue
+				}
+				return result
+			}
+			t.mu.Lock()
+			bundle, err = t.client.StockF10(market, code)
+			t.mu.Unlock()
+			if err == nil {
+				break
+			}
+			logger.SugaredLogger.Warnf("TdxKLine StockF10 retry #%d error: %v", attempt+1, err)
+			tdxRetryDelay(attempt)
 		}
-		t.mu.Lock()
-		bundle, err = t.client.StockF10(market, code)
-		t.mu.Unlock()
 		if err != nil {
-			logger.SugaredLogger.Errorf("TdxKLine StockF10 retry error: %v", err)
+			logger.SugaredLogger.Errorf("TdxKLine StockF10 exhaust retry: %v", err)
 			return result
 		}
 	}
@@ -1045,15 +1113,26 @@ func (t *TdxKLineApi) GetMACSymbolBelongBoard(stockCode string) *[]MACBelongBoar
 
 	if err != nil {
 		logger.SugaredLogger.Warnf("TdxKLine MACSymbolBelongBoard error: %v, reconnecting...", err)
-		if reconnectErr := t.reconnectMAC(); reconnectErr != nil {
-			logger.SugaredLogger.Errorf("TdxKLine reconnectMAC error: %v", reconnectErr)
-			return result
+		for attempt := 1; attempt <= 3; attempt++ {
+			if err := t.reconnectMAC(); err != nil {
+				logger.SugaredLogger.Errorf("TdxKLine reconnectMAC error: %v", err)
+				if attempt < 3 {
+					tdxRetryDelay(attempt)
+					continue
+				}
+				return result
+			}
+			t.macMu.Lock()
+			items, err = t.macClient.MACSymbolBelongBoard(code, market)
+			t.macMu.Unlock()
+			if err == nil {
+				break
+			}
+			logger.SugaredLogger.Warnf("TdxKLine MACSymbolBelongBoard retry #%d error: %v", attempt+1, err)
+			tdxRetryDelay(attempt)
 		}
-		t.macMu.Lock()
-		items, err = t.macClient.MACSymbolBelongBoard(code, market)
-		t.macMu.Unlock()
 		if err != nil {
-			logger.SugaredLogger.Errorf("TdxKLine MACSymbolBelongBoard retry error: %v", err)
+			logger.SugaredLogger.Errorf("TdxKLine MACSymbolBelongBoard exhaust retry: %v", err)
 			return result
 		}
 	}
@@ -1098,14 +1177,22 @@ func (t *TdxKLineApi) GetAllStockList() *[]TdxStockBasic {
 	markets := []types.Market{types.MarketSZ, types.MarketSH, types.MarketBJ}
 	for _, market := range markets {
 		if err := t.fetchStockListByMarket(market, result); err != nil {
-			logger.SugaredLogger.Warnf("TdxKLine GetAllStockList market %s error: %v, retry once...", market.String(), err)
-			// 单市场失败不影响其它市场，重连后重试一次
-			if reconnectErr := t.reconnect(); reconnectErr != nil {
-				logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", reconnectErr)
-				continue
-			}
-			if retryErr := t.fetchStockListByMarket(market, result); retryErr != nil {
-				logger.SugaredLogger.Errorf("TdxKLine GetAllStockList market %s retry error: %v", market.String(), retryErr)
+			logger.SugaredLogger.Warnf("TdxKLine GetAllStockList market %s error: %v, retry...", market.String(), err)
+			for attempt := 1; attempt <= 3; attempt++ {
+				if err := t.reconnect(); err != nil {
+					logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", err)
+					if attempt < 3 {
+						tdxRetryDelay(attempt)
+						continue
+					}
+					break
+				}
+				if retryErr := t.fetchStockListByMarket(market, result); retryErr != nil {
+					logger.SugaredLogger.Warnf("TdxKLine GetAllStockList market %s retry #%d error: %v", market.String(), attempt, retryErr)
+					tdxRetryDelay(attempt)
+					continue
+				}
+				break
 			}
 		}
 	}
@@ -1258,15 +1345,25 @@ func (t *TdxKLineApi) fetchExCountWithRetry() (uint32, error) {
 	t.macExMu.Unlock()
 	if err != nil {
 		logger.SugaredLogger.Warnf("ExCount error: %v, retry...", err)
-		if e := t.reconnectMACEx(); e != nil {
-			return 0, e
+		for attempt := 1; attempt <= 3; attempt++ {
+			if e := t.reconnectMACEx(); e != nil {
+				logger.SugaredLogger.Errorf("ExCount reconnect error: %v", e)
+				if attempt < 3 {
+					tdxRetryDelay(attempt)
+					continue
+				}
+				return 0, e
+			}
+			t.macExMu.Lock()
+			total, err = t.macExClient.ExCount()
+			t.macExMu.Unlock()
+			if err == nil {
+				return total, nil
+			}
+			logger.SugaredLogger.Warnf("ExCount retry #%d error: %v", attempt+1, err)
+			tdxRetryDelay(attempt)
 		}
-		t.macExMu.Lock()
-		total, err = t.macExClient.ExCount()
-		t.macExMu.Unlock()
-		if err != nil {
-			return 0, err
-		}
+		return 0, err
 	}
 	return total, nil
 }
@@ -1277,15 +1374,25 @@ func (t *TdxKLineApi) fetchExListWithRetry(start uint32, count uint16) ([]proto.
 	t.macExMu.Unlock()
 	if err != nil {
 		logger.SugaredLogger.Warnf("ExList start=%d error: %v, retry...", start, err)
-		if e := t.reconnectMACEx(); e != nil {
-			return nil, e
+		for attempt := 1; attempt <= 3; attempt++ {
+			if e := t.reconnectMACEx(); e != nil {
+				logger.SugaredLogger.Errorf("ExList reconnect error: %v", e)
+				if attempt < 3 {
+					tdxRetryDelay(attempt)
+					continue
+				}
+				return nil, e
+			}
+			t.macExMu.Lock()
+			items, err = t.macExClient.ExList(start, count)
+			t.macExMu.Unlock()
+			if err == nil {
+				return items, nil
+			}
+			logger.SugaredLogger.Warnf("ExList retry #%d error: %v", attempt+1, err)
+			tdxRetryDelay(attempt)
 		}
-		t.macExMu.Lock()
-		items, err = t.macExClient.ExList(start, count)
-		t.macExMu.Unlock()
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 	return items, nil
 }

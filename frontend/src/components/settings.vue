@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {h, onBeforeUnmount, onMounted, ref, computed, reactive, nextTick} from "vue";
 import {
   ExportConfig,
@@ -58,6 +58,7 @@ const formValue = ref({
   tushareToken: '',
   iwencaiApiKey: '',
   emApiKey: '',
+  tickFlowAPIKey: '',
   dingPush: {
     enable: false,
     dingRobot: ''
@@ -78,6 +79,10 @@ const formValue = ref({
   httpProxyEnabled:false,
   enableAgent: false,
   qgqpBId: '',
+  akshareServiceUrl: '',
+  backtestAccuracyThreshold: 5.0,
+  backtestVerifyDays: 2,
+  backtestEnabled: true,
 })
 
 // ========================
@@ -250,6 +255,7 @@ onMounted(() => {
     formValue.value.tushareToken = res.tushareToken
     formValue.value.iwencaiApiKey = res.iwencaiApiKey || ''
     formValue.value.emApiKey = res.emApiKey || ''
+    formValue.value.tickFlowAPIKey = res.tickFlowAPIKey || ''
     formValue.value.dingPush = {
       enable: res.dingPushEnable,
       dingRobot: res.dingRobot
@@ -333,6 +339,7 @@ async function saveConfig() {
     tushareToken: formValue.value.tushareToken,
     iwencaiApiKey: formValue.value.iwencaiApiKey,
     emApiKey: formValue.value.emApiKey,
+      tickFlowAPIKey: formValue.value.tickFlowAPIKey,
     prompt: aiPrompt.value,
     questionTemplate: questionTemplate.value,
     crawlTimeOut: crawlTimeOut.value,
@@ -591,6 +598,27 @@ function importConfig() {
               </n-tooltip>
             </n-form-item-gi>
 
+            <n-form-item-gi :span="12" label="TickFlow API Key：" path="tickFlowAPIKey">
+              <n-input type="password" placeholder="TickFlow API Key (https://tickflow.org)" v-model:value="formValue.tickFlowAPIKey" clearable show-password-on="click"/>
+              <n-tooltip placement="top">
+                <template #trigger>
+                  <n-icon color="#0e7a0d" size="20">
+                    <HelpCircleFilledIcon />
+                  </n-icon>
+                </template>
+                <template #default>
+                  <n-gradient-text :type="'warning'">
+                  <div style="max-width: 400px;text-align: left">
+                    获取方法：<br>
+                    访问 https://tickflow.org 注册并获取 API Key。<br>
+                    配置后可使用 TickFlow 实时行情、K线、财务数据等接口，
+                    替代同花顺问财和 Sina 爬虫。
+                  </div>
+                  </n-gradient-text>
+                </template>
+              </n-tooltip>
+            </n-form-item-gi>
+
           </n-grid>
         </n-card>
 
@@ -646,6 +674,49 @@ function importConfig() {
               <n-input type="text" placeholder="爬虫http代理地址" v-model:value="formValue.httpProxy" clearable/>
             </n-form-item-gi>
 
+
+            <n-gi :span="24" v-if="openAiEnable">
+              <n-divider title-placement="left">回测设置</n-divider>
+            </n-gi>
+            <n-form-item-gi :span="8" v-if="openAiEnable" label="回测准确率阈值(%)" path="backtestAccuracyThreshold">
+              <n-input-number :min="0" :max="100" step="0.1" v-model:value="formValue.backtestAccuracyThreshold"/>
+              <n-tooltip placement="top">
+                <template #trigger>
+                  <n-icon color="#0e7a0d" size="20">
+                    <HelpCircleFilledIcon />
+                  </n-icon>
+                </template>
+                <template #default>
+                  <n-gradient-text :type="'warning'">
+                  <div style="max-width: 400px;text-align: left">
+                    回测准确率阈值：预测涨跌幅度超过此阈值才被认为是准确预测。<br>
+                    例如：设置为5.0时，预测涨跌幅度>5%且方向正确才算是准确预测。
+                  </div>
+                  </n-gradient-text>
+                </template>
+              </n-tooltip>
+            </n-form-item-gi>
+            <n-form-item-gi :span="8" v-if="openAiEnable" label="回测验证天数" path="backtestVerifyDays">
+              <n-input-number :min="1" :max="60" step="1" v-model:value="formValue.backtestVerifyDays"/>
+              <n-tooltip placement="top">
+                <template #trigger>
+                  <n-icon color="#0e7a0d" size="20">
+                    <HelpCircleFilledIcon />
+                  </n-icon>
+                </template>
+                <template #default>
+                  <n-gradient-text :type="'warning'">
+                  <div style="max-width: 400px;text-align: left">
+                    回测验证天数：分析后多少个交易日验证预测是否准确。<br>
+                    例如：设置为2时，分析后2个交易日验证预测准确性。
+                  </div>
+                  </n-gradient-text>
+                </template>
+              </n-tooltip>
+            </n-form-item-gi>
+            <n-form-item-gi :span="4" v-if="openAiEnable" label="启用回测" path="backtestEnabled">
+              <n-switch v-model:value="formValue.backtestEnabled"/>
+            </n-form-item-gi>
 
             <n-gi :span="24" v-if="openAiEnable">
               <n-divider title-placement="left">默认提示词设置</n-divider>

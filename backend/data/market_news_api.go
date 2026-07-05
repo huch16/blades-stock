@@ -332,72 +332,79 @@ func (m MarketNewsApi) GetSinaNews(crawlTimeOut uint) *[]models.Telegraph {
 	vm.Run("var feedStr = JSON.stringify(feed);")
 
 	value, _ := vm.Get("feedStr")
-	//resultStr, _ := vm.Get("resultStr")
+	// 检查返回值是否为 undefined 或空
+	valueStr := value.String()
+	if valueStr == "undefined" || valueStr == "" {
+		logger.SugaredLogger.Debugf("fetchNewsList: JavaScript 返回 undefined，跳过解析")
+		return news
+	}
 
-	//logger.SugaredLogger.Info(resultStr)
 	feed := make(map[string]any)
-	err = json.Unmarshal([]byte(value.String()), &feed)
-	if err != nil {
-		logger.SugaredLogger.Errorf("json.Unmarshal error:%v", err.Error())
+	if err := json.Unmarshal([]byte(valueStr), &feed); err != nil {
+		logger.SugaredLogger.Errorf("fetchNewsList json.Unmarshal feed error: %v, raw=%s", err, valueStr)
+		return news
 	}
 	var telegraphs []models.Telegraph
 
-	if feed["list"] != nil {
-		for _, item := range feed["list"].([]any) {
-			telegraph := models.Telegraph{Source: "新浪财经"}
-			data := item.(map[string]any)
-			//logger.SugaredLogger.Infof("%s:%s", data["create_time"], data["rich_text"])
-			telegraph.Content = data["rich_text"].(string)
-			telegraph.Title = strutil.SubInBetween(data["rich_text"].(string), "【", "】")
-			telegraph.Time = strings.Split(data["create_time"].(string), " ")[1]
-			dataTime, _ := time.ParseInLocation("2006-01-02 15:04:05", data["create_time"].(string), time.Local)
-			if !dataTime.IsZero() {
-				telegraph.DataTime = &dataTime
+	rawList, ok := feed["list"].([]any)
+	if !ok || len(rawList) == 0 {
+		return news
+	}
+	for _, item := range rawList {
+		data, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		telegraph := models.Telegraph{Source: "新浪财经"}
+		richText, _ := data["rich_text"].(string)
+		createTime, _ := data["create_time"].(string)
+		telegraph.Content = richText
+		telegraph.Title = strutil.SubInBetween(richText, "【", "】")
+		telegraph.Time = strings.Split(createTime, " ")[1]
+		dataTime, _ := time.ParseInLocation("2006-01-02 15:04:05", createTime, time.Local)
+		if !dataTime.IsZero() {
+			telegraph.DataTime = &dataTime
+		}
+		rawTags, _ := data["tag"].([]any)
+		telegraph.SubjectTags = lo.Map(rawTags, func(tagItem any, index int) string {
+			tagMap, _ := tagItem.(map[string]any)
+			name, _ := tagMap["name"].(string)
+			tag := &models.Tags{
+				Name: name,
+				Type: "sina_subject",
 			}
-			tags := data["tag"].([]any)
-			telegraph.SubjectTags = lo.Map(tags, func(tagItem any, index int) string {
-				name := tagItem.(map[string]any)["name"].(string)
-				tag := &models.Tags{
-					Name: name,
-					Type: "sina_subject",
-				}
-				db.Dao.Model(tag).Where("name=? and type=?", name, "sina_subject").FirstOrCreate(&tag)
-				return name
-			})
-			if _, ok := lo.Find(telegraph.SubjectTags, func(item string) bool { return item == "焦点" }); ok {
-				telegraph.IsRed = true
-			}
-			//logger.SugaredLogger.Infof("telegraph.SubjectTags:%v %s", telegraph.SubjectTags, telegraph.Content)
+			db.Dao.Model(tag).Where("name=? and type=?", name, "sina_subject").FirstOrCreate(&tag)
+			return name
+		})
+		if _, ok := lo.Find(telegraph.SubjectTags, func(item string) bool { return item == "焦点" }); ok {
+			telegraph.IsRed = true
+		}
 
-			if telegraph.Content != "" {
-				telegraph.SentimentResult = AnalyzeSentiment(telegraph.Content).Description
-				cnt := int64(0)
-				if telegraph.Title == "" {
-					db.Dao.Model(telegraph).Where("content=?", telegraph.Content).Count(&cnt)
-				} else {
-					db.Dao.Model(telegraph).Where("title=?", telegraph.Title).Count(&cnt)
-				}
-				if cnt == 0 {
-					db.Dao.Create(&telegraph)
-					telegraphs = append(telegraphs, telegraph)
-					for _, tag := range telegraph.SubjectTags {
-						tagInfo := &models.Tags{}
-						db.Dao.Model(models.Tags{}).Where("name=? and type=?", tag, "sina_subject").First(&tagInfo)
-						if tagInfo.ID > 0 {
-							db.Dao.Model(models.TelegraphTags{}).Where("telegraph_id=? and tag_id=?", telegraph.ID, tagInfo.ID).FirstOrCreate(&models.TelegraphTags{
-								TelegraphId: telegraph.ID,
-								TagId:       tagInfo.ID,
-							})
-						}
+		if telegraph.Content != "" {
+			telegraph.SentimentResult = AnalyzeSentiment(telegraph.Content).Description
+			cnt := int64(0)
+			if telegraph.Title == "" {
+				db.Dao.Model(telegraph).Where("content=?", telegraph.Content).Count(&cnt)
+			} else {
+				db.Dao.Model(telegraph).Where("title=?", telegraph.Title).Count(&cnt)
+			}
+			if cnt == 0 {
+				db.Dao.Create(&telegraph)
+				telegraphs = append(telegraphs, telegraph)
+				for _, tag := range telegraph.SubjectTags {
+					tagInfo := &models.Tags{}
+					db.Dao.Model(models.Tags{}).Where("name=? and type=?", tag, "sina_subject").First(&tagInfo)
+					if tagInfo.ID > 0 {
+						db.Dao.Model(models.TelegraphTags{}).Where("telegraph_id=? and tag_id=?", telegraph.ID, tagInfo.ID).FirstOrCreate(&models.TelegraphTags{
+							TelegraphId: telegraph.ID,
+							TagId:       tagInfo.ID,
+						})
 					}
 				}
 			}
 		}
-		return &telegraphs
 	}
-
-	return news
-
+	return &telegraphs
 }
 
 func (m MarketNewsApi) GlobalStockIndexes(crawlTimeOut uint) map[string]any {
@@ -1033,7 +1040,7 @@ func (m MarketNewsApi) TradingViewNewsDetail(id string) *models.TVNewsDetail {
 	if config.HttpProxyEnabled && config.HttpProxy != "" {
 		client.SetProxy(config.HttpProxy)
 	}
-	request := client.SetTimeout(time.Duration(3) * time.Second).R()
+	request := client.SetTimeout(time.Duration(10) * time.Second).R()
 	_, err := request.
 		SetHeader("Host", "news-headlines.tradingview.com").
 		SetHeader("Origin", "https://cn.tradingview.com").

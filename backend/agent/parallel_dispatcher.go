@@ -1,9 +1,11 @@
-package agent
+﻿package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/data"
@@ -11,12 +13,14 @@ import (
 
 	"github.com/go-kratos/blades"
 	bladesTools "github.com/go-kratos/blades/tools"
+	"golang.org/x/sync/semaphore"
 )
 
 // PreFetchedData holds the result of one parallel sub-task.
 type PreFetchedData struct {
 	Group   string
 	Summary string
+	Fallback bool   // true when this sub-task timed out or errored
 }
 
 // shouldParallelize returns true when the question spans multiple independent
@@ -65,12 +69,27 @@ func decomposeIntoSubPrompts(question string, groups map[tools.ToolGroup]bool) m
 
 // preFetchInParallel identifies independent data requirements from the
 // question, dispatches one minimal sub-agent per tool group, executes them
-// concurrently, and returns the collected data. Returns nil when the question
-// is too narrow to benefit from parallel dispatch.
+// concurrently (max N concurrent LLM calls, timeout each from config), and returns
+// the collected data. Returns nil when the question is too narrow to benefit
+// from parallel dispatch.
 func preFetchInParallel(ctx context.Context, question string, allTools []bladesTools.Tool, aiConfig data.AIConfig) []PreFetchedData {
 	if !shouldParallelize(question) {
 		return nil
 	}
+
+	// Concurrency limit from config (default 2)
+	concurrency := aiConfig.LLMConcurrencyLimit
+	if concurrency <= 0 {
+		concurrency = 2
+	}
+	llmSem := semaphore.NewWeighted(int64(concurrency))
+
+	// Timeout per sub-agent from config (default 60s, increased for MCP HTTP calls)
+	subAgentTimeoutSec := aiConfig.SubAgentTimeout
+	if subAgentTimeoutSec <= 0 {
+		subAgentTimeoutSec = 60
+	}
+	subAgentTimeout := time.Duration(subAgentTimeoutSec) * time.Second
 
 	groups := tools.ClassifyQuestion(question)
 	subPrompts := decomposeIntoSubPrompts(question, groups)
@@ -90,45 +109,94 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 		go func(group tools.ToolGroup, subPrompt string) {
 			defer wg.Done()
 
+			// 1) Acquire semaphore (max N concurrent LLM calls from config)
+			if err := llmSem.Acquire(ctx, 1); err != nil {
+				mu.Lock()
+				results = append(results, PreFetchedData{
+					Group:    string(group),
+					Summary:  "[并发受限] 信号量获取失败: " + err.Error(),
+					Fallback: true,
+				})
+				mu.Unlock()
+				return
+			}
+			defer llmSem.Release(1)
+
+			// 2) Per-sub-agent deadline from config
+			subCtx, cancel := context.WithTimeout(ctx, subAgentTimeout)
+			defer cancel()
+
 			groupTools := tools.FilterToolsByGroups(allTools, map[tools.ToolGroup]bool{
 				tools.GroupBase: true,
 				group:           true,
 			})
 
-			subModel, subErr := createChatModel(ctx, aiConfig)
+			subModel, subErr := createChatModel(subCtx, aiConfig)
 			if subErr != nil {
 				logger.SugaredLogger.Errorf("[parallel] failed to create model for %s: %v", group, subErr)
+				mu.Lock()
+				results = append(results, PreFetchedData{
+					Group:    string(group),
+					Summary:  "[模型创建失败] " + subErr.Error(),
+					Fallback: true,
+				})
+				mu.Unlock()
 				return
 			}
 			subAgent, err := blades.NewAgent("sub-"+string(group),
 				blades.WithModel(subModel),
 				blades.WithTools(groupTools...),
-				blades.WithMaxIterations(2),
-				blades.WithInstruction("你是专业的数据采集助手，专注于" + describeGroup(group) + "领域。请使用你拥有的工具获取数据，返回获取到的原始结果。如果工具调用失败，请明确说明。不要进行冗余分析。"),
+				blades.WithMaxIterations(20),
+				blades.WithInstruction("你是专业的数据采集助手，专注于"+describeGroup(group)+"领域。\n\n【重要】你拥有 "+fmt.Sprintf("%d", len(groupTools))+" 个可用工具。\n\n【Tushare MCP 工具清单】（2120积分档位，共 38 个）\n行情数据：stock_basic, trade_cal, daily, adj_factor, suspend, daily_basic, weekly, monthly, stk_mins\n资金流向：moneyflow_hsgt, hsgt_top10, ggt_top10, margin, margin_detail, moneyflow\n财务报表：income, balancesheet, cashflow, forecast, express, fina_indicator, fina_audit, fina_mainbz\n股东数据：top10_holders, top10_floatholders, pledge_stat, pledge_detail\n指数数据：index_basic, index_daily, index_weight, index_weekly, index_monthly\n其他：stock_company, namechange, dividend, concept, concept_detail, limit_list, top_list, top_inst, new_share, repurchase\n\n【悟道A股 MCP】工具名如 hot_sectors, sector_analysis 等，数据较全但每日限额 50 次。\n\n【行为准则】\n1. 优先用 Tushare（稳定无次数限制），悟道A股仅在 Tushare 缺失时使用；\n2. 工具调用失败立即换工具，不要放弃；\n3. 只返回原始数据，不要冗余分析；\n4. 所有工具均失败时，说明已尝试的工具列表。"),
 			)
 			if err != nil {
 				logger.SugaredLogger.Errorf("[parallel] failed to create sub-agent for %s: %v", group, err)
+				mu.Lock()
+				results = append(results, PreFetchedData{
+					Group:    string(group),
+					Summary:  "[子Agent创建失败] " + err.Error(),
+					Fallback: true,
+				})
+				mu.Unlock()
 				return
 			}
 
 			var sb strings.Builder
-			for msg, err := range subAgent.Run(ctx, &blades.Invocation{
+			// 3) Run sub-agent and collect all assistant text
+			// Note: ErrMaxIterationsExceeded means LLM hit iteration limit but may have collected partial data.
+			// ErrDeadlineExceeded means sub-context expired (time limit).
+			for msg, err := range subAgent.Run(subCtx, &blades.Invocation{
 				Message:    blades.UserMessage(subPrompt),
 				Streamable: false,
 			}) {
 				if err != nil {
-					logger.SugaredLogger.Errorf("[parallel] sub-agent %s error: %v", group, err)
-					return
+					break
 				}
 				if msg != nil && msg.Role == blades.RoleAssistant {
 					sb.WriteString(msg.Text())
 				}
 			}
 
+			// 4) Fallback logic:
+			// - sb.Len() > 0: LLM collected data before stopping → use it, don't mark as fallback
+			// - subCtx.Err()==DeadlineExceeded: ran out of time → timeout fallback
+			// - any error with empty sb: explicit fallback
+			fallback := false
+			summary := sb.String()
+			if summary == "" {
+				if subCtx.Err() == context.DeadlineExceeded {
+					summary = fmt.Sprintf("[超时] 子Agent执行超过%d秒", subAgentTimeoutSec)
+				} else {
+					summary = "[无数据] 子Agent未返回有效内容"
+				}
+				fallback = true
+			}
+
 			mu.Lock()
 			results = append(results, PreFetchedData{
-				Group:   string(group),
-				Summary: sb.String(),
+				Group:    string(group),
+				Summary:  summary,
+				Fallback: fallback,
 			})
 			mu.Unlock()
 		}(g, prompt)
@@ -151,10 +219,19 @@ func buildParallelContext(data []PreFetchedData) string {
 
 	var sb strings.Builder
 	sb.WriteString("【以下是通过并行数据采集预先获取的原始数据，供你在生成最终回答时直接参考使用】\n\n")
+	fallbackCount := 0
 	for _, d := range data {
-		sb.WriteString("===== " + describeGroup(tools.ToolGroup(d.Group)) + " =====\n")
+		if d.Fallback {
+			fallbackCount++
+			sb.WriteString("===== " + describeGroup(tools.ToolGroup(d.Group)) + " [FALLBACK: 数据可能不完整] =====\n")
+		} else {
+			sb.WriteString("===== " + describeGroup(tools.ToolGroup(d.Group)) + " =====\n")
+		}
 		sb.WriteString(truncateString(d.Summary, 4000))
 		sb.WriteString("\n\n")
+	}
+	if fallbackCount > 0 {
+		sb.WriteString(fmt.Sprintf("【注意】上述 %d 个并行子任务出现超时/降级，数据可能不完整。主Agent可根据需要补充调用工具。\n\n", fallbackCount))
 	}
 	sb.WriteString("【预采集数据结束】\n\n以上数据已由系统并行采集完毕。你无需再次调用工具查询同样的内容，直接基于以上数据进行分析和回答即可。如有额外需求，仍可使用你的工具。")
 	return sb.String()
@@ -193,5 +270,6 @@ func truncateString(s string, maxLen int) string {
 	}
 	return string(runes[:maxLen]) + "\n\n...(数据过长，已截断)"
 }
+
 
 

@@ -18,28 +18,7 @@ func init() {
 	registerToolHandler("GetHolidayYear", handleGetHolidayYear)
 	registerToolHandler("GetHolidayBatch", handleGetHolidayBatch)
 
-	for _, name := range []string{
-		"QueryBasicInfo",
-		"QueryFinance",
-		"QueryIndustry",
-		"QueryFutures",
-		"SelectETF",
-		"QueryManagement",
-		"QueryStockConnect",
-		"SelectFundManager",
-		"SelectConvertibleBond",
-		"SelectFundCompany",
-		"SelectFund",
-		"SelectFuturesOption",
-		"SelectHKStock",
-		"SelectUSStock",
-		"QueryFundFinance",
-		"QueryBusinessData",
-	} {
-		registerToolHandler(name, handleAgentParityIwencaiQuery)
-	}
-
-	registerToolHandler("SearchAnnouncement", handleSearchAnnouncement)
+	// 问财工具已移除（原 16 个工具），改用 TickFlow API
 	registerToolHandler("StockEarningsReview", handleStockEarningsReview)
 	registerToolHandler("IndustryResearch", handleIndustryResearch)
 	registerToolHandler("TrackingReport", handleTrackingReport)
@@ -48,38 +27,6 @@ func init() {
 
 func handleSendDingDingMessage(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 	return handleSendToDingDing(o, funcArguments, ctx)
-}
-
-func handleAgentParityIwencaiQuery(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, ctx.FuncName, funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	page := int(gjson.Get(funcArguments, "page").Int())
-	limit := int(gjson.Get(funcArguments, "limit").Int())
-	if query == "" {
-		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请输入查询语句")
-		return nil
-	}
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 {
-		limit = 10
-	}
-	result := NewIwencaiAPI().QueryToMarkdown(query, page, limit)
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, result)
-	return nil
-}
-
-func handleSearchAnnouncement(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	sendToolCallLog(ctx, "SearchAnnouncement", funcArguments)
-	query := gjson.Get(funcArguments, "query").String()
-	if query == "" {
-		appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, "请输入搜索关键词")
-		return nil
-	}
-	result := NewIwencaiAPI().SearchAnnouncementToMarkdown(query)
-	appendToolMessages(ctx.Messages, ctx.CurrentAIContent.String(), ctx.ReasoningContentText.String(), ctx.CurrentCallID, ctx.FuncName, funcArguments, result)
-	return nil
 }
 
 func handleStockEarningsReview(o *OpenAi, funcArguments string, ctx *ToolContext) error {

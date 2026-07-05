@@ -16,6 +16,9 @@ import (
 const emF10BaseURL = "https://datacenter.eastmoney.com/securities/api/data/v1/get"
 
 func (receiver StockDataApi) f10Request(url string, result any) error {
+	if receiver.config == nil {
+		return fmt.Errorf("f10Request: receiver.config is nil")
+	}
 	resp, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
 		SetHeader("Host", "datacenter.eastmoney.com").
 		SetHeader("Referer", "https://emweb.securities.eastmoney.com/").
@@ -669,6 +672,9 @@ func (receiver StockDataApi) GetStockLatestFinanceToMarkdown(stockCode string) s
 	if err != nil {
 		logger.SugaredLogger.Errorf("获取最新财务数据失败: %v", err)
 		return fmt.Sprintf("获取最新财务数据失败: %v", err)
+	}
+	if resp == nil || resp.Result == nil || len(resp.Result.Data) == 0 {
+		return fmt.Sprintf("获取 %s 最新财务数据为空", stockCode)
 	}
 	name := ""
 	if len(resp.Result.Data) > 0 {

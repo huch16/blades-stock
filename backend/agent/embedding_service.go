@@ -120,3 +120,8 @@ func sqrt64(x float64) float64 {
 	}
 	return z
 }
+
+// IsConfigured returns true if the embedding service has a valid baseURL and modelName.
+func (s *EmbeddingService) IsConfigured() bool {
+	return s != nil && s.baseURL != "" && s.modelName != ""
+}
