@@ -233,12 +233,20 @@ func (s *BacktestService) RunSingleBacktest(r models.AIResponseResult) (*models.
 		return nil, fmt.Errorf("no price data after %s for %s", analysisDate, r.StockCode)
 	}
 
-	// 取后续 verifyDays 个交易日 作为验证窗口
-	verifyWindow := 20 // 临时使用默认值，TODO: 从配置读取
-	// verifyWindow := verifyDays // 暂时注释掉，编译错误
-	if verifyWindow < 2 {
-		verifyWindow = 2 // 最少 2 个交易日
+	// 从数据库读取配置
+	var settings data.Settings
+	db.Dao.First(&settings)
+	verifyDays := int(settings.BacktestVerifyDays)
+	if verifyDays < 2 {
+		verifyDays = 20 // 默认 20 个交易日
 	}
+	accuracyThreshold := settings.BacktestAccuracyThreshold
+	if accuracyThreshold == 0 {
+		accuracyThreshold = 5.0
+	}
+
+	// 取后续 verifyDays 个交易日 作为验证窗口
+	verifyWindow := verifyDays
 	endIdx := startIdx + verifyWindow
 	if endIdx > len(prices) {
 		endIdx = len(prices)
@@ -267,17 +275,6 @@ func (s *BacktestService) RunSingleBacktest(r models.AIResponseResult) (*models.
 
 	// 判断方向准确（使用可配置阈值）
 	isAccurate := false
-	// 从数据库读取配置
-	var settings data.Settings
-	db.Dao.First(&settings)
-	accuracyThreshold := settings.BacktestAccuracyThreshold
-	if accuracyThreshold == 0 {
-		accuracyThreshold = 0.0 // 默认 0%
-	}
-	verifyDays := int(settings.BacktestVerifyDays)
-	if verifyDays == 0 {
-		verifyDays = 20 // 默认 20 个交易日
-	}
 	switch pred.Direction {
 	case "看涨":
 		isAccurate = priceChange > accuracyThreshold

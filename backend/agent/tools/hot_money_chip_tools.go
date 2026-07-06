@@ -202,7 +202,7 @@ func newChipConcentrationTool() bladesTools.Tool {
 				negativeSignals++
 			}
 
-			sb.WriteString(fmt.Sprintf("| 维度 | 信号 | 解读 |\n|---|---|---|\n"))
+			sb.WriteString("| 维度 | 信号 | 解读 |\n|---|---|---|\n")
 			sb.WriteString(fmt.Sprintf("| 股东户数 | %s | %s |\n",
 				signalIcon(holderConcentrating), concentrationDesc(holderConcentrating)))
 			sb.WriteString(fmt.Sprintf("| 大宗交易 | %s | %s |\n",

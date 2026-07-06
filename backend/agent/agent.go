@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
@@ -94,7 +95,7 @@ func classifyComplexity(question string) AgentMode {
 }
 
 func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question string, agentMode string, extraTools ...bladesTools.Tool) *AgentInstance {
-	logger.SugaredLogger.Infof("GetStockAiAgent aiConfig: %v", aiConfig)
+	logger.SugaredLogger.Infof("GetStockAiAgent aiConfig: %+v", redactAIConfig(aiConfig))
 
 	modelProvider, err := createChatModel(ctx, aiConfig)
 	if err != nil {
@@ -357,6 +358,11 @@ func buildSkillPrompt(question string, embedSvc *EmbeddingService) string {
 	return sb.String()
 }
 
+// BuildSkillPromptForTest exports buildSkillPrompt for testing purposes.
+func BuildSkillPromptForTest(question string) string {
+	return buildSkillPrompt(question, nil)
+}
+
 func GetAllTools() []bladesTools.Tool {
 	var allTools []bladesTools.Tool
 	allTools = append(allTools, tools.GetQueryStockCodeInfoTool())
@@ -430,14 +436,30 @@ func groupNames(groups map[tools.ToolGroup]bool) []string {
 	return names
 }
 
-func getMCPTools() []bladesTools.Tool {
-	var mcpTools []bladesTools.Tool
+type mcpServerResult struct {
+	tools []bladesTools.Tool
+	name  string
+}
 
+var (
+	mcpToolsCache     []bladesTools.Tool
+	mcpToolsCacheTime time.Time
+	mcpToolsCacheMu   sync.Mutex
+)
+
+func getMCPTools() []bladesTools.Tool {
+	mcpToolsCacheMu.Lock()
+	if mcpToolsCache != nil && time.Since(mcpToolsCacheTime) < 5*time.Minute {
+		cached := mcpToolsCache
+		mcpToolsCacheMu.Unlock()
+		return cached
+	}
+	mcpToolsCacheMu.Unlock()
 	var servers []models.MCPServer
 	err := db.Dao.Where("enable = ?", true).Find(&servers).Error
 	if err != nil {
 		logger.SugaredLogger.Errorf("获取MCP服务器列表失败: %v", err)
-		return mcpTools
+		return nil
 	}
 
 	skillServerIDs := getSkillMCPServerIDs()
@@ -458,88 +480,114 @@ func getMCPTools() []bladesTools.Tool {
 	}
 
 	if len(servers) == 0 {
-		return mcpTools
+		return nil
 	}
+
+	results := make(chan mcpServerResult, len(servers))
+	var wg sync.WaitGroup
 
 	for _, server := range servers {
-		var transport bladesmc.TransportType
-		var endpoint string
-		var command string
-		var args []string
-		var env map[string]string
-		var headers map[string]string
-
-		switch {
-		case server.Command != "":
-			transport = bladesmc.TransportStdio
-			command = server.Command
-			args = parseMCPArgs(server.Args)
-			env = parseMCPEnv(server.Env)
-		case server.URL != "":
-			transport = bladesmc.TransportHTTP
-			endpoint = server.URL
-			headers = parseMCPHeaders(server.Headers)
-		default:
-			logger.SugaredLogger.Warnf("MCP服务器 [%s] 未配置URL或Command，跳过", server.Name)
-			continue
-		}
-
-		mcpClient, err := bladesmc.NewClient(bladesmc.ClientConfig{
-			Name:      server.Name,
-			Transport: transport,
-			Endpoint:  endpoint,
-			Command:   command,
-			Args:      args,
-			Env:       env,
-			Headers:   headers,
-			Timeout:   30 * time.Second,
-		})
-		if err != nil {
-			logger.SugaredLogger.Errorf("创建MCP客户端失败 [%s]: %v", server.Name, err)
-			continue
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err = mcpClient.Connect(ctx)
-		cancel()
-		if err != nil {
-			logger.SugaredLogger.Errorf("MCP连接失败 [%s]: %v", server.Name, err)
-			continue
-		}
-
-		ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
-		toolList, err := mcpClient.Resolve(ctx)
-		cancel()
-		if err != nil {
-			logger.SugaredLogger.Errorf("获取MCP工具列表失败 [%s]: %v", server.Name, err)
-			continue
-		}
-
-		if len(toolList) > 0 {
-			// tushareMcp: 仅加载白名单工具，避免 LLM 乱试权限不足的接口
-			if server.Name == "tushareMcp" {
-				allowed := data.TushareAllowListMap()
-				filtered := make([]bladesTools.Tool, 0, len(toolList))
-				for _, t := range toolList {
-					if allowed[t.Name()] {
-						filtered = append(filtered, t)
-					}
-				}
-				toolList = filtered
-				logger.SugaredLogger.Infof("从MCP服务器 [%s] 白名单过滤后加载了 %d/%d 个工具", server.Name, len(toolList), len(toolList))
-			} else {
-				logger.SugaredLogger.Infof("从MCP服务器 [%s] 加载了 %d 个工具", server.Name, len(toolList))
-			}
-			// Wrap MCP handlers to return errors as tool responses, not Go errors.
-			// This prevents MCP tool call failures from killing the entire sub-agent.
-			for i := range toolList {
-				toolList[i] = wrapMCPToolHandler(toolList[i], server.Name)
-			}
-			mcpTools = append(mcpTools, toolList...)
-		}
+		wg.Add(1)
+		go func(srv models.MCPServer) {
+			defer wg.Done()
+			tools := connectMCPServer(srv)
+			results <- mcpServerResult{tools: tools, name: srv.Name}
+		}(server)
 	}
 
+	wg.Wait()
+	close(results)
+
+	var mcpTools []bladesTools.Tool
+	for r := range results {
+		if len(r.tools) > 0 {
+			mcpTools = append(mcpTools, r.tools...)
+		}
+	}
+	mcpToolsCacheMu.Lock()
+	mcpToolsCache = mcpTools
+	mcpToolsCacheTime = time.Now()
+	mcpToolsCacheMu.Unlock()
 	return mcpTools
+}
+
+func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
+	var transport bladesmc.TransportType
+	var endpoint string
+	var command string
+	var args []string
+	var env map[string]string
+	var headers map[string]string
+
+	switch {
+	case server.Command != "":
+		transport = bladesmc.TransportStdio
+		command = server.Command
+		args = parseMCPArgs(server.Args)
+		env = parseMCPEnv(server.Env)
+	case server.URL != "":
+		transport = bladesmc.TransportHTTP
+		endpoint = server.URL
+		headers = parseMCPHeaders(server.Headers)
+	default:
+		logger.SugaredLogger.Warnf("MCP服务器 [%s] 未配置URL或Command，跳过", server.Name)
+		return nil
+	}
+
+	mcpClient, err := bladesmc.NewClient(bladesmc.ClientConfig{
+		Name:      server.Name,
+		Transport: transport,
+		Endpoint:  endpoint,
+		Command:   command,
+		Args:      args,
+		Env:       env,
+		Headers:   headers,
+		Timeout:   5 * time.Second,
+	})
+	if err != nil {
+		logger.SugaredLogger.Errorf("创建MCP客户端失败 [%s]: %v", server.Name, err)
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err = mcpClient.Connect(ctx)
+	cancel()
+	if err != nil {
+		logger.SugaredLogger.Errorf("MCP连接失败 [%s]: %v", server.Name, err)
+		return nil
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	toolList, err := mcpClient.Resolve(ctx)
+	cancel()
+	if err != nil {
+		logger.SugaredLogger.Errorf("获取MCP工具列表失败 [%s]: %v", server.Name, err)
+		return nil
+	}
+
+	if len(toolList) == 0 {
+		return nil
+	}
+
+	// tushareMcp: 仅加载白名单工具
+	if server.Name == "tushareMcp" {
+		allowed := data.TushareAllowListMap()
+		filtered := make([]bladesTools.Tool, 0, len(toolList))
+		for _, t := range toolList {
+			if allowed[t.Name()] {
+				filtered = append(filtered, t)
+			}
+		}
+		logger.SugaredLogger.Infof("从MCP服务器 [%s] 白名单过滤后加载了 %d/%d 个工具", server.Name, len(filtered), len(toolList))
+		toolList = filtered
+	} else {
+		logger.SugaredLogger.Infof("从MCP服务器 [%s] 加载了 %d 个工具", server.Name, len(toolList))
+	}
+
+	for i := range toolList {
+		toolList[i] = wrapMCPToolHandler(toolList[i], server.Name)
+	}
+	return toolList
 }
 
 // wrapMCPToolHandler wraps an MCP tool's handler to return call errors as structured JSON
@@ -1035,6 +1083,16 @@ func init() {
 
 		return fmt.Sprintf("✅ 成功学习项目「%s」并生成了 Skill「%s」！\n以后你可以直接问我关于 %s 项目的问题，我会用已学的知识回答。\n必要时我会使用 ReadProjectFile 等工具查阅最新的代码细节。", name, skill.Name, name)
 	})
+}
+
+func redactAIConfig(cfg data.AIConfig) data.AIConfig {
+	if cfg.ApiKey != "" {
+		cfg.ApiKey = "****" + cfg.ApiKey[max(0, len(cfg.ApiKey)-4):]
+	}
+	if cfg.HttpProxy != "" && len(cfg.HttpProxy) > 8 {
+		cfg.HttpProxy = cfg.HttpProxy[:8] + "****"
+	}
+	return cfg
 }
 
 func resolveProjectPath(source, name string) string {

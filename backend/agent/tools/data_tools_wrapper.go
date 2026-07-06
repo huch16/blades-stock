@@ -3969,6 +3969,12 @@ func GetAllDataTools() []bladesTools.Tool {
 	// 注册游资追踪、筹码分析、资金博弈等高阶分析工具
 	result = append(result, GetHotMoneyChipTools()...)
 
+	// AKShare tools（数据源：VPS :8089 AKShare 代理）
+	result = append(result, GetAkshareTools()...)
+
+	// AData tools（数据源：VPS :8000 AData 服务）
+	result = append(result, GetAdataTools()...)
+
 	// 根据 API Key 配置过滤工具，未配置对应 Key 的工具不注册
 	// TickFlow tools (K线、标池、标的元数据)
 	result = append(result, GetTickFlowToolWrappers()...)
@@ -3980,9 +3986,6 @@ func GetAllDataTools() []bladesTools.Tool {
 		}
 		filtered = append(filtered, t)
 	}
-
-		// AKShare 工具（走本地 AKShare 服务，无需外部 API Key）
-		filtered = append(filtered, GetAkshareTools()...)
 
 	return filtered
 }

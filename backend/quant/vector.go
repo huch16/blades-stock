@@ -246,7 +246,7 @@ func (v *Vector) RollingSum(window int) *Vector {
 		return NewZeros(v.Len)
 	}
 	out := NewZeros(v.Len)
-	s := v.Values[0]
+	s := 0.0
 	for i := 0; i < window-1 && i < v.Len; i++ {
 		s += v.Values[i]
 	}
@@ -349,6 +349,8 @@ func (v *Vector) Shift(n int) *Vector {
 		copy(out.Values[n:], v.Values[:v.Len-n])
 	} else if n < 0 {
 		copy(out.Values[:v.Len+n], v.Values[-n:])
+	} else {
+		copy(out.Values, v.Values)
 	}
 	return out
 }
@@ -675,13 +677,6 @@ func (m *Matrix) Col(j int) *Vector {
 
 func min(a, b int) int {
 	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
 		return a
 	}
 	return b

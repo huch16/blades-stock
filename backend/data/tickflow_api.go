@@ -79,6 +79,10 @@ func (c *TickFlowClient) GetKlines(symbol, period string, count int, adjust stri
 func (c *TickFlowClient) GetKlinesAsMarkdown(symbol, period string, count int, adjust string) string {
 	data, err := c.GetKlines(symbol, period, count, adjust)
 	if err != nil {
+		if strings.Contains(err.Error(), "NO_KLINE_PERMISSION") || strings.Contains(err.Error(), "403") {
+			logger.SugaredLogger.Debugf("TickFlow %s 无 %s K线权限，跳过", symbol, period)
+			return ""
+		}
 		logger.SugaredLogger.Warnf("TickFlow GetKlinesAsMarkdown failed: %v", err)
 		return fmt.Sprintf("获取 %s K线失败: %v", symbol, err)
 	}

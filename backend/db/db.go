@@ -40,9 +40,15 @@ func Init(sqlitePath string) {
 	}
 
 	// 兜底：确保 busy_timeout / WAL / synchronous 生效（不同驱动/DSN 参数支持可能存在差异）
-	_ = openDb.Exec("PRAGMA busy_timeout=10000").Error
-	_ = openDb.Exec("PRAGMA journal_mode=WAL").Error
-	_ = openDb.Exec("PRAGMA synchronous=NORMAL").Error
+	if err := openDb.Exec("PRAGMA busy_timeout=10000").Error; err != nil {
+		log.Printf("warn: set busy_timeout failed: %v", err)
+	}
+	if err := openDb.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
+		log.Printf("warn: set WAL mode failed: %v", err)
+	}
+	if err := openDb.Exec("PRAGMA synchronous=NORMAL").Error; err != nil {
+		log.Printf("warn: set synchronous failed: %v", err)
+	}
 
 	dbCon, err := openDb.DB()
 	if err != nil {

@@ -7,7 +7,8 @@ import {
   UpdateConfig,
   FetchAiModels,
   FetchAiModelInfo,
-  CleanupData
+  CleanupData,
+  BackupData
 } from "../../wailsjs/go/main/App";
 import {NTag, NTooltip, NIcon, useMessage, useDialog} from "naive-ui";
 import {data, models} from "../../wailsjs/go/models";
@@ -56,7 +57,6 @@ const aiConfigExpandedNames = ref([])
 const formValue = ref({
   ID: 1,
   tushareToken: '',
-  iwencaiApiKey: '',
   emApiKey: '',
   tickFlowAPIKey: '',
   dingPush: {
@@ -79,10 +79,12 @@ const formValue = ref({
   httpProxyEnabled:false,
   enableAgent: false,
   qgqpBId: '',
-  akshareServiceUrl: '',
   backtestAccuracyThreshold: 5.0,
   backtestVerifyDays: 2,
   backtestEnabled: true,
+  akshareServiceUrl: 'http://115.190.72.22:8089',
+  aDataServiceUrl: 'http://115.190.72.22:8000',
+  defaultDataSource: 'adata',
 })
 
 // ========================
@@ -253,7 +255,6 @@ onMounted(() => {
   GetConfig().then(res => {
     formValue.value.ID = res.ID
     formValue.value.tushareToken = res.tushareToken
-    formValue.value.iwencaiApiKey = res.iwencaiApiKey || ''
     formValue.value.emApiKey = res.emApiKey || ''
     formValue.value.tickFlowAPIKey = res.tickFlowAPIKey || ''
     formValue.value.dingPush = {
@@ -300,6 +301,9 @@ onMounted(() => {
     formValue.value.httpProxyEnabled=res.httpProxyEnabled;
     formValue.value.enableAgent = res.enableAgent;
     formValue.value.qgqpBId = res.qgqpBId;
+    formValue.value.akshareServiceUrl = res.akshareServiceUrl || 'http://115.190.72.22:8089';
+    formValue.value.aDataServiceUrl = res.aDataServiceUrl || 'http://115.190.72.22:8000';
+    formValue.value.defaultDataSource = res.defaultDataSource || 'adata';
   }).catch(err => {
     message.error('加载配置失败: ' + (err?.message || err))
   })
@@ -337,9 +341,8 @@ async function saveConfig() {
     openAiEnable: openAiEnable.value,
     aiConfigs: aiConfigs.value,
     tushareToken: formValue.value.tushareToken,
-    iwencaiApiKey: formValue.value.iwencaiApiKey,
     emApiKey: formValue.value.emApiKey,
-      tickFlowAPIKey: formValue.value.tickFlowAPIKey,
+    tickFlowAPIKey: formValue.value.tickFlowAPIKey,
     prompt: aiPrompt.value,
     questionTemplate: questionTemplate.value,
     crawlTimeOut: crawlTimeOut.value,
@@ -355,6 +358,9 @@ async function saveConfig() {
     httpProxyEnabled:formValue.value.httpProxyEnabled,
     enableAgent: formValue.value.enableAgent,
     qgqpBId: formValue.value.qgqpBId,
+    akshareServiceUrl: formValue.value.akshareServiceUrl,
+    aDataServiceUrl: formValue.value.aDataServiceUrl,
+    defaultDataSource: formValue.value.defaultDataSource,
   })
 
   try {
@@ -433,6 +439,35 @@ async function cleanup(type) {
   })
 }
 
+async function backup(type) {
+  const typeNameMap = {
+    'followed_stocks': '自选股票',
+    'recommend_stocks': '推荐股票',
+    'ai_reports': 'AI分析报告',
+    'followed_funds': '关注基金',
+    'backtest_results': '回测结果',
+    'stock_change_history': '异动历史(最近1万条)'
+  }
+  const typeName = typeNameMap[type] || type
+  try {
+    const confirm = await dialog.info({
+      title: '确认备份',
+      content: `确定要备份${typeName}到 CSV 文件吗？`,
+      positiveText: '确认备份',
+      negativeText: '取消',
+      closable: false
+    })
+    if (!confirm) return
+  } catch {
+    return
+  }
+  BackupData(type).then(res => {
+    message.success(res)
+  }).catch(err => {
+    message.error('备份失败: ' + (err?.message || err))
+  })
+}
+
 function importConfig() {
   let input = document.createElement('input');
   input.type = 'file';
@@ -456,7 +491,6 @@ function importConfig() {
       }
       formValue.value.ID = config.ID ?? 1
       formValue.value.tushareToken = config.tushareToken ?? ''
-      formValue.value.iwencaiApiKey = config.iwencaiApiKey || ''
       formValue.value.emApiKey = config.emApiKey || ''
       formValue.value.dingPush = {
         enable: !!config.dingPushEnable,
@@ -490,6 +524,9 @@ function importConfig() {
       formValue.value.httpProxyEnabled = !!config.httpProxyEnabled
       formValue.value.enableAgent = !!config.enableAgent
       formValue.value.qgqpBId = config.qgqpBId ?? ''
+      formValue.value.akshareServiceUrl = config.akshareServiceUrl ?? 'http://115.190.72.22:8089'
+      formValue.value.aDataServiceUrl = config.aDataServiceUrl ?? 'http://115.190.72.22:8000'
+      formValue.value.defaultDataSource = config.defaultDataSource ?? 'adata'
       formValue.value.updateChannel = config.updateChannel || 'release'
       // 导入后同步 Store (F-08)
       if (aiConfigs.value.length > 0) {
@@ -554,29 +591,6 @@ function importConfig() {
                 </template>
               </n-tooltip>
             </n-form-item-gi>
-
-            <n-form-item-gi :span="11" label="问财API密钥：" path="iwencaiApiKey">
-              <n-input type="password" placeholder="同花顺问财开放平台API Key" v-model:value="formValue.iwencaiApiKey" clearable show-password-on="click"/>
-              <n-tooltip placement="top">
-                <template #trigger>
-                  <n-icon color="#0e7a0d" size="20">
-                    <HelpCircleFilledIcon />
-                  </n-icon>
-                </template>
-                <template #default>
-                  <n-gradient-text :type="'warning'">
-                  <div style="max-width: 400px;text-align: left">
-                    获取方法：<br>
-                    访问同花顺问财开放平台：<br>
-                    <a href="https://open.iwencai.com" target="_blank" style="color: #63e2b7">https://www.iwencai.com/skillhub</a><br>
-                    注册并登录后，在控制台获取API Key。<br>
-                    配置后可使用问财智能选股、行情查询、研报搜索等功能。
-                  </div>
-                  </n-gradient-text>
-                </template>
-              </n-tooltip>
-            </n-form-item-gi>
-
             <n-form-item-gi :span="11" label="东财AI密钥：" path="emApiKey">
               <n-input type="password" placeholder="东方财富AI SaaS API Key" v-model:value="formValue.emApiKey" clearable show-password-on="click"/>
               <n-tooltip placement="top">
@@ -619,6 +633,24 @@ function importConfig() {
               </n-tooltip>
             </n-form-item-gi>
 
+          </n-grid>
+        </n-card>
+
+        <n-card :title="() => h(NTag, { type: 'primary', bordered: false }, () => '数据源设置')" size="small">
+          <n-grid :cols="24" :x-gap="24" style="text-align: left">
+            <n-form-item-gi :span="8" label="AKShare 服务地址：" path="akshareServiceUrl">
+              <n-input type="text" placeholder="AKShare 代理地址" v-model:value="formValue.akshareServiceUrl" clearable/>
+            </n-form-item-gi>
+            <n-form-item-gi :span="8" label="AData 服务地址：" path="aDataServiceUrl">
+              <n-input type="text" placeholder="AData 服务地址" v-model:value="formValue.aDataServiceUrl" clearable/>
+            </n-form-item-gi>
+            <n-form-item-gi :span="6" label="默认数据源：" path="defaultDataSource">
+              <n-select v-model:value="formValue.defaultDataSource" :options="[
+                { label: 'AData（VPS :8000）', value: 'adata' },
+                { label: 'AKShare（VPS :8089）', value: 'akshare' },
+                { label: '自动（MAC→东财→新浪→腾讯→通达信）', value: 'auto' },
+              ]"/>
+            </n-form-item-gi>
           </n-grid>
         </n-card>
 
@@ -826,11 +858,7 @@ function importConfig() {
                           </template>
                           <template #default>
                             <n-gradient-text :type="'warning'">
-                            <div style="max-width: 400px;text-align: left">
-                              启用语义向量记忆后，Agent 会基于当前问题语义检索
-                              最相关的历史对话（而非简单的最近N条），
-                              需要配置 Embedding 模型（如 bge-m3）。
-                            </div>
+                            <div style="max-width: 400px;text-align: left"></div>
                             </n-gradient-text>
                           </template>
                         </n-tooltip>
@@ -867,6 +895,24 @@ function importConfig() {
             </n-gi>
 
             <n-gi :span="24">
+              <n-divider title-placement="left">数据备份</n-divider>
+            </n-gi>
+
+            <n-gi :span="24">
+              <n-space vertical>
+                <n-text depth="3">导出用户数据到 backups 目录下的 CSV 文件（Excel 可直接打开）</n-text>
+                <n-space justify="center" wrap>
+                  <n-button type="info" ghost @click="backup('followed_stocks')">备份自选股票</n-button>
+                  <n-button type="info" ghost @click="backup('recommend_stocks')">备份推荐股票</n-button>
+                  <n-button type="info" ghost @click="backup('ai_reports')">备份AI分析报告</n-button>
+                  <n-button type="info" ghost @click="backup('followed_funds')">备份关注基金</n-button>
+                  <n-button type="info" ghost @click="backup('backtest_results')">备份回测结果</n-button>
+                  <n-button type="info" ghost @click="backup('stock_change_history')">备份异动历史</n-button>
+                </n-space>
+              </n-space>
+            </n-gi>
+
+            <n-gi :span="24">
               <n-divider/>
             </n-gi>
 
@@ -894,3 +940,5 @@ function importConfig() {
   color: red;
 }
 </style>
+
+

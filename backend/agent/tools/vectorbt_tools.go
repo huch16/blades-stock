@@ -55,27 +55,17 @@ func GetVectorBacktestTool() bladesTools.Tool {
 				params["window"] = gjson.Get(args, "window").Float()
 			}
 
-			result := quant.VectorBTHandler(stockCode, strategyType, params)
-			if result["code"].(int) == 0 {
-				return fmt.Sprintf("回测失败: %v", result["message"]), nil
+			resp, err := quant.VectorBTHandler(stockCode, strategyType, params)
+			if err != nil {
+				return fmt.Sprintf("回测失败: %v", err), nil
 			}
-
-			data := result["data"].(map[string]any)
-			report := data["report"].(string)
-			stats := data["stats"].(map[string]any)
 
 			var b strings.Builder
-			b.WriteString(fmt.Sprintf("## 📊 VectorBT 向量化回测结果\n\n"))
+			b.WriteString("## 📊 VectorBT 向量化回测结果\n\n")
 			b.WriteString(fmt.Sprintf("**股票**: %s | **策略**: %s | **参数**: %v\n\n", stockCode, strategyType, params))
-			b.WriteString(report)
-
-			// 格式化统计数据
-			if totalReturn, ok := stats["TotalReturn"].(float64); ok {
-				b.WriteString(fmt.Sprintf("\n**详细数据**: 总收益%.2f%% | 夏普%.4f | 最大回撤%.2f%%\n",
-					totalReturn*100,
-					getFloat(stats, "SharpeRatio"),
-					getFloat(stats, "MaxDrawdownPct")))
-			}
+			b.WriteString(resp.Report)
+			b.WriteString(fmt.Sprintf("\n**详细数据**: 总收益%.2f%% | 夏普%.4f | 最大回撤%.2f%%\n",
+				resp.Stats.TotalReturn*100, resp.Stats.SharpeRatio, resp.Stats.MaxDrawdownPct))
 
 			return b.String(), nil
 		},
@@ -103,30 +93,26 @@ func GetVectorGridSearchTool() bladesTools.Tool {
 				strategyType = "MA"
 			}
 
-			result := quant.VectorBTGridSearchHandler(stockCode, strategyType)
-			if result["code"].(int) == 0 {
-				return fmt.Sprintf("扫描失败: %v", result["message"]), nil
+			resp, err := quant.VectorBTGridSearchHandler(stockCode, strategyType)
+			if err != nil {
+				return fmt.Sprintf("扫描失败: %v", err), nil
 			}
 
-			data := result["data"].(map[string]any)
-			message := result["message"].(string)
-
 			var b strings.Builder
-			b.WriteString(fmt.Sprintf("## 🔍 参数网格扫描结果\n\n"))
-			b.WriteString(fmt.Sprintf("%s\n\n", message))
-			b.WriteString(fmt.Sprintf("**最优策略**: %s\n", data["best_strategy"]))
-			b.WriteString(fmt.Sprintf("**最优参数**: %v\n\n", data["best_params"]))
+			b.WriteString("## 🔍 参数网格扫描结果\n\n")
+			b.WriteString(fmt.Sprintf("%s\n\n", resp.Message))
+			b.WriteString(fmt.Sprintf("**最优策略**: %s\n", resp.BestStrategy))
+			b.WriteString(fmt.Sprintf("**最优参数**: %v\n\n", resp.BestParams))
 
-			if bestStats := data["best_stats"]; bestStats != nil {
-				bs := bestStats.(map[string]any)
-				b.WriteString(fmt.Sprintf("**最优表现**:\n"))
-				b.WriteString(fmt.Sprintf("- 总收益率: %.2f%%\n", getFloat(bs, "TotalReturn")*100))
-				b.WriteString(fmt.Sprintf("- 年化收益率: %.2f%%\n", getFloat(bs, "AnnualReturn")*100))
-				b.WriteString(fmt.Sprintf("- 夏普比率: %.4f\n", getFloat(bs, "SharpeRatio")))
-				b.WriteString(fmt.Sprintf("- 最大回撤: %.2f%%\n", getFloat(bs, "MaxDrawdownPct")))
-				b.WriteString(fmt.Sprintf("- 胜率: %.1f%%\n", getFloat(bs, "WinRate")*100))
-				b.WriteString(fmt.Sprintf("- 盈亏比: %.2f\n", getFloat(bs, "ProfitFactor")))
-				b.WriteString(fmt.Sprintf("- 交易次数: %d\n", int(getFloat(bs, "TotalTrades"))))
+			if s := resp.BestStats; s != nil {
+				b.WriteString("**最优表现**:\n")
+				b.WriteString(fmt.Sprintf("- 总收益率: %.2f%%\n", s.TotalReturn*100))
+				b.WriteString(fmt.Sprintf("- 年化收益率: %.2f%%\n", s.AnnualReturn*100))
+				b.WriteString(fmt.Sprintf("- 夏普比率: %.4f\n", s.SharpeRatio))
+				b.WriteString(fmt.Sprintf("- 最大回撤: %.2f%%\n", s.MaxDrawdownPct))
+				b.WriteString(fmt.Sprintf("- 胜率: %.1f%%\n", s.WinRate*100))
+				b.WriteString(fmt.Sprintf("- 盈亏比: %.2f\n", s.ProfitFactor))
+				b.WriteString(fmt.Sprintf("- 交易次数: %d\n", s.TotalTrades))
 			}
 
 			return b.String(), nil
@@ -134,9 +120,3 @@ func GetVectorGridSearchTool() bladesTools.Tool {
 	)
 }
 
-func getFloat(m map[string]any, key string) float64 {
-	if v, ok := m[key].(float64); ok {
-		return v
-	}
-	return 0
-}

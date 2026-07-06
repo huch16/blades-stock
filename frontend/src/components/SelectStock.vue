@@ -30,11 +30,25 @@ const saveForm = reactive({
   sortOrder: 0,
 })
 
+interface FollowGroup {
+  ID: number
+  name: string
+  sort?: number
+  [key: string]: unknown
+}
+
 // 关注分组选择
-const groupList = ref<any[]>([])
+const groupList = ref<FollowGroup[]>([])
 const showFollowGroupModal = ref(false)
 const newGroupName = ref('')
-const pendingFollowRow = ref<any>(null)
+interface StockRow {
+  SECURITY_CODE: string
+  SECURITY_SHORT_NAME: string
+  MARKET_SHORT_NAME: string
+  [key: string]: unknown
+}
+
+const pendingFollowRow = ref<StockRow | null>(null)
 
 const followGroupOptions = computed(() => {
   const opts = [{label: '默认（不分组）', key: 0}]

@@ -4,16 +4,22 @@
 - `go build ./...` — Go-only compile check (fastest)
 - `make lint` — `go vet` + `staticcheck` + `golangci-lint`
 - `make test` — unit tests only (`-run "^Test" -skip "integration"`)
-- `make build` — `wails build -clean -skipbindings` (full desktop build)
+- `.\build.ps1 frontend` — build Vue 3 frontend only
+- `.\build.ps1 go` — build Go backend binary
+- `.\build.ps1 wails` — full Wails desktop build (single entry, auto-checkpoints DB + copies to build/bin/)
+- `.\build.ps1 dev` — Wails dev mode with hot-reload (Ctrl+C to exit)
+- `go run ./cmd/checkpoint_db/ "data/stock.db"` — checkpoint WAL into main DB before copying to build/bin/
 - `go test -run TestName ./backend/agent/` — focused single test
-- `GOTOOLCHAIN=go1.26.4` must be set before Wails builds
+- Wails flags `-skipbindings -skipembedcreate` required for Go 1.26.x compatibility (handled automatically in build.ps1)
+
+> Legacy build scripts (`*.bat`, `clean_build*.ps1`, `do_build.ps1`) remain for reference but `.\build.ps1` is the unified entry point.
 
 ## Architecture
 - **Wails v2** desktop app: Go backend + Vue 3 frontend (Naive UI + Pinia + Vite 7)
 - **Module**: `blades-stock`, Go 1.26, Wails v2.12.0
 - **AI framework**: `github.com/go-kratos/blades` v0.3.0 (NOT Eino)
 - **Entrypoint**: `main.go` → `NewApp()` → `wails.Run()` with `App` bound to frontend
-- **No vendor dir** — causes Wails "package without types" for blades
+- **Vendored blades** in `vendor-blades/` — Wails `packages.Load` fails on it (Go 1.26.x regression); use `-skipbindings -skipembedcreate`
 
 ## Agent Pipeline (backend/agent/)
 1. `ChatWithContext()` (`agent_api.go:80`) receives question
@@ -67,5 +73,6 @@ Detected by baseURL pattern matching in `detectChatModelProvider()`.
 - `GetStockMoneyData()` returns `models.StockMoneyDataResp` (value, not pointer) — check `.Data` length, not nil
 - `StockMoneyDataDiff` fields: `F12` (code), `F14` (name), `F62` (net inflow ¥)
 - Wails build fails if `go.sum` is stale — run `go mod tidy` first
-- Source changes → `wails build -skipbindings` to apply; frontend changes → `npm run build` or `wails dev`
+- Source changes → `.\build.ps1 wails` to apply; frontend changes → `.\build.ps1 dev` or `npm run build`
+- `wails dev -skipbindings -skipembedcreate` and `wails build -skipbindings -skipembedcreate` required for Go 1.26.x (blades "without types" bug)
 - Chinese chars in Go source must be UTF-8; use `\uXXXX` escapes if encoding corrupted

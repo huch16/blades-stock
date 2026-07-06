@@ -270,6 +270,17 @@ const columns = [
     ellipsis: { tooltip: { style: { maxWidth: '400px', wordBreak: 'break-all' } } }
   },
   {
+    title: '规则摘要',
+    key: 'systemPrompt',
+    width: 240,
+    ellipsis: { tooltip: { width: 600, style: { whiteSpace: 'pre-wrap', maxHeight: '400px', overflow: 'auto' } } },
+    render(row) {
+      if (!row.systemPrompt) return ''
+      const preview = row.systemPrompt.replace(/\n/g, ' ').substring(0, 120)
+      return h('span', { style: { fontSize: '12px', color: '#888' } }, preview + (row.systemPrompt.length > 120 ? '...' : ''))
+    }
+  },
+  {
     title: '绑定MCP',
     key: 'mcpServerIds',
     width: 100,

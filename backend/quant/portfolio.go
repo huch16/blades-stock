@@ -241,7 +241,7 @@ func FromSignals(
 				}
 
 				pnl := calculatePnL(pos, exitPrice, pf.config)
-				pf.cash[i] = pf.cash[i-1] + pnl
+				pf.cash[i] = pf.cash[i-1] + pos.EntryCash + pnl
 				pf.shares[i] = 0
 				pf.status[i] = 0
 
@@ -308,7 +308,7 @@ func FromSignals(
 		lastPrice := closePrices[n-1]
 		lastPrice = applyFees(lastPrice, pf.config.Fees, pf.config.Slippage)
 		pnl := calculatePnL(pos, lastPrice, pf.config)
-		pf.cash[n-1] += pnl
+		pf.cash[n-1] += pos.EntryCash + pnl
 		pf.equity[n-1] = pf.cash[n-1]
 		pf.value[n-1] = pf.cash[n-1]
 
@@ -571,13 +571,16 @@ func FromHolding(closePrices []float64, initCash float64) *Portfolio {
 	for i := 0; i < n; i++ {
 		equity[i] = shares * closePrices[i]
 	}
-	return &Portfolio{
+	pf := &Portfolio{
 		config:  &PortfolioConfig{InitCash: initCash},
 		value:   equity,
 		equity:  equity,
 		cash:    make([]float64, n),
 		shares:  make([]float64, n),
 	}
+	pf.computeReturns()
+	pf.computeDrawdowns()
+	return pf
 }
 
 // GetHoldingStats 买入持有统计

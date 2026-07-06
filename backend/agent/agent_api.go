@@ -102,6 +102,39 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			sessionIDOverride = optsOverride[1]
 		}
 
+		settingConfig := data.GetSettingConfig()
+
+		// Build embedding service from original config first, then detect skill
+		var embedService *EmbeddingService
+		originalAiConfig, _ := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
+			return uint(aiConfigId) == item.ID
+		})
+		if originalAiConfig != nil && originalAiConfig.EmbeddingEnabled && originalAiConfig.EmbeddingModelName != "" {
+			embedBaseUrl := originalAiConfig.EmbeddingBaseUrl
+			if embedBaseUrl == "" {
+				embedBaseUrl = originalAiConfig.BaseUrl
+			}
+			embedService = NewEmbeddingService(
+				embedBaseUrl,
+				originalAiConfig.ApiKey,
+				originalAiConfig.EmbeddingModelName,
+			)
+		}
+
+		// Detect skill before creating agent, so we can override aiConfigId by skill
+		skillPrompt := buildSkillPrompt(question, embedService)
+		if skillPrompt != "" {
+			hasETF := strings.Contains(skillPrompt, "ETF轮动多Agent分析")
+			hasSerenity := strings.Contains(skillPrompt, "Serenity式产业分析")
+			if hasETF && hasSerenity {
+				aiConfigId = 3 // both matched: MiniMax-M3 (1M context)
+			} else if hasETF {
+				aiConfigId = 1 // gpt-oss-120b: reliable for complex pipeline
+			} else if hasSerenity {
+				aiConfigId = 3 // MiniMax-M3: 1M context for long reports
+			}
+		}
+
 		stockAiAgent := receiver.newStockAiAgent(&ctx, aiConfigId, thinkingMode, question, agentMode)
 		if stockAiAgent == nil {
 			logger.SugaredLogger.Errorf("stockAiAgent is nil")
@@ -115,20 +148,6 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		if sessionIDOverride != "" {
 			stockAiAgent.sessionID = sessionIDOverride
-		}
-
-		// Build embedding service for both memory and skill matching
-		var embedService *EmbeddingService
-		if stockAiAgent.instance.AIConfig.EmbeddingEnabled && stockAiAgent.instance.AIConfig.EmbeddingModelName != "" {
-			embedBaseUrl := stockAiAgent.instance.AIConfig.EmbeddingBaseUrl
-			if embedBaseUrl == "" {
-				embedBaseUrl = stockAiAgent.instance.AIConfig.BaseUrl
-			}
-			embedService = NewEmbeddingService(
-				embedBaseUrl,
-				stockAiAgent.instance.AIConfig.ApiKey,
-				stockAiAgent.instance.AIConfig.EmbeddingModelName,
-			)
 		}
 
 		var memoryService *ChatMemoryService
@@ -147,14 +166,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
-		settingConfig := data.GetSettingConfig()
-
 		sysPrompt := sysPromptOverride
 		if sysPrompt == "" {
 			if settingConfig.Prompt != "" {
 				sysPrompt = settingConfig.Prompt + "\n\n"
 			}
-			skillPrompt := buildSkillPrompt(question, embedService)
 			if skillPrompt != "" {
 				sysPrompt += skillPrompt + "\n\n"
 			}

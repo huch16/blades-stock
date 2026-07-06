@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"errors"
 	"blades-stock/backend/logger"
 	"sync"
 	"time"
@@ -27,8 +28,6 @@ func NewBrowserPool(size int) *BrowserPool {
 		}
 		if path != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(crawlTimeOut)*time.Second)
-			// Note: cancel is intentionally not called here as chromedp handles
-			// context cleanup via chromedp.Cancel() in Put/Close methods
 			_ = cancel
 			ctx, _ = chromedp.NewExecAllocator(
 				ctx,
@@ -37,7 +36,6 @@ func NewBrowserPool(size int) *BrowserPool {
 				chromedp.Flag("blink-settings", "imagesEnabled=false"),
 				chromedp.Flag("disable-javascript", false),
 				chromedp.Flag("disable-gpu", true),
-				//chromedp.UserAgent(""),
 				chromedp.Flag("disable-background-networking", true),
 				chromedp.Flag("enable-features", "NetworkService,NetworkServiceInProcess"),
 				chromedp.Flag("disable-background-timer-throttling", true),
@@ -63,6 +61,8 @@ func NewBrowserPool(size int) *BrowserPool {
 			)
 			ctx, _ = chromedp.NewContext(ctx, chromedp.WithLogf(logger.SugaredLogger.Infof))
 			pool <- &ctx
+		} else {
+			pool <- nil
 		}
 	}
 	return &BrowserPool{
@@ -84,29 +84,31 @@ func (pool *BrowserPool) Get() *context.Context {
 func (pool *BrowserPool) Put(ctx *context.Context) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	// 检查池是否已满
-	if len(pool.pool) >= pool.size {
-		// 池已满，关闭并丢弃这个实例
+	if ctx != nil {
 		chromedp.Cancel(*ctx)
+	}
+	if len(pool.pool) >= pool.size {
 		return
 	}
-	chromedp.Cancel(*ctx)
 	pool.pool <- ctx
 }
 
-// Close 关闭池中的所有浏览器实例
 func (pool *BrowserPool) Close() {
 	close(pool.pool)
 	for ctx := range pool.pool {
-		chromedp.Cancel(*ctx)
+		if ctx != nil {
+			chromedp.Cancel(*ctx)
+		}
 	}
 }
 
 // FetchPage 使用浏览器池获取页面内容
 func (pool *BrowserPool) FetchPage(url, waitVisible string) (string, error) {
-	// 从池中获取浏览器实例
 	ctx := pool.Get()
-	defer pool.Put(ctx) // 使用完毕后放回池中
+	defer pool.Put(ctx)
+	if ctx == nil {
+		return "", errors.New("浏览器未配置，请先在设置中配置BrowserPath")
+	}
 	var htmlContent string
 	err := chromedp.Run(*ctx,
 		chromedp.Navigate(url),

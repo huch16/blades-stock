@@ -135,8 +135,8 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 	switch p {
 	case providerAnthropic:
 		maxOut := aiConfig.MaxTokens
-		if maxOut <= 0 {
-			maxOut = 8192
+		if maxOut <= 0 || maxOut > 32768 {
+			maxOut = 32768
 		}
 		provider = anthropic.NewModel(aiConfig.ModelName, anthropic.Config{
 			APIKey:          aiConfig.ApiKey,
@@ -153,8 +153,15 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 		})
 
 	default:
+		// max_tokens 是输出 token 上限，不是上下文窗口。
+		// MiniMax-M3(1M ctx) 的 API 限制 max_tokens≤524288，且实际输出不可能达到。
+		// 对所有 OpenAI 兼容模型统一 cap 到 32768，兼顾安全与实用性。
+		outputTok := maxTok
+		if outputTok <= 0 || outputTok > 32768 {
+			outputTok = 32768
+		}
 		extraFields := map[string]any{
-			"max_tokens": maxTok,
+			"max_tokens": outputTok,
 		}
 		if aiConfig.Thinking {
 			extraFields["reasoning_effort"] = "medium"
@@ -163,7 +170,7 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 			APIKey:          aiConfig.ApiKey,
 			BaseURL:         baseURL,
 			Temperature:     temperature,
-			MaxOutputTokens: int64(maxTok),
+			MaxOutputTokens: int64(outputTok),
 			ExtraFields:     extraFields,
 		}
 		provider = openai.NewModel(aiConfig.ModelName, cfg)

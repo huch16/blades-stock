@@ -66,15 +66,11 @@ type DirStats3 struct {
 // ============================================================================
 
 // StockDataLoader 从 blades-stock 数据源加载 K 线数据
-type StockDataLoader struct {
-	stockAPI *data.StockDataApi
-}
+type StockDataLoader struct{}
 
 // NewStockDataLoader 创建数据加载器
 func NewStockDataLoader() *StockDataLoader {
-	return &StockDataLoader{
-		stockAPI: data.NewStockDataApi(),
-	}
+	return &StockDataLoader{}
 }
 
 // LoadKLineData 加载 K 线数据
@@ -83,9 +79,26 @@ func (l *StockDataLoader) LoadKLineData(stockCode string, days int) (
 	dates []string,
 	err error,
 ) {
-	kLines := l.stockAPI.GetKLineData(stockCode, "day", int64(days))
-	if kLines == nil || len(*kLines) == 0 {
-		return nil, nil, nil, nil, nil, nil, fmt.Errorf("no kline data for %s", stockCode)
+	var kLines *[]data.KLineData
+
+	cfg := data.GetSettingConfig()
+	if cfg.Settings.DefaultDataSource == "adata" {
+		adateClient := data.NewAdataClient()
+		adataResult, adataErr := adateClient.GetKLineData(stockCode, "", "")
+		if adataErr == nil && len(adataResult) > 0 {
+			kl, convErr := adataResultToKLineData(adataResult)
+			if convErr == nil {
+				kLines = &kl
+			}
+		}
+	}
+
+	if kLines == nil {
+		result := data.FetchKLineWithFallback(stockCode, "", "101", days, "")
+		if result == nil || result.Data == nil || len(*result.Data) == 0 {
+			return nil, nil, nil, nil, nil, nil, fmt.Errorf("no kline data for %s", stockCode)
+		}
+		kLines = result.Data
 	}
 
 	n := len(*kLines)
@@ -466,6 +479,32 @@ func countNotSkipped2(results []aiReportResult) int {
 	return n
 }
 
+// adataResultToKLineData 将 AData 返回数据转换为 KLineData 切片
+func adataResultToKLineData(items []map[string]any) ([]data.KLineData, error) {
+	var result []data.KLineData
+	for _, item := range items {
+		day, _ := item["date"].(string)
+		open, _ := item["open"].(string)
+		high, _ := item["high"].(string)
+		low, _ := item["low"].(string)
+		close_, _ := item["close"].(string)
+		volume, _ := item["volume"].(string)
+		if day == "" {
+			continue
+		}
+		kl := data.KLineData{
+			Day:    day,
+			Open:   open,
+			High:   high,
+			Low:    low,
+			Close:  close_,
+			Volume: volume,
+		}
+		result = append(result, kl)
+	}
+	return result, nil
+}
+
 // SaveBacktestResultToDB 保存回测结果到数据库
 func SaveBacktestResultToDB(r models.AIResponseResult, br aiReportResult) {
 	pred := extractAIPrediction(r.Content)
@@ -489,12 +528,21 @@ func SaveBacktestResultToDB(r models.AIResponseResult, br aiReportResult) {
 // API Handlers - Agent 调用的 API
 // ============================================================================
 
+// VectorBTResponse 回测结果响应
+type VectorBTResponse struct {
+	Code         int
+	Message      string
+	StrategyName string
+	Report       string
+	Stats        *Stats
+}
+
 // VectorBTHandler VectorBT 风格回测 API
-func VectorBTHandler(stockCode string, strategyType string, params map[string]any) map[string]any {
+func VectorBTHandler(stockCode string, strategyType string, params map[string]any) (*VectorBTResponse, error) {
 	loader := NewStockDataLoader()
 	close, high, low, open, volume, dates, err := loader.LoadKLineData(stockCode, 365)
 	if err != nil {
-		return map[string]any{"code": 0, "message": fmt.Sprintf("数据加载失败: %v", err)}
+		return nil, fmt.Errorf("数据加载失败: %v", err)
 	}
 
 	var strategy Strategy
@@ -537,27 +585,32 @@ func VectorBTHandler(stockCode string, strategyType string, params map[string]an
 		Build()
 
 	backtestResult := engine.Run(strategy)
-	output := PrintResult(backtestResult)
+	return &VectorBTResponse{
+		Code:         1,
+		Message:      "回测完成",
+		StrategyName: backtestResult.StrategyName,
+		Report:       PrintResult(backtestResult),
+		Stats:        backtestResult.Stats,
+	}, nil
+}
 
-	return map[string]any{
-		"code":    1,
-		"message": "回测完成",
-		"data": map[string]any{
-			"strategy":    backtestResult.StrategyName,
-			"params":      backtestResult.Params,
-			"stats":       backtestResult.Stats,
-			"trades_count": len(backtestResult.Trades),
-			"report":      output,
-		},
-	}
+// VectorBTGridSearchResponse 参数扫描结果响应
+type VectorBTGridSearchResponse struct {
+	Code            int
+	Message         string
+	TotalCombinations int
+	BestStrategy    string
+	BestParams      map[string]any
+	BestStats       *Stats
+	Duration        string
 }
 
 // VectorBTGridSearchHandler 参数网格扫描 API
-func VectorBTGridSearchHandler(stockCode string, strategyType string) map[string]any {
+func VectorBTGridSearchHandler(stockCode string, strategyType string) (*VectorBTGridSearchResponse, error) {
 	loader := NewStockDataLoader()
 	close, high, low, open, volume, dates, err := loader.LoadKLineData(stockCode, 365)
 	if err != nil {
-		return map[string]any{"code": 0, "message": fmt.Sprintf("数据加载失败: %v", err)}
+		return nil, fmt.Errorf("数据加载失败: %v", err)
 	}
 
 	var strategies []Strategy
@@ -588,15 +641,13 @@ func VectorBTGridSearchHandler(stockCode string, strategyType string) map[string
 
 	result := engine.RunGridSearch(strategies)
 
-	return map[string]any{
-		"code":    1,
-		"message": fmt.Sprintf("扫描完成，共 %d 种参数组合，耗时 %v", result.TotalCombinations, result.Duration),
-		"data": map[string]any{
-			"total_combinations": result.TotalCombinations,
-			"best_strategy":      result.BestStrategyName,
-			"best_params":        result.BestParams,
-			"best_stats":         result.BestStats,
-			"duration":           result.Duration.String(),
-		},
-	}
+	return &VectorBTGridSearchResponse{
+		Code:              1,
+		Message:           fmt.Sprintf("扫描完成，共 %d 种参数组合，耗时 %v", result.TotalCombinations, result.Duration),
+		TotalCombinations: result.TotalCombinations,
+		BestStrategy:      result.BestStrategyName,
+		BestParams:        result.BestParams,
+		BestStats:         result.BestStats,
+		Duration:          result.Duration.String(),
+	}, nil
 }

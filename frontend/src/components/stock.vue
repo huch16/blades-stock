@@ -924,47 +924,39 @@ function search(code, name) {
 }
 
 function handleLongEntryPriceUpdate(newPrice) {
-  console.log('[DEBUG handleLongEntryPriceUpdate] called, newPrice:', newPrice, 'type:', typeof newPrice)
   currentStockTradingPrice.value.entryPrice = newPrice
-  console.log('[DEBUG handleLongEntryPriceUpdate] after assignment, entryPrice:', currentStockTradingPrice.value.entryPrice)
   saveTradingPriceToBackend()
 }
 
 function handleLongStopLossPriceUpdate(newPrice) {
-  console.log('[DEBUG handleLongStopLossPriceUpdate] called, newPrice:', newPrice, 'type:', typeof newPrice)
   currentStockTradingPrice.value.stopLossPrice = newPrice
   saveTradingPriceToBackend()
 }
 
 function handleLongTakeProfitPriceUpdate(newPrice) {
-  console.log('[DEBUG handleLongTakeProfitPriceUpdate] called, newPrice:', newPrice, 'type:', typeof newPrice)
   currentStockTradingPrice.value.takeProfitPrice = newPrice
   saveTradingPriceToBackend()
 }
 
 function handleCostPriceUpdate(newPrice) {
-  console.log('[DEBUG handleCostPriceUpdate] called, newPrice:', newPrice, 'type:', typeof newPrice)
   currentStockTradingPrice.value.costPrice = newPrice
   saveTradingPriceToBackend()
 }
 
 function saveTradingPriceToBackend() {
-  console.log('[DEBUG saveTradingPriceToBackend] called, stockCode:', currentStockTradingPrice.value.stockCode)
   if (!currentStockTradingPrice.value.stockCode) {
-    console.log('[DEBUG saveTradingPriceToBackend] early return - no stockCode')
     return
   }
   const emCode = currentStockTradingPrice.value.stockCode
   const code = fromEastMoneyCode(emCode)
   if (!code) {
-    console.warn('[saveTradingPriceToBackend] 无法转换股票代码:', emCode)
+    console.warn('无法转换股票代码:', emCode)
     return
   }
   const entryPrice = Number(currentStockTradingPrice.value.entryPrice) || 0
   const takeProfitPrice = Number(currentStockTradingPrice.value.takeProfitPrice) || 0
   const stopLossPrice = Number(currentStockTradingPrice.value.stopLossPrice) || 0
   const costPrice = Number(currentStockTradingPrice.value.costPrice) || 0
-  console.log('[DEBUG saveTradingPriceToBackend] calling SetTradingPrice with:', code, entryPrice, takeProfitPrice, stopLossPrice, costPrice)
   SetTradingPrice(
     code,
     entryPrice,
@@ -972,7 +964,6 @@ function saveTradingPriceToBackend() {
     stopLossPrice,
     costPrice
   ).then(result => {
-    console.log('[DEBUG saveTradingPriceToBackend] SetTradingPrice result:', result)
     if (result === '设置成功') {
       const emCode = currentStockTradingPrice.value.stockCode
       const internalCode = code
@@ -981,11 +972,10 @@ function saveTradingPriceToBackend() {
         followItem.EntryPrice = entryPrice
         followItem.TakeProfitPrice = takeProfitPrice
         followItem.StopLossPrice = stopLossPrice
-        console.log('[DEBUG saveTradingPriceToBackend] updated followList item')
       }
     }
   }).catch(err => {
-    console.error('[DEBUG saveTradingPriceToBackend] SetTradingPrice error:', err)
+    console.error('SetTradingPrice error:', err)
   })
 }
 

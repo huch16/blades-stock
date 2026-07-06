@@ -2,6 +2,8 @@ package data
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
@@ -13,6 +15,10 @@ import (
 	"github.com/bensema/gotdx/proto"
 	"github.com/bensema/gotdx/types"
 )
+
+func init() {
+	log.SetOutput(io.Discard)
+}
 
 type TdxKLineApi struct {
 	client      *gotdx.Client
@@ -1177,7 +1183,7 @@ func (t *TdxKLineApi) GetAllStockList() *[]TdxStockBasic {
 	markets := []types.Market{types.MarketSZ, types.MarketSH, types.MarketBJ}
 	for _, market := range markets {
 		if err := t.fetchStockListByMarket(market, result); err != nil {
-			logger.SugaredLogger.Warnf("TdxKLine GetAllStockList market %s error: %v, retry...", market.String(), err)
+			logger.SugaredLogger.Debugf("TdxKLine GetAllStockList market %s error: %v, retry...", market.String(), err)
 			for attempt := 1; attempt <= 3; attempt++ {
 				if err := t.reconnect(); err != nil {
 					logger.SugaredLogger.Errorf("TdxKLine reconnect error: %v", err)
@@ -1188,7 +1194,7 @@ func (t *TdxKLineApi) GetAllStockList() *[]TdxStockBasic {
 					break
 				}
 				if retryErr := t.fetchStockListByMarket(market, result); retryErr != nil {
-					logger.SugaredLogger.Warnf("TdxKLine GetAllStockList market %s retry #%d error: %v", market.String(), attempt, retryErr)
+					logger.SugaredLogger.Debugf("TdxKLine GetAllStockList market %s retry #%d error: %v", market.String(), attempt, retryErr)
 					tdxRetryDelay(attempt)
 					continue
 				}
@@ -1373,7 +1379,7 @@ func (t *TdxKLineApi) fetchExListWithRetry(start uint32, count uint16) ([]proto.
 	items, err := t.macExClient.ExList(start, count)
 	t.macExMu.Unlock()
 	if err != nil {
-		logger.SugaredLogger.Warnf("ExList start=%d error: %v, retry...", start, err)
+			logger.SugaredLogger.Debugf("ExList start=%d error: %v, retry...", start, err)
 		for attempt := 1; attempt <= 3; attempt++ {
 			if e := t.reconnectMACEx(); e != nil {
 				logger.SugaredLogger.Errorf("ExList reconnect error: %v", e)
@@ -1389,7 +1395,7 @@ func (t *TdxKLineApi) fetchExListWithRetry(start uint32, count uint16) ([]proto.
 			if err == nil {
 				return items, nil
 			}
-			logger.SugaredLogger.Warnf("ExList retry #%d error: %v", attempt+1, err)
+			logger.SugaredLogger.Debugf("ExList retry #%d error: %v", attempt+1, err)
 			tdxRetryDelay(attempt)
 		}
 		return nil, err

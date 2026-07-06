@@ -442,8 +442,44 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
 		Get(url)
 	if err != nil {
-		logger.SugaredLogger.Error(err.Error())
-		return &[]StockInfo{}, err
+		logger.SugaredLogger.Debugf("Sina实时行情请求失败，切换到腾讯行情: %v", err)
+		txCodes := slice.JoinFunc(szzsusCodes, ",", func(s string) string {
+			s = strings.ToLower(s)
+			if strutil.HasPrefixAny(s, []string{"us", "gb_"}) {
+				return "gb_" + strings.TrimLeft(strings.TrimPrefix(strings.TrimPrefix(s, "us"), "gb_"), ".")
+			}
+			return s
+		})
+		txFallbackURL := fmt.Sprintf(txStockUrl, time.Now().Unix(), txCodes)
+		resp2, err2 := receiver.client.R().
+			SetHeader("Host", "qt.gtimg.cn").
+			SetHeader("Referer", "https://gu.qq.com/").
+			SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
+			Get(txFallbackURL)
+		if err2 != nil {
+			logger.SugaredLogger.Debugf("腾讯行情也失败（将跳过）: %v", err2)
+			return &[]StockInfo{}, err
+		}
+		resp = resp2
+		str2 := GB18030ToUTF8(resp.Body())
+		dataStr2 := strutil.SplitAndTrim(strings.Trim(str2, "\n"), ";")
+		for _, data := range dataStr2 {
+			stockData, errTx := ParseTxStockData(data)
+			if errTx != nil || stockData == nil {
+				continue
+			}
+			stockInfos = append(stockInfos, *stockData)
+			go func() {
+				var count int64
+				db.Dao.Model(&StockInfo{}).Where("code = ?", stockData.Code).Count(&count)
+				if count == 0 {
+					db.Dao.Model(&StockInfo{}).Create(stockData)
+				} else {
+					db.Dao.Model(&StockInfo{}).Where("code = ?", stockData.Code).Updates(stockData)
+				}
+			}()
+		}
+		return &stockInfos, nil
 	}
 
 	str := GB18030ToUTF8(resp.Body())

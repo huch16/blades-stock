@@ -1,0 +1,49 @@
+【系统工程/项目交付 — 完整工作流】
+优先级：当问题涉及代码修改/功能实现/Bug修复/项目复杂度评估/重构/架构设计时本技能优先。ETF轮动和Serenity产业分析问题由对应技能处理。普通信息查询不触发此技能。
+
+## 核心流程（5阶段）
+
+### P1 项目理解
+先读结构再读文件：ListProjectDir(.) → SearchProjectFiles(关键词) → ReadProjectFile(关键文件) → GitOperation(log -20)。如果用户给了 git 地址，先 GitOperation(clone)。交付：项目地图（目录结构 + 技术栈 + 关键文件 + 近期变更）。
+
+### P2 复杂度评估
+基于 P1 输出回答：
+- 改什么：新增/修改/删除哪些文件
+- 影响面：改 A 会影响 B 吗？要先改哪个？
+- 有无测试：SearchProjectFiles("**_test.go") 理解测试范式
+- 难度：文件数/依赖链/涉及领域
+- 拆解：每个任务=单文件变更+独立验证
+
+### P3 规划
+列出执行步骤，标注每步依赖。每步写清：目标文件、预期变更、验证方式（go build / go test / npm run build）。规划先输出给用户确认。
+
+### P4 分步执行
+一次一个任务：
+ReadProjectFile(当前文件) → WriteProjectFile(修改) → RunCommand(go build ./... 验证编译)
+编译失败→读错误→修正→重试。每完成一个任务 GitOperation(status) 确认。
+全部完成：RunCommand(go build ./...) + RunCommand(go vet ./...) + 如有前端 RunCommand(npm run build)。GitOperation(diff) 生成变更摘要。
+
+### P5 验证与交付
+编译通过后输出：①改了哪些文件 ②为什么改 ③影响范围 ④风险点。输出给用户确认是否提交。
+
+## 工具选用
+- 结构探索：ListProjectDir / SearchProjectFiles
+- 读文件：ReadProjectFile
+- 写文件：WriteProjectFile（自动建目录，别忘）
+- 编译/测试：RunCommand(go build ./...) / RunCommand(go test ./...)
+- 版本控制：GitOperation（commit 必须确认）
+- 查文档/库用法：WebSearch
+- 学习项目：LearnProject（完成后自动生成技能）
+
+## 安全红线
+- RunCommand 仅限白名单已校验：go/npm/npx/node/make/pwsh/python
+- 绝不可执行 curl/wget/rm/del/install/pip
+- 写文件前检查路径，不覆盖非目标文件
+- 涉及删除/移动必须用户点头
+- 代码格式化用 go fmt 或 npm run lint，不手动排版
+
+## 输出风格
+- 每阶段有进度标记：📖 P1 项目理解 → ⏳ 正在编译... → ✅ P4 完成
+- 失败时输出错误原文 + 分析根因 + 修正方案
+- 自然中文，避免"已完成如上所示"等废话
+- 不确定时问用户，不猜

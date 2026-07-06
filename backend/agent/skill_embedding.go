@@ -27,26 +27,35 @@ type SkillEmbeddingService struct {
 	embeddings map[uint][]float32
 }
 
-var skillEmbedSvc *SkillEmbeddingService
-var skillEmbedOnce sync.Once
+var (
+	skillEmbedSvc *SkillEmbeddingService
+	skillEmbedMu  sync.Mutex
+)
 
 func GetSkillEmbeddingService(es *EmbeddingService) *SkillEmbeddingService {
-	skillEmbedOnce.Do(func() {
-		skillEmbedSvc = &SkillEmbeddingService{
-			es:         es,
-			embeddings: make(map[uint][]float32),
+	enabled := es != nil && es.IsConfigured()
+
+	skillEmbedMu.Lock()
+	defer skillEmbedMu.Unlock()
+
+	if skillEmbedSvc != nil && skillEmbedSvc.enabled == enabled {
+		return skillEmbedSvc
+	}
+
+	skillEmbedSvc = &SkillEmbeddingService{
+		es:         es,
+		embeddings: make(map[uint][]float32),
+	}
+	skillEmbedSvc.enabled = enabled
+	if enabled {
+		logger.SugaredLogger.Info("SkillEmbeddingService 已启用（bge-m3语义匹配）")
+		if err := skillEmbedSvc.loadFromDB(); err != nil {
+			logger.SugaredLogger.Warnf("从DB加载skill embedding失败: %v，将重新计算", err)
+			_ = skillEmbedSvc.RefreshEmbeddings()
 		}
-		skillEmbedSvc.enabled = es != nil && es.IsConfigured()
-		if skillEmbedSvc.enabled {
-			logger.SugaredLogger.Info("SkillEmbeddingService 已启用（bge-m3语义匹配）")
-			if err := skillEmbedSvc.loadFromDB(); err != nil {
-				logger.SugaredLogger.Warnf("从DB加载skill embedding失败: %v，将重新计算", err)
-				_ = skillEmbedSvc.RefreshEmbeddings()
-			}
-		} else {
-			logger.SugaredLogger.Warn("EmbeddingService 未配置，SkillEmbeddingService 降级为关键词匹配")
-		}
-	})
+	} else {
+		logger.SugaredLogger.Warn("EmbeddingService 未配置，SkillEmbeddingService 降级为关键词匹配")
+	}
 	return skillEmbedSvc
 }
 
@@ -222,9 +231,11 @@ func BuildShortSkillPrompt(matchedSkills []models.Skill) string {
 		if skill.Description != "" {
 			sb.WriteString(fmt.Sprintf("描述：%s\n", skill.Description))
 		}
-		// Inject short directive instead of full SystemPrompt
+		// Inject short directive if available, otherwise full SystemPrompt
 		if skill.Directive != "" {
 			sb.WriteString(fmt.Sprintf("【规则指令】\n%s\n", skill.Directive))
+		} else if skill.SystemPrompt != "" {
+			sb.WriteString(fmt.Sprintf("【规则指令】\n%s\n", skill.SystemPrompt))
 		}
 		if skill.TriggerKeywords != "" {
 			sb.WriteString(fmt.Sprintf("触发关键词：%s\n", skill.TriggerKeywords))

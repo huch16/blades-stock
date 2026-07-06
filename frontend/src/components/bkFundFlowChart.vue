@@ -14,16 +14,27 @@ const props = defineProps({
   }
 })
 
+interface FlowItem {
+  code: string
+  name: string
+  netInflow: number
+}
+
+interface BKCodeItem {
+  code: string
+  name: string
+}
+
 const chartRef = ref(null)
-const topList = ref<any[]>([])
+const topList = ref<FlowItem[]>([])
 const loading = ref(false)
-const refreshInterval = ref<any>(null)
+const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null)
 let chart: echarts.ECharts | null = null
 
 // 临时添加的板块
-const extraSectors = ref<any[]>([])
+const extraSectors = ref<FlowItem[]>([])
 const addCodeInput = ref('')
-const allBKCodes = ref<any[]>([])
+const allBKCodes = ref<BKCodeItem[]>([])
 const addCodeOptions = computed(() => {
   const existCodes = new Set([
     ...inflowList.value.map((i: any) => i.code),
@@ -52,11 +63,11 @@ const outflowList = computed(() => topList.value.filter((item: any) => item.netI
 
 // ===== 播放功能 =====
 const isPlaying = ref(false)
-const playTimer = ref<any>(null)
+const playTimer = ref<ReturnType<typeof setInterval> | null>(null)
 const playSpeed = ref(1) // 倍速
 const playIndex = ref(0)  // 当前播放到第几个时间点
 const totalPoints = ref(0) // 总时间点数
-const cachedAllData = ref<any[]>([]) // 缓存全量数据
+const cachedAllData = ref<FlowItem[][]>([]) // 缓存全量数据
 const cachedTimes = ref<string[]>([]) // 缓存全量时间轴
 
 onMounted(async () => {

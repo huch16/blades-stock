@@ -8,8 +8,8 @@ const (
 	chineseCharsPerToken = 1.5
 	englishCharsPerToken = 4.0
 	toolsTokenReserve    = 8000
-	skillPromptReserve   = 4000
-	reactLoopReserve     = 8000
+	skillPromptReserve   = 2000 // Directive ~3KB ≈ 2000 tok, full prompt ≤4000 tok
+	reactLoopReserve     = 4000 // plan_execute 模式才消耗, 非该模式时实际用不到
 	safetyMargin         = 0.85
 )
 

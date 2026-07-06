@@ -24,6 +24,8 @@ export function AnalyzeSentiment(arg1:string):Promise<models.SentimentResult>;
 
 export function AnalyzeSentimentWithFreqWeight(arg1:string):Promise<Record<string, any>>;
 
+export function BackupData(arg1:string):Promise<string>;
+
 export function BatchDeleteAIResponseResult(arg1:Array<number>):Promise<string>;
 
 export function BatchDeleteAllStockInfo(arg1:Array<number>):Promise<string>;
@@ -318,6 +320,10 @@ export function RemoveStockGroup(arg1:string,arg2:string,arg3:number):Promise<st
 
 export function RestartAsAdmin():Promise<void>;
 
+export function RunVectorBacktest(arg1:string,arg2:string,arg3:Record<string, any>):Promise<Record<string, any>>;
+
+export function RunVectorGridSearch(arg1:string,arg2:string):Promise<Record<string, any>>;
+
 export function SaveAIResponseResult(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:number):Promise<void>;
 
 export function SaveAiAssistantSession(arg1:string,arg2:Array<models.AiAssistantMessage>):Promise<void>;
@@ -387,7 +393,3 @@ export function UpdateSkill(arg1:models.Skill):Promise<string>;
 export function UpdateTradingRecord(arg1:data.TradingRecord):Promise<void>;
 
 export function ValidateCronExpr(arg1:string):Promise<string>;
-
-export function RunVectorBacktest(arg1:string,arg2:string,arg3:any):Promise<any>;
-
-export function RunVectorGridSearch(arg1:string,arg2:string):Promise<any>;

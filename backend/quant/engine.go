@@ -9,6 +9,7 @@ import (
 	"context"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -628,11 +629,11 @@ func formatFloat(v any) string {
 }
 
 func formatPct(v float64) string {
-	return sprintf("%.2f%%", v*100)
+	return sprintf("%.2f", v*100) + "%"
 }
 
 func formatMoney(v float64) string {
-	return sprintf("¥%.2f", v)
+	return "¥" + sprintf("%.2f", v)
 }
 
 func itoa(i int) string {
@@ -668,15 +669,7 @@ func contains(s, substr string) bool {
 }
 
 func sprintfFloat(f float64, decimals int) string {
-	mult := 1.0
-	for i := 0; i < decimals; i++ {
-		mult *= 10
-	}
-	rounded := float64(int(f*mult+0.5)) / mult
-	// Simple integer part + decimal
-	intPart := int(rounded)
-	decPart := int((rounded - float64(intPart)) * mult)
-	return sprintf("%d.%0"+itoa(decimals)+"d", intPart, decPart)
+	return strconv.FormatFloat(f, 'f', decimals, 64)
 }
 
 func sprintfInt(i int) string {

@@ -38,6 +38,10 @@ export function AnalyzeSentimentWithFreqWeight(arg1) {
   return window['go']['main']['App']['AnalyzeSentimentWithFreqWeight'](arg1);
 }
 
+export function BackupData(arg1) {
+  return window['go']['main']['App']['BackupData'](arg1);
+}
+
 export function BatchDeleteAIResponseResult(arg1) {
   return window['go']['main']['App']['BatchDeleteAIResponseResult'](arg1);
 }
@@ -626,6 +630,14 @@ export function RestartAsAdmin() {
   return window['go']['main']['App']['RestartAsAdmin']();
 }
 
+export function RunVectorBacktest(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RunVectorBacktest'](arg1, arg2, arg3);
+}
+
+export function RunVectorGridSearch(arg1, arg2) {
+  return window['go']['main']['App']['RunVectorGridSearch'](arg1, arg2);
+}
+
 export function SaveAIResponseResult(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['SaveAIResponseResult'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
@@ -764,12 +776,4 @@ export function UpdateTradingRecord(arg1) {
 
 export function ValidateCronExpr(arg1) {
   return window['go']['main']['App']['ValidateCronExpr'](arg1);
-}
-
-export function RunVectorBacktest(arg1, arg2, arg3) {
-  return window['go']['main']['App']['RunVectorBacktest'](arg1, arg2, arg3);
-}
-
-export function RunVectorGridSearch(arg1, arg2) {
-  return window['go']['main']['App']['RunVectorGridSearch'](arg1, arg2);
 }

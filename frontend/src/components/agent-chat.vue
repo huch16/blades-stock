@@ -87,7 +87,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import {ref, onMounted, h, onBeforeUnmount, onBeforeMount, nextTick} from 'vue';
+import {ref, onMounted, h, onBeforeUnmount, onBeforeMount, nextTick, type VNode} from 'vue';
 import {ArrowDownIcon, CheckCircleIcon, SystemSumIcon} from 'tdesign-icons-vue-next';
 const isStreaming = ref(false);
 
@@ -491,7 +491,22 @@ const handleOperation = function (type: string, options: any) {
   }
 };
 
-const chatList = ref<any[]>([
+interface ChatMessage {
+  id: number
+  avatar: string | VNode
+  name: string
+  datetime: string
+  content: string
+  reasoning?: string
+  rawContent?: string
+  rawReasoning?: string
+  jsonMarkdown?: string
+  role: 'assistant' | 'user'
+  duration?: number
+  steps?: string[]
+}
+
+const chatList = ref<ChatMessage[]>([
   {
     id: nextMsgId(),
     avatar: '',

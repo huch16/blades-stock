@@ -641,21 +641,21 @@ func isTradingDay(date time.Time) bool {
 	}
 
 	if weekday == time.Saturday || weekday == time.Sunday {
-		_ = tradingDayCache.Set(cacheKey, []byte("0"), 86400)
+		tradingDayCache.Set(cacheKey, []byte("0"), 86400)
 		return false
 	}
 
 	isHoliday, apiOk := checkHolidayAPI(dateStr)
 	if apiOk {
 		if isHoliday {
-			_ = tradingDayCache.Set(cacheKey, []byte("0"), 86400)
+			tradingDayCache.Set(cacheKey, []byte("0"), 86400)
 			return false
 		}
-		_ = tradingDayCache.Set(cacheKey, []byte("1"), 86400)
+		tradingDayCache.Set(cacheKey, []byte("1"), 86400)
 		return true
 	}
 
-	_ = tradingDayCache.Set(cacheKey, []byte("1"), 600)
+	tradingDayCache.Set(cacheKey, []byte("1"), 600)
 	return true
 }
 
@@ -765,21 +765,21 @@ func isHKTradingDay(date time.Time) bool {
 	}
 
 	if weekday == time.Saturday || weekday == time.Sunday {
-		_ = tradingDayCache.Set(cacheKey, []byte("0"), 86400)
+		tradingDayCache.Set(cacheKey, []byte("0"), 86400)
 		return false
 	}
 
 	isHoliday, apiOk := checkHKHolidayAPI(dateStr)
 	if apiOk {
 		if isHoliday {
-			_ = tradingDayCache.Set(cacheKey, []byte("0"), 86400)
+			tradingDayCache.Set(cacheKey, []byte("0"), 86400)
 			return false
 		}
-		_ = tradingDayCache.Set(cacheKey, []byte("1"), 86400)
+		tradingDayCache.Set(cacheKey, []byte("1"), 86400)
 		return true
 	}
 
-	_ = tradingDayCache.Set(cacheKey, []byte("1"), 600)
+	tradingDayCache.Set(cacheKey, []byte("1"), 600)
 	return true
 }
 
@@ -843,21 +843,21 @@ func isUSTradingDay(estTime time.Time) bool {
 	}
 
 	if weekday == time.Saturday || weekday == time.Sunday {
-		_ = tradingDayCache.Set(cacheKey, []byte("0"), 86400)
+		tradingDayCache.Set(cacheKey, []byte("0"), 86400)
 		return false
 	}
 
 	isHoliday, apiOk := checkUSHolidayAPI(dateStr)
 	if apiOk {
 		if isHoliday {
-			_ = tradingDayCache.Set(cacheKey, []byte("0"), 86400)
+			tradingDayCache.Set(cacheKey, []byte("0"), 86400)
 			return false
 		}
-		_ = tradingDayCache.Set(cacheKey, []byte("1"), 86400)
+		tradingDayCache.Set(cacheKey, []byte("1"), 86400)
 		return true
 	}
 
-	_ = tradingDayCache.Set(cacheKey, []byte("1"), 600)
+	tradingDayCache.Set(cacheKey, []byte("1"), 600)
 	return true
 }
 
@@ -1652,6 +1652,11 @@ func (a *App) ExportConfig() string {
 // CleanupData 暴露给前端的清理入口
 func (a *App) CleanupData(cleanupType string) string {
 	return data.NewSettingsApi().CleanupData(cleanupType)
+}
+
+// BackupData 暴露给前端的数据备份入口
+func (a *App) BackupData(backupType string) string {
+	return data.NewSettingsApi().BackupData(backupType)
 }
 
 func (a *App) ShareAnalysis(stockCode, stockName string) string {
@@ -3009,10 +3014,35 @@ type VectorBTResult struct {
 
 // RunVectorBacktest 运行单次回测
 func (a *App) RunVectorBacktest(stockCode, strategyType string, params map[string]any) map[string]any {
-	return quant.VectorBTHandler(stockCode, strategyType, params)
+	resp, err := quant.VectorBTHandler(stockCode, strategyType, params)
+	if err != nil {
+		return map[string]any{"code": 0, "message": err.Error()}
+	}
+	return map[string]any{
+		"code":    resp.Code,
+		"message": resp.Message,
+		"data": map[string]any{
+			"report":   resp.Report,
+			"stats":    resp.Stats,
+			"strategy": resp.StrategyName,
+			"params":   params,
+		},
+	}
 }
 
 // RunVectorGridSearch 运行参数网格扫描
 func (a *App) RunVectorGridSearch(stockCode, strategyType string) map[string]any {
-	return quant.VectorBTGridSearchHandler(stockCode, strategyType)
+	resp, err := quant.VectorBTGridSearchHandler(stockCode, strategyType)
+	if err != nil {
+		return map[string]any{"code": 0, "message": err.Error()}
+	}
+	return map[string]any{
+		"code":              resp.Code,
+		"message":           resp.Message,
+		"total_combinations": resp.TotalCombinations,
+		"best_strategy":     resp.BestStrategy,
+		"best_params":       resp.BestParams,
+		"best_stats":        resp.BestStats,
+		"duration":          resp.Duration,
+	}
 }

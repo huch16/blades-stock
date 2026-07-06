@@ -576,7 +576,11 @@ func (api *EmAPI) IndustryResearch(query string) (*EmIndustryResearchResult, err
 func (api *EmAPI) IndustryResearchToMarkdown(query string) string {
 	result, err := api.IndustryResearch(query)
 	if err != nil {
-		logger.SugaredLogger.Errorf("行业研究报告生成失败: %v", err)
+		if strings.Contains(err.Error(), "积分已用完") {
+			logger.SugaredLogger.Warnf("东方财富AI积分已用完，跳过行业研究报告")
+		} else {
+			logger.SugaredLogger.Errorf("行业研究报告生成失败: %v", err)
+		}
 		return fmt.Sprintf("行业研究报告生成失败: %v", err)
 	}
 
@@ -1335,7 +1339,11 @@ func (api *EmAPI) HotspotDiscovery(question string) (string, error) {
 func (api *EmAPI) HotspotDiscoveryToMarkdown(question string) string {
 	content, err := api.HotspotDiscovery(question)
 	if err != nil {
-		logger.SugaredLogger.Errorf("热点发现失败: %v", err)
+		if strings.Contains(err.Error(), "积分已用完") {
+			logger.SugaredLogger.Warnf("东方财富AI积分已用完，跳过热点发现")
+		} else {
+			logger.SugaredLogger.Errorf("热点发现失败: %v", err)
+		}
 		return fmt.Sprintf("热点发现失败: %v", err)
 	}
 	return content

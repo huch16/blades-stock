@@ -629,26 +629,6 @@ func buildKeywordVector(text string) []float64 {
 	return vec
 }
 
-// cosineSimilarity 余弦相似度
-func cosineSimilarity(a, b []float64) float64 {
-	if len(a) != len(b) || len(a) == 0 {
-		return 0
-	}
-
-	var dotProd, normA, normB float64
-	for i := 0; i < len(a); i++ {
-		dotProd += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
-	}
-
-	if normA == 0 || normB == 0 {
-		return 0
-	}
-
-	return dotProd / (math.Sqrt(normA) * math.Sqrt(normB))
-}
-
 // ---------------------------------------------------------------------------
 // 辅助函数
 // ---------------------------------------------------------------------------
@@ -656,8 +636,6 @@ func cosineSimilarity(a, b []float64) float64 {
 func parseFloat(s string) (float64, error) {
 	return strconv.ParseFloat(strings.TrimSpace(s), 64)
 }
-
-var strconvParseFloat = strconv.ParseFloat
 
 // ============================================================================
 // API 端点

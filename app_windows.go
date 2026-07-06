@@ -129,7 +129,10 @@ func MonitorStockPrices(a *App) {
 	//logger.SugaredLogger.Debugf("市场状态 - A股: %v, 港股: %v, 美股: %v", isAStockOpen, isHKStockOpen, isUSStockOpen)
 
 	dest := &[]data.FollowedStock{}
-	db.Dao.Model(&data.FollowedStock{}).Find(dest)
+	if err := db.Dao.Model(&data.FollowedStock{}).Find(dest).Error; err != nil {
+		logger.SugaredLogger.Errorf("查询自选股失败: %v", err)
+		return
+	}
 	total := float64(0)
 	//for _, follow := range *dest {
 	//	stockData := getStockInfo(follow)

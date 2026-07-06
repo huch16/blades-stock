@@ -71,7 +71,9 @@ func main() {
 	data.SetAppIcon(icon)
 	db.Init("")
 	data.InitAnalyzeSentiment()
-	go AutoMigrate()
+	// 初始化交易日历（Baostock，含法定节假日）
+	data.InitTradingCalendar()
+	AutoMigrate()
 	// 后台启动分析报告回测
 	go func() {
 		time.Sleep(10 * time.Second) // 等数据库和数据服务就绪

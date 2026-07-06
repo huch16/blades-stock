@@ -12,9 +12,14 @@
       <n-gi>
         <div class="input-group">
           <label>股票代码</label>
-          <n-input
+          <n-auto-complete
             v-model:value="stockCode"
-            placeholder="如 000001"
+            :input-props="{ autocomplete: 'disabled' }"
+            :options="stockOptions"
+            placeholder="股票名称/代码（如 000001）"
+            clearable
+            @update-value="searchStock"
+            @select="onSelectStock"
             @keyup.enter="runBacktest"
           />
         </div>
@@ -241,10 +246,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { RunVectorBacktest, RunVectorGridSearch, GetConfig } from '../../wailsjs/go/main/App'
+import { RunVectorBacktest, RunVectorGridSearch, GetConfig, GetStockList } from '../../wailsjs/go/main/App'
 import {
   NButton,
-  NInput,
+  NAutoComplete,
   NInputNumber,
   NSelect,
   NGrid,
@@ -272,19 +277,17 @@ const macdSignal = ref(9)
 const rsiWindow = ref(14)
 const initCash = ref(100000)
 
-// 结果
-const result = ref<any>(null)
-const stats = ref<any>({})
-const gridResult = ref<any>(null)
+interface StockItem {
+  name?: string
+  ts_code?: string
+  [key: string]: unknown
+}
 
-// 策略选项
-const strategyOptions = [
-  { label: 'MA 均线交叉', value: 'MA' },
-  { label: 'MACD', value: 'MACD' },
-  { label: 'RSI 超买超卖', value: 'RSI' },
-]
+// 股票自动补全
+const stockList = ref<StockItem[]>([])
+const stockOptions = ref<Array<{ label: string; value: string }>>([])
 
-// 获取配置
+// 加载股票列表
 onMounted(async () => {
   try {
     const config = await GetConfig()
@@ -292,7 +295,82 @@ onMounted(async () => {
   } catch (e) {
     console.error('获取配置失败:', e)
   }
+  try {
+    const list = await GetStockList("")
+    stockList.value = list
+  } catch (e) {
+    console.error('加载股票列表失败:', e)
+  }
 })
+
+// 搜索股票
+function searchStock(value: string) {
+  if (!value) {
+    stockOptions.value = []
+    return
+  }
+  stockOptions.value = stockList.value
+    .filter((item: any) => item.name?.includes(value) || item.ts_code?.includes(value))
+    .map((item: any) => ({
+      label: `${item.name} - ${item.ts_code}`,
+      value: item.ts_code,
+    }))
+  if (value.indexOf("-") <= 0) {
+    stockCode.value = value
+  }
+}
+
+// 选择股票：转换为内部格式（sz000001 / sh600000）
+function onSelectStock(item: string) {
+  if (item.indexOf("-") > 0) {
+    item = item.split("-")[1].toLowerCase()
+  }
+  if (item.indexOf(".") > 0) {
+    const parts = item.split(".")
+    stockCode.value = parts[1].toLowerCase() + parts[0]
+  } else {
+    stockCode.value = item
+  }
+}
+
+interface BacktestStats {
+  TotalReturn: number
+  AnnualReturn: number
+  SharpeRatio: number
+  MaxDrawdownPct: number
+  WinRate: number
+  ProfitFactor: number
+  TotalTrades: number
+  SortinoRatio: number
+}
+
+interface BacktestData {
+  report: string
+  stats: BacktestStats | null
+  strategy: string
+  params: Record<string, number>
+}
+
+interface GridSearchResult {
+  code: number
+  message: string
+  best_strategy: string
+  best_params: Record<string, unknown>
+  best_stats: BacktestStats | null
+  total_combinations: number
+  duration: string
+}
+
+const result = ref<BacktestData | null>(null)
+const stats = ref<BacktestStats>({} as BacktestStats)
+const gridResult = ref<GridSearchResult | null>(null)
+
+// 策略选项
+const strategyOptions = [
+  { label: 'MA 均线交叉', value: 'MA' },
+  { label: 'MACD', value: 'MACD' },
+  { label: 'RSI 超买超卖', value: 'RSI' },
+]
 
 // 获取参数
 function getParams(): Record<string, number> {

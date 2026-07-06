@@ -18,4 +18,4 @@ test-integration:
 	go test -tags=integration ./... -v
 
 build:
-	wails build -clean -skipbindings
+	powershell -File build.ps1 wails

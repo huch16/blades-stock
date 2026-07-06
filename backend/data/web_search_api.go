@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -150,14 +152,44 @@ func (s *WebSearchApi) Search(query string, maxResults int) []WebSearchResult {
 		maxResults = 10
 	}
 
-	// 直接走百度浏览器搜索（SearXNG + Whohai 对中国查询返回 0 条，已移除）
 	browser, err := GetBrowserManager().GetOrCreateBrowser()
 	if err != nil {
-		logger.SugaredLogger.Warnf("Failed to get browser: %v", err)
-		return nil
+		logger.SugaredLogger.Debugf("浏览器不可用，降级到HTTP搜索: %v", err)
+		return s.searchBaiduHTTP(query, maxResults)
 	}
 
 	return s.searchBaiduWithBrowser(browser, query, maxResults)
+}
+
+// searchBaiduHTTP 使用简单 HTTP 请求 + goquery 解析百度搜索结果，作为 Chrome 不可用时的降级方案。
+func (s *WebSearchApi) searchBaiduHTTP(query string, maxResults int) []WebSearchResult {
+	client := &http.Client{Timeout: 15 * time.Second}
+	encodedQuery := url.QueryEscape(query)
+	searchURL := fmt.Sprintf("https://www.baidu.com/s?wd=%s&ie=utf-8", encodedQuery)
+
+	req, err := http.NewRequest("GET", searchURL, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.SugaredLogger.Warnf("HTTP百度搜索请求失败: %v", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	results := s.parseBaiduResultsWithGoquery(string(body), maxResults)
+	logger.SugaredLogger.Infof("HTTP百度搜索到 %d 条结果（降级）: %s", len(results), query)
+	return results
 }
 
 func (s *WebSearchApi) searchBaiduWithBrowser(browser *BrowserInstance, query string, maxResults int) []WebSearchResult {
@@ -189,55 +221,6 @@ func (s *WebSearchApi) searchBaiduWithBrowser(browser *BrowserInstance, query st
 	results = s.parseBaiduResultsWithGoquery(htmlContent, maxResults)
 	logger.SugaredLogger.Infof("Baidu search found %d results for query: %s", len(results), query)
 
-	return results
-}
-
-func (s *WebSearchApi) parseBingResultsWithGoquery(htmlContent string, maxResults int) []WebSearchResult {
-	var results []WebSearchResult
-
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
-	if err != nil {
-		logger.SugaredLogger.Errorf("Failed to parse Bing HTML: %v", err)
-		return results
-	}
-
-	doc.Find("li.b_algo").Each(func(i int, li *goquery.Selection) {
-		if i >= maxResults {
-			return
-		}
-
-		result := WebSearchResult{Source: "Bing"}
-
-		li.Find("h2 a").First().Each(func(_ int, a *goquery.Selection) {
-			href, exists := a.Attr("href")
-			if exists {
-				result.Url = href
-				result.Title = strings.TrimSpace(a.Text())
-			}
-		})
-
-		if result.Url == "" {
-			return
-		}
-
-		li.Find(".b_caption p").First().Each(func(_ int, p *goquery.Selection) {
-			result.Snippet = strings.TrimSpace(p.Text())
-		})
-
-		if result.Snippet == "" {
-			li.Find(".b_paractl").First().Each(func(_ int, p *goquery.Selection) {
-				result.Snippet = strings.TrimSpace(p.Text())
-			})
-		}
-
-		li.Find(".b_attribution, .news, .date").First().Each(func(_ int, span *goquery.Selection) {
-			result.PublishTime = strings.TrimSpace(span.Text())
-		})
-
-		results = append(results, result)
-	})
-
-	logger.SugaredLogger.Debugf("Bing: found %d results using goquery", len(results))
 	return results
 }
 

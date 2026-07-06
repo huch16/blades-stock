@@ -148,24 +148,33 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetFundInfo":                 GroupOperations,
 	"GetEconomicData":             GroupOperations,
 
+	// AKShare tools
+	"GetFuturesSpot":           GroupMarket,
+	"GetETFSpot":               GroupMarket,
+	"GetETFHistorical":         GroupStockAnalysis,
+	"GetOpenFundNetValue":      GroupStockAnalysis,
+	"GetBoardConcept":          GroupMarket,
+	"GetBoardIndustry":         GroupMarket,
+	"GetMacroCPI":              GroupMarket,
+	"GetMacroGDP":              GroupMarket,
+	"GetMacroPMI":              GroupMarket,
+	"GetMacroMoneySupply":      GroupMarket,
+	"GetLongHuToday":           GroupNewsResearch,
+	"GetConvertibleBondSpot":   GroupMarket,
+
+	// AData tools
+	"GetADataMarketCurrent":    GroupMarket,
+	"GetADataKLine":            GroupStockAnalysis,
+	"GetADataTradeCalendar":    GroupBase,
+	"GetADataNorthFlow":        GroupMoneyFlow,
+
 	"ReadProjectFile":    GroupProject,
 	"ListProjectDir":     GroupProject,
 	"SearchProjectFiles": GroupProject,
 	"GitOperation":       GroupProject,
 	"LearnProject":       GroupProject,
-
-	// AKShare 工具（走本地 AKShare 服务）
-	"GetAkshareFuturesSpot":      GroupMarket,
-	"GetAkshareETFSpot":          GroupMarket,
-	"GetAkshareBoardConcept":     GroupMarket,
-	"GetAkshareBoardIndustry":    GroupMarket,
-	"GetAkshareMacroCPI":        GroupMarket,
-	"GetAkshareMacroGDP":         GroupMarket,
-	"GetAkshareMacroPMI":         GroupMarket,
-	"GetAkshareMacroMoneySupply": GroupMarket,
-	"GetAkshareLongHuToday":      GroupMarket,
-	"GetAkshareConvertibleBondSpot": GroupMarket,
-	"CallAkshareFunction":        GroupMarket,
+	"WriteProjectFile":   GroupProject,
+	"RunCommand":         GroupProject,
 }
 
 type groupKeywords struct {
@@ -286,6 +295,8 @@ var groupKeywordsList = []groupKeywords{
 		"文件读取", "目录结构", "看代码", "读代码", "项目结构",
 		"分析项目", "导入项目", "项目文件", "源代码",
 		"ReadProjectFile", "ListProjectDir", "GitOperation",
+		"WriteProjectFile", "RunCommand", "写文件", "执行命令",
+		"编译", "测试", "build", "格式化", "lint", "fmt",
 	}},
 }
 

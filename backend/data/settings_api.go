@@ -1,7 +1,9 @@
 package data
 
 import (
+	"encoding/csv"
 	"encoding/json"
+	"database/sql"
 	"errors"
 	"fmt"
 	"blades-stock/backend/db"
@@ -42,9 +44,7 @@ type Settings struct {
 	HttpProxyEnabled       bool   `json:"httpProxyEnabled"`
 	EnableAgent            bool   `json:"enableAgent"`
 	QgqpBId                string `json:"qgqpBId" gorm:"column:qgqp_b_id"`
-	IwencaiApiKey          string `json:"iwencaiApiKey" gorm:"column:iwencai_api_key"`
 	TickFlowAPIKey        string `json:"tickFlowAPIKey" gorm:"column:tickflow_api_key"`
-	AkshareServiceUrl      string `json:"akshareServiceUrl" gorm:"column:akshare_service_url"`
 	EmApiKey               string `json:"emApiKey" gorm:"column:em_api_key"`
 	WindowWidth            int    `json:"windowWidth"`
 	WindowHeight           int    `json:"windowHeight"`
@@ -52,6 +52,9 @@ type Settings struct {
 	BacktestAccuracyThreshold float64 `json:"backtestAccuracyThreshold" gorm:"column:backtest_accuracy_threshold;default:5.0"`
 	BacktestVerifyDays        int64   `json:"backtestVerifyDays" gorm:"column:backtest_verify_days;default:2"`
 	BacktestEnabled           bool    `json:"backtestEnabled" gorm:"column:backtest_enabled;default:true"`
+	AkshareServiceUrl         string  `json:"akshareServiceUrl" gorm:"column:akshare_service_url;default:http://115.190.72.22:8089"`
+	ADataServiceUrl           string  `json:"aDataServiceUrl" gorm:"column:adata_service_url;default:http://115.190.72.22:8000"`
+	DefaultDataSource         string  `json:"defaultDataSource" gorm:"column:default_data_source;default:adata"`
 }
 
 func (receiver Settings) TableName() string {
@@ -130,6 +133,16 @@ func NewSettingsApi() *SettingsApi {
 }
 
 // CleanupTypes 定义支持的清理类型
+
+// BackupTypes 定义支持的数据备份类型
+const (
+	BackupFollowedStocks     = "followed_stocks"
+	BackupRecommendStocks    = "recommend_stocks"
+	BackupAIReports          = "ai_reports"
+	BackupFollowedFunds      = "followed_funds"
+	BackupBacktestResults    = "backtest_results"
+	BackupStockChangeHistory = "stock_change_history"
+)
 const (
 	CleanupLogs       = "logs"
 	CleanupCache      = "cache"
@@ -256,6 +269,134 @@ func cleanupBrowserTemp() string {
 	}
 	return fmt.Sprintf("已清理 %d 个浏览器临时目录", removed)
 }
+// BackupData 导出用户数据到 CSV，返回生成的文件路径
+func (s *SettingsApi) BackupData(backupType string) string {
+	logger.SugaredLogger.Infof("Backing up data type: %s", backupType)
+
+	backupDir := "backups"
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		return "创建备份目录失败: " + err.Error()
+	}
+
+	ts := time.Now().Format("20060102_150405")
+	fileName := filepath.Join(backupDir, fmt.Sprintf("%s_%s.csv", backupType, ts))
+
+	switch backupType {
+	case BackupFollowedStocks:
+		return backupFollowedStocks(fileName)
+	case BackupRecommendStocks:
+		return backupRecommendStocks(fileName)
+	case BackupAIReports:
+		return backupAIReports(fileName)
+	case BackupFollowedFunds:
+		return backupFollowedFunds(fileName)
+	case BackupBacktestResults:
+		return backupBacktestResults(fileName)
+	case BackupStockChangeHistory:
+		return backupStockChangeHistory(fileName)
+	default:
+		return "未知备份类型: " + backupType
+	}
+}
+
+func backupFollowedStocks(fileName string) string {
+	rows, err := db.Dao.Raw("SELECT stock_code, name, volume, cost_price, price, change_percent, alarm_change_percent, alarm_price, time, sort, ai_config_id, entry_price, take_profit_price, stop_loss_price FROM followed_stock WHERE is_del=0 ORDER BY sort, id").Rows()
+	if err != nil {
+		return "导出自选股票失败: " + err.Error()
+	}
+	defer rows.Close()
+	return dumpRowsToCSV(fileName, rows, []string{"股票代码", "名称", "持仓量", "成本价", "当前价", "涨跌幅%", "预警涨跌幅%", "预警价", "时间", "排序", "AI配置ID", "入场价", "止盈价", "止损价"})
+}
+
+func backupRecommendStocks(fileName string) string {
+	rows, err := db.Dao.Raw("SELECT id, data_time, model_name, rating, stock_code, stock_name, bk_name, stock_price, stock_current_price, stock_current_price_time, stock_close_price, stock_pre_price, recommend_reason, recommend_buy_price, recommend_buy_price_min, recommend_buy_price_max, recommend_stop_profit_price, recommend_stop_profit_price_min, recommend_stop_profit_price_max, recommend_stop_loss_price, risk_remarks, remarks, enable_alert FROM ai_recommend_stocks ORDER BY id DESC").Rows()
+	if err != nil {
+		return "导出推荐股票失败: " + err.Error()
+	}
+	defer rows.Close()
+	return dumpRowsToCSV(fileName, rows, []string{"ID", "数据时间", "模型", "评级", "股票代码", "股票名称", "板块", "推荐价", "当前价", "当前价时间", "收盘价", "昨收", "推荐理由", "建议买入价", "建议买入最低价", "建议买入最高价", "建议止盈价", "建议止盈最低价", "建议止盈最高价", "建议止损价", "风险提示", "备注", "启用提醒"})
+}
+
+func backupAIReports(fileName string) string {
+	rows, err := db.Dao.Raw("SELECT id, created_at, model_name, stock_code, stock_name, question, content, is_del FROM ai_response_result ORDER BY id DESC").Rows()
+	if err != nil {
+		return "导出AI分析报告失败: " + err.Error()
+	}
+	defer rows.Close()
+	return dumpRowsToCSV(fileName, rows, []string{"ID", "创建时间", "模型", "股票代码", "股票名称", "问题", "内容", "是否删除"})
+}
+
+func backupFollowedFunds(fileName string) string {
+	rows, err := db.Dao.Raw("SELECT id, created_at, code, name, net_unit_value, net_unit_value_date, net_estimated_unit, net_estimated_time, net_accumulated, net_estimated_rate, net_unit_value_prev, net_actual_rate FROM followed_fund ORDER BY id DESC").Rows()
+	if err != nil {
+		return "导出关注基金失败: " + err.Error()
+	}
+	defer rows.Close()
+	return dumpRowsToCSV(fileName, rows, []string{"ID", "创建时间", "基金代码", "基金名称", "单位净值", "净值日期", "估算净值", "估算时间", "累计净值", "估算涨跌幅", "昨日净值", "实际涨跌幅"})
+}
+
+func backupBacktestResults(fileName string) string {
+	rows, err := db.Dao.Raw("SELECT id, created_at, report_id, stock_code, stock_name, analysis_date, direction, target_price, verify_date, verify_price, price_change, max_drawdown, max_upside, is_accurate, confidence, summary FROM backtest_results ORDER BY id DESC").Rows()
+	if err != nil {
+		return "导出回测结果失败: " + err.Error()
+	}
+	defer rows.Close()
+	return dumpRowsToCSV(fileName, rows, []string{"ID", "创建时间", "报告ID", "股票代码", "股票名称", "分析日期", "方向", "目标价", "验证日期", "验证价", "价格变化", "最大回撤", "最大上涨", "是否准确", "置信度", "摘要"})
+}
+
+func backupStockChangeHistory(fileName string) string {
+	rows, err := db.Dao.Raw("SELECT id, change_date, change_time, stock_code, stock_name, market, change_type, type_name, volume, price, change_rate, amount, industry, concept FROM stock_change_history ORDER BY id DESC LIMIT 10000").Rows()
+	if err != nil {
+		return "导出异动历史失败: " + err.Error()
+	}
+	defer rows.Close()
+	return dumpRowsToCSV(fileName, rows, []string{"ID", "日期", "时间", "股票代码", "股票名称", "市场", "异动类型", "类型名", "成交量", "价格", "涨跌幅%", "金额", "行业", "概念"})
+}
+
+func dumpRowsToCSV(fileName string, rows *sql.Rows, headers []string) string {
+	f, err := os.Create(fileName)
+	if err != nil {
+		return "创建备份文件失败: " + err.Error()
+	}
+	defer f.Close()
+
+	// UTF-8 BOM for Excel
+	f.Write([]byte{0xEF, 0xBB, 0xBF})
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return "读取列信息失败: " + err.Error()
+	}
+
+	w := csv.NewWriter(f)
+	w.Write(headers)
+
+	values := make([]any, len(columns))
+	valuePtrs := make([]any, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	var count int
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			logger.SugaredLogger.Warnf("scan row failed: %v", err)
+			continue
+		}
+		record := make([]string, len(columns))
+		for i, v := range values {
+			record[i] = fmt.Sprintf("%v", v)
+		}
+		w.Write(record)
+		count++
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return "写入CSV失败: " + err.Error()
+	}
+	return fmt.Sprintf("已备份 %d 条记录到 %s", count, fileName)
+}
+
 func (s *SettingsApi) Export() string {
 	d, err := json.MarshalIndent(s.Config, "", "    ")
 	if err != nil {
@@ -304,6 +445,8 @@ func UpdateConfig(s *SettingConfig) string {
 	}
 	err := db.Dao.Transaction(func(tx *gorm.DB) error {
 		count := int64(0)
+		// 清理已废弃字段，避免旧数据污染
+		tx.Model(&Settings{}).Where("1=1").Updates(map[string]any{"iwencai_api_key": ""})
 		tx.Model(&Settings{}).Count(&count)
 		if count > 0 {
 			result := tx.Model(&Settings{}).Where("id=?", s.ID).Updates(map[string]any{
@@ -331,10 +474,11 @@ func UpdateConfig(s *SettingConfig) string {
 				"http_proxy_enabled":         s.HttpProxyEnabled,
 				"enable_agent":               s.EnableAgent,
 				"qgqp_b_id":                  s.QgqpBId,
-				"iwencai_api_key":            s.IwencaiApiKey,
 				"em_api_key":                 s.EmApiKey,
 			"tickflow_api_key":           s.TickFlowAPIKey,
-			"akshare_service_url":        s.AkshareServiceUrl,
+			"akshare_service_url":       s.AkshareServiceUrl,
+			"adata_service_url":         s.ADataServiceUrl,
+			"default_data_source":       s.DefaultDataSource,
 				"window_width":               s.WindowWidth,
 				"window_height":              s.WindowHeight,
 				"prompt_plaza_api_base":      s.PromptPlazaApiBase,

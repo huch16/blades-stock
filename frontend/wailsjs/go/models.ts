@@ -915,13 +915,17 @@ export namespace data {
 	    httpProxyEnabled: boolean;
 	    enableAgent: boolean;
 	    qgqpBId: string;
-	    iwencaiApiKey: string;
 	    tickFlowAPIKey: string;
-	    akshareServiceUrl: string;
 	    emApiKey: string;
 	    windowWidth: number;
 	    windowHeight: number;
 	    promptPlazaApiBase: string;
+	    backtestAccuracyThreshold: number;
+	    backtestVerifyDays: number;
+	    backtestEnabled: boolean;
+	    akshareServiceUrl: string;
+	    aDataServiceUrl: string;
+	    defaultDataSource: string;
 	    aiConfigs: AIConfig[];
 	
 	    static createFrom(source: any = {}) {
@@ -959,13 +963,17 @@ export namespace data {
 	        this.httpProxyEnabled = source["httpProxyEnabled"];
 	        this.enableAgent = source["enableAgent"];
 	        this.qgqpBId = source["qgqpBId"];
-	        this.iwencaiApiKey = source["iwencaiApiKey"];
 	        this.tickFlowAPIKey = source["tickFlowAPIKey"];
-	        this.akshareServiceUrl = source["akshareServiceUrl"];
 	        this.emApiKey = source["emApiKey"];
 	        this.windowWidth = source["windowWidth"];
 	        this.windowHeight = source["windowHeight"];
 	        this.promptPlazaApiBase = source["promptPlazaApiBase"];
+	        this.backtestAccuracyThreshold = source["backtestAccuracyThreshold"];
+	        this.backtestVerifyDays = source["backtestVerifyDays"];
+	        this.backtestEnabled = source["backtestEnabled"];
+	        this.akshareServiceUrl = source["akshareServiceUrl"];
+	        this.aDataServiceUrl = source["aDataServiceUrl"];
+	        this.defaultDataSource = source["defaultDataSource"];
 	        this.aiConfigs = this.convertValues(source["aiConfigs"], AIConfig);
 	    }
 	

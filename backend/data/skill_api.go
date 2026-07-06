@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/models"
+	"strconv"
 	"strings"
 )
 
@@ -105,11 +106,11 @@ func (a *SkillApi) GetMCPServerIDs(skill *models.Skill) []uint {
 		if p == "" {
 			continue
 		}
-		var id uint
-		fmt.Sscanf(p, "%d", &id)
-		if id > 0 {
-			ids = append(ids, id)
+		id, err := strconv.ParseUint(p, 10, 64)
+		if err != nil {
+			continue
 		}
+		ids = append(ids, uint(id))
 	}
 	return ids
 }
