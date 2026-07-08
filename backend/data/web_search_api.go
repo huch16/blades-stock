@@ -46,6 +46,30 @@ func GetBrowserManager() *BrowserManager {
 	return browserManager
 }
 
+const browserIdleTimeout = 5 * time.Minute
+
+func init() {
+	go func() {
+		for {
+			time.Sleep(browserIdleTimeout)
+			bm := GetBrowserManager()
+			bm.mu.RLock()
+			inst := bm.instance
+			bm.mu.RUnlock()
+			if inst == nil {
+				continue
+			}
+			inst.mu.Lock()
+			idle := time.Since(inst.lastUsed)
+			inst.mu.Unlock()
+			if idle >= browserIdleTimeout {
+				logger.SugaredLogger.Infof("浏览器空闲 %v，自动关闭", idle)
+				bm.CloseBrowser()
+			}
+		}
+	}()
+}
+
 func (bm *BrowserManager) GetOrCreateBrowser() (*BrowserInstance, error) {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
@@ -97,6 +121,7 @@ func (bi *BrowserInstance) NewTab() (context.Context, context.CancelFunc) {
 	bi.mu.Lock()
 	defer bi.mu.Unlock()
 
+	bi.lastUsed = time.Now()
 	tabCtx, tabCancel := chromedp.NewContext(bi.browserCtx)
 	return tabCtx, tabCancel
 }
@@ -147,18 +172,90 @@ func NewWebSearchApi(timeout int) *WebSearchApi {
 	return &WebSearchApi{timeout: timeout}
 }
 
+const searxngURL = "https://search.whohai.cfd"
+
 func (s *WebSearchApi) Search(query string, maxResults int) []WebSearchResult {
 	if maxResults <= 0 {
 		maxResults = 10
 	}
 
+	results := s.searchSearXNG(query, maxResults)
+	if len(results) > 0 {
+		return results
+	}
+
+	logger.SugaredLogger.Debugf("SearXNG无结果，尝试百度HTTP搜索: %s", query)
+	results = s.searchBaiduHTTP(query, maxResults)
+	if len(results) > 0 {
+		return results
+	}
+
+	if GetSettingConfig().DisableBrowserSearch {
+		logger.SugaredLogger.Debugf("浏览器搜索已禁用，跳过: %s", query)
+		return results
+	}
+
+	logger.SugaredLogger.Debugf("HTTP搜索无结果，尝试浏览器搜索: %s", query)
 	browser, err := GetBrowserManager().GetOrCreateBrowser()
 	if err != nil {
-		logger.SugaredLogger.Debugf("浏览器不可用，降级到HTTP搜索: %v", err)
-		return s.searchBaiduHTTP(query, maxResults)
+		logger.SugaredLogger.Debugf("浏览器不可用: %v", err)
+		return results
 	}
 
 	return s.searchBaiduWithBrowser(browser, query, maxResults)
+}
+
+func (s *WebSearchApi) searchSearXNG(query string, maxResults int) []WebSearchResult {
+	client := &http.Client{Timeout: 10 * time.Second}
+	searchURL := fmt.Sprintf("%s/search?q=%s&format=json&language=zh-CN", searxngURL, url.QueryEscape(query))
+
+	req, err := http.NewRequest("GET", searchURL, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.SugaredLogger.Warnf("SearXNG请求失败: %v", err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	var searxngResp struct {
+		Results []struct {
+			URL     string `json:"url"`
+			Title   string `json:"title"`
+			Content string `json:"content"`
+			Engine  string `json:"engine"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(body, &searxngResp); err != nil {
+		logger.SugaredLogger.Warnf("SearXNG解析失败: %v", err)
+		return nil
+	}
+
+	var results []WebSearchResult
+	for i, r := range searxngResp.Results {
+		if i >= maxResults {
+			break
+		}
+		results = append(results, WebSearchResult{
+			Title:   r.Title,
+			Url:     r.URL,
+			Snippet: r.Content,
+			Source:  "SearXNG/" + r.Engine,
+		})
+	}
+
+	logger.SugaredLogger.Infof("SearXNG搜索到 %d 条结果: %s", len(results), query)
+	return results
 }
 
 // searchBaiduHTTP 使用简单 HTTP 请求 + goquery 解析百度搜索结果，作为 Chrome 不可用时的降级方案。

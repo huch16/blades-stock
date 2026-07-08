@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
-	"github.com/chromedp/chromedp"
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/duke-git/lancet/v2/strutil"
@@ -1194,304 +1192,66 @@ type RealTimeStockPriceInfo struct {
 	Time      time.Time
 }
 
-func GetRealTimeStockPriceInfo(ctx context.Context, stockCode string) (price, priceTime string) {
-	if strutil.HasPrefixAny(stockCode, []string{"SZ", "SH", "sh", "sz"}) {
-		crawlerAPI := CrawlerApi{}
-		crawlerBaseInfo := CrawlerBaseInfo{
-			Name:        "EastmoneyCrawler",
-			Description: "EastmoneyCrawler Description",
-			BaseUrl:     "https://quote.eastmoney.com/",
-			Headers:     map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0"},
-		}
-		crawlerAPI = crawlerAPI.NewCrawler(ctx, crawlerBaseInfo)
-		htmlContent, ok := crawlerAPI.GetHtml(fmt.Sprintf("https://quote.eastmoney.com/%s.html", stockCode), "div.zxj", true)
-		if ok {
-			price := ""
-			priceTime := ""
-			document, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
-			if err != nil {
-				//logger.SugaredLogger.Errorf("GetRealTimeStockPriceInfo error: %v", err)
-			}
-			document.Find("div.zxj").Each(func(i int, selection *goquery.Selection) {
-				price = selection.Text()
-				//logger.SugaredLogger.Infof("股票代码: %s, 当前价格: %s", stockCode, price)
-			})
-
-			document.Find("span.quote_title_time").Each(func(i int, selection *goquery.Selection) {
-				priceTime = selection.Text()
-				//logger.SugaredLogger.Infof("股票代码: %s, 当前价格时间: %s", stockCode, priceTime)
-			})
-			return price, priceTime
-		}
-	}
-	return price, priceTime
-}
-
 func SearchStockPriceInfo(stockName, stockCode string, crawlTimeOut int64) *[]string {
-
-	if strutil.HasPrefixAny(stockCode, []string{"SZ", "SH", "sh", "sz", "bj"}) {
-		//if strutil.HasPrefixAny(stockCode, []string{"bj", "BJ"}) {
-		//	stockCode = strutil.ReplaceWithMap(stockCode, map[string]string{
-		//		"bj": "",
-		//		"BJ": "",
-		//	}) + ".BJ"
-		//}
-
-		return getSHSZStockPriceInfo(stockName, stockCode, crawlTimeOut)
-	}
-	if strutil.HasPrefixAny(stockCode, []string{"HK", "hk"}) {
-		return getHKStockPriceInfo(stockCode, crawlTimeOut)
-	}
-	if strutil.HasPrefixAny(stockCode, []string{"US", "us", "gb_"}) {
-		return getUSStockPriceInfo(stockCode, crawlTimeOut)
-	}
-	return &[]string{}
-}
-
-func getUSStockPriceInfo(stockCode string, crawlTimeOut int64) *[]string {
-	var messages []string
-	crawlerAPI := CrawlerApi{}
-	crawlerBaseInfo := CrawlerBaseInfo{
-		Name:        "SinaCrawler",
-		Description: "SinaCrawler Crawler Description",
-		BaseUrl:     "https://stock.finance.sina.com.cn",
-		Headers:     map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0"},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(crawlTimeOut)*time.Second)
-	defer cancel()
-	crawlerAPI = crawlerAPI.NewCrawler(ctx, crawlerBaseInfo)
-
-	url := fmt.Sprintf("https://stock.finance.sina.com.cn/usstock/quotes/%s.html", strings.ReplaceAll(stockCode, "gb_", ""))
-	htmlContent, ok := crawlerAPI.GetHtml(url, "div#hqPrice", true)
-	if !ok {
+	stockData, err := NewStockDataApi().GetStockCodeRealTimeData(stockCode)
+	if err != nil || stockData == nil || len(*stockData) == 0 {
 		return &[]string{}
 	}
-	document, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
-	if err != nil {
-		logger.SugaredLogger.Error(err.Error())
-	}
-	stockName := ""
-	stockPrice := ""
-	stockPriceTime := ""
-	document.Find("div.hq_title >h1").Each(func(i int, selection *goquery.Selection) {
-		stockName = strutil.RemoveNonPrintable(selection.Text())
-		//logger.SugaredLogger.Infof("股票名称-:%s", stockName)
-	})
-
-	document.Find("#hqPrice").Each(func(i int, selection *goquery.Selection) {
-		stockPrice = strutil.RemoveNonPrintable(selection.Text())
-		//logger.SugaredLogger.Infof("现价: %s", stockPrice)
-	})
-
-	document.Find("div.hq_time").Each(func(i int, selection *goquery.Selection) {
-		stockPriceTime = strutil.RemoveNonPrintable(selection.Text())
-		//logger.SugaredLogger.Infof("时间: %s", stockPriceTime)
-	})
-
-	messages = append(messages, fmt.Sprintf("%s:%s现价%s", stockPriceTime, stockName, stockPrice))
-	//logger.SugaredLogger.Infof("股票: %s", messages)
-
-	document.Find("div#hqDetails >table tbody tr").Each(func(i int, selection *goquery.Selection) {
-		text := strutil.RemoveNonPrintable(selection.Text())
-		//logger.SugaredLogger.Infof("股票名称-%s: %s", stockName, text)
-		messages = append(messages, text)
-	})
-
-	//logger.SugaredLogger.Infof("messages: %s", messages)
-	return &messages
-}
-
-func getHKStockPriceInfo(stockCode string, crawlTimeOut int64) *[]string {
+	info := (*stockData)[0]
 	var messages []string
-	crawlerAPI := CrawlerApi{}
-	crawlerBaseInfo := CrawlerBaseInfo{
-		Name:        "SinaCrawler",
-		Description: "SinaCrawler Crawler Description",
-		BaseUrl:     "https://stock.finance.sina.com.cn",
-		Headers:     map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0"},
+	priceTime := info.Date + " " + info.Time
+	name := info.Name
+	if name == "" {
+		name = stockName
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(crawlTimeOut)*time.Second)
-	defer cancel()
-	crawlerAPI = crawlerAPI.NewCrawler(ctx, crawlerBaseInfo)
-
-	url := fmt.Sprintf("https://stock.finance.sina.com.cn/hkstock/quotes/%s.html", strings.ReplaceAll(stockCode, "hk", ""))
-	//logger.SugaredLogger.Infof("CrawlHKStockPriceInfo url:%s", url)
-	htmlContent, ok := crawlerAPI.GetHtml(url, "div.deta_hqContainer >.deta03>ul ", false)
-	if !ok {
-		return &[]string{}
+	messages = append(messages, fmt.Sprintf("%s:%s现价%s", priceTime, name, info.Price))
+	messages = append(messages, fmt.Sprintf("开盘价: %s", info.Open))
+	messages = append(messages, fmt.Sprintf("最高价: %s", info.High))
+	messages = append(messages, fmt.Sprintf("最低价: %s", info.Low))
+	messages = append(messages, fmt.Sprintf("昨收价: %s", info.PreClose))
+	messages = append(messages, fmt.Sprintf("成交量: %s", info.Volume))
+	messages = append(messages, fmt.Sprintf("成交额: %s", info.Amount))
+	if info.ChangePercent != 0 {
+		messages = append(messages, fmt.Sprintf("涨跌幅: %.2f%%", info.ChangePercent))
 	}
-	//logger.SugaredLogger.Infof("CrawlHKStockPriceInfo htmlContent:%s", htmlContent)
-	document, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
-	if err != nil {
-		logger.SugaredLogger.Error(err.Error())
+	if info.ChangePrice != 0 {
+		messages = append(messages, fmt.Sprintf("涨跌额: %.2f", info.ChangePrice))
 	}
-	stockName := ""
-	stockPrice := ""
-	stockPriceTime := ""
-	document.Find("#stock_cname").Each(func(i int, selection *goquery.Selection) {
-		stockName = strutil.RemoveNonPrintable(selection.Text())
-		//logger.SugaredLogger.Infof("股票名称-:%s", stockName)
-	})
-
-	document.Find("#mts_stock_hk_price").Each(func(i int, selection *goquery.Selection) {
-		stockPrice = strutil.RemoveNonPrintable(selection.Text())
-		//logger.SugaredLogger.Infof("现价: %s", stockPrice)
-	})
-
-	document.Find("#mts_stock_hk_time").Each(func(i int, selection *goquery.Selection) {
-		stockPriceTime = strutil.RemoveNonPrintable(selection.Text())
-		//logger.SugaredLogger.Infof("时间: %s", stockPriceTime)
-	})
-
-	messages = append(messages, fmt.Sprintf("%s:%s现价%s", stockPriceTime, stockName, stockPrice))
-	//logger.SugaredLogger.Infof("股票: %s", messages)
-
-	document.Find(".deta_hqContainer >.deta03 li").Each(func(i int, selection *goquery.Selection) {
-		text := strutil.RemoveNonPrintable(selection.Text())
-		//logger.SugaredLogger.Infof("股票名称-%s: %s", stockName, text)
-		messages = append(messages, text)
-	})
-
-	//logger.SugaredLogger.Infof("messages: %s", messages)
 	return &messages
-}
-
-func GetZSInfo(name, stockCode string, crawlTimeOut int64) string {
-	url := "https://finance.sina.com.cn/realstock/company/" + stockCode + "/nc.shtml"
-	crawlerAPI := CrawlerApi{}
-	crawlerBaseInfo := CrawlerBaseInfo{
-		Name:        "TestCrawler",
-		Description: "Test Crawler Description",
-		BaseUrl:     "https://finance.sina.com.cn",
-		Headers:     map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0"},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(crawlTimeOut)*time.Second)
-	defer cancel()
-	crawlerAPI = crawlerAPI.NewCrawler(ctx, crawlerBaseInfo)
-	html, ok := crawlerAPI.GetHtml(url, "div#hqDetails table", true)
-	if !ok {
-		return ""
-	}
-	document, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-	if err != nil {
-		logger.SugaredLogger.Error(err.Error())
-	}
-
-	//price
-	price := strutil.RemoveWhiteSpace(document.Find("div#price").First().Text(), false)
-	hqTime := strutil.RemoveWhiteSpace(document.Find("div#hqTime").First().Text(), false)
-
-	if strutil.ContainsAny(price, []string{"-", "--"}) {
-		return "暂无数据"
-	}
-
-	var markdown strings.Builder
-	markdown.WriteString(fmt.Sprintf("### 时间：%s %s：%s \n", hqTime, name, price))
-	GetTableMarkdown(document, "div#hqDetails table", &markdown)
-	return markdown.String()
-}
-
-func getSHSZStockPriceInfo(stockName, stockCode string, crawlTimeOut int64) *[]string {
-	url := "https://finance.sina.com.cn/realstock/company/" + stockCode + "/nc.shtml"
-	crawlerAPI := CrawlerApi{}
-	crawlerBaseInfo := CrawlerBaseInfo{
-		Name:        "TestCrawler",
-		Description: "Test Crawler Description",
-		BaseUrl:     "https://finance.sina.com.cn",
-		Headers:     map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0"},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(crawlTimeOut)*time.Second)
-	defer cancel()
-	crawlerAPI = crawlerAPI.NewCrawler(ctx, crawlerBaseInfo)
-	html, ok := crawlerAPI.GetHtml(url, "div#hqDetails table", true)
-	if !ok {
-		return &[]string{""}
-	}
-	document, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-	if err != nil {
-		logger.SugaredLogger.Error(err.Error())
-	}
-
-	//price
-	price := strutil.RemoveWhiteSpace(document.Find("div#price").First().Text(), false)
-	hqTime := strutil.RemoveWhiteSpace(document.Find("div#hqTime").First().Text(), false)
-
-	var markdown strings.Builder
-	markdown.WriteString(fmt.Sprintf("### %s现价：%s 现价时间：%s\n", stockName, price, hqTime))
-	GetTableMarkdown(document, "div#hqDetails table", &markdown)
-	return &[]string{markdown.String()}
 }
 
 func SearchStockInfo(stock, msgType string, crawlTimeOut int64) *[]string {
-	crawler := CrawlerApi{
-		crawlerBaseInfo: CrawlerBaseInfo{
-
-			Name:        "财联社",
-			BaseUrl:     "https://www.cls.cn",
-			Description: "财联社",
-			Headers:     map[string]string{"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0"},
-		},
-	}
-	timeoutCtx, timeoutCtxCancel := context.WithTimeout(context.Background(), time.Duration(crawlTimeOut)*time.Second)
-	defer timeoutCtxCancel()
-	crawler = crawler.NewCrawler(timeoutCtx, crawler.crawlerBaseInfo)
-	url := fmt.Sprintf("https://www.cls.cn/searchPage?keyword=%s&type=%s", RemoveAllBlankChar(stock), msgType)
-	//logger.SugaredLogger.Infof("SearchStockInfo url:%s", url)
-	waitVisible := ".search-telegraph-list,.subject-interest-list"
-	htmlContent, ok := crawler.GetHtml(url, waitVisible, true)
-	if !ok {
+	apiURL := fmt.Sprintf("https://www.cls.cn/api/cache?app=CailianpressWeb&name=telegraphSearch&os=web&sv=8.7.9&keyword=%s&type=%s", url2.QueryEscape(RemoveAllBlankChar(stock)), url2.QueryEscape(msgType))
+	client := resty.New()
+	resp, err := client.SetTimeout(time.Duration(crawlTimeOut)*time.Second).R().
+		SetHeader("Host", "www.cls.cn").
+		SetHeader("Origin", "https://www.cls.cn").
+		SetHeader("Referer", "https://www.cls.cn/searchPage").
+		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.0.0").
+		Get(apiURL)
+	if err != nil || resp.StatusCode() != 200 {
+		logger.SugaredLogger.Debugf("SearchStockInfo HTTP failed: %v", err)
 		return &[]string{}
 	}
-	document, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
-	if err != nil {
-		logger.SugaredLogger.Error(err.Error())
-		return &[]string{}
+	var result struct {
+		Data []struct {
+			Title   string `json:"title"`
+			Content string `json:"content"`
+			Time    string `json:"ctime"`
+		} `json:"data"`
 	}
-	var messages []string
-	document.Find(waitVisible).Each(func(i int, selection *goquery.Selection) {
-		text := strutil.RemoveNonPrintable(selection.Text())
-		messages = append(messages, ReplaceSensitiveWords(text))
-		//logger.SugaredLogger.Infof("搜索到消息-%s: %s", msgType, text)
-	})
-	return &messages
-}
-
-func SearchStockInfoByCode(stock string) *[]string {
-	// 创建一个 chromedp 上下文
-	ctx, cancel := chromedp.NewContext(
-		context.Background(),
-		chromedp.WithLogf(logger.SugaredLogger.Infof),
-		chromedp.WithErrorf(logger.SugaredLogger.Errorf),
-	)
-	defer cancel()
-	var htmlContent string
-	stock = strings.ReplaceAll(stock, "sh", "")
-	stock = strings.ReplaceAll(stock, "sz", "")
-	url := fmt.Sprintf("https://gushitong.baidu.com/stock/ab-%s", stock)
-	err := chromedp.Run(ctx,
-		chromedp.Navigate(url),
-		// 等待页面加载完成，可以根据需要调整等待时间
-		//chromedp.Sleep(3*time.Second),
-		chromedp.WaitVisible("a.news-item-link", chromedp.ByQuery),
-		chromedp.OuterHTML("html", &htmlContent, chromedp.ByQuery),
-	)
-	if err != nil {
-		logger.SugaredLogger.Error(err.Error())
-		return &[]string{}
-	}
-	document, err := goquery.NewDocumentFromReader(strings.NewReader(htmlContent))
-	if err != nil {
-		logger.SugaredLogger.Error(err.Error())
+	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+		logger.SugaredLogger.Debugf("SearchStockInfo JSON unmarshal failed: %v", err)
 		return &[]string{}
 	}
 	var messages []string
-	document.Find("a.news-item-link").Each(func(i int, selection *goquery.Selection) {
-		text := strutil.RemoveNonPrintable(selection.Text())
-		if strings.Contains(text, stock) {
-			messages = append(messages, text)
-			//logger.SugaredLogger.Infof("搜索到消息: %s", text)
+	for _, item := range result.Data {
+		text := item.Title
+		if text == "" {
+			text = item.Content
 		}
-	})
+		messages = append(messages, ReplaceSensitiveWords(text))
+	}
 	return &messages
 }
 
@@ -1691,14 +1451,14 @@ func (receiver StockDataApi) getDCStockInfo(market string, page, pageSize int) {
 	vm.Run("function data(res){return res};")
 	val, err := vm.Run(body)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("vm.Run error:%v", err.Error())
+		logger.SugaredLogger.Errorf("vm.Run error: %v", err)
 	}
 	value, _ := val.Object().Value().Export()
 	marshal, _ := json.Marshal(value)
 	data := make(map[string]any)
 	json.Unmarshal(marshal, &data)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("json.Unmarshal error:%v", err.Error())
+		logger.SugaredLogger.Errorf("json.Unmarshal error: %v", err)
 	}
 	//logger.SugaredLogger.Infof("resp:%s", data)
 	if data["data"] != nil {
@@ -2017,7 +1777,7 @@ func (receiver StockDataApi) GetStockHistoryMoneyData(stockCode string) []models
 
 	resp, err := req.Get(reqURL)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("req.Get error: %v", err)
 	}
 	body := string(resp.Body())
 	//logger.SugaredLogger.Infof("resp:%s", body)
@@ -2025,11 +1785,11 @@ func (receiver StockDataApi) GetStockHistoryMoneyData(stockCode string) []models
 	vm.Run("function data(res){return res};")
 	val, err := vm.Run(body)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("vm.Run error: %v", err)
 	}
 	value, err := val.Export()
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("val.Export error: %v", err)
 	}
 	marshal, err := json.Marshal(value)
 	if err != nil {
@@ -2086,7 +1846,7 @@ func (receiver StockDataApi) GetStockMoneyData() models.StockMoneyDataResp {
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
 		Get(url)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("req.Get error: %v", err)
 	}
 	body := string(resp.Body())
 	//logger.SugaredLogger.Infof("resp:%s", body)
@@ -2094,15 +1854,15 @@ func (receiver StockDataApi) GetStockMoneyData() models.StockMoneyDataResp {
 	vm.Run("function data(res){return res};")
 	val, err := vm.Run(body)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("vm.Run error: %v", err)
 	}
 	value, err := val.Export()
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("val.Export error: %v", err)
 	}
 	marshal, err := json.Marshal(value)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("json.Marshal error: %v", err)
 		return models.StockMoneyDataResp{}
 	}
 	err = json.Unmarshal(marshal, &resData)
@@ -2191,11 +1951,11 @@ func (receiver StockDataApi) GetStockConceptInfo(stockCode string) models.StockC
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0").
 		Get(url)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("req.Get error: %v", err)
 	}
 	err = json.Unmarshal(resp.Body(), &data)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("json.Unmarshal error: %v", err)
 		return models.StockConceptInfoResp{}
 	}
 	return data
@@ -2218,12 +1978,12 @@ func (receiver StockDataApi) GetStockFinancialInfo(stockCode string) *models.Sto
 		//SetResult(&data).
 		Get(url)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("req.Get error: %v", err)
 	}
 	//logger.SugaredLogger.Infof("resp:%s", string(resp.Body()))
 	err = json.Unmarshal(resp.Body(), &data)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("json.Unmarshal error: %v", err)
 		return &models.StockFinancialInfoResp{}
 	}
 	//logger.SugaredLogger.Infof("data:%v", data)
@@ -2245,11 +2005,11 @@ func (receiver StockDataApi) GetStockHolderNum(stockCode string) *models.StockHo
 		//SetResult(&data).
 		Get(url)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("req.Get error: %v", err)
 	}
 	err = json.Unmarshal(resp.Body(), &data)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("json.Unmarshal error: %v", err)
 		return &models.StockHolderNumResp{}
 	}
 	return &data
@@ -2262,7 +2022,7 @@ func (receiver StockDataApi) GetIndustryValuation(bkName string) *models.Industr
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
 		Get(url)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("req.Get error: %v", err)
 	}
 	body := string(resp.Body())
 	//logger.SugaredLogger.Infof("resp:%s", body)
@@ -2270,21 +2030,21 @@ func (receiver StockDataApi) GetIndustryValuation(bkName string) *models.Industr
 	vm.Run("function data(res){return res};")
 	val, err := vm.Run(body)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("vm.Run error: %v", err)
 	}
 	value, err := val.Export()
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("val.Export error: %v", err)
 	}
 	marshal, err := json.Marshal(value)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("json.Marshal error: %v", err)
 	}
 	//logger.SugaredLogger.Infof("data:%s", string(marshal))
 	data := models.IndustryValuationResp{}
 	err = json.Unmarshal(marshal, &data)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("json.Unmarshal error: %v", err)
 	}
 	return &data
 }
@@ -2342,12 +2102,12 @@ func (receiver StockDataApi) GetAllStocks(page int, pageSize int, name string, t
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
 		Get(url)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("req.Get error: %v", err)
 	}
 	data := models.AllStocksResp{}
 	err = json.Unmarshal(resp.Body(), &data)
 	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
+		logger.SugaredLogger.Errorf("json.Unmarshal error: %v", err)
 		return &models.AllStocksResp{}
 	}
 	//for _, info := range data.Result.Data {

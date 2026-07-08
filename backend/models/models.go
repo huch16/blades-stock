@@ -1,3 +1,4 @@
+// Package models provides data models for the application.
 package models
 
 import (
@@ -570,7 +571,6 @@ type OldSettings struct {
 	BrowserPath       string  `json:"browserPath"`
 	EnableNews        bool    `json:"enableNews"`
 	DarkTheme         bool    `json:"darkTheme"`
-	BrowserPoolSize   int     `json:"browserPoolSize"`
 	EnableFund        bool    `json:"enableFund"`
 	EnablePushNews    bool    `json:"enablePushNews"`
 }
@@ -1597,6 +1597,7 @@ type MCPServerTool struct {
 	ToolName     string    `json:"toolName" gorm:"size:255;not null"`
 	Description  string    `json:"description" gorm:"type:text"`
 	ParamsSchema string    `json:"paramsSchema" gorm:"type:text"`
+	Enabled      bool      `json:"enabled" gorm:"default:true"`
 }
 
 func (MCPServerTool) TableName() string {

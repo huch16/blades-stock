@@ -99,29 +99,32 @@
                       </div>
                       <div class="msg-bubble">
                         <div class="msg-content">
+                          <div v-if="group.assistantMsg.statusText && isStreamLoad" class="msg-status-text">
+                            <NSpin size="small" /> <span>{{ group.assistantMsg.statusText }}</span>
+                          </div>
                           <div v-if="group.assistantMsg.steps && group.assistantMsg.steps.length > 0" class="msg-steps-wrapper">
-                            <div class="msg-steps-header" @click="toggleReasoning(group.assistantIndex)">
-                              <NIcon :component="reasoningExpandedMap[group.assistantIndex] ? ChevronDownOutline : ChevronForwardOutline" size="14" />
+                            <div class="msg-steps-header" :class="{ 'steps-expanded': isStreamLoad }" @click="toggleReasoning(group.assistantIndex)">
+                              <NIcon :component="reasoningExpandedMap[group.assistantIndex] || isStreamLoad ? ChevronDownOutline : ChevronForwardOutline" size="14" />
                               <span class="msg-steps-title">📋 执行步骤</span>
                               <span class="msg-steps-count">{{ group.assistantMsg.steps.length }}</span>
                             </div>
-                            <div v-show="reasoningExpandedMap[group.assistantIndex]" class="msg-steps-content">
+                            <div v-show="reasoningExpandedMap[group.assistantIndex] || isStreamLoad" class="msg-steps-content">
                               <div v-for="(step, si) in group.assistantMsg.steps" :key="si" class="msg-step-item">
                                 <div class="msg-step-dot" :class="getStepDotClass(step)"></div>
                                 <span class="msg-step-text">{{ step }}</span>
                               </div>
                             </div>
                           </div>
-                          <div v-if="group.assistantMsg.reasoning" class="msg-reasoning-wrapper">
-                            <div class="msg-reasoning-header" @click="toggleReasoning('r-' + group.assistantIndex)">
-                              <NIcon :component="reasoningExpandedMap['r-' + group.assistantIndex] ? ChevronDownOutline : ChevronForwardOutline" size="14" />
+                          <div v-if="group.assistantMsg.reasoning || (isStreamLoad && group.assistantMsg.rawReasoning)" class="msg-reasoning-wrapper">
+                            <div class="msg-reasoning-header" :class="{ 'reasoning-expanded': isStreamLoad }" @click="toggleReasoning('r-' + group.assistantIndex)">
+                              <NIcon :component="reasoningExpandedMap['r-' + group.assistantIndex] || isStreamLoad ? ChevronDownOutline : ChevronForwardOutline" size="14" />
                               <span class="msg-reasoning-title">💭 思考过程</span>
                             </div>
-                            <div v-show="reasoningExpandedMap['r-' + group.assistantIndex]" class="msg-reasoning-content">
+                            <div v-show="reasoningExpandedMap['r-' + group.assistantIndex] || isStreamLoad" class="msg-reasoning-content">
                               <MdPreview
                                 :theme="theme"
                                 :style="{ textAlign: 'left' }"
-                                :model-value="group.assistantMsg.reasoning"
+                                :model-value="group.assistantMsg.reasoning || ''"
                                 :editor-id="'agent-reasoning-' + group.assistantIndex"
                                 class="msg-markdown"
                               />
@@ -694,10 +697,13 @@ async function loadHistory() {
       messages.value = list.map(m => ({
         role: m.role ?? '',
         content: m.content ?? '',
+        rawContent: m.rawContent ?? '',
         time: m.time ?? '',
         modelName: m.modelName ?? '',
         reasoning: m.reasoning ?? '',
+        rawReasoning: m.rawReasoning ?? '',
         steps: m.steps ?? [],
+        statusText: '',
         jsonMarkdown: m.jsonMarkdown ?? ''
       }))
       nextTick(() => {
@@ -791,6 +797,7 @@ function sendMessage() {
     reasoning: '',
     rawReasoning: '',
     steps: [],
+    statusText: '',
     jsonMarkdown: ''
   })
   inputValue.value = ''
@@ -1087,7 +1094,9 @@ function onAgentMessage(msg) {
   if (last && last.role === 'assistant') {
     if (msg?.reasoning_content) {
       const rc = msg.reasoning_content
-      if (rc.startsWith('[STEP]')) {
+      if (rc.startsWith('[STATUS]')) {
+        last.statusText = rc.replace(/^\[STATUS\]/, '').trim()
+      } else if (rc.startsWith('[STEP]')) {
         const stepText = rc.replace(/^\[STEP\]/, '').trim()
         if (stepText) {
           if (!last.steps) last.steps = []
@@ -1874,5 +1883,20 @@ body > div:has(.n-select-menu) {
   height: 40px;
   background: linear-gradient(transparent, var(--n-color));
   pointer-events: none;
+}
+.msg-status-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--n-color-info);
+  color: var(--n-color-info-text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.steps-expanded,
+.reasoning-expanded {
+  background: var(--n-color-info);
 }
 </style>

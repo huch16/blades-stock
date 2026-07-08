@@ -428,14 +428,8 @@ func (receiver *EastMoneyKLineApi) parseKLine(klineStr, adjustFlag string) *KLin
 		TurnoverRate:  receiver.parseFloat(parts[10]), // 换手率 (%)
 	}
 
-	// 如果有复权数据，解析额外字段
-	if adjustFlag != "" && len(parts) >= 14 {
-		// f113: 前复权开盘价
-		// f114: 前复权收盘价
-		// f115: 前复权最高价
-		// f116: 前复权最低价
-		// 这些字段可以根据需要使用
-	}
+	// f113: 前复权开盘价, f114: 前复权收盘价, f115: 前复权最高价, f116: 前复权最低价
+	_ = adjustFlag != "" && len(parts) >= 14
 
 	return kline
 }

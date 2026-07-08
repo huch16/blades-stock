@@ -1,6 +1,7 @@
 package data
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -25,45 +26,55 @@ func NewAdataClient() *AdataClient {
 	}
 	return &AdataClient{
 		baseURL: u,
-		client:  resty.New().SetTimeout(60 * time.Second),
+		client:  resty.New().SetTimeout(30 * time.Second),
 	}
 }
 
-func (c *AdataClient) SetBaseURL(url string) {
-	c.baseURL = strings.TrimRight(url, "/")
+func (c *AdataClient) SetBaseURL(baseURL string) {
+	c.baseURL = strings.TrimRight(baseURL, "/")
 }
 
-type adataResponse struct {
-	Code int           `json:"code"`
-	Msg  string        `json:"msg"`
-	Data []map[string]any `json:"data"`
+// adataValueResponse 是 AData 服务实际返回的格式
+// {"value": [...], "count": N}
+type adataValueResponse struct {
+	Value []map[string]any `json:"value"`
+	Count int              `json:"Count"`
 }
 
-func (c *AdataClient) get(path string) (*adataResponse, error) {
-	var resp adataResponse
+func (c *AdataClient) get(path string) ([]map[string]any, error) {
 	r, err := c.client.R().
-		SetResult(&resp).
 		SetHeader("User-Agent", "blades-stock/1.0").
 		Get(c.baseURL + path)
 	if err != nil {
 		return nil, fmt.Errorf("adata HTTP GET %s: %w", path, err)
 	}
 	if r.StatusCode() >= 400 {
-		return nil, fmt.Errorf("adata HTTP %d GET %s", r.StatusCode(), path)
+		return nil, fmt.Errorf("adata HTTP %d GET %s: %s", r.StatusCode(), path, string(r.Body()))
 	}
-	if resp.Code >= 400 {
-		return nil, fmt.Errorf("adata api err %s: %s", path, resp.Msg)
+
+	// AData 返回 {"value": [...]} 格式
+	var resp adataValueResponse
+	if err := json.Unmarshal(r.Body(), &resp); err != nil {
+		// 尝试直接解析为数组
+		var arr []map[string]any
+		if err2 := json.Unmarshal(r.Body(), &arr); err2 != nil {
+			return nil, fmt.Errorf("adata response parse failed: %w (body: %s)", err, truncateStr(string(r.Body()), 200))
+		}
+		return arr, nil
 	}
-	return &resp, nil
+	return resp.Value, nil
 }
 
 func (c *AdataClient) Ping() error {
 	var resp struct {
 		Status string `json:"status"`
 	}
-	_, err := c.client.R().SetResult(&resp).Get(c.baseURL + "/api/health")
+	_, err := c.client.R().SetResult(&resp).Get(c.baseURL + "/health")
 	if err != nil {
 		return err
+	}
+	if resp.Status != "ok" {
+		return fmt.Errorf("adata service status: %s", resp.Status)
 	}
 	logger.SugaredLogger.Infof("[AdataClient] connected to %s", c.baseURL)
 	return nil
@@ -71,35 +82,37 @@ func (c *AdataClient) Ping() error {
 
 func (c *AdataClient) GetMarketCurrent(codeList []string) ([]map[string]any, error) {
 	codes := strings.Join(codeList, ",")
-	resp, err := c.get(fmt.Sprintf("/api/stock/market_current?code_list=%s", url.QueryEscape(codes)))
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
+	return c.get(fmt.Sprintf("/api/stock/market_current?code_list=%s", url.QueryEscape(codes)))
 }
 
 func (c *AdataClient) GetKLineData(stockCode, startDate, endDate string) ([]map[string]any, error) {
 	path := fmt.Sprintf("/api/stock/market?stock_code=%s&start_date=%s&end_date=%s",
 		url.QueryEscape(stockCode), url.QueryEscape(startDate), url.QueryEscape(endDate))
-	resp, err := c.get(path)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
+	return c.get(path)
 }
 
-func (c *AdataClient) GetTradeCalendar(year int) ([]map[string]any, error) {
-	resp, err := c.get(fmt.Sprintf("/api/stock/trade_calendar?year=%d", year))
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
+func (c *AdataClient) GetTradeCalendar() ([]map[string]any, error) {
+	return c.get("/api/stock/trade_calendar")
 }
 
 func (c *AdataClient) GetNorthFlow() ([]map[string]any, error) {
-	resp, err := c.get("/api/sentiment/north_flow_current")
+	return c.get("/api/sentiment/north_flow_current")
+}
+
+// GetTradeCalendarDays 提取交易日列表（trade_status=1 的日期）
+func (c *AdataClient) GetTradeCalendarDays() ([]string, error) {
+	data, err := c.GetTradeCalendar()
 	if err != nil {
 		return nil, err
 	}
-	return resp.Data, nil
+	var days []string
+	for _, item := range data {
+		status, _ := item["trade_status"].(float64)
+		if int(status) == 1 {
+			if dateStr, ok := item["trade_date"].(string); ok {
+				days = append(days, dateStr)
+			}
+		}
+	}
+	return days, nil
 }

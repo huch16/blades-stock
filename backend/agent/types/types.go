@@ -1,3 +1,4 @@
+// Package types provides shared types for the agent package.
 package types
 
 import (

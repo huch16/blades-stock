@@ -26,6 +26,8 @@ export function AnalyzeSentimentWithFreqWeight(arg1:string):Promise<Record<strin
 
 export function BackupData(arg1:string):Promise<string>;
 
+export function RestoreData(arg1:string):Promise<string>;
+
 export function BatchDeleteAIResponseResult(arg1:Array<number>):Promise<string>;
 
 export function BatchDeleteAllStockInfo(arg1:Array<number>):Promise<string>;
@@ -77,6 +79,8 @@ export function EMDictCode(arg1:string):Promise<Array<any>>;
 export function EnableCronTask(arg1:number,arg2:boolean):Promise<string>;
 
 export function EnableMCPServer(arg1:number,arg2:boolean):Promise<string>;
+
+export function EnableMCPTool(arg1:number,arg2:boolean):Promise<string>;
 
 export function EnableSkill(arg1:number,arg2:boolean):Promise<string>;
 

@@ -450,6 +450,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			md4 := util.MarkdownTableWithTitle("采购经理人指数(PMI)", res4.PMIResult.Data)
 			market.WriteString(md4)
 
+			msgMu.Lock()
 			msg = append(msg, map[string]interface{}{
 				"role":    "user",
 				"content": "国内宏观经济数据",
@@ -459,6 +460,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 				"reasoning_content": "使用工具查询",
 				"content":           "\n# 国内宏观经济数据：\n" + market.String(),
 			})
+			msgMu.Unlock()
 		}()
 
 		go func() {

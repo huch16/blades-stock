@@ -8,7 +8,8 @@ import {
   FetchAiModels,
   FetchAiModelInfo,
   CleanupData,
-  BackupData
+  BackupData,
+  RestoreData
 } from "../../wailsjs/go/main/App";
 import {NTag, NTooltip, NIcon, useMessage, useDialog} from "naive-ui";
 import {data, models} from "../../wailsjs/go/models";
@@ -44,6 +45,12 @@ function getMeta(index: number, id: number): ConfigMeta {
 // ========================
 const openAiEnable = ref(false)
 const aiConfigs = ref<AIConfig[]>([])
+const defaultAiConfigId = ref(0)
+const aiConfigOptions = computed(() => aiConfigs.value.map(cfg => ({
+  label: cfg.name || `AI 配置 #${aiConfigs.value.indexOf(cfg) + 1}`,
+  value: cfg.ID,
+  labelProp: cfg.modelName ? `${cfg.modelName}` : ''
+})))
 const aiPrompt = ref('')
 const questionTemplate = ref('{{stockName}}分析和总结')
 const crawlTimeOut = ref(30)
@@ -78,6 +85,7 @@ const formValue = ref({
   httpProxy:"",
   httpProxyEnabled:false,
   enableAgent: false,
+  disableBrowserSearch: false,
   qgqpBId: '',
   backtestAccuracyThreshold: 5.0,
   backtestVerifyDays: 2,
@@ -269,6 +277,7 @@ onMounted(() => {
 
     openAiEnable.value = res.openAiEnable
     aiConfigs.value = res.aiConfigs || []
+    defaultAiConfigId.value = res.aiConfigId ?? 0
     aiPrompt.value = res.prompt || ''
     questionTemplate.value = res.questionTemplate || '{{stockName}}分析和总结'
     crawlTimeOut.value = res.crawlTimeOut || 30
@@ -299,6 +308,7 @@ onMounted(() => {
     formValue.value.enableOnlyPushRedNews = res.enableOnlyPushRedNews
     formValue.value.httpProxy=res.httpProxy;
     formValue.value.httpProxyEnabled=res.httpProxyEnabled;
+    formValue.value.disableBrowserSearch = res.disableBrowserSearch ?? false;
     formValue.value.enableAgent = res.enableAgent;
     formValue.value.qgqpBId = res.qgqpBId;
     formValue.value.akshareServiceUrl = res.akshareServiceUrl || 'http://115.190.72.22:8089';
@@ -339,6 +349,7 @@ async function saveConfig() {
     updateBasicInfoOnStart: formValue.value.updateBasicInfoOnStart,
     refreshInterval: formValue.value.refreshInterval,
     openAiEnable: openAiEnable.value,
+    aiConfigId: defaultAiConfigId.value,
     aiConfigs: aiConfigs.value,
     tushareToken: formValue.value.tushareToken,
     emApiKey: formValue.value.emApiKey,
@@ -356,6 +367,7 @@ async function saveConfig() {
     enableOnlyPushRedNews: formValue.value.enableOnlyPushRedNews,
     httpProxy:formValue.value.httpProxy,
     httpProxyEnabled:formValue.value.httpProxyEnabled,
+    disableBrowserSearch: formValue.value.disableBrowserSearch,
     enableAgent: formValue.value.enableAgent,
     qgqpBId: formValue.value.qgqpBId,
     akshareServiceUrl: formValue.value.akshareServiceUrl,
@@ -468,6 +480,35 @@ async function backup(type) {
   })
 }
 
+async function restore(type) {
+  const typeNameMap = {
+    'followed_stocks': '自选股票',
+    'recommend_stocks': '推荐股票',
+    'ai_reports': 'AI分析报告',
+    'followed_funds': '关注基金',
+    'backtest_results': '回测结果',
+    'stock_change_history': '异动历史(最近1万条)'
+  }
+  const typeName = typeNameMap[type] || type
+  try {
+    const confirm = await dialog.warning({
+      title: '确认恢复',
+      content: `确定要从 CSV 恢复 ${typeName} 吗？将覆盖当前数据。`,
+      positiveText: '确认恢复',
+      negativeText: '取消',
+      closable: false
+    })
+    if (!confirm) return
+  } catch {
+    return
+  }
+  RestoreData(type).then(res => {
+    message.success(res)
+  }).catch(err => {
+    message.error('恢复失败: ' + (err?.message || err))
+  })
+}
+
 function importConfig() {
   let input = document.createElement('input');
   input.type = 'file';
@@ -522,6 +563,7 @@ function importConfig() {
       formValue.value.enableOnlyPushRedNews = config.enableOnlyPushRedNews !== false
       formValue.value.httpProxy = config.httpProxy ?? ''
       formValue.value.httpProxyEnabled = !!config.httpProxyEnabled
+      formValue.value.disableBrowserSearch = !!config.disableBrowserSearch
       formValue.value.enableAgent = !!config.enableAgent
       formValue.value.qgqpBId = config.qgqpBId ?? ''
       formValue.value.akshareServiceUrl = config.akshareServiceUrl ?? 'http://115.190.72.22:8089'
@@ -705,6 +747,23 @@ function importConfig() {
                             label="http代理地址" path="httpProxy">
               <n-input type="text" placeholder="爬虫http代理地址" v-model:value="formValue.httpProxy" clearable/>
             </n-form-item-gi>
+            <n-form-item-gi :span="6" label="禁用浏览器搜索" path="disableBrowserSearch">
+              <n-switch v-model:value="formValue.disableBrowserSearch"/>
+              <n-tooltip placement="top">
+                <template #trigger>
+                  <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
+                    <HelpCircleFilledIcon />
+                  </n-icon>
+                </template>
+                <template #default>
+                  <n-gradient-text :type="'warning'">
+                  <div style="max-width: 400px;text-align: left">
+                    开启后搜索引擎只使用 SearXNG JSON API + 百度 HTTP，不再启动 Edge/Chrome 浏览器进程，可大幅降低内存占用。
+                  </div>
+                  </n-gradient-text>
+                </template>
+              </n-tooltip>
+            </n-form-item-gi>
 
 
             <n-gi :span="24" v-if="openAiEnable">
@@ -767,6 +826,9 @@ function importConfig() {
             <n-gi :span="24" v-if="openAiEnable">
               <n-divider title-placement="left">AI模型服务配置</n-divider>
             </n-gi>
+            <n-form-item-gi :span="12" v-if="openAiEnable && aiConfigs.length > 0" label="默认AI配置">
+              <n-select v-model:value="defaultAiConfigId" :options="aiConfigOptions" filterable placeholder="选择默认AI配置" clearable />
+            </n-form-item-gi>
             <n-gi :span="24" v-if="openAiEnable">
               <n-space vertical>
                 <n-collapse v-model:expanded-names="aiConfigExpandedNames" accordion>
@@ -900,7 +962,7 @@ function importConfig() {
 
             <n-gi :span="24">
               <n-space vertical>
-                <n-text depth="3">导出用户数据到 backups 目录下的 CSV 文件（Excel 可直接打开）</n-text>
+                <n-text depth="3">导出用户数据到备份目录下的 CSV 文件（Excel 可直接打开），备份完成后会显示具体路径</n-text>
                 <n-space justify="center" wrap>
                   <n-button type="info" ghost @click="backup('followed_stocks')">备份自选股票</n-button>
                   <n-button type="info" ghost @click="backup('recommend_stocks')">备份推荐股票</n-button>
@@ -908,6 +970,16 @@ function importConfig() {
                   <n-button type="info" ghost @click="backup('followed_funds')">备份关注基金</n-button>
                   <n-button type="info" ghost @click="backup('backtest_results')">备份回测结果</n-button>
                   <n-button type="info" ghost @click="backup('stock_change_history')">备份异动历史</n-button>
+                </n-space>
+                <n-divider/>
+                <n-text depth="3">从最近的备份 CSV 文件恢复数据到数据库（将覆盖当前数据）</n-text>
+                <n-space justify="center" wrap>
+                  <n-button type="warning" ghost @click="restore('followed_stocks')">恢复自选股票</n-button>
+                  <n-button type="warning" ghost @click="restore('recommend_stocks')">恢复推荐股票</n-button>
+                  <n-button type="warning" ghost @click="restore('ai_reports')">恢复AI分析报告</n-button>
+                  <n-button type="warning" ghost @click="restore('followed_funds')">恢复关注基金</n-button>
+                  <n-button type="warning" ghost @click="restore('backtest_results')">恢复回测结果</n-button>
+                  <n-button type="warning" ghost @click="restore('stock_change_history')">恢复异动历史</n-button>
                 </n-space>
               </n-space>
             </n-gi>

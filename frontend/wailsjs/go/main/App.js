@@ -42,6 +42,10 @@ export function BackupData(arg1) {
   return window['go']['main']['App']['BackupData'](arg1);
 }
 
+export function RestoreData(arg1) {
+  return window['go']['main']['App']['RestoreData'](arg1);
+}
+
 export function BatchDeleteAIResponseResult(arg1) {
   return window['go']['main']['App']['BatchDeleteAIResponseResult'](arg1);
 }
@@ -144,6 +148,10 @@ export function EnableCronTask(arg1, arg2) {
 
 export function EnableMCPServer(arg1, arg2) {
   return window['go']['main']['App']['EnableMCPServer'](arg1, arg2);
+}
+
+export function EnableMCPTool(arg1, arg2) {
+  return window['go']['main']['App']['EnableMCPTool'](arg1, arg2);
 }
 
 export function EnableSkill(arg1, arg2) {

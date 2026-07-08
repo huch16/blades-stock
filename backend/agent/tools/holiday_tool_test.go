@@ -156,6 +156,10 @@ func TestGetHolidayInfo_API(t *testing.T) {
 
 	t.Logf("Holiday info for 2026-01-01:\n%s", result)
 
+	if strings.HasPrefix(result, "查询失败") {
+		t.Skipf("外部节假日API不可用（频率限制或有网络问题），跳过测试: %s", result)
+	}
+
 	if !strings.Contains(result, "元旦") {
 		t.Error("Expected result to contain '元旦'")
 	}
@@ -219,6 +223,10 @@ func TestGetHolidayYear_API(t *testing.T) {
 	}
 
 	t.Logf("Holiday year info for 2026:\n%s", result)
+
+	if strings.HasPrefix(result, "查询失败") {
+		t.Skipf("外部节假日API不可用（频率限制或有网络问题），跳过测试: %s", result)
+	}
 
 	if !strings.Contains(result, "元旦") {
 		t.Error("Expected result to contain '元旦'")

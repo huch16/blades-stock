@@ -897,6 +897,7 @@ export namespace data {
 	    updateBasicInfoOnStart: boolean;
 	    refreshInterval: number;
 	    openAiEnable: boolean;
+	    aiConfigId: number;
 	    prompt: string;
 	    checkUpdate: boolean;
 	    updateChannel: string;
@@ -907,13 +908,13 @@ export namespace data {
 	    browserPath: string;
 	    enableNews: boolean;
 	    darkTheme: boolean;
-	    browserPoolSize: number;
 	    enableFund: boolean;
 	    enablePushNews: boolean;
 	    enableOnlyPushRedNews: boolean;
 	    httpProxy: string;
 	    httpProxyEnabled: boolean;
 	    enableAgent: boolean;
+	    disableBrowserSearch: boolean;
 	    qgqpBId: string;
 	    tickFlowAPIKey: string;
 	    emApiKey: string;
@@ -945,6 +946,7 @@ export namespace data {
 	        this.updateBasicInfoOnStart = source["updateBasicInfoOnStart"];
 	        this.refreshInterval = source["refreshInterval"];
 	        this.openAiEnable = source["openAiEnable"];
+	        this.aiConfigId = source["aiConfigId"] ?? 0;
 	        this.prompt = source["prompt"];
 	        this.checkUpdate = source["checkUpdate"];
 	        this.updateChannel = source["updateChannel"];
@@ -955,13 +957,13 @@ export namespace data {
 	        this.browserPath = source["browserPath"];
 	        this.enableNews = source["enableNews"];
 	        this.darkTheme = source["darkTheme"];
-	        this.browserPoolSize = source["browserPoolSize"];
 	        this.enableFund = source["enableFund"];
 	        this.enablePushNews = source["enablePushNews"];
 	        this.enableOnlyPushRedNews = source["enableOnlyPushRedNews"];
 	        this.httpProxy = source["httpProxy"];
 	        this.httpProxyEnabled = source["httpProxyEnabled"];
 	        this.enableAgent = source["enableAgent"];
+	        this.disableBrowserSearch = source["disableBrowserSearch"] ?? false;
 	        this.qgqpBId = source["qgqpBId"];
 	        this.tickFlowAPIKey = source["tickFlowAPIKey"];
 	        this.emApiKey = source["emApiKey"];
@@ -2614,6 +2616,7 @@ export namespace models {
 	    toolName: string;
 	    description: string;
 	    paramsSchema: string;
+	    enabled: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new MCPServerTool(source);
@@ -2628,6 +2631,7 @@ export namespace models {
 	        this.toolName = source["toolName"];
 	        this.description = source["description"];
 	        this.paramsSchema = source["paramsSchema"];
+	        this.enabled = source["enabled"] ?? true;
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

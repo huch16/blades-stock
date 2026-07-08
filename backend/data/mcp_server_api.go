@@ -246,9 +246,19 @@ func (a *MCPServerApi) TestConnection(id uint) (string, error) {
 	return fmt.Sprintf("连接成功!发现 %d 个工具: %s", toolCount, strings.Join(toolNames, ", ")), nil
 }
 
+func (a *MCPServerApi) EnableTool(id uint, enable bool) error {
+	return db.Dao.Model(&models.MCPServerTool{}).Where("id = ?", id).Update("enabled", enable).Error
+}
+
 func (a *MCPServerApi) GetToolsByServerID(serverID uint) []models.MCPServerTool {
 	var tools []models.MCPServerTool
 	db.Dao.Where("mcp_server_id = ?", serverID).Order("tool_name ASC").Find(&tools)
+	return tools
+}
+
+func (a *MCPServerApi) GetEnabledToolsByServerID(serverID uint) []models.MCPServerTool {
+	var tools []models.MCPServerTool
+	db.Dao.Where("mcp_server_id = ? AND enabled = ?", serverID, true).Order("tool_name ASC").Find(&tools)
 	return tools
 }
 

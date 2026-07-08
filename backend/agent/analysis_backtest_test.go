@@ -1,12 +1,19 @@
 package agent
 
 import (
+	"os"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"testing"
 )
 
 func TestBacktest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+	if _, err := os.Stat("data/stock.db"); os.IsNotExist(err) {
+		t.Skip("Skipping: data/stock.db not found (run from project root)")
+	}
 	// Initialize database
 	db.Init("data/stock.db")
 

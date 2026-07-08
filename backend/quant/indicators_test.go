@@ -9,18 +9,6 @@ func approxEq(a, b, eps float64) bool {
 	return math.Abs(a-b) < eps
 }
 
-func vecApproxEq(t *testing.T, got *Vector, expected []float64, eps float64, name string) {
-	t.Helper()
-	if got.Len != len(expected) {
-		t.Fatalf("%s: length mismatch: got %d, want %d", name, got.Len, len(expected))
-	}
-	for i := 0; i < got.Len; i++ {
-		if !approxEq(got.Values[i], expected[i], eps) {
-			t.Fatalf("%s[%d]: got %f, want %f", name, i, got.Values[i], expected[i])
-		}
-	}
-}
-
 func TestNewSMA(t *testing.T) {
 	close := NewVec(1, 2, 3, 4, 5)
 	sma := NewSMA(close, 3)

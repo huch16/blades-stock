@@ -43,11 +43,21 @@ func (receiver StockAiAgent) newStockAiAgent(ctx *context.Context, aiConfigId in
 		return nil
 	}
 
+	if aiConfigId <= 0 {
+		aiConfigId = int(settingConfig.AiConfigID)
+	}
+
 	aiConfig, ok := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
 		return uint(aiConfigId) == item.ID
 	})
+	if !ok && len(settingConfig.AiConfigs) > 0 {
+		aiConfig = settingConfig.AiConfigs[0]
+		aiConfigId = int(aiConfig.ID)
+		ok = true
+		logger.SugaredLogger.Infof("ai config %d not found, fallback to first available: %d (%s)", aiConfigId, aiConfig.ID, aiConfig.Name)
+	}
 	if !ok {
-		logger.SugaredLogger.Errorf("ai config not found for id: %d", aiConfigId)
+		logger.SugaredLogger.Errorf("no ai config available")
 		return nil
 	}
 	if aiConfig == nil {
@@ -121,19 +131,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			)
 		}
 
-		// Detect skill before creating agent, so we can override aiConfigId by skill
+		// Detect skill before creating agent, so we can log skill usage
 		skillPrompt := buildSkillPrompt(question, embedService)
-		if skillPrompt != "" {
-			hasETF := strings.Contains(skillPrompt, "ETF轮动多Agent分析")
-			hasSerenity := strings.Contains(skillPrompt, "Serenity式产业分析")
-			if hasETF && hasSerenity {
-				aiConfigId = 3 // both matched: MiniMax-M3 (1M context)
-			} else if hasETF {
-				aiConfigId = 1 // gpt-oss-120b: reliable for complex pipeline
-			} else if hasSerenity {
-				aiConfigId = 3 // MiniMax-M3: 1M context for long reports
-			}
-		}
 
 		stockAiAgent := receiver.newStockAiAgent(&ctx, aiConfigId, thinkingMode, question, agentMode)
 		if stockAiAgent == nil {
@@ -176,10 +175,18 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 			sysPrompt += `【强制规则】你必须通过工具调用获取实时数据，严禁凭记忆编造或使用过时数据。以下场景必须调用工具：
 1. 股票/指数行情数据（价格、涨跌幅、成交量等）——必须调用工具获取最新实时数据
-2. 财务数据（营收、利润、市盈率等）——必须调用工具获取最新财报数据
-3. 新闻资讯——必须调用工具获取最新新闻
-4. 宏观经济数据——必须调用工具获取最新数据
-任何涉及具体数字的回答，都必须先通过工具查询确认，不得使用训练数据中的过时信息。如果你没有获取到最新数据，必须明确告知用户"当前未能获取到最新数据"，绝不能编造数据。`
+2. 财务数据（营收、利润、市盈率PE、市净率PB、ROE、毛利率、净利率等）——必须调用工具获取最新财报数据
+3. 资金流向数据（主力净流入/流出、大单、超大单、散户）——必须调用工具获取
+4. 技术指标（均线MA、MACD、KDJ、RSI等）——必须调用工具或基于实时行情推算
+5. 新闻资讯——必须调用工具获取最新新闻
+6. 宏观经济数据——必须调用工具获取最新数据
+
+【数据真实性红线】这是最高优先级规则：
+- 严禁凭空编造PE、PB、ROE、营收、利润、毛利率、净利率、资金流向金额、成交额、股东人数、换手率、均线价格等任何数字指标
+- 如果你没有通过工具获取到某个指标的确切数值，必须明确说"数据不可得"或"未查询到"，绝不能编造一个数字充数
+- 如果你不确定某个信息的来源，不要声称它来自"公告"、"公司披露"或"机构调研"
+- 任何涉及具体数字的回答，都必须先通过工具查询确认，不得使用训练数据中的过时信息
+- 如果你没有获取到最新数据，必须明确告知用户"当前未能获取到最新数据"`
 		}
 
 		aiConfig, _ := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
@@ -260,6 +267,12 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
+		ch <- &StreamMessage{
+			Role:             "assistant",
+			Content:          "",
+			ReasoningContent: "[STATUS]🤔 正在理解问题并制定分析计划...",
+		}
+
 		invocation := &blades.Invocation{
 			Message:     blades.UserMessage(question),
 			Instruction: blades.SystemMessage(sysPrompt),
@@ -331,8 +344,31 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 						Content:          "",
 						ReasoningContent: fmt.Sprintf("[STEP]🔧 调用工具：%s(%s)\n", tp.Name, tp.Request),
 					}
+					if tp.Response != "" {
+						resultLen := len(tp.Response)
+						status := "✅"
+						if resultLen == 0 || strings.Contains(tp.Response, "error") || strings.Contains(tp.Response, "失败") {
+							status = "⚠️"
+						}
+						summary := tp.Response
+						if len(summary) > 80 {
+							summary = summary[:80] + "..."
+						}
+						summary = strings.ReplaceAll(summary, "\n", " ")
+						ch <- &StreamMessage{
+							Role:             "assistant",
+							Content:          "",
+							ReasoningContent: fmt.Sprintf("[STEP]%s 工具 %s 返回数据 (%d 字符): %s\n", status, tp.Name, resultLen, summary),
+						}
+					}
 				}
 			}
+		}
+
+		ch <- &StreamMessage{
+			Role:             "assistant",
+			Content:          "",
+			ReasoningContent: "[STATUS]✍️ 正在根据数据生成回答...",
 		}
 
 		if fullResponse.Len() != 0 && memoryService != nil {

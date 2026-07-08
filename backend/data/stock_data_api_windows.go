@@ -73,17 +73,17 @@ func CheckFirefox() (string, bool) {
 func CheckBrowser() (string, bool) {
 	// 优先检测 Edge（chromedp 基于 Chromium，Edge 兼容性更好）
 	if path, ok := CheckEdge(); ok {
-		logger.SugaredLogger.Infof("检测到 Edge 浏览器：%s", path)
+		logger.SugaredLogger.Debugf("检测到 Edge 浏览器：%s", path)
 		return path, true
 	}
 	// 其次检测 Chrome
 	if path, ok := CheckChrome(); ok {
-		logger.SugaredLogger.Infof("检测到 Chrome 浏览器：%s", path)
+		logger.SugaredLogger.Debugf("检测到 Chrome 浏览器：%s", path)
 		return path, true
 	}
 	// 最后检测 Firefox
 	if path, ok := CheckFirefox(); ok {
-		logger.SugaredLogger.Infof("检测到 Firefox 浏览器：%s", path)
+		logger.SugaredLogger.Debugf("检测到 Firefox 浏览器：%s", path)
 		return path, true
 	}
 	return "", false

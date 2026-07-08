@@ -1,3 +1,4 @@
+// Package util provides common utility functions.
 package util
 
 import uaFake "github.com/lib4u/fake-useragent"

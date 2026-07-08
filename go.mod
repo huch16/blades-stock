@@ -6,7 +6,6 @@ require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/bensema/gotdx v0.0.0-20260623084845-957640139dfe
 	github.com/bytedance/sonic v1.15.2
-	github.com/chromedp/cdproto v0.0.0-20260427013145-5737772c319b
 	github.com/chromedp/chromedp v0.15.1
 	github.com/coocood/freecache v1.2.7
 	github.com/denisbrodbeck/machineid v1.0.1
@@ -28,7 +27,6 @@ require (
 	github.com/robertkrimen/otto v0.5.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/lo v1.53.0
-	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.19.0
 	github.com/wailsapp/wails/v2 v2.12.0
 	go.uber.org/zap v1.28.0
@@ -57,6 +55,7 @@ require (
 	github.com/bytedance/gopkg v0.1.4 // indirect
 	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/chromedp/cdproto v0.0.0-20260427013145-5737772c319b // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -150,7 +149,6 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.73.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

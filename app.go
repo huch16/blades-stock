@@ -157,6 +157,23 @@ func GetSource(tags []string) string {
 // domReady is called after front-end resources have been loaded
 func (a *App) domReady(ctx context.Context) {
 	defer PanicHandler()
+
+	// 初始化 VPS 数据服务
+	go func() {
+		// 交易日历（AData → Baostock → 周末判断）
+		data.InitTradingCalendar()
+
+		// AData 健康检查
+		if err := data.NewAdataClient().Ping(); err != nil {
+			logger.SugaredLogger.Warnf("AData 服务连接失败: %v", err)
+		}
+
+		// AKShare 健康检查
+		if err := data.NewAkshareClient().Ping(); err != nil {
+			logger.SugaredLogger.Warnf("AKShare 服务连接失败: %v", err)
+		}
+	}()
+
 	defer func() {
 		// 增加延迟确保前端已准备好接收事件
 		go func() {
@@ -1457,6 +1474,24 @@ func preFetchStockAnalysisData(stockCode string) string {
 		parts = append(parts, financeMd)
 	}
 
+	// Quarterly financial indicators (ROE, gross margin, etc.)
+	qtrMd := api.GetStockQtrMainFinanceToMarkdown(stockCode)
+	if qtrMd != "" && !strings.HasPrefix(qtrMd, "获取") {
+		parts = append(parts, qtrMd)
+	}
+
+	// Valuation percentile (PE/PB percentile rank)
+	valMd := api.GetStockValuationPercentileToMarkdown(stockCode)
+	if valMd != "" && !strings.HasPrefix(valMd, "获取") {
+		parts = append(parts, valMd)
+	}
+
+	// Institutional prediction summary
+	predMd := api.GetStockPredictSummaryToMarkdown(stockCode)
+	if predMd != "" && !strings.HasPrefix(predMd, "获取") {
+		parts = append(parts, predMd)
+	}
+
 	if len(parts) == 0 {
 		return ""
 	}
@@ -1482,7 +1517,7 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 		analysisQuestion = fmt.Sprintf("请对%s(%s)进行全方位深度分析，从技术面、基本面、消息面、资金面四个维度综合研判，给出明确的多空判断和操作建议。", stock, stockCode)
 	}
 	if preFetchCtx != "" {
-		analysisQuestion = analysisQuestion + "\n\n【预采集参考数据】以下数据由系统预先采集，可供直接引用分析，无需再重复查询：\n" + preFetchCtx
+		analysisQuestion += "\n\n【预采集参考数据】以下数据由系统预先采集，是真实数据，可直接引用分析：\n" + preFetchCtx + "\n\n【重要】严禁编造或推算PE/PB/ROE/毛利率/营收/利润/资金流向/均线等任何数字指标。所有数据须来自预采集数据或工具返回结果。不确定的指标请明确说'数据不可得'，不要自行估算。"
 	}
 	for msg := range agent.NewStockAiAgentApi().ChatWithContext(a.ctx, analysisQuestion, aiConfigId, sysPromptId, true, 5, think, "plan_execute") {
 		if msg == nil {
@@ -1657,6 +1692,11 @@ func (a *App) CleanupData(cleanupType string) string {
 // BackupData 暴露给前端的数据备份入口
 func (a *App) BackupData(backupType string) string {
 	return data.NewSettingsApi().BackupData(backupType)
+}
+
+// RestoreData 暴露给前端的恢复入口
+func (a *App) RestoreData(backupType string) string {
+	return data.NewSettingsApi().RestoreData(backupType)
 }
 
 func (a *App) ShareAnalysis(stockCode, stockName string) string {
@@ -2985,6 +3025,16 @@ func (a *App) LearnSkillFromProject(projectName string, analysis string) string 
 
 func (a *App) GetMCPToolsByServerID(serverID uint) []models.MCPServerTool {
 	return data.NewMCPServerApi().GetToolsByServerID(serverID)
+}
+
+func (a *App) EnableMCPTool(id uint, enable bool) string {
+	if err := data.NewMCPServerApi().EnableTool(id, enable); err != nil {
+		return "操作失败: " + err.Error()
+	}
+	if enable {
+		return "已启用工具"
+	}
+	return "已禁用工具"
 }
 
 func (a *App) GetAllMCPTools() []models.MCPServerTool {

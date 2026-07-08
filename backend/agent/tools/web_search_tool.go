@@ -11,7 +11,7 @@ import (
 
 func GetWebSearchTool() bladesTools.Tool {
 	return types.NewTool("WebSearch",
-		"SearXNG 通用互联网搜索工具。当用户需要查询实时信息、无法通过本地股票接口直接获得的列表/地域/新闻/非结构化数据时调用。例如：总部位于某城市的上市公司、最新热点、实时资讯等。优先调用此工具而不是直接回答无法查询。",
+		"SearXNG/百度 通用互联网搜索工具。优先使用 SearXNG JSON API 搜索，仅当 SearXNG 和百度 HTTP 均无结果时回退到浏览器。当用户需要查询实时信息、无法通过本地股票接口直接获得的列表/地域/新闻/非结构化数据时调用。例如：总部位于某城市的上市公司、最新热点、实时资讯等。优先调用此工具而不是直接回答无法查询。",
 		map[string]*types.ParamDef{
 			"query": {Type: "string", Desc: "搜索关键词，建议简洁且包含关键限定词", Required: true},
 			"count": {Type: "integer", Desc: "返回结果条数，默认5，最大20", Required: false},

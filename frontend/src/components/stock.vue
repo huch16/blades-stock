@@ -419,21 +419,31 @@ onBeforeMount(() => {
       if (msg.question) {
         data.question = msg.question
       }
-      if (msg.content || msg.reasoning_content || msg.extraContent) {
-        if (!data.airesult) {
-          data.analysisStatus = "AI正在分析中..."
-        }
-        data.loading = false
-      }
-      if (msg.content) {
-        data.airesult = data.airesult + msg.content
+      // [STATUS] → 更新状态栏；[STEP] → 忽略（工具调用日志）
+      // reasoning_content 中真正的 AI 推理过程 → 保留到 result
+      let hasContent = false
+      if (msg.content && !msg.content.startsWith("[STATUS]") && !msg.content.startsWith("[STEP]") && msg.content !== "agent-DONE") {
+        data.airesult += msg.content
+        hasContent = true
+      } else if (msg.content && msg.content.startsWith("[STATUS]")) {
+        data.analysisStatus = msg.content.replace("[STATUS]", "").trim()
       }
       if (msg.reasoning_content) {
-        data.airesult = data.airesult + msg.reasoning_content
+        if (msg.reasoning_content.startsWith("[STATUS]")) {
+          data.analysisStatus = msg.reasoning_content.replace("[STATUS]", "").trim()
+        } else if (!msg.reasoning_content.startsWith("[STEP]")) {
+          data.airesult += msg.reasoning_content
+          hasContent = true
+        }
       }
       if (msg.extraContent) {
-        data.airesult = data.airesult + msg.extraContent
+        data.airesult += msg.extraContent
+        hasContent = true
       }
+      if (hasContent && !data.airesult) {
+        data.analysisStatus = "AI正在分析中..."
+      }
+      data.loading = !hasContent
       scrollToAiResultBottom()
     }
   })

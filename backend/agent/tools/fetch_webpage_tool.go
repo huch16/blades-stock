@@ -2,10 +2,14 @@ package tools
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 	"blades-stock/backend/agent/types"
-	"blades-stock/backend/data"
+	"blades-stock/backend/logger"
 
+	"github.com/PuerkitoBio/goquery"
+	"github.com/go-resty/resty/v2"
 	bladesTools "github.com/go-kratos/blades/tools"
 )
 
@@ -33,16 +37,24 @@ func GetFetchWebPageTool() bladesTools.Tool {
 			if !ok || url == "" {
 				return "URL不能为空", nil
 			}
-			waitVisible := "body"
-			if w, ok := parms["waitVisible"].(string); ok && w != "" {
-				waitVisible = w
-			}
-			cfg := data.GetSettingConfig()
-			pool := data.NewBrowserPool(cfg.BrowserPoolSize)
-			html, err := pool.FetchPage(url, waitVisible)
+			client := resty.New()
+			client.SetTimeout(30 * time.Second)
+			resp, err := client.R().
+				SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36").
+				Get(url)
 			if err != nil {
-				return "抓取失败: " + err.Error(), nil
+				return fmt.Sprintf("抓取失败: %v", err), nil
 			}
+			if resp.StatusCode() != 200 {
+				return fmt.Sprintf("抓取失败: HTTP %d", resp.StatusCode()), nil
+			}
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(string(resp.Body())))
+			if err != nil {
+				logger.SugaredLogger.Debugf("FetchWebPage goquery parse error: %v", err)
+			}
+			doc.Find("script, style, noscript, svg, meta, link, form, nav, footer, header, iframe, img, video, audio").
+				Remove()
+			html, _ := doc.Html()
 			text := stripHTMLTags(html)
 			text = strings.TrimSpace(text)
 			if len(text) > 50000 {

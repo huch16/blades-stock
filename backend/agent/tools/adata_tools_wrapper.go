@@ -83,8 +83,9 @@ func GetAdataTools() []bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			year := int(gjson.Get(args, "year").Int())
+			_ = year // AData 返回全年日历，不需要年份参数
 			client := data.NewAdataClient()
-			result, err := client.GetTradeCalendar(year)
+			result, err := client.GetTradeCalendar()
 			if err != nil {
 				return "", err
 			}

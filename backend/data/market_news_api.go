@@ -567,8 +567,6 @@ func (m MarketNewsApi) CacheGlobalStockIndexes(crawlTimeOut uint) error {
 					"img":      index.Img,
 					"region":   index.Region,
 				})
-			} else {
-				// 记录不存在，创建
 			}
 			db.Dao.Where(models.GlobalStockIndex{Qtcode: index.Qtcode}).FirstOrCreate(&index)
 		}
@@ -1063,61 +1061,31 @@ func (m MarketNewsApi) XUEQIUHotStock(size int, marketType string) *[]models.Hot
 	url := fmt.Sprintf("https://stock.xueqiu.com/v5/stock/hot_stock/list.json?page=1&size=%d&_type=%s&type=%s", size, marketType, marketType)
 	empty := &[]models.HotItem{}
 
-	const maxRetries = 2
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		cookieHeader, cookieErr := FetchXueqiuCookiesViaChromedp("", 30*time.Second, "https://xueqiu.com/hq#hot")
-		if cookieErr != nil {
-			logger.SugaredLogger.Warnf("雪球 chromedp 获取 cookie 失败 (attempt %d): %v", attempt+1, cookieErr)
-		}
-
-		res := &models.XUEQIUHot{}
-		request := SharedHTTPClient.SetTimeout(time.Duration(30) * time.Second).R()
-		request.SetHeader("Host", "stock.xueqiu.com").
-			SetHeader("Origin", "https://xueqiu.com").
-			SetHeader("Referer", "https://xueqiu.com/").
-			SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
-		if cookieErr == nil && cookieHeader != "" {
-			request.SetHeader("Cookie", cookieHeader)
-		}
-		_, err := request.SetResult(res).Get(url)
-		if err != nil {
-			logger.SugaredLogger.Errorf("XUEQIUHotStock err (attempt %d):%s", attempt+1, err.Error())
-			if attempt < maxRetries-1 {
-				InvalidateXueqiuCookieCache()
-				time.Sleep(time.Second)
-				continue
-			}
-			return empty
-		}
-		if res.ErrorCode != 0 {
-			logger.SugaredLogger.Errorf("XUEQIUHotStock API error (attempt %d): code=%d, desc=%s", attempt+1, res.ErrorCode, res.ErrorDescription)
-			if attempt < maxRetries-1 {
-				InvalidateXueqiuCookieCache()
-				time.Sleep(time.Second)
-				continue
-			}
-			return empty
-		}
-		return &res.Data.Items
+	res := &models.XUEQIUHot{}
+	request := SharedHTTPClient.SetTimeout(time.Duration(30) * time.Second).R()
+	request.SetHeader("Host", "stock.xueqiu.com").
+		SetHeader("Origin", "https://xueqiu.com").
+		SetHeader("Referer", "https://xueqiu.com/").
+		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
+	_, err := request.SetResult(res).Get(url)
+	if err != nil {
+		logger.SugaredLogger.Errorf("XUEQIUHotStock err:%s", err.Error())
+		return empty
 	}
-	return empty
+	if res.ErrorCode != 0 {
+		logger.SugaredLogger.Errorf("XUEQIUHotStock API error: code=%d, desc=%s", res.ErrorCode, res.ErrorDescription)
+		return empty
+	}
+	return &res.Data.Items
 }
 
 func (m MarketNewsApi) HotEvent(size int) *[]models.HotEvent {
-	cookieHeader, cookieErr := FetchXueqiuCookiesViaChromedp("", 30*time.Second, "https://xueqiu.com/hq#hot")
-	if cookieErr != nil {
-		logger.SugaredLogger.Warnf("雪球 chromedp 获取 cookie 失败: %v", cookieErr)
-	}
-
 	events := &[]models.HotEvent{}
 	sprintf := fmt.Sprintf("https://xueqiu.com/hot_event/list.json?count=%d", size)
 	request := SharedHTTPClient.SetTimeout(time.Duration(30) * time.Second).R()
 	request.SetHeader("Host", "xueqiu.com").
 		SetHeader("Referer", "https://xueqiu.com/").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
-	if cookieErr == nil && cookieHeader != "" {
-		request.SetHeader("Cookie", cookieHeader)
-	}
 	resp, err := request.Get(sprintf)
 	if err != nil {
 		logger.SugaredLogger.Errorf("HotEvent err:%s", err.Error())

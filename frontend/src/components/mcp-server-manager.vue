@@ -177,6 +177,7 @@ import {
   NDataTable,
   NCollapse,
   NCollapseItem,
+  NSwitch,
   useMessage
 } from 'naive-ui'
 import VueJsonPretty from 'vue-json-pretty'
@@ -203,7 +204,8 @@ import {
   EnableMCPServer,
   TestMCPServer,
   GetMCPToolsByServerID,
-  GetAllMCPTools
+  GetAllMCPTools,
+  EnableMCPTool
 } from '../../wailsjs/go/main/App'
 
 const message = useMessage()
@@ -370,6 +372,19 @@ const columns = [
       }
 
       const toolColumns = [
+        {
+          title: '启用',
+          key: 'enabled',
+          width: 70,
+          render(toolRow) {
+            return h(NSwitch, {
+              size: 'small',
+              value: toolRow.enabled,
+              loading: toolRow._toggling,
+              onUpdateValue: (val) => handleToggleTool(toolRow, val)
+            })
+          }
+        },
         {
           title: '工具名称',
           key: 'toolName',
@@ -666,6 +681,19 @@ const handleToggleEnable = async (row) => {
     await loadServerList()
   } catch (error) {
     message.error('操作失败：' + error.message)
+  }
+}
+
+const handleToggleTool = async (tool, newVal) => {
+  tool._toggling = true
+  try {
+    const result = await EnableMCPTool(tool.id, newVal)
+    message.success(result)
+    tool.enabled = newVal
+  } catch (error) {
+    message.error('操作失败：' + error.message)
+  } finally {
+    tool._toggling = false
   }
 }
 

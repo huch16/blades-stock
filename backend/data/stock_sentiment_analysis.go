@@ -136,8 +136,6 @@ func InitAnalyzeSentiment() {
 		err := seg.AddToken(tag.Name, basefreq+100, "n")
 		if err != nil {
 			logger.SugaredLogger.Errorf("添加%s失败:%s", tag.Name, err.Error())
-		} else {
-			//logger.SugaredLogger.Infof("添加tags词典[%s]成功", tag.Name)
 		}
 	}
 	logger.SugaredLogger.Info("加载tags词典成功")

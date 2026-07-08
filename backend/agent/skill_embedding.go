@@ -197,10 +197,11 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 func (s *SkillEmbeddingService) keywordMatch(skills []models.Skill, question string, topK int) []models.Skill {
 	var matched []models.Skill
 	for _, skill := range skills {
+		if len(matched) >= topK {
+			break
+		}
 		if skill.TriggerKeywords == "" {
-			if len(matched) < topK {
-				matched = append(matched, skill)
-			}
+			matched = append(matched, skill)
 			continue
 		}
 		keywords := strings.Split(skill.TriggerKeywords, ",")

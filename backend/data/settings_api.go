@@ -26,6 +26,7 @@ type Settings struct {
 	UpdateBasicInfoOnStart bool   `json:"updateBasicInfoOnStart"`
 	RefreshInterval        int64  `json:"refreshInterval"`
 	OpenAiEnable           bool   `json:"openAiEnable"`
+	AiConfigID             uint   `json:"aiConfigId" gorm:"column:ai_config_id;default:0"`
 	Prompt                 string `json:"prompt"`
 	CheckUpdate            bool   `json:"checkUpdate"`
 	UpdateChannel          string `json:"updateChannel"`
@@ -36,13 +37,13 @@ type Settings struct {
 	BrowserPath            string `json:"browserPath"`
 	EnableNews             bool   `json:"enableNews"`
 	DarkTheme              bool   `json:"darkTheme"`
-	BrowserPoolSize        int    `json:"browserPoolSize"`
 	EnableFund             bool   `json:"enableFund"`
 	EnablePushNews         bool   `json:"enablePushNews"`
 	EnableOnlyPushRedNews  bool   `json:"enableOnlyPushRedNews"`
 	HttpProxy              string `json:"httpProxy"`
 	HttpProxyEnabled       bool   `json:"httpProxyEnabled"`
 	EnableAgent            bool   `json:"enableAgent"`
+	DisableBrowserSearch   bool   `json:"disableBrowserSearch" gorm:"column:disable_browser_search;default:false"`
 	QgqpBId                string `json:"qgqpBId" gorm:"column:qgqp_b_id"`
 	TickFlowAPIKey        string `json:"tickFlowAPIKey" gorm:"column:tickflow_api_key"`
 	EmApiKey               string `json:"emApiKey" gorm:"column:em_api_key"`
@@ -269,11 +270,19 @@ func cleanupBrowserTemp() string {
 	}
 	return fmt.Sprintf("已清理 %d 个浏览器临时目录", removed)
 }
+func backupDirPath() string {
+	exe, err := os.Executable()
+	if err == nil {
+		return filepath.Join(filepath.Dir(exe), "backups")
+	}
+	return "backups"
+}
+
 // BackupData 导出用户数据到 CSV，返回生成的文件路径
 func (s *SettingsApi) BackupData(backupType string) string {
 	logger.SugaredLogger.Infof("Backing up data type: %s", backupType)
 
-	backupDir := "backups"
+	backupDir := backupDirPath()
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
 		return "创建备份目录失败: " + err.Error()
 	}
@@ -281,21 +290,58 @@ func (s *SettingsApi) BackupData(backupType string) string {
 	ts := time.Now().Format("20060102_150405")
 	fileName := filepath.Join(backupDir, fmt.Sprintf("%s_%s.csv", backupType, ts))
 
+	var result string
 	switch backupType {
 	case BackupFollowedStocks:
-		return backupFollowedStocks(fileName)
+		result = backupFollowedStocks(fileName)
 	case BackupRecommendStocks:
-		return backupRecommendStocks(fileName)
+		result = backupRecommendStocks(fileName)
 	case BackupAIReports:
-		return backupAIReports(fileName)
+		result = backupAIReports(fileName)
 	case BackupFollowedFunds:
-		return backupFollowedFunds(fileName)
+		result = backupFollowedFunds(fileName)
 	case BackupBacktestResults:
-		return backupBacktestResults(fileName)
+		result = backupBacktestResults(fileName)
 	case BackupStockChangeHistory:
-		return backupStockChangeHistory(fileName)
+		result = backupStockChangeHistory(fileName)
 	default:
 		return "未知备份类型: " + backupType
+	}
+	return fmt.Sprintf("%s\n备份目录: %s", result, backupDir)
+}
+
+// RestoreData 从 CSV 文件恢复数据到数据库
+func (s *SettingsApi) RestoreData(backupType string) string {
+	logger.SugaredLogger.Infof("Restoring data type: %s", backupType)
+
+	backupDir := backupDirPath()
+	pattern := filepath.Join(backupDir, backupType+"_*.csv")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return "查找备份文件失败: " + err.Error()
+	}
+	if len(matches) == 0 {
+		return "未找到 " + backupType + " 的备份文件，请先执行备份\n备份目录: " + backupDir
+	}
+
+	// 使用最新的文件
+	fileName := matches[len(matches)-1]
+
+	switch backupType {
+	case BackupFollowedStocks:
+		return restoreFollowedStocks(fileName)
+	case BackupRecommendStocks:
+		return restoreRecommendStocks(fileName)
+	case BackupAIReports:
+		return restoreAIReports(fileName)
+	case BackupFollowedFunds:
+		return restoreFollowedFunds(fileName)
+	case BackupBacktestResults:
+		return restoreBacktestResults(fileName)
+	case BackupStockChangeHistory:
+		return restoreStockChangeHistory(fileName)
+	default:
+		return "未知恢复类型: " + backupType
 	}
 }
 
@@ -397,6 +443,167 @@ func dumpRowsToCSV(fileName string, rows *sql.Rows, headers []string) string {
 	return fmt.Sprintf("已备份 %d 条记录到 %s", count, fileName)
 }
 
+func readCSV(fileName string) ([]map[string]string, error) {
+	f, err := os.Open(fileName)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	allRows, err := r.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+	if len(allRows) < 2 {
+		return nil, nil
+	}
+	headers := allRows[0]
+	var records []map[string]string
+	for _, row := range allRows[1:] {
+		rec := make(map[string]string)
+		for i, h := range headers {
+			if i < len(row) {
+				rec[h] = row[i]
+			}
+		}
+		records = append(records, rec)
+	}
+	return records, nil
+}
+
+func restoreFollowedStocks(fileName string) string {
+	records, err := readCSV(fileName)
+	if err != nil {
+		return "读取备份文件失败: " + err.Error()
+	}
+	if len(records) == 0 {
+		return "备份文件为空，无数据可恢复"
+	}
+	tx := db.Dao.Begin()
+	for _, r := range records {
+		err := tx.Exec("INSERT OR REPLACE INTO followed_stock (stock_code, name, volume, cost_price, price, change_percent, alarm_change_percent, alarm_price, time, sort, ai_config_id, entry_price, take_profit_price, stop_loss_price) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+			r["股票代码"], r["名称"], r["持仓量"], r["成本价"], r["当前价"], r["涨跌幅%"], r["预警涨跌幅%"], r["预警价"], r["时间"], r["排序"], r["AI配置ID"], r["入场价"], r["止盈价"], r["止损价"],
+		).Error
+		if err != nil {
+			tx.Rollback()
+			return "恢复自选股票失败: " + err.Error()
+		}
+	}
+	tx.Commit()
+	return fmt.Sprintf("已恢复 %d 条自选股票记录", len(records))
+}
+
+func restoreRecommendStocks(fileName string) string {
+	records, err := readCSV(fileName)
+	if err != nil {
+		return "读取备份文件失败: " + err.Error()
+	}
+	if len(records) == 0 {
+		return "备份文件为空，无数据可恢复"
+	}
+	tx := db.Dao.Begin()
+	for _, r := range records {
+		err := tx.Exec("INSERT OR REPLACE INTO ai_recommend_stocks (id, data_time, model_name, rating, stock_code, stock_name, bk_name, stock_price, stock_current_price, stock_current_price_time, stock_close_price, stock_pre_price, recommend_reason, recommend_buy_price, recommend_buy_price_min, recommend_buy_price_max, recommend_stop_profit_price, recommend_stop_profit_price_min, recommend_stop_profit_price_max, recommend_stop_loss_price, risk_remarks, remarks, enable_alert) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+			r["ID"], r["数据时间"], r["模型"], r["评级"], r["股票代码"], r["股票名称"], r["板块"], r["推荐价"], r["当前价"], r["当前价时间"], r["收盘价"], r["昨收"], r["推荐理由"], r["建议买入价"], r["建议买入最低价"], r["建议买入最高价"], r["建议止盈价"], r["建议止盈最低价"], r["建议止盈最高价"], r["建议止损价"], r["风险提示"], r["备注"], r["启用提醒"],
+		).Error
+		if err != nil {
+			tx.Rollback()
+			return "恢复推荐股票失败: " + err.Error()
+		}
+	}
+	tx.Commit()
+	return fmt.Sprintf("已恢复 %d 条推荐股票记录", len(records))
+}
+
+func restoreAIReports(fileName string) string {
+	records, err := readCSV(fileName)
+	if err != nil {
+		return "读取备份文件失败: " + err.Error()
+	}
+	if len(records) == 0 {
+		return "备份文件为空，无数据可恢复"
+	}
+	tx := db.Dao.Begin()
+	for _, r := range records {
+		err := tx.Exec("INSERT OR REPLACE INTO ai_response_result (id, created_at, model_name, stock_code, stock_name, question, content, is_del) VALUES (?,?,?,?,?,?,?,?)",
+			r["ID"], r["创建时间"], r["模型"], r["股票代码"], r["股票名称"], r["问题"], r["内容"], r["是否删除"],
+		).Error
+		if err != nil {
+			tx.Rollback()
+			return "恢复AI分析报告失败: " + err.Error()
+		}
+	}
+	tx.Commit()
+	return fmt.Sprintf("已恢复 %d 条AI分析报告", len(records))
+}
+
+func restoreFollowedFunds(fileName string) string {
+	records, err := readCSV(fileName)
+	if err != nil {
+		return "读取备份文件失败: " + err.Error()
+	}
+	if len(records) == 0 {
+		return "备份文件为空，无数据可恢复"
+	}
+	tx := db.Dao.Begin()
+	for _, r := range records {
+		err := tx.Exec("INSERT OR REPLACE INTO followed_fund (id, created_at, code, name, net_unit_value, net_unit_value_date, net_estimated_unit, net_estimated_time, net_accumulated, net_estimated_rate, net_unit_value_prev, net_actual_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+			r["ID"], r["创建时间"], r["基金代码"], r["基金名称"], r["单位净值"], r["净值日期"], r["估算净值"], r["估算时间"], r["累计净值"], r["估算涨跌幅"], r["昨日净值"], r["实际涨跌幅"],
+		).Error
+		if err != nil {
+			tx.Rollback()
+			return "恢复关注基金失败: " + err.Error()
+		}
+	}
+	tx.Commit()
+	return fmt.Sprintf("已恢复 %d 条关注基金记录", len(records))
+}
+
+func restoreBacktestResults(fileName string) string {
+	records, err := readCSV(fileName)
+	if err != nil {
+		return "读取备份文件失败: " + err.Error()
+	}
+	if len(records) == 0 {
+		return "备份文件为空，无数据可恢复"
+	}
+	tx := db.Dao.Begin()
+	for _, r := range records {
+		err := tx.Exec("INSERT OR REPLACE INTO backtest_results (id, created_at, report_id, stock_code, stock_name, analysis_date, direction, target_price, verify_date, verify_price, price_change, max_drawdown, max_upside, is_accurate, confidence, summary) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+			r["ID"], r["创建时间"], r["报告ID"], r["股票代码"], r["股票名称"], r["分析日期"], r["方向"], r["目标价"], r["验证日期"], r["验证价"], r["价格变化"], r["最大回撤"], r["最大上涨"], r["是否准确"], r["置信度"], r["摘要"],
+		).Error
+		if err != nil {
+			tx.Rollback()
+			return "恢复回测结果失败: " + err.Error()
+		}
+	}
+	tx.Commit()
+	return fmt.Sprintf("已恢复 %d 条回测结果记录", len(records))
+}
+
+func restoreStockChangeHistory(fileName string) string {
+	records, err := readCSV(fileName)
+	if err != nil {
+		return "读取备份文件失败: " + err.Error()
+	}
+	if len(records) == 0 {
+		return "备份文件为空，无数据可恢复"
+	}
+	tx := db.Dao.Begin()
+	for _, r := range records {
+		err := tx.Exec("INSERT OR REPLACE INTO stock_change_history (id, change_date, change_time, stock_code, stock_name, market, change_type, type_name, volume, price, change_rate, amount, industry, concept) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+			r["ID"], r["日期"], r["时间"], r["股票代码"], r["股票名称"], r["市场"], r["异动类型"], r["类型名"], r["成交量"], r["价格"], r["涨跌幅%"], r["金额"], r["行业"], r["概念"],
+		).Error
+		if err != nil {
+			tx.Rollback()
+			return "恢复异动历史失败: " + err.Error()
+		}
+	}
+	tx.Commit()
+	return fmt.Sprintf("已恢复 %d 条异动历史记录", len(records))
+}
+
 func (s *SettingsApi) Export() string {
 	d, err := json.MarshalIndent(s.Config, "", "    ")
 	if err != nil {
@@ -456,6 +663,7 @@ func UpdateConfig(s *SettingConfig) string {
 				"update_basic_info_on_start": s.UpdateBasicInfoOnStart,
 				"refresh_interval":           s.RefreshInterval,
 				"open_ai_enable":             s.OpenAiEnable,
+				"ai_config_id":               s.AiConfigID,
 				"tushare_token":              s.TushareToken,
 				"prompt":                     s.Prompt,
 				"check_update":               s.CheckUpdate,
@@ -473,6 +681,7 @@ func UpdateConfig(s *SettingConfig) string {
 				"http_proxy":                 s.HttpProxy,
 				"http_proxy_enabled":         s.HttpProxyEnabled,
 				"enable_agent":               s.EnableAgent,
+				"disable_browser_search":     s.DisableBrowserSearch,
 				"qgqp_b_id":                  s.QgqpBId,
 				"em_api_key":                 s.EmApiKey,
 			"tickflow_api_key":           s.TickFlowAPIKey,
@@ -624,9 +833,6 @@ func GetSettingConfig() *SettingConfig {
 	}
 	if settings.BrowserPath == "" {
 		settings.BrowserPath, _ = CheckBrowser()
-	}
-	if settings.BrowserPoolSize <= 0 {
-		settings.BrowserPoolSize = 1
 	}
 	settingConfig.Settings = settings
 	settingConfig.AiConfigs = aiConfigs

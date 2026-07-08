@@ -20,8 +20,11 @@
             </div>
           </div>
         </div>
-        <t-chat-reasoning v-if="item.role === 'assistant'"  expand-icon-placement="right">
-          <t-chat-loading v-if="isStreaming" text="思考中..." />
+        <div v-if="item.role === 'assistant' && isStreaming" class="agent-status">
+          <span class="agent-status-text">{{ item.statusText || '处理中...' }}</span>
+        </div>
+        <t-chat-reasoning v-if="item.role === 'assistant'" :default-expand-all="isStreaming" expand-icon-placement="right">
+          <t-chat-loading v-if="isStreaming && !item.reasoning" text="思考中..." />
           <t-chat-content v-if="item.reasoning.length > 0" :content="item.reasoning" />
         </t-chat-reasoning>
         <div v-if="item.role === 'assistant' && item.jsonMarkdown" class="agent-json-md">
@@ -387,7 +390,9 @@ const handleAgentMessage = (data: any) => {
     }
     if (data['reasoning_content']){
       const rc = data['reasoning_content']
-      if (rc.startsWith('[STEP]')) {
+      if (rc.startsWith('[STATUS]')) {
+        lastItem.statusText = rc.replace(/^\[STATUS\]/, '').trim()
+      } else if (rc.startsWith('[STEP]')) {
         const stepText = rc.replace(/^\[STEP\]/, '').trim()
         if (stepText) {
           if (!lastItem.steps) lastItem.steps = []
@@ -586,6 +591,7 @@ const inputEnter = function () {
     jsonMarkdown: '',
     role: 'assistant',
     steps: [],
+    statusText: '',
   };
   params2.avatar = h(NImage, { src: icon.value, height: '48px', width: '48px'}) // (F-26)
   chatList.value.unshift(params2);
@@ -866,4 +872,84 @@ const inputEnter = function () {
   text-align: left;
 }
 
+.agent-steps {
+  margin-bottom: 8px;
+  border: 1px solid var(--td-component-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--td-bg-color-container-hover);
+}
+.agent-steps-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
+  background: var(--td-bg-color-component);
+  border-bottom: 1px solid var(--td-component-border);
+}
+.agent-steps-badge {
+  background: var(--td-brand-color);
+  color: #fff;
+  border-radius: 10px;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 18px;
+  min-width: 18px;
+  text-align: center;
+}
+.agent-steps-list {
+  padding: 6px 10px;
+}
+.agent-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.agent-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.agent-step-dot.step-done { background: #22c55e; }
+.agent-step-dot.step-tool { background: #3b82f6; }
+.agent-step-dot.step-active { background: #f59e0b; animation: agent-dot-pulse 1.2s infinite; }
+@keyframes agent-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.agent-step-text { word-break: break-all; color: var(--td-text-color-secondary); }
+.agent-status {
+  background: var(--td-brand-color-light, #e8f5e9);
+  border-radius: 6px;
+  padding: 6px 12px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.agent-status::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--td-brand-color, #0052d9);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: agent-status-spin 0.8s linear infinite;
+}
+.agent-status-text {
+  font-size: 13px;
+  color: var(--td-brand-color, #0052d9);
+}
+@keyframes agent-status-spin {
+  to { transform: rotate(360deg); }
+}
 </style>

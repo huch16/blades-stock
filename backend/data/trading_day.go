@@ -8,9 +8,7 @@ import (
 )
 
 // ============================================================================
-// 交易日历 — 支持 Baostock 精确交易日历（含法定节假日）
-// 启动时从 Baostock 获取全年交易日历，缓存到内存。
-// 降级策略：Baostock 不可用时回退到周末判断。
+// 交易日历 — 优先使用 AData（8000端口），降级 Baostock（8090端口），最终降级周末判断
 // ============================================================================
 
 var (
@@ -20,46 +18,63 @@ var (
 )
 
 // InitTradingCalendar 初始化交易日历缓存
-// 从 Baostock 获取当年交易日历，失败则降级到周末判断
+// 优先从 AData 获取，失败则尝试 Baostock，最终降级到周末判断
 func InitTradingCalendar() {
-	year := time.Now().Year()
-	api := NewBaostockApi()
-
-	resp, err := api.GetTradeCalendarYear(year)
-	if err != nil {
-		logger.SugaredLogger.Warnf("InitTradingCalendar: baostock 获取交易日历失败，降级到周末判断: %v", err)
-		tradingDayCache = nil
-		tradingDayInited = false
+	// 优先：AData（8000端口，稳定运行）
+	adataClient := NewAdataClient()
+	days, err := adataClient.GetTradeCalendarDays()
+	if err == nil && len(days) > 0 {
+		cache := make(map[string]bool, len(days))
+		for _, day := range days {
+			cache[day] = true
+		}
+		tradingDayCacheMu.Lock()
+		tradingDayCache = cache
+		tradingDayInited = true
+		tradingDayCacheMu.Unlock()
+		logger.SugaredLogger.Infof("InitTradingCalendar: AData 已加载交易日历，共 %d 个交易日", len(days))
 		return
 	}
-
-	cache := make(map[string]bool, len(resp.TradingDays))
-	for _, day := range resp.TradingDays {
-		// baostock 返回格式 "2026-07-03"
-		cache[day] = true
+	if err != nil {
+		logger.SugaredLogger.Warnf("InitTradingCalendar: AData 获取交易日历失败: %v", err)
 	}
 
-	// 同时获取下一年的1月（避免年底跨年问题）
-	nextYear := year + 1
-	if resp2, err := api.GetTradeCalendarYear(nextYear); err == nil {
-		for _, day := range resp2.TradingDays {
-			// 只缓存1月的数据
-			if len(day) >= 7 && day[:4] == time.Date(nextYear, 1, 1, 0, 0, 0, 0, time.Local).Format("2006")[:4] {
-				cache[day] = true
+	// 降级：Baostock（8090端口）
+	year := time.Now().Year()
+	api := NewBaostockApi()
+	resp, err := api.GetTradeCalendarYear(year)
+	if err == nil && resp != nil && len(resp.TradingDays) > 0 {
+		cache := make(map[string]bool, len(resp.TradingDays))
+		for _, day := range resp.TradingDays {
+			cache[day] = true
+		}
+		// 获取下一年1月
+		if resp2, err := api.GetTradeCalendarYear(year + 1); err == nil {
+			for _, day := range resp2.TradingDays {
+				if len(day) >= 7 && day[:4] == time.Date(year+1, 1, 1, 0, 0, 0, 0, time.Local).Format("2006")[:4] {
+					cache[day] = true
+				}
 			}
 		}
+		tradingDayCacheMu.Lock()
+		tradingDayCache = cache
+		tradingDayInited = true
+		tradingDayCacheMu.Unlock()
+		logger.SugaredLogger.Infof("InitTradingCalendar: Baostock 已加载交易日历，共 %d 个交易日", resp.TradingCount)
+		return
+	}
+	if err != nil {
+		logger.SugaredLogger.Warnf("InitTradingCalendar: Baostock 获取交易日历失败，降级到周末判断: %v", err)
 	}
 
 	tradingDayCacheMu.Lock()
-	tradingDayCache = cache
-	tradingDayInited = true
+	tradingDayCache = nil
+	tradingDayInited = false
 	tradingDayCacheMu.Unlock()
-
-	logger.SugaredLogger.Infof("InitTradingCalendar: 已加载 %d 年交易日历，共 %d 个交易日", year, resp.TradingCount)
 }
 
 // IsTradingDay 判断指定日期是否为交易日
-// 优先查 Baostock 交易日历缓存，降级到周末判断
+// 优先查交易日历缓存，降级到周末判断
 func IsTradingDay(dateStr string) bool {
 	var t time.Time
 	var err error
@@ -79,18 +94,15 @@ func IsTradingDay(dateStr string) bool {
 		}
 	}
 
-	// 统一日期格式
 	normalized := t.Format("2006-01-02")
 
-	// 尝试从缓存查询
 	tradingDayCacheMu.RLock()
 	if tradingDayInited && tradingDayCache != nil {
 		isTrading, ok := tradingDayCache[normalized]
 		tradingDayCacheMu.RUnlock()
 		if ok {
-			return isTrading // 缓存命中（交易日=true，非交易日不在map中所以ok=false）
+			return isTrading
 		}
-		// 缓存已初始化但该日期不在交易日列表中 → 非交易日（节假日/周末）
 		return false
 	} else {
 		tradingDayCacheMu.RUnlock()
@@ -98,10 +110,7 @@ func IsTradingDay(dateStr string) bool {
 
 	// 降级：缓存未初始化，仅周末判断
 	wd := t.Weekday()
-	if wd == time.Saturday || wd == time.Sunday {
-		return false
-	}
-	return true
+	return wd != time.Saturday && wd != time.Sunday
 }
 
 // IsTodayTradingDay 判断今天是否为交易日
@@ -129,7 +138,6 @@ func GetLatestTradingDay(dateStr string) string {
 		}
 	}
 
-	// 向前查找最多 15 天（覆盖春节+国庆长假）
 	for i := 0; i < 15; i++ {
 		d := t.AddDate(0, 0, -i)
 		if IsTradingDay(d.Format("2006-01-02")) {
@@ -137,7 +145,6 @@ func GetLatestTradingDay(dateStr string) string {
 		}
 	}
 
-	// 兜底：返回原日期
 	if dateStr == "" {
 		return time.Now().Format("2006-01-02")
 	}

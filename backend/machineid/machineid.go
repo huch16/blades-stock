@@ -1,3 +1,4 @@
+// Package machineid provides machine identification utilities.
 package machineid
 
 import (

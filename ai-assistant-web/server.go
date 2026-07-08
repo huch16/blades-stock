@@ -1,3 +1,4 @@
+// Package server provides the AI assistant web server.
 package server
 
 import (

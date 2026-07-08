@@ -46,9 +46,7 @@ func main() {
 		syms := splitAndTrim(*customSymbols)
 		cfg.Symbols = syms
 		cfg.Names = make([]string, len(syms))
-		for i, s := range syms {
-			cfg.Names[i] = s
-		}
+		copy(cfg.Names, syms)
 	}
 
 	fmt.Println("========================================")

@@ -157,6 +157,7 @@ func (f *FundApi) crawlFundBasicViaHTML(fundCode string) (*FundBasic, error) {
 		text := strutil.RemoveWhiteSpace(s.Text(), true)
 		defer func() {
 			if r := recover(); r != nil {
+				logger.SugaredLogger.Warnf("recovered panic: %v", r)
 			}
 		}()
 		splitEx := strutil.SplitEx(text, "：", true)
@@ -190,6 +191,7 @@ func (f *FundApi) crawlFundBasicViaHTML(fundCode string) (*FundBasic, error) {
 		text := strutil.RemoveWhiteSpace(s.Text(), true)
 		defer func() {
 			if r := recover(); r != nil {
+				logger.SugaredLogger.Warnf("recovered panic: %v", r)
 			}
 		}()
 		splitEx := strutil.SplitAndTrim(text, "：", "%")

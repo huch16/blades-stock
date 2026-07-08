@@ -1,3 +1,4 @@
+// Package agent provides the AI agent pipeline for stock analysis.
 package agent
 
 import (
@@ -158,7 +159,7 @@ func personalityPrompt() string {
 3. 数据获取失败时明确告知用户"当前未能获取到最新数据"，绝不伪造
 4. 对模糊的问题主动反问澄清意图
 5. 当本地金融工具无法直接回答"上市公司名单/地域分布/城市总部/省份区域/注册地/办公地址"等定位类问题时，必须优先调用 WebSearch 工具进行互联网搜索，禁止直接回答"无法查询"
-6. 你的默认搜索引擎是 SearXNG（https://search.whohai.cfd），走 JSON API，搜索效率高于浏览器方案
+6. 你的默认搜索引擎是 SearXNG（JSON API），搜索效率远高于浏览器方案。仅在 SearXNG 和百度 HTTP 均无法返回结果时，才回退到浏览器搜索。
 
 ## 股票推荐方法论（核心！必须遵守）
 进行市场资讯分析和股票推荐时，必须按以下流程操作，
@@ -309,15 +310,15 @@ func buildSkillPrompt(question string, embedSvc *EmbeddingService) string {
 	if embedSvc != nil {
 		// bge-m3 semantic matching
 		skillEmbedSvc := GetSkillEmbeddingService(embedSvc)
-		matched = skillEmbedSvc.MatchSkills(question, 3)
+		matched = skillEmbedSvc.MatchSkills(question, 1)
 	}
 
-	// Fallback: keyword match
+	// Fallback: keyword match (first match only)
 	if len(matched) == 0 {
 		for _, skill := range skills {
 			if skill.TriggerKeywords == "" {
 				matched = append(matched, skill)
-				continue
+				break
 			}
 			keywords := strings.Split(skill.TriggerKeywords, ",")
 			for _, kw := range keywords {
@@ -326,6 +327,9 @@ func buildSkillPrompt(question string, embedSvc *EmbeddingService) string {
 					matched = append(matched, skill)
 					break
 				}
+			}
+			if len(matched) > 0 {
+				break
 			}
 		}
 	}
@@ -458,7 +462,7 @@ func getMCPTools() []bladesTools.Tool {
 	var servers []models.MCPServer
 	err := db.Dao.Where("enable = ?", true).Find(&servers).Error
 	if err != nil {
-		logger.SugaredLogger.Errorf("获取MCP服务器列表失败: %v", err)
+		logger.SugaredLogger.Debugf("获取MCP服务器列表失败（表不存在是正常现象，首次运行会自动建表）: %v", err)
 		return nil
 	}
 
@@ -569,25 +573,37 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 		return nil
 	}
 
-	// tushareMcp: 仅加载白名单工具
-	if server.Name == "tushareMcp" {
-		allowed := data.TushareAllowListMap()
+	// 根据 DB 中工具启用状态过滤
+	enabledTools := getEnabledToolNames(server.ID)
+	if len(enabledTools) > 0 {
 		filtered := make([]bladesTools.Tool, 0, len(toolList))
 		for _, t := range toolList {
-			if allowed[t.Name()] {
+			if enabledTools[t.Name()] {
 				filtered = append(filtered, t)
 			}
 		}
-		logger.SugaredLogger.Infof("从MCP服务器 [%s] 白名单过滤后加载了 %d/%d 个工具", server.Name, len(filtered), len(toolList))
+		logger.SugaredLogger.Infof("从MCP服务器 [%s] 使用工具白名单过滤后加载了 %d/%d 个工具", server.Name, len(filtered), len(toolList))
 		toolList = filtered
 	} else {
-		logger.SugaredLogger.Infof("从MCP服务器 [%s] 加载了 %d 个工具", server.Name, len(toolList))
+		logger.SugaredLogger.Infof("从MCP服务器 [%s] 加载了 %d 个工具（未配置白名单）", server.Name, len(toolList))
 	}
 
 	for i := range toolList {
 		toolList[i] = wrapMCPToolHandler(toolList[i], server.Name)
 	}
 	return toolList
+}
+
+func getEnabledToolNames(serverID uint) map[string]bool {
+	tools := data.NewMCPServerApi().GetEnabledToolsByServerID(serverID)
+	if len(tools) == 0 {
+		return nil
+	}
+	m := make(map[string]bool, len(tools))
+	for _, t := range tools {
+		m[t.ToolName] = true
+	}
+	return m
 }
 
 // wrapMCPToolHandler wraps an MCP tool's handler to return call errors as structured JSON
