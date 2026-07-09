@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -175,13 +176,9 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 	}
 
 	// Sort by score desc
-	for i := 0; i < len(scoredSkills)-1; i++ {
-		for j := i + 1; j < len(scoredSkills); j++ {
-			if scoredSkills[j].score > scoredSkills[i].score {
-				scoredSkills[i], scoredSkills[j] = scoredSkills[j], scoredSkills[i]
-			}
-		}
-	}
+	sort.Slice(scoredSkills, func(i, j int) bool {
+		return scoredSkills[i].score > scoredSkills[j].score
+	})
 
 	if len(scoredSkills) > topK {
 		scoredSkills = scoredSkills[:topK]
