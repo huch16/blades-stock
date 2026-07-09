@@ -1,17 +1,18 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"time"
 
 	assistantweb "blades-stock/ai-assistant-web"
-	"blades-stock/backend/agent"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	log "blades-stock/backend/logger"
 	"blades-stock/backend/machineid"
 	"blades-stock/backend/models"
+	"blades-stock/backend/quant"
 	"os"
 	"runtime/debug"
 
@@ -77,11 +78,13 @@ func main() {
 	// 后台启动分析报告回测
 	go func() {
 		time.Sleep(10 * time.Second) // 等数据库和数据服务就绪
-		count, err := agent.NewBacktestService().RunAllBacktests()
+		mgr := quant.NewBacktestManager()
+		result, err := mgr.RunAIReportBacktest(context.Background(), 50)
 		if err != nil {
 			log.SugaredLogger.Errorf("auto backtest failed: %v", err)
-		} else if count > 0 {
-			log.SugaredLogger.Infof("auto backtest completed: %d reports", count)
+		} else if result.Processed > 0 {
+			log.SugaredLogger.Infof("auto backtest completed: %d reports processed, %d accurate (%.1f%%)",
+				result.Processed, result.Accurate, result.AccuracyRate*100)
 		}
 	}()
 

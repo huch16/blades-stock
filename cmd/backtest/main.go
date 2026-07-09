@@ -1,10 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"blades-stock/backend/agent"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/quant"
 	"os"
 )
 
@@ -18,17 +19,17 @@ func main() {
 	fmt.Println("=== Backtest Test Tool ===")
 	fmt.Println()
 
-	// Create BacktestService
-	svc := agent.NewBacktestService()
+	// Create BacktestManager
+	mgr := quant.NewBacktestManager()
 
 	// Check if there are reports needing backtest
-	needBacktest := svc.NeedBacktest()
+	needBacktest := mgr.NeedBacktest()
 	fmt.Printf("Reports pending backtest: %v\n", needBacktest)
 
 	if !needBacktest {
 		fmt.Println("No reports need backtest. Checking existing results...")
 		// Show existing backtest results
-		results := svc.GetLatestBacktestResults(10)
+		results := mgr.GetLatestResults(10)
 		if len(results) == 0 {
 			fmt.Println("No backtest results found.")
 		} else {
@@ -40,7 +41,7 @@ func main() {
 		}
 
 		// Show overall stats
-		stats := svc.GetOverallStats()
+		stats := mgr.GetOverallStats()
 		fmt.Printf("\n=== Overall Backtest Statistics ===\n")
 		fmt.Printf("Total reports: %d\n", stats.TotalReports)
 		fmt.Printf("Verified reports: %d\n", stats.VerifiedCount)
@@ -53,16 +54,17 @@ func main() {
 
 	// Run backtest
 	fmt.Println("\nRunning backtest...")
-	count, err := svc.RunAllBacktests()
+	result, err := mgr.RunAIReportBacktest(context.Background(), 50)
 	if err != nil {
 		fmt.Printf("Error running backtest: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Backtest completed: %d reports processed\n", count)
+	fmt.Printf("Backtest completed: total=%d, processed=%d, skipped=%d, accurate=%d (%.1f%%)\n",
+		result.Total, result.Processed, result.Skipped, result.Accurate, result.AccuracyRate*100)
 
 	// Show results
-	results := svc.GetLatestBacktestResults(10)
+	results := mgr.GetLatestResults(10)
 	fmt.Printf("\nRecent %d backtest results:\n", len(results))
 	for _, r := range results {
 		fmt.Printf("  ID=%d, Stock=%s(%s), Direction=%s, Accurate=%v, Change=%.2f%%\n",
@@ -70,7 +72,7 @@ func main() {
 	}
 
 	// Show overall stats
-	stats := svc.GetOverallStats()
+	stats := mgr.GetOverallStats()
 	fmt.Printf("\n=== Overall Backtest Statistics ===\n")
 	fmt.Printf("Total reports: %d\n", stats.TotalReports)
 	fmt.Printf("Verified reports: %d\n", stats.VerifiedCount)

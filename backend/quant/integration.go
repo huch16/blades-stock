@@ -32,6 +32,8 @@ type aiReportResult struct {
 	reportID     uint
 	isAccurate   bool
 	priceChange  float64
+	maxUpside    float64
+	maxDrawdown  float64
 	direction    string
 	summary      string
 	skipped      bool
@@ -509,17 +511,19 @@ func adataResultToKLineData(items []map[string]any) ([]data.KLineData, error) {
 func SaveBacktestResultToDB(r models.AIResponseResult, br aiReportResult) {
 	pred := extractAIPrediction(r.Content)
 	analysisDate := r.CreatedAt.Format("2006-01-02")
-	_ = analysisDate
 
 	result := &models.BacktestResult{
-		ReportID:    r.ID,
-		StockCode:   r.StockCode,
-		StockName:   r.StockName,
-		Direction:   pred.Direction,
-		Confidence:  pred.Confidence,
-		IsAccurate:  br.isAccurate,
-		PriceChange: br.priceChange,
-		Summary:     br.summary,
+		ReportID:     r.ID,
+		StockCode:    r.StockCode,
+		StockName:    r.StockName,
+		AnalysisDate: analysisDate,
+		Direction:    pred.Direction,
+		Confidence:   pred.Confidence,
+		IsAccurate:   br.isAccurate,
+		PriceChange:  br.priceChange,
+		MaxUpside:    br.maxUpside,
+		MaxDrawdown:  br.maxDrawdown,
+		Summary:      br.summary,
 	}
 	db.Dao.Where("report_id = ?", r.ID).Assign(result).FirstOrCreate(&models.BacktestResult{})
 }

@@ -108,6 +108,18 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 		wg.Add(1)
 		go func(group tools.ToolGroup, subPrompt string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("panic in sub-agent goroutine [%s]: %v", group, r)
+					mu.Lock()
+					results = append(results, PreFetchedData{
+						Group:    string(group),
+						Summary:  "[子Agent异常崩溃] " + fmt.Sprint(r),
+						Fallback: true,
+					})
+					mu.Unlock()
+				}
+			}()
 
 			// 1) Acquire semaphore (max N concurrent LLM calls from config)
 			if err := llmSem.Acquire(ctx, 1); err != nil {
@@ -147,7 +159,7 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 				blades.WithModel(subModel),
 				blades.WithTools(groupTools...),
 				blades.WithMaxIterations(20),
-				blades.WithInstruction("你是专业的数据采集助手，专注于"+describeGroup(group)+"领域。\n\n【重要】你拥有 "+fmt.Sprintf("%d", len(groupTools))+" 个可用工具。\n\n【Tushare MCP 工具清单】（2120积分档位，共 38 个）\n行情数据：stock_basic, trade_cal, daily, adj_factor, suspend, daily_basic, weekly, monthly, stk_mins\n资金流向：moneyflow_hsgt, hsgt_top10, ggt_top10, margin, margin_detail, moneyflow\n财务报表：income, balancesheet, cashflow, forecast, express, fina_indicator, fina_audit, fina_mainbz\n股东数据：top10_holders, top10_floatholders, pledge_stat, pledge_detail\n指数数据：index_basic, index_daily, index_weight, index_weekly, index_monthly\n其他：stock_company, namechange, dividend, concept, concept_detail, limit_list, top_list, top_inst, new_share, repurchase\n\n【悟道A股 MCP】工具名如 hot_sectors, sector_analysis 等，数据较全但每日限额 50 次。\n\n【行为准则】\n1. 优先用 Tushare（稳定无次数限制），悟道A股仅在 Tushare 缺失时使用；\n2. 工具调用失败立即换工具，不要放弃；\n3. 只返回原始数据，不要冗余分析；\n4. 所有工具均失败时，说明已尝试的工具列表。"),
+				blades.WithInstruction("你是专业的数据采集助手，专注于"+describeGroup(group)+"领域。\n\n【重要】你拥有 "+fmt.Sprintf("%d", len(groupTools))+" 个可用工具，所有工具名称和功能已自动注入，请直接使用。\n\n【行为准则】\n1. 工具调用失败立即换工具，不要放弃；\n2. 只返回原始数据，不要冗余分析；\n3. 所有工具均失败时，说明已尝试的工具列表。"),
 			)
 			if err != nil {
 				logger.SugaredLogger.Errorf("[parallel] failed to create sub-agent for %s: %v", group, err)

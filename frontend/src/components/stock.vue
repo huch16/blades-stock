@@ -164,6 +164,7 @@ const data = reactive({
   openAiEnable: false,
   loading: true,
   analysisStatus: "",
+  analysisAborted: false,
   enableDanmu: false,
   darkTheme: false,
   changePercent: 0
@@ -394,24 +395,30 @@ onBeforeMount(() => {
   })
 
   EventsOn("newChatStream", async (msg) => {
+    if (data.analysisAborted) return
     if (msg === "DONE") {
       // 清除超时定时器
       if (aiAnalysisTimeout.value) {
         clearTimeout(aiAnalysisTimeout.value)
         aiAnalysisTimeout.value = null
       }
-      SaveAIResponseResult(data.code, data.name, data.airesult, data.chatId, data.question, aiConfigStore.activeConfigId)
       data.loading = false
-      data.analysisStatus = "分析完成"
+      if (data.airesult && !data.airesult.startsWith("❌")) {
+        SaveAIResponseResult(data.code, data.name, data.airesult, data.chatId, data.question, aiConfigStore.activeConfigId)
+        data.analysisStatus = "分析完成"
+        notify.success({
+          title: 'AI分析完成',
+          content: `[${data.name}] 分析已完成`,
+          duration: 3000,
+        })
+        setTimeout(() => {
+          data.analysisStatus = ""
+        }, 3000)
+      } else {
+        data.analysisStatus = "分析失败"
+        message.error(data.airesult || "AI分析失败")
+      }
       message.destroyAll()
-      notify.success({
-        title: 'AI分析完成',
-        content: `[${data.name}] 分析已完成`,
-        duration: 3000,
-      })
-      setTimeout(() => {
-        data.analysisStatus = ""
-      }, 3000)
     } else {
       if (msg.chatId) {
         data.chatId = msg.chatId
@@ -1882,6 +1889,7 @@ function aiReCheckStock(stock, stockCode) {
   data.loading = true
   modalShow4.value = true
   data.analysisStatus = "正在连接AI服务..."
+  data.analysisAborted = false
   message.loading("ai检测中...", {
     duration: 0,
   })
@@ -1890,6 +1898,7 @@ function aiReCheckStock(stock, stockCode) {
   //message.info("sysPromptId:"+data.sysPromptId)
   NewChatStream(stock, stockCode, data.question, aiConfigStore.activeConfigId, data.sysPromptId, enableTools.value,thinkingMode.value)
     .catch(err => {
+      if (data.analysisAborted) return
       data.loading = false
       data.analysisStatus = ""
       message.destroyAll()
@@ -1903,6 +1912,7 @@ function aiReCheckStock(stock, stockCode) {
     if (data.loading) {
       data.loading = false
       data.analysisStatus = ""
+      data.analysisAborted = true
       message.destroyAll()
       message.error("AI分析超时，请检查网络连接或AI服务配置")
       if (!data.airesult) {

@@ -71,8 +71,13 @@ func (e *Evaluator) ScoreResult(result string) int {
 
 type LLMReflectionFunc func(systemPrompt, userMessage string) (string, error)
 
-func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durationMs int64, llm LLMReflectionFunc) (*ReflectionResult, error) {
-	autoScore := e.ScoreResult(answer)
+func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durationMs int64, llm LLMReflectionFunc, preScore ...int) (*ReflectionResult, error) {
+	autoScore := 0
+	if len(preScore) > 0 {
+		autoScore = preScore[0]
+	} else {
+		autoScore = e.ScoreResult(answer)
+	}
 	reflectionPrompt := fmt.Sprintf(`你是一个智能体反思分析器。请分析以下智能体的执行轨迹并给出反思。
 
 ## 原始问题

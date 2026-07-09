@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/quant"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-kratos/blades"
 	bladesTools "github.com/go-kratos/blades/tools"
@@ -48,13 +50,18 @@ func (receiver StockAiAgent) newStockAiAgent(ctx *context.Context, aiConfigId in
 	}
 
 	aiConfig, ok := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
-		return uint(aiConfigId) == item.ID
+		return item != nil && uint(aiConfigId) == item.ID
 	})
-	if !ok && len(settingConfig.AiConfigs) > 0 {
-		aiConfig = settingConfig.AiConfigs[0]
-		aiConfigId = int(aiConfig.ID)
-		ok = true
-		logger.SugaredLogger.Infof("ai config %d not found, fallback to first available: %d (%s)", aiConfigId, aiConfig.ID, aiConfig.Name)
+	if !ok {
+		for _, cfg := range settingConfig.AiConfigs {
+			if cfg != nil {
+				aiConfig = cfg
+				aiConfigId = int(cfg.ID)
+				ok = true
+				logger.SugaredLogger.Infof("ai config %d not found, fallback to first non-nil: %d (%s)", aiConfigId, cfg.ID, cfg.Name)
+				break
+			}
+		}
 	}
 	if !ok {
 		logger.SugaredLogger.Errorf("no ai config available")
@@ -119,15 +126,27 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		originalAiConfig, _ := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
 			return uint(aiConfigId) == item.ID
 		})
-		if originalAiConfig != nil && originalAiConfig.EmbeddingEnabled && originalAiConfig.EmbeddingModelName != "" {
-			embedBaseUrl := originalAiConfig.EmbeddingBaseUrl
+		// 1) If the selected config has embedding enabled, use it directly.
+		// 2) Otherwise, scan all configs for an embedding-enabled one (e.g. bge-m3)
+		//    so that chat models without embedding support can still use semantic matching.
+		embedCfg := originalAiConfig
+		if embedCfg == nil || !embedCfg.EmbeddingEnabled || embedCfg.EmbeddingModelName == "" {
+			for _, cfg := range settingConfig.AiConfigs {
+				if cfg.EmbeddingEnabled && cfg.EmbeddingModelName != "" {
+					embedCfg = cfg
+					break
+				}
+			}
+		}
+		if embedCfg != nil && embedCfg.EmbeddingEnabled && embedCfg.EmbeddingModelName != "" {
+			embedBaseUrl := embedCfg.EmbeddingBaseUrl
 			if embedBaseUrl == "" {
-				embedBaseUrl = originalAiConfig.BaseUrl
+				embedBaseUrl = embedCfg.BaseUrl
 			}
 			embedService = NewEmbeddingService(
 				embedBaseUrl,
-				originalAiConfig.ApiKey,
-				originalAiConfig.EmbeddingModelName,
+				embedCfg.ApiKey,
+				embedCfg.EmbeddingModelName,
 			)
 		}
 
@@ -147,6 +166,19 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		if sessionIDOverride != "" {
 			stockAiAgent.sessionID = sessionIDOverride
+		}
+
+		// Apply timeout from AI config to the context, so the LLM HTTP call
+		// respects the configured timeout instead of hanging indefinitely.
+		// Default to 300s (5 min) if not configured, matching the frontend timeout.
+		if stockAiAgent.instance != nil {
+			timeOutSec := stockAiAgent.instance.AIConfig.TimeOut
+			if timeOutSec <= 0 {
+				timeOutSec = 300
+			}
+			toCtx, cancel := context.WithTimeout(ctx, time.Duration(timeOutSec)*time.Second)
+			ctx = toCtx
+			defer cancel()
 		}
 
 		var memoryService *ChatMemoryService
@@ -241,15 +273,15 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		}
 
 		// inject backtest track record
-		bts := NewBacktestService()
+		btMgr := quant.NewBacktestManager()
 		if stockCode != "" {
-			if stats := bts.GetStockAccuracy(stockCode); stats.VerifiedCount > 0 {
+			if stats := btMgr.GetStockStats(stockCode); stats.VerifiedCount > 0 {
 				trackRecord := fmt.Sprintf("【回测记录】你在 %s 上的历史分析准确率: %.1f%% (已验证 %d 次)", stockCode, stats.AccuracyRate, stats.VerifiedCount)
 				sysPrompt += "\n\n" + trackRecord
 			}
-		} else if overall := bts.GetOverallStats(); overall.VerifiedCount > 0 {
+		} else if overall := btMgr.GetOverallStats(); overall.VerifiedCount > 0 {
 			trackRecord := fmt.Sprintf("【回测记录】你的历史分析总体准确率: %.1f%% (已验证 %d 次, 共 %d 份报告)", overall.AccuracyRate, overall.VerifiedCount, overall.TotalReports)
-			sysPrompt += "\n\n" + trackRecord
+				sysPrompt += "\n\n" + trackRecord
 		}
 
 		if memoryService != nil {
@@ -285,8 +317,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		var fullResponse strings.Builder
 		var toolNames []string
+		var agentErr error
 		for msg, err := range stockAiAgent.instance.Agent.Run(ctx, invocation) {
 			if err != nil {
+				agentErr = err
 				logger.SugaredLogger.Errorf("agent run error: %v", err)
 
 				errMsg := fmt.Sprintf("❌ Agent 调用失败：%v", err)
@@ -365,6 +399,12 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
+		// If agent exited early due to error, don't send status/DONE signals — just close.
+		if agentErr != nil {
+			close(ch)
+			return
+		}
+
 		ch <- &StreamMessage{
 			Role:             "assistant",
 			Content:          "",
@@ -396,12 +436,18 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 // parallel after the agent response is complete. It is fire-and-forget and
 // must not block the response stream.
 func postProcessResponse(sessionID, question, response string, toolNames []string) {
+	recoverLog := func(label string) {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Errorf("panic in postProcessResponse [%s]: %v", label, r)
+		}
+	}
 	var wg sync.WaitGroup
 
 	// 1. Store working memory
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer recoverLog("memory")
 		DefaultMemoryManager().Add(sessionID, "user", question)
 		DefaultMemoryManager().Add(sessionID, "assistant", response)
 	}()
@@ -410,19 +456,23 @@ func postProcessResponse(sessionID, question, response string, toolNames []strin
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		DefaultEvaluator().GenerateReflection(sessionID, question, response, 0, nil)
+		defer recoverLog("reflection")
+		score := DefaultEvaluator().ScoreResult(response)
+		DefaultEvaluator().GenerateReflection(sessionID, question, response, 0, nil, score)
 	}()
 
 	// 3. Record tool usage
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer recoverLog("tool_ranking")
 		for _, name := range toolNames {
 			DefaultEvolver().RecordToolUse(name, true, 0)
 		}
 	}()
 
 	wg.Wait()
+	logger.SugaredLogger.Debugf("postProcessResponse completed for session %s", sessionID)
 }
 
 // extractStockInfo 从用户问题中提取股票代码/名称（简单启发式匹配）

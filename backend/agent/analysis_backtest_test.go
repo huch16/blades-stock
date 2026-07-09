@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/quant"
 	"testing"
 )
 
@@ -20,25 +22,26 @@ func TestBacktest(t *testing.T) {
 	// Initialize logger
 	logger.InitLogger()
 
-	// Create BacktestService
-	svc := NewBacktestService()
+	// Create BacktestManager
+	mgr := quant.NewBacktestManager()
 
 	// Check if there are reports needing backtest
-	needBacktest := svc.NeedBacktest()
+	needBacktest := mgr.NeedBacktest()
 	t.Logf("Reports pending backtest: %v", needBacktest)
 
 	// Run backtest
 	t.Log("Running backtest...")
-	count, err := svc.RunAllBacktests()
+	result, err := mgr.RunAIReportBacktest(context.Background(), 50)
 	if err != nil {
 		t.Errorf("Error running backtest: %v", err)
 		return
 	}
 
-	t.Logf("Backtest completed: %d reports processed", count)
+	t.Logf("Backtest completed: total=%d, processed=%d, skipped=%d, accurate=%d (%.1f%%)",
+		result.Total, result.Processed, result.Skipped, result.Accurate, result.AccuracyRate*100)
 
 	// Show recent results
-	results := svc.GetLatestBacktestResults(10)
+	results := mgr.GetLatestResults(10)
 	t.Logf("Recent %d backtest results:", len(results))
 	for _, r := range results {
 		t.Logf("  ID=%d, Stock=%s(%s), Direction=%s, Accurate=%v, Change=%.2f%%",
@@ -46,7 +49,7 @@ func TestBacktest(t *testing.T) {
 	}
 
 	// Show overall stats
-	stats := svc.GetOverallStats()
+	stats := mgr.GetOverallStats()
 	t.Logf("=== Overall Backtest Statistics ===")
 	t.Logf("Total reports: %d", stats.TotalReports)
 	t.Logf("Verified reports: %d", stats.VerifiedCount)

@@ -1523,6 +1523,9 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 		if msg == nil {
 			continue
 		}
+		if msg.Content == "agent-DONE" {
+			continue
+		}
 		runtime.EventsEmit(a.ctx, "newChatStream", map[string]any{
 			"content":           msg.Content,
 			"reasoning_content": msg.ReasoningContent,
@@ -2139,6 +2142,9 @@ func (a *App) SummaryStockNews(question string, aiConfigId int, sysPromptId *int
 
 	for msg := range agent.NewStockAiAgentApi().ChatWithContext(ctx, q, aiConfigId, sysPromptId, false, 0, think, "plan_execute") {
 		if msg == nil {
+			continue
+		}
+		if msg.Content == "agent-DONE" {
 			continue
 		}
 		runtime.EventsEmit(a.ctx, eventName, map[string]any{

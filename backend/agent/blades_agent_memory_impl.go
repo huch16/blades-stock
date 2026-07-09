@@ -26,6 +26,10 @@ type MemoryManager struct {
 	mu            sync.RWMutex
 	workingMem    []workingEntry
 	maxWorking    int
+
+	ch     chan workingDBEntry
+	stopCh chan struct{}
+	wg     sync.WaitGroup
 }
 
 type workingEntry struct {
@@ -34,19 +38,73 @@ type workingEntry struct {
 	Time    int64  `json:"time"`
 }
 
+type workingDBEntry struct {
+	SessionID string
+	Role      string
+	Content   string
+}
+
 func NewMemoryManager(maxWorking int) *MemoryManager {
 	if maxWorking <= 0 {
 		maxWorking = 20
 	}
-	return &MemoryManager{
+	m := &MemoryManager{
 		workingMem: make([]workingEntry, 0, maxWorking),
 		maxWorking: maxWorking,
+		ch:         make(chan workingDBEntry, 64),
+		stopCh:     make(chan struct{}),
+	}
+	m.wg.Add(1)
+	go m.flushLoop()
+	return m
+}
+
+func (m *MemoryManager) flushLoop() {
+	defer m.wg.Done()
+	batch := make([]AgentMemory, 0, 10)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case entry, ok := <-m.ch:
+			if !ok {
+				m.flushBatch(batch)
+				return
+			}
+			batch = append(batch, AgentMemory{
+				SessionID: entry.SessionID,
+				Role:      entry.Role,
+				Content:   entry.Content,
+				Category:  "working",
+				CreatedAt: time.Now(),
+			})
+			if len(batch) >= 10 {
+				m.flushBatch(batch)
+				batch = batch[:0]
+			}
+		case <-ticker.C:
+			if len(batch) > 0 {
+				m.flushBatch(batch)
+				batch = batch[:0]
+			}
+		case <-m.stopCh:
+			m.flushBatch(batch)
+			return
+		}
+	}
+}
+
+func (m *MemoryManager) flushBatch(batch []AgentMemory) {
+	if len(batch) == 0 {
+		return
+	}
+	if err := db.Dao.CreateInBatches(batch, 10).Error; err != nil {
+		logger.SugaredLogger.Errorf("flush agent memories batch: %v", err)
 	}
 }
 
 func (m *MemoryManager) Add(sessionID, role, content string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.workingMem = append(m.workingMem, workingEntry{
 		Role:    role,
 		Content: content,
@@ -55,16 +113,18 @@ func (m *MemoryManager) Add(sessionID, role, content string) {
 	if len(m.workingMem) > m.maxWorking {
 		m.workingMem = m.workingMem[len(m.workingMem)-m.maxWorking:]
 	}
-	mem := &AgentMemory{
-		SessionID: sessionID,
-		Role:      role,
-		Content:   content,
-		Category:  "working",
-		CreatedAt: time.Now(),
+	m.mu.Unlock()
+
+	select {
+	case m.ch <- workingDBEntry{SessionID: sessionID, Role: role, Content: content}:
+	default:
+		logger.SugaredLogger.Warn("memory write channel full, dropping entry")
 	}
-	if err := db.Dao.Create(mem).Error; err != nil {
-		logger.SugaredLogger.Errorf("save agent memory: %v", err)
-	}
+}
+
+func (m *MemoryManager) Close() {
+	close(m.stopCh)
+	m.wg.Wait()
 }
 
 func (m *MemoryManager) GetWorking() []workingEntry {

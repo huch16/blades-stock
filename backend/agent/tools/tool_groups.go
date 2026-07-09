@@ -141,6 +141,8 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetBacktestStats":            GroupAIAnalysis,
 	"GetBacktestDetail":           GroupAIAnalysis,
 	"RunBacktest":                 GroupAIAnalysis,
+	"VectorBacktest":              GroupAIAnalysis,
+	"VectorGridSearch":            GroupAIAnalysis,
 	"SetTradingPrice":             GroupOperations,
 	"SendDingDingMessage":         GroupOperations,
 	"SendToDingDing":              GroupOperations,

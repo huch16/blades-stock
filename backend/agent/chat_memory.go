@@ -6,6 +6,7 @@ import (
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -13,6 +14,11 @@ type ChatMemoryService struct {
 	sessionID        string
 	maxMemory        int
 	embeddingService *EmbeddingService
+
+	mu           sync.RWMutex
+	cache        []db.ChatMemory
+	cacheReady   bool
+	msgCount     int
 }
 
 func NewChatMemoryService(sessionID string, maxMemory int) *ChatMemoryService {
@@ -22,6 +28,7 @@ func NewChatMemoryService(sessionID string, maxMemory int) *ChatMemoryService {
 	return &ChatMemoryService{
 		sessionID: sessionID,
 		maxMemory: maxMemory * 2,
+		cache:     make([]db.ChatMemory, 0, maxMemory*2),
 	}
 }
 
@@ -29,40 +36,80 @@ func (s *ChatMemoryService) SetEmbeddingService(es *EmbeddingService) {
 	s.embeddingService = es
 }
 
-func (s *ChatMemoryService) AddUserMessage(content string) error {
+func (s *ChatMemoryService) addMessage(role, content string, skipEmbedding bool) error {
 	memory := &db.ChatMemory{
 		SessionID: s.sessionID,
-		Role:      "user",
+		Role:      role,
 		Content:   content,
 	}
-	if s.embeddingService != nil {
+	if !skipEmbedding && s.embeddingService != nil {
 		if vec, err := s.embeddingService.Embed(content); err != nil {
-			logger.SugaredLogger.Warnf("embed user message failed: %v", err)
+			logger.SugaredLogger.Warnf("embed %s message failed: %v", role, err)
 		} else {
 			memory.Embedding, _ = json.Marshal(vec)
 		}
 	}
-	return memory.Save()
+	if err := memory.Save(); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	s.msgCount++
+	s.cache = append(s.cache, *memory)
+	if len(s.cache) > s.maxMemory {
+		s.cache = s.cache[len(s.cache)-s.maxMemory:]
+	}
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *ChatMemoryService) AddUserMessage(content string) error {
+	return s.addMessage("user", content, false)
 }
 
 func (s *ChatMemoryService) AddAssistantMessage(content string) error {
-	memory := &db.ChatMemory{
-		SessionID: s.sessionID,
-		Role:      "assistant",
-		Content:   content,
+	return s.addMessage("assistant", content, false)
+}
+
+func (s *ChatMemoryService) ensureCache() error {
+	s.mu.RLock()
+	if s.cacheReady {
+		s.mu.RUnlock()
+		return nil
 	}
-	if s.embeddingService != nil {
-		if vec, err := s.embeddingService.Embed(content); err != nil {
-			logger.SugaredLogger.Warnf("embed assistant message failed: %v", err)
-		} else {
-			memory.Embedding, _ = json.Marshal(vec)
-		}
+	s.mu.RUnlock()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cacheReady {
+		return nil
 	}
-	return memory.Save()
+
+	memories, err := db.GetRecentChatMemory(s.sessionID, s.maxMemory)
+	if err != nil {
+		return err
+	}
+	s.cache = memories
+	if len(s.cache) > s.maxMemory {
+		s.cache = s.cache[len(s.cache)-s.maxMemory:]
+	}
+	s.cacheReady = true
+	return nil
+}
+
+func (s *ChatMemoryService) loadMessages() ([]db.ChatMemory, error) {
+	if err := s.ensureCache(); err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	out := make([]db.ChatMemory, len(s.cache))
+	copy(out, s.cache)
+	s.mu.RUnlock()
+	return out, nil
 }
 
 func (s *ChatMemoryService) GetHistoryMessages(query ...string) ([]map[string]string, error) {
-	memories, err := db.GetRecentChatMemory(s.sessionID, s.maxMemory)
+	memories, err := s.loadMessages()
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetChatMemoryList failed: %v", err)
 		return nil, err
@@ -148,9 +195,9 @@ func (s *ChatMemoryService) semanticRetrieve(memories []db.ChatMemory, query str
 }
 
 func (s *ChatMemoryService) GetHistory() ([]string, error) {
-	memories, err := db.GetRecentChatMemory(s.sessionID, s.maxMemory)
+	memories, err := s.loadMessages()
 	if err != nil {
-		logger.SugaredLogger.Errorf("GetChatMemoryList failed: %v", err)
+		logger.SugaredLogger.Errorf("GetHistory failed: %v", err)
 		return nil, err
 	}
 
@@ -190,12 +237,23 @@ func (s *ChatMemoryService) GetSummary() (string, error) {
 }
 
 func (s *ChatMemoryService) NeedsCompress() bool {
-	count, err := db.CountChatMemory(s.sessionID)
+	s.mu.RLock()
+	count := s.msgCount
+	s.mu.RUnlock()
+	if count > 30 {
+		return true
+	}
+	dbCount, err := db.CountChatMemory(s.sessionID)
 	if err != nil {
 		logger.SugaredLogger.Warnf("count chat memory failed: %v", err)
 		return false
 	}
-	return count > 30
+	s.mu.Lock()
+	if dbCount > s.msgCount {
+		s.msgCount = dbCount
+	}
+	s.mu.Unlock()
+	return dbCount > 30
 }
 
 func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) ([]map[string]string, error) {
@@ -251,6 +309,12 @@ func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) 
 
 	logger.SugaredLogger.Infof("compressed %d messages into summary for session %s", len(compressible), s.sessionID)
 
+	s.mu.Lock()
+	s.cache = nil
+	s.cacheReady = false
+	s.msgCount = 0
+	s.mu.Unlock()
+
 	summaryMsg := []map[string]string{{
 		"role":    "system",
 		"content": summaryText,
@@ -262,5 +326,11 @@ func (s *ChatMemoryService) Clear() error {
 	if err := db.DeleteChatMemorySummary(s.sessionID); err != nil {
 		logger.SugaredLogger.Errorf("delete chat memory summary failed in Clear: %v", err)
 	}
-	return db.ClearChatMemory(s.sessionID)
+	err := db.ClearChatMemory(s.sessionID)
+	s.mu.Lock()
+	s.cache = nil
+	s.cacheReady = false
+	s.msgCount = 0
+	s.mu.Unlock()
+	return err
 }

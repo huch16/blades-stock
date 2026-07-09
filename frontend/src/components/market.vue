@@ -312,18 +312,23 @@ function updateTab(name) {
 
 EventsOn("summaryStockNews", async (msg) => {
   if (msg === "DONE") {
-    await SaveAIResponseResult("市场资讯", "市场资讯", aiSummary.value, chatId.value, question.value,aiConfigId.value)
     loading.value = false
-    analysisStatus.value = "分析完成"
+    if (aiSummary.value && !aiSummary.value.startsWith("❌")) {
+      await SaveAIResponseResult("市场资讯", "市场资讯", aiSummary.value, chatId.value, question.value,aiConfigId.value)
+      analysisStatus.value = "分析完成"
+      notify.success({
+        title: 'AI分析完成',
+        content: '市场资讯分析已完成',
+        duration: 3000,
+      })
+      setTimeout(() => {
+        analysisStatus.value = ""
+      }, 3000)
+    } else {
+      analysisStatus.value = "分析失败"
+      message.error(aiSummary.value || "AI分析失败")
+    }
     message.destroyAll()
-    notify.success({
-      title: 'AI分析完成',
-      content: '市场资讯分析已完成',
-      duration: 3000,
-    })
-    setTimeout(() => {
-      analysisStatus.value = ""
-    }, 3000)
   } else {
     if (msg.chatId) {
       chatId.value = msg.chatId
@@ -331,13 +336,13 @@ EventsOn("summaryStockNews", async (msg) => {
     if (msg.question) {
       question.value = msg.question
     }
-    if (msg.content || msg.reasoning_content || msg.extraContent) {
+    if ((msg.content && msg.content !== "agent-DONE") || msg.reasoning_content || msg.extraContent) {
       if (!aiSummary.value) {
         analysisStatus.value = "AI正在分析中..."
       }
       loading.value = false
     }
-    if (msg.content) {
+    if (msg.content && msg.content !== "agent-DONE") {
       aiSummary.value = aiSummary.value + msg.content
     }
     if (msg.reasoning_content) {

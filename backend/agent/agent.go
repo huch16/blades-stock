@@ -494,6 +494,12 @@ func getMCPTools() []bladesTools.Tool {
 		wg.Add(1)
 		go func(srv models.MCPServer) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("panic connecting MCP server [%s]: %v", srv.Name, r)
+					results <- mcpServerResult{tools: nil, name: srv.Name}
+				}
+			}()
 			tools := connectMCPServer(srv)
 			results <- mcpServerResult{tools: tools, name: srv.Name}
 		}(server)
@@ -1061,19 +1067,6 @@ func smartTruncateLinesFromEnd(lines []string, maxBytes int) []string {
 }
 
 func init() {
-	tools.RegisterBacktestHandler(func() string {
-		bts := NewBacktestService()
-		count, err := bts.RunAllBacktests()
-		if err != nil {
-			return fmt.Sprintf("回测执行失败: %v", err)
-		}
-		if count == 0 {
-			return "所有分析报告已完成回测，无需重复执行"
-		}
-		stats := bts.GetOverallStats()
-		return fmt.Sprintf("✅ 完成 %d 份分析报告回测！\n当前综合准确率: %.1f%% (已验证 %d 次)", count, stats.AccuracyRate, stats.VerifiedCount)
-	})
-
 	tools.RegisterLearnProjectHandler(func(source, name string) string {
 		if name == "" {
 			parts := strings.Split(strings.TrimSuffix(source, ".git"), "/")
