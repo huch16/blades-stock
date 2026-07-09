@@ -19,6 +19,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Frontend build (required by go:embed)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
       - name: Go mod tidy
         run: go mod tidy
       - name: Build (Go)
@@ -27,8 +32,3 @@ jobs:
         run: go vet -tags "desktop,production" ./...
       - name: Test
         run: go test -tags "desktop,production" -run "^Test" -skip "integration" ./...
-      - name: Frontend build
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
