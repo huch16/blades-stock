@@ -21,6 +21,8 @@ jobs:
           node-version: 20
       - name: Frontend build (required by go:embed)
         working-directory: frontend
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
           npm ci
           npm run build
