@@ -42,7 +42,7 @@ main.go / app.go // 应用入口与平台适配
 
 ### 技能（Skill）机制
 
-`buildSkillPrompt` 从数据库读取已启用的 Skill（`data.NewSkillApi().GetEnabledSkills()`），优先使用向量语义匹配（`EmbeddingService` + `SkillEmbedding`），回退到触发关键词匹配，然后把选中 Skill 的 Directive 或 SystemPrompt 注入到最终 prompt 中，形成"专业技能 - 必须严格遵守"的规则块。Skill 的增删改查由 `backend/data/skill_api.go` 管理。
+`buildSkillPrompt` 从数据库读取已启用的 Skill（`data.NewSkillApi().GetEnabledSkills()`），统一通过 `GetSkillEmbeddingService.MatchSkills(question, 2)` 选择最多 2 个技能：先尝试语义匹配（`EmbeddingService` + `SkillEmbedding`），如果 EmbeddingService 未配置或相似度不足则降级到关键词匹配，然后把选中 Skill 的 `Directive` 或 `SystemPrompt` 注入到最终 prompt 中，形成"专业技能 - 必须严格遵守"的规则块。Skill 的增删改查由 `backend/data/skill_api.go` 管理。
 
 ### Skill 自动生成
 
@@ -89,11 +89,11 @@ npm run dev
 
 ## 实际关键点（基于代码阅读）
 
-- **Skill 注入逻辑只会选出有限的技能**：
-  - 若有 EmbeddingService，会调用 `MatchSkills(question, 1)`（topN = 1），只取最相关的一条 skill；
-  - 回退关键词匹配也在找到第一条后就 break；若某 skill 的 `TriggerKeywords` 为空，则会被优先选中（作为默认 skill）；
-  - 插入提示时优先使用 `skill.Directive`（短指令），否则使用 `skill.SystemPrompt`（完整系统提示）。
-  - 这会导致复杂问题下只有一个 skill 被注入，若需多个技能并用，需要在 Match/回退逻辑上调整。
+- **Skill 注入逻辑**：
+  - `buildSkillPrompt` 统一走 `GetSkillEmbeddingService.MatchSkills(question, 2)`，最多匹配 2 个相关技能。
+  - 语义匹配优先（bge-m3），可配置 threshold 0.3；若 EmbeddingService 未配置或 embed 失败，降级关键词匹配。
+  - 关键词匹配：遍历所有技能，只选择问题中包含触发关键词的技能；`TriggerKeywords` 为空的技能作为"通用技能"仅在其他匹配不足时回退填充。
+  - 插入 prompt 时优先使用 `skill.Directive`（短指令 ~800 chars），否则使用 `skill.SystemPrompt`（完整系统提示 ~2000+ chars），同时附上 `Description`、`TriggerKeywords` 和 `Examples`。
 
 - **ReasoningMiddleware** 根据 `agent_mode` 注入不同的"思考框架"提示（`plan_execute` 时会注入详尽的多步执行模板），这决定 agent 是一步到位回答还是按规划-执行-再规划循环调用工具。
 

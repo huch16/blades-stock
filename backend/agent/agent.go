@@ -298,68 +298,19 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 }
 
 // buildSkillPrompt uses bge-m3 semantic matching (via EmbeddingService) to select relevant skills.
-// When EmbeddingService is nil or skill has no Directive, falls back to keyword + full SystemPrompt.
+// When EmbeddingService is nil or embedding fails, falls back to keyword matching.
 // Target prompt size: ~800 chars per skill (Directive mode), ~2000+ chars (full SystemPrompt mode).
 func buildSkillPrompt(question string, embedSvc *EmbeddingService) string {
-	skills := data.NewSkillApi().GetEnabledSkills()
-	if len(skills) == 0 {
+	if len(data.NewSkillApi().GetEnabledSkills()) == 0 {
 		return ""
 	}
 
-	var matched []models.Skill
-	if embedSvc != nil {
-		// bge-m3 semantic matching
-		skillEmbedSvc := GetSkillEmbeddingService(embedSvc)
-		matched = skillEmbedSvc.MatchSkills(question, 1)
-	}
-
-	// Fallback: keyword match (first match only)
-	if len(matched) == 0 {
-		for _, skill := range skills {
-			if skill.TriggerKeywords == "" {
-				matched = append(matched, skill)
-				break
-			}
-			keywords := strings.Split(skill.TriggerKeywords, ",")
-			for _, kw := range keywords {
-				kw = strings.TrimSpace(kw)
-				if kw != "" && strings.Contains(question, kw) {
-					matched = append(matched, skill)
-					break
-				}
-			}
-			if len(matched) > 0 {
-				break
-			}
-		}
-	}
-
+	skillEmbedSvc := GetSkillEmbeddingService(embedSvc)
+	matched := skillEmbedSvc.MatchSkills(question, 2)
 	if len(matched) == 0 {
 		return ""
 	}
-
-	var sb strings.Builder
-	sb.WriteString("\n===== 【专业技能 - 必须严格遵守】 =====\n")
-	for _, skill := range matched {
-		sb.WriteString(fmt.Sprintf("\n--- %s ---\n", skill.Name))
-		if skill.Description != "" {
-			sb.WriteString(fmt.Sprintf("描述：%s\n", skill.Description))
-		}
-		// Priority: Directive (short ~800 chars) > SystemPrompt (full)
-		if skill.Directive != "" {
-			sb.WriteString(fmt.Sprintf("【规则指令】\n%s\n", skill.Directive))
-		} else if skill.SystemPrompt != "" {
-			sb.WriteString(fmt.Sprintf("【规则指令】\n%s\n", skill.SystemPrompt))
-		}
-		if skill.TriggerKeywords != "" {
-			sb.WriteString(fmt.Sprintf("触发关键词：%s\n", skill.TriggerKeywords))
-		}
-		if skill.Examples != "" {
-			sb.WriteString(fmt.Sprintf("【行为示例】\n%s\n", skill.Examples))
-		}
-	}
-	sb.WriteString("\n===== 专业技能指令结束 =====\n")
-	return sb.String()
+	return BuildShortSkillPrompt(matched)
 }
 
 // BuildSkillPromptForTest exports buildSkillPrompt for testing purposes.
