@@ -81,9 +81,24 @@ npm run dev
 ```
 
 ### 环境配置要点
-- **数据库**（gorm）用于 Skill、MCPServer、ProjectAnalysis 等表；首次运行会自动建表。
+- **数据库**（gorm）用于 Skill、MCPServer、ProjectAnalysis 等表；首次运行会自动建表（超时保护 30 秒）。
 - **语义匹配**：若启用，需要配置 Embedding 服务的 `baseURL`、`modelName`、`apiKey`。
 - **MCP（远程工具服务器）**：需在 DB 中配置 MCPServer 并确保可连接（`agent.go` 中有 `connectMCPServer` 的连接与 Resolve 流程与超时处理）。
+
+### 构建标志
+Wails 打包时需传入 `-skipbindings -skipembedcreate` 以兼容 Go 1.26 下的 vendored blades 框架：
+```bash
+wails build -skipbindings -skipembedcreate
+wails dev   -skipbindings -skipembedcreate
+```
+`build.ps1` 已封装此行为，推荐使用。
+
+### 环境变量 / ldflags
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `BuildKey` (ldflags) | 机器码加密密钥，生产构建必须通过 `-ldflags="-X main.BuildKey=..."` 注入 | `dev-fallback-build-key`（仅开发用） |
+
+> **安全提醒**：`BuildKey` 在生产环境必须通过 CI secret 注入，不要硬编码在源码或构建脚本中。
 
 ---
 

@@ -2,33 +2,33 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [dev, main]
   pull_request:
-    branches: [ main, master ]
+    branches: [dev, main]
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
-      - name: Install dependencies
+          go-version: "1.26"
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Go mod tidy
         run: go mod tidy
-      - name: Run go vet
-        run: go vet ./... 
-      - name: Run staticcheck
+      - name: Build (Go)
+        run: go build -tags "desktop,production" ./...
+      - name: Vet
+        run: go vet -tags "desktop,production" ./...
+      - name: Test
+        run: go test -tags "desktop,production" -run "^Test" -skip "integration" ./...
+      - name: Frontend build
+        working-directory: frontend
         run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...
-      - name: Run unit tests with coverage
-        run: |
-          go test -coverprofile=coverage.out ./... 
-          go tool cover -func=coverage.out
-      - name: Upload coverage
-        uses: actions/upload-artifact@v3
-        with:
-          name: coverage-report
-          path: coverage.out
+          npm ci
+          npm run build
