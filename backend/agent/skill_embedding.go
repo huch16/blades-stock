@@ -175,8 +175,8 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 		}
 	}
 
-	// Sort by score desc
-	sort.Slice(scoredSkills, func(i, j int) bool {
+	// Sort by score desc (stable: same score keeps DB sort_order order)
+	sort.SliceStable(scoredSkills, func(i, j int) bool {
 		return scoredSkills[i].score > scoredSkills[j].score
 	})
 
