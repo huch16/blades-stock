@@ -1,7 +1,7 @@
 <script setup>
 
 import {GetStockKLine} from "../../wailsjs/go/main/App";
-import * as echarts from "echarts";
+import * as echarts from "../utils/echarts";
 import {onMounted, ref} from "vue";
 import _ from "lodash";
 const { code,stockName,darkTheme,kDays ,chartHeight} = defineProps({

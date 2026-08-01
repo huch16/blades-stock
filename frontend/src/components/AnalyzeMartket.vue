@@ -1,7 +1,7 @@
 <script setup>
 
 import {AnalyzeSentimentWithFreqWeight,GlobalStockIndexes,GetTodayMarketStatistic,GetRecentDaysMarketStatistic,GetDailyChangeStats,GetChangeTypeDailyStats,GetChangeRank,GetDailyDimensionStats,GetTypeStatsByDate,IsTradingTime} from "../../wailsjs/go/main/App";
-import * as echarts from "echarts";
+import * as echarts from "../utils/echarts";
 import {onMounted,onUnmounted, ref, watch, nextTick} from "vue";
 import _ from "lodash";
 const { name,darkTheme,kDays ,chartHeight} = defineProps({

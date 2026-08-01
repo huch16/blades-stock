@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {computed, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
-import * as echarts from 'echarts';
+import * as echarts from '../utils/echarts';
 import type { AIConfig } from '../../wailsjs/go/models'
 import {
   AddGroup,

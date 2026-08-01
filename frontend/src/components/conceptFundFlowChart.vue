@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {onBeforeUnmount, onMounted, ref, watch, computed} from "vue";
 import {GetConceptFundFlowListByDate, GetConceptFundFlowTopListByDate, GetAllConceptCodes} from "../../wailsjs/go/main/App";
-import * as echarts from "echarts";
+import * as echarts from "../utils/echarts";
 
 const props = defineProps({
   darkTheme: {

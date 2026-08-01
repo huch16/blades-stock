@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {onMounted, ref} from "vue";
 import {GetStockMoneyTrendByDay} from "../../wailsjs/go/main/App";
-import * as echarts from "echarts";
+import * as echarts from "../utils/echarts";
 
 const {code, name, darkTheme, days, chartHeight} = defineProps({
   code: {

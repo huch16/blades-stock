@@ -1,5 +1,5 @@
 <script setup>
-import * as echarts from "echarts";
+import * as echarts from "../utils/echarts";
 import {computed, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref} from 'vue'
 import {
   GetAIResponseResult,
