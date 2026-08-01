@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"blades-stock/backend/logger"
 	"io"
+	"math"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type EmbeddingService struct {
@@ -25,7 +27,7 @@ func NewEmbeddingService(baseURL, apiKey, modelName string) *EmbeddingService {
 		baseURL:   baseURL + "/v1",
 		apiKey:    apiKey,
 		modelName: modelName,
-		client:    &http.Client{},
+		client:    &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -107,18 +109,7 @@ func CosineSimilarity(a, b []float32) float32 {
 	if normA == 0 || normB == 0 {
 		return 0
 	}
-	return float32(dot / (sqrt64(normA) * sqrt64(normB)))
-}
-
-func sqrt64(x float64) float64 {
-	if x <= 0 {
-		return 0
-	}
-	z := x / 2.0
-	for i := 0; i < 10; i++ {
-		z -= (z*z - x) / (2 * z)
-	}
-	return z
+	return float32(dot / (math.Sqrt(normA) * math.Sqrt(normB)))
 }
 
 // IsConfigured returns true if the embedding service has a valid baseURL and modelName.
