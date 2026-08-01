@@ -1452,6 +1452,22 @@ func (a *App) SendDingDingMessageByType(message string, stockCode string, msgTyp
 
 // preFetchStockAnalysisData collects real-time market data for the given stock
 // and returns a formatted reference string for the agent's system prompt.
+// isETFRecommendQuestion 判断用户问题是否属于 ETF/基金推荐、轮动、板块资金类问询。
+// 这类问题与当前页面个股无关，注入该个股预采集数据会误导模型偏离 ETF 分析框架。
+func isETFRecommendQuestion(q string) bool {
+	if strings.TrimSpace(q) == "" {
+		return false
+	}
+	lower := strings.ToLower(q)
+	etfHints := []string{"ETF", "etf", "基金", "板块", "轮动", "北向资金", "资金流向", "热点", "大盘", "指数"}
+	for _, hint := range etfHints {
+		if strings.Contains(lower, hint) {
+			return true
+		}
+	}
+	return false
+}
+
 func preFetchStockAnalysisData(stockCode string) string {
 	if stockCode == "" {
 		return ""
@@ -1509,10 +1525,18 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 			runtime.EventsEmit(a.ctx, "newChatStream", "DONE")
 		}
 	}()
-	// Pre-fetch real-time stock data as reference context for the agent
-	preFetchCtx := preFetchStockAnalysisData(stockCode)
+	analysisQuestion := strings.TrimSpace(question)
 
-	analysisQuestion := question
+	// 当用户问题涉及 ETF/基金推荐等非个股问询时，不注入当前页面的个股预采集数据，
+	// 否则模型会被强制引导到当前股票（如 TCL科技）的个股研判，而不是执行 ETF 轮动 skill。
+	isETFOriented := isETFRecommendQuestion(analysisQuestion)
+
+	// Pre-fetch real-time stock data as reference context for the agent
+	var preFetchCtx string
+	if !isETFOriented {
+		preFetchCtx = preFetchStockAnalysisData(stockCode)
+	}
+
 	if analysisQuestion == "" {
 		analysisQuestion = fmt.Sprintf("请对%s(%s)进行全方位深度分析，从技术面、基本面、消息面、资金面四个维度综合研判，给出明确的多空判断和操作建议。", stock, stockCode)
 	}
