@@ -7,9 +7,8 @@ linters:
     - errcheck
     - gofmt
     - ineffassign
-    - structcheck
-    - deadcode
     - typecheck
+    - unused
 issues:
   exclude-rules:
     - linters:

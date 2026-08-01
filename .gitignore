@@ -135,3 +135,18 @@ wails.json
 cov
 go.mod.localbackup
 go.mod.with-replaces
+
+# Python
+.venv/
+
+# Knowledge graph
+.graph/
+
+# Stray root files (temp artifacts that must not be committed)
+/probe_tushare_perms.exe
+/blades-stock.exe
+/stock_basic.json
+/img.png
+/wails-naive.png
+/serenity_current.txt
+/skills_report.txt

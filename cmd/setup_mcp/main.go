@@ -12,10 +12,20 @@ import (
 func main() {
 	db.Init("")
 
-	tushareToken := "dca1afb47b186d365ea451cd07e61806ea3d98a82abfc7839a568dbd"
+	tushareToken := os.Getenv("TUSHARE_TOKEN")
+	if tushareToken == "" {
+		fmt.Fprintln(os.Stderr, "错误: 请设置环境变量 TUSHARE_TOKEN")
+		os.Exit(1)
+	}
+
+	wudaoBearer := os.Getenv("WUDAO_BEARER_TOKEN")
+	if wudaoBearer == "" {
+		fmt.Fprintln(os.Stderr, "错误: 请设置环境变量 WUDAO_BEARER_TOKEN")
+		os.Exit(1)
+	}
 
 	wudaoHeaders, _ := json.Marshal(map[string]string{
-		"Authorization": "Bearer lb_e5b90ef9a52baf4ccaff18106c190d3f2907dd036f0dd50d2ed547a2be664d8d",
+		"Authorization": "Bearer " + wudaoBearer,
 	})
 
 	var wdCount int64

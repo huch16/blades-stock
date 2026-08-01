@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-import type { AIConfig } from '../../wailsjs/go/models'
+import type { data } from '../../wailsjs/go/models'
 import { GetAiConfigs } from '../../wailsjs/go/main/App'
+
+type AIConfig = data.AIConfig
 
 const STORAGE_KEY = 'aiConfigStore_activeConfigId'
 
