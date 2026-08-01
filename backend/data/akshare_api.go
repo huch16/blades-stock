@@ -10,18 +10,18 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const defaultAkshareServiceURL = "http://115.190.72.22:8089"
-
 type AkshareClient struct {
 	baseURL string
 	client  *resty.Client
 }
 
 func NewAkshareClient() *AkshareClient {
-	cfg := GetSettingConfig()
-	u := strings.TrimSpace(cfg.Settings.AkshareServiceUrl)
+	u := ""
+	if cfg := GetSettingConfig(); cfg != nil && cfg.Settings != nil {
+		u = strings.TrimSpace(cfg.Settings.AkshareServiceUrl)
+	}
 	if u == "" {
-		u = defaultAkshareServiceURL
+		u = AkshareServiceURL()
 	}
 	return &AkshareClient{
 		baseURL: u,

@@ -11,18 +11,18 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const defaultADataServiceURL = "http://115.190.72.22:8000"
-
 type AdataClient struct {
 	baseURL string
 	client  *resty.Client
 }
 
 func NewAdataClient() *AdataClient {
-	cfg := GetSettingConfig()
-	u := strings.TrimSpace(cfg.Settings.ADataServiceUrl)
+	u := ""
+	if cfg := GetSettingConfig(); cfg != nil && cfg.Settings != nil {
+		u = strings.TrimSpace(cfg.Settings.ADataServiceUrl)
+	}
 	if u == "" {
-		u = defaultADataServiceURL
+		u = ADataServiceURL()
 	}
 	return &AdataClient{
 		baseURL: u,

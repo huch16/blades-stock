@@ -454,7 +454,7 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 	data.SharedHTTPClient.R().
 		SetHeader("user", "blades-stock").
 		SetResult(stockBasics).
-		Get("http://8.134.249.145:18080/go-stock/stock_basic.json")
+		Get(data.StaticDataServiceURL() + "/go-stock/stock_basic.json")
 
 	db.Dao.Unscoped().Model(&data.StockBasic{}).Where("1=1").Delete(&data.StockBasic{})
 	err := db.Dao.CreateInBatches(stockBasics, 400).Error
@@ -489,7 +489,7 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 	data.SharedHTTPClient.R().
 		SetHeader("user", "blades-stock").
 		SetResult(stockHKBasics).
-		Get("http://8.134.249.145:18080/go-stock/stock_base_info_hk.json")
+		Get(data.StaticDataServiceURL() + "/go-stock/stock_base_info_hk.json")
 
 	db.Dao.Unscoped().Model(&models.StockInfoHK{}).Where("1=1").Delete(&models.StockInfoHK{})
 	err = db.Dao.CreateInBatches(stockHKBasics, 400).Error
@@ -515,7 +515,7 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 	data.SharedHTTPClient.R().
 		SetHeader("user", "blades-stock").
 		SetResult(stockUSBasics).
-		Get("http://8.134.249.145:18080/go-stock/stock_base_info_us.json")
+		Get(data.StaticDataServiceURL() + "/go-stock/stock_base_info_us.json")
 
 	db.Dao.Unscoped().Model(&models.StockInfoUS{}).Where("1=1").Delete(&models.StockInfoUS{})
 	err = db.Dao.CreateInBatches(stockUSBasics, 400).Error

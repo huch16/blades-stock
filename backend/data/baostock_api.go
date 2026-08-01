@@ -14,11 +14,9 @@ import (
 
 // ============================================================================
 // Baostock 数据服务客户端
-// 部署在 VPS 115.190.72.22:8090
+// 默认部署在 VPS 115.190.72.22:8090，可用环境变量 BLADES_STOCK_BAOSTOCK_URL 覆盖
 // 提供交易日历、季频财务数据、行业分类等
 // ============================================================================
-
-const defaultBaostockServiceURL = "http://115.190.72.22:8090"
 
 // BaostockApi Baostock 数据服务客户端
 type BaostockApi struct {
@@ -28,14 +26,8 @@ type BaostockApi struct {
 
 // NewBaostockApi 创建客户端
 func NewBaostockApi() *BaostockApi {
-	baseURL := defaultBaostockServiceURL
-	// 从配置读取（如果有）
-	if settings := GetSettingConfig(); settings != nil && settings.Settings != nil {
-		// 暂时使用默认地址，后续可加配置字段
-		_ = settings
-	}
 	return &BaostockApi{
-		baseURL: baseURL,
+		baseURL: BaostockServiceURL(),
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},

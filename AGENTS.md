@@ -56,7 +56,14 @@ Detected by baseURL pattern matching in `detectChatModelProvider()`.
 - **CLS / Sina / TradingView** — news feeds
 - **SearXNG** (search.whohai.cfd) — web search
 - **Tushare** — historical (optional API key)
-- Static files: `backend/data/stock_basic.json`, `build/*.json` from remote server `http://8.134.249.145:18080`
+- Static files: `backend/data/stock_basic.json`, `build/*.json` from remote server `http://8.134.249.145:18080` (configurable via `BLADES_STOCK_STATIC_DATA_URL`)
+
+### Configurable service URLs (backend/data/service_config.go)
+- `BLADES_STOCK_STATIC_DATA_URL` — static stock basic info JSON (default `http://8.134.249.145:18080`)
+- `BLADES_STOCK_ADATA_URL` — AData service (default `http://115.190.72.22:8000`)
+- `BLADES_STOCK_AKSHARE_URL` — AKShare service (default `http://115.190.72.22:8089`)
+- `BLADES_STOCK_BAOSTOCK_URL` — Baostock service (default `http://115.190.72.22:8090`)
+- Precedence: env var → DB settings field → default constant. Empty DB fields (`akshare_service_url`/`adata_service_url`) defer to env/default.
 
 ## Frontend (Vue 3)
 - `frontend/src/` — main app code
