@@ -40,9 +40,6 @@ var alipay []byte
 //go:embed build/screenshot/wxpay.jpg
 var wxpay []byte
 
-//go:embed build/screenshot/screenshot_wechat.png
-var wxgzh []byte
-
 //go:embed docs/blades-stock使用手册.md
 var userManual []byte
 

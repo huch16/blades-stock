@@ -3115,7 +3115,6 @@ export namespace models {
 	    icon: string;
 	    alipay: string;
 	    wxpay: string;
-	    wxgzh: string;
 	    buildTimeStamp: number;
 	    officialStatement: string;
 	    IsDel: number;
@@ -3135,7 +3134,6 @@ export namespace models {
 	        this.icon = source["icon"];
 	        this.alipay = source["alipay"];
 	        this.wxpay = source["wxpay"];
-	        this.wxgzh = source["wxgzh"];
 	        this.buildTimeStamp = source["buildTimeStamp"];
 	        this.officialStatement = source["officialStatement"];
 	        this.IsDel = source["IsDel"];
