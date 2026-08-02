@@ -4,7 +4,10 @@ package db
 import (
 	"log"
 	"os"
+	"path/filepath"
 	"time"
+
+	"blades-stock/backend/paths"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -27,7 +30,7 @@ func Init(sqlitePath string) {
 	var openDb *gorm.DB
 	var err error
 	if sqlitePath == "" {
-		sqlitePath = "data/stock.db?_busy_timeout=10000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-524288"
+		sqlitePath = filepath.Join(paths.DataDir(), "stock.db?_busy_timeout=10000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-524288")
 	}
 	openDb, err = gorm.Open(sqlite.Open(sqlitePath), &gorm.Config{
 		Logger:                                   dbLogger,

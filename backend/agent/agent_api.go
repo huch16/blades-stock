@@ -121,33 +121,47 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		settingConfig := data.GetSettingConfig()
 
-		// Build embedding service from original config first, then detect skill
+		// Build embedding service. Priority:
+		// 1) Global standalone embedding config (vector model) from settings.
+		// 2) Selected chat config's own embedding settings.
+		// 3) Scan all configs for an embedding-enabled one (e.g. bge-m3)
+		//    so that chat models without embedding support still get semantic matching.
 		var embedService *EmbeddingService
 		originalAiConfig, _ := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
 			return uint(aiConfigId) == item.ID
 		})
-		// 1) If the selected config has embedding enabled, use it directly.
-		// 2) Otherwise, scan all configs for an embedding-enabled one (e.g. bge-m3)
-		//    so that chat models without embedding support can still use semantic matching.
-		embedCfg := originalAiConfig
-		if embedCfg == nil || !embedCfg.EmbeddingEnabled || embedCfg.EmbeddingModelName == "" {
-			for _, cfg := range settingConfig.AiConfigs {
-				if cfg.EmbeddingEnabled && cfg.EmbeddingModelName != "" {
-					embedCfg = cfg
-					break
-				}
-			}
-		}
-		if embedCfg != nil && embedCfg.EmbeddingEnabled && embedCfg.EmbeddingModelName != "" {
-			embedBaseUrl := embedCfg.EmbeddingBaseUrl
-			if embedBaseUrl == "" {
-				embedBaseUrl = embedCfg.BaseUrl
+		embedEnabled := settingConfig.EmbeddingEnabled && settingConfig.EmbeddingModelName != ""
+		if embedEnabled {
+			embedBaseUrl := settingConfig.EmbeddingBaseUrl
+			if embedBaseUrl == "" && originalAiConfig != nil {
+				embedBaseUrl = originalAiConfig.BaseUrl
 			}
 			embedService = NewEmbeddingService(
 				embedBaseUrl,
-				embedCfg.ApiKey,
-				embedCfg.EmbeddingModelName,
+				settingConfig.EmbeddingApiKey,
+				settingConfig.EmbeddingModelName,
 			)
+		} else {
+			embedCfg := originalAiConfig
+			if embedCfg == nil || !embedCfg.EmbeddingEnabled || embedCfg.EmbeddingModelName == "" {
+				for _, cfg := range settingConfig.AiConfigs {
+					if cfg.EmbeddingEnabled && cfg.EmbeddingModelName != "" {
+						embedCfg = cfg
+						break
+					}
+				}
+			}
+			if embedCfg != nil && embedCfg.EmbeddingEnabled && embedCfg.EmbeddingModelName != "" {
+				embedBaseUrl := embedCfg.EmbeddingBaseUrl
+				if embedBaseUrl == "" {
+					embedBaseUrl = embedCfg.BaseUrl
+				}
+				embedService = NewEmbeddingService(
+					embedBaseUrl,
+					embedCfg.ApiKey,
+					embedCfg.EmbeddingModelName,
+				)
+			}
 		}
 
 		// Detect skill before creating agent, so we can log skill usage

@@ -174,6 +174,10 @@ export function FetchAiModels(arg1, arg2) {
   return window['go']['main']['App']['FetchAiModels'](arg1, arg2);
 }
 
+export function TestAiConnection(arg1, arg2, arg3) {
+  return window['go']['main']['App']['TestAiConnection'](arg1, arg2, arg3);
+}
+
 export function FetchAndSaveMarketStatistic() {
   return window['go']['main']['App']['FetchAndSaveMarketStatistic']();
 }

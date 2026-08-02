@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"time"
 
-	assistantweb "blades-stock/ai-assistant-web"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	log "blades-stock/backend/logger"
 	"blades-stock/backend/machineid"
 	"blades-stock/backend/models"
+	"blades-stock/backend/paths"
 	"blades-stock/backend/quant"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 
 	"github.com/duke-git/lancet/v2/convertor"
@@ -63,6 +64,12 @@ func main() {
 			log.SugaredLogger.Error("stack: ", string(debug.Stack()))
 		}
 	}()
+
+	// 锚定基准目录：所有相对路径（data/、logs/、memory/、stock_basic.json 等）以它为准，
+	// 使开发模式与本地发布 exe 共用同一份数据，部署包则自包含。
+	if err := os.Chdir(paths.BaseDir()); err != nil {
+		log.SugaredLogger.Warnf("chdir to base dir failed: %v", err)
+	}
 
 	checkDir("data")
 	machineid.Init(BuildKey)
@@ -166,14 +173,6 @@ func main() {
 	log.SugaredLogger.Info("screen resolution: " + convertor.ToString(width) + "x" + convertor.ToString(height))
 	log.SugaredLogger.Info("window size: " + convertor.ToString(appWidth) + "x" + convertor.ToString(appHeight))
 
-	// 作为 blades-stock 子组件启动独立 Web 服务
-	// 端口默认由 AI_ASSISTANT_WEB_ADDR 决定。
-	go func() {
-		if err := assistantweb.Start(); err != nil {
-			log.SugaredLogger.Errorf("ai-assistant-web start error: %v", err)
-		}
-	}()
-
 	// Create application with options
 	err = wails.Run(&options.App{
 		Title: "Blades Stock：AI赋能股票分析✨ " + OFFICIAL_STATEMENT,
@@ -193,7 +192,7 @@ func main() {
 		BackgroundColour:         backgroundColour,
 		Assets:                   assets,
 		Menu:                     AppMenu,
-		Logger:                   logger.NewFileLogger("./logs/wails.log"),
+		Logger:                   logger.NewFileLogger(filepath.Join(paths.LogDir(), "wails.log")),
 		LogLevel:                 logger.DEBUG,
 		LogLevelProduction:       logger.INFO,
 		OnStartup:                app.startup,

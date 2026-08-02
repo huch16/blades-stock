@@ -108,7 +108,6 @@ dist
 .qoder
 .idea/
 /data/*.db*
-ai-assistant-web/data/*.db*
 *.exe
 /build/bin/*
 frontend/package.json.md5

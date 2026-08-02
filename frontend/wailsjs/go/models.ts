@@ -927,6 +927,10 @@ export namespace data {
 	    akshareServiceUrl: string;
 	    aDataServiceUrl: string;
 	    defaultDataSource: string;
+	    embeddingEnabled: boolean;
+	    embeddingModelName: string;
+	    embeddingBaseUrl: string;
+	    embeddingApiKey: string;
 	    aiConfigs: AIConfig[];
 	
 	    static createFrom(source: any = {}) {
@@ -976,6 +980,10 @@ export namespace data {
 	        this.akshareServiceUrl = source["akshareServiceUrl"];
 	        this.aDataServiceUrl = source["aDataServiceUrl"];
 	        this.defaultDataSource = source["defaultDataSource"];
+	        this.embeddingEnabled = source["embeddingEnabled"] ?? false;
+	        this.embeddingModelName = source["embeddingModelName"];
+	        this.embeddingBaseUrl = source["embeddingBaseUrl"];
+	        this.embeddingApiKey = source["embeddingApiKey"];
 	        this.aiConfigs = this.convertValues(source["aiConfigs"], AIConfig);
 	    }
 	

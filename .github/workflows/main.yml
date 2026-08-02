@@ -3,7 +3,7 @@ name: Wails build
 on:
   push:
     tags:
-    # Match any new tag
+      # Match any new tag
       - '*-release'
       - '*-dev'
       - '*-pre'
@@ -20,7 +20,7 @@ permissions:
 jobs:
   build:
     strategy:
-    # Failure in one platform build won't impact the others
+      # Failure in one platform build won't impact the others
       fail-fast: false
       matrix:
         build:
@@ -71,21 +71,95 @@ jobs:
             echo "channel_label=Dev（开发版）" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build wails x go-stock
-        uses: ArvinLovegood/wails-build-action@v3.8
-        id: build
+      - name: Install Go
+        uses: actions/setup-go@v5
         with:
-          build-name: ${{ matrix.build.name }}
-          build-platform: ${{ matrix.build.platform }}
-          package: true
           go-version: '1.26'
-          build-tags: ${{ github.ref_name }}
-          build-commit-message: ${{ steps.get_commit_message.outputs.commit_message }}
-          build-statement: ${{ env.OFFICIAL_STATEMENT }}
-          build-key: ${{ env.BUILD_KEY }}
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
           node-version: '22.22.2'
-          wails-version: 'v2.11.0'
-          nsis: 'true'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Generate bindings (required for -skipbindings)
+        run: wails generate module
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build Wails application
+        id: build
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          VERSION="${{ github.ref_name }}"
+          COMMIT_MSG="${{ steps.get_commit_message.outputs.commit_message }}"
+          STATEMENT="${{ env.OFFICIAL_STATEMENT }}"
+          BUILD_KEY="${{ env.BUILD_KEY }}"
+          
+          wails build \
+            -platform "${{ matrix.build.platform }}" \
+            -skipbindings \
+            -skipembedcreate \
+            -product-version "${VERSION}" \
+            -file-description "${COMMIT_MSG}" \
+            -copyright "${STATEMENT}" \
+            -company-name "${BUILD_KEY}" \
+            -comments "Blades Stock - ${{ steps.channel.outputs.channel_label }}"
+
+      - name: Package Windows (zip + NSIS)
+        if: runner.os == 'Windows'
+        run: |
+          # Zip the build output
+          $buildDir = "build/bin"
+          $zipName = "${{ matrix.build.name }}.zip"
+          Compress-Archive -Path "$buildDir\*" -DestinationPath "$zipName" -Force
+          echo "artifact_name=$zipName" >> $GITHUB_OUTPUT
+          echo "artifact_path=$zipName" >> $GITHUB_OUTPUT
+
+          # NSIS installer (if NSIS is available)
+          if (Get-Command makensis -ErrorAction SilentlyContinue) {
+            $nsisScript = "frontend/nsis/installer.nsi"
+            if (Test-Path $nsisScript) {
+              makensis $nsisScript
+              $exeName = "${{ matrix.build.name }}.exe"
+              if (Test-Path "$exeName") {
+                echo "nsis_artifact_name=$exeName" >> $GITHUB_OUTPUT
+                echo "nsis_artifact_path=$exeName" >> $GITHUB_OUTPUT
+              }
+            }
+          }
+        shell: powershell
+
+      - name: Package macOS (zip)
+        if: runner.os == 'macOS'
+        run: |
+          buildDir="build/bin"
+          zipName="${{ matrix.build.name }}.zip"
+          cd "$buildDir"
+          zip -r "../$zipName" .
+          cd ../..
+          echo "artifact_name=$zipName" >> $GITHUB_OUTPUT
+          echo "artifact_path=build/$zipName" >> $GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.build.name }}
+          path: |
+            ${{ steps.build.outputs.artifact_path }}
+            ${{ steps.build.outputs.nsis_artifact_path }}
+          if-no-files-found: warn
 
       - name: Update release for channel
         if: steps.channel.outputs.channel != 'release'

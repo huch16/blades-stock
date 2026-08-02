@@ -92,6 +92,8 @@ export function FetchAiModelInfo(arg1:string,arg2:string,arg3:string):Promise<ma
 
 export function FetchAiModels(arg1:string,arg2:string):Promise<Array<string>>;
 
+export function TestAiConnection(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function FetchAndSaveMarketStatistic():Promise<void>;
 
 export function Follow(arg1:string):Promise<string>;

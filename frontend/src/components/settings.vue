@@ -7,6 +7,7 @@ import {
   UpdateConfig,
   FetchAiModels,
   FetchAiModelInfo,
+  TestAiConnection,
   CleanupData,
   BackupData,
   RestoreData
@@ -29,13 +30,14 @@ const formRef = ref(null)
 // ========================
 interface ConfigMeta {
   loadingModels: boolean
+  testing: boolean
   modelOptions: { label: string; value: string }[]
 }
 const aiConfigMeta = reactive<Record<number, ConfigMeta>>({})
 function getMeta(index: number, id: number): ConfigMeta {
   const key = id > 0 ? id : -index - 1
   if (!aiConfigMeta[key]) {
-    aiConfigMeta[key] = { loadingModels: false, modelOptions: [] }
+    aiConfigMeta[key] = { loadingModels: false, testing: false, modelOptions: [] }
   }
   return aiConfigMeta[key]
 }
@@ -93,6 +95,10 @@ const formValue = ref({
   akshareServiceUrl: 'http://115.190.72.22:8089',
   aDataServiceUrl: 'http://115.190.72.22:8000',
   defaultDataSource: 'adata',
+  embeddingEnabled: false,
+  embeddingModelName: '',
+  embeddingBaseUrl: '',
+  embeddingApiKey: '',
 })
 
 // ========================
@@ -108,22 +114,31 @@ const formRules = {
 let nextTempId = -1
 function addAiConfig() {
   const id = aiConfigs.value.reduce((max, c) => Math.max(max, c.ID || 0), 0) + 1 || nextTempId--
-  aiConfigs.value.push(new data.AIConfig({
+  const newConfig = new data.AIConfig({
     ID: id,
     name: '',
     baseUrl: 'https://api.deepseek.com',
     apiKey: '',
     modelName: 'deepseek-reasoner',
-    temperature: 0.1,
+    temperature: 0.7,
     maxTokens: 8192,
     timeOut: 300,
-    httpProxy:"",
-    httpProxyEnabled:false,
+    httpProxy: '',
+    httpProxyEnabled: false,
     thinking: true,
     embeddingEnabled: false,
     embeddingModelName: '',
     embeddingBaseUrl: '',
-  }))
+    llmConcurrencyLimit: 2,
+    subAgentTimeout: 20,
+  })
+  // 自动生成配置名称（用户手动改名后不再自动覆盖）
+  ;(newConfig as any)._nameTouched = false
+  const platformName = getPlatformName(newConfig.baseUrl)
+  const baseName = platformName || 'AI'
+  newConfig.name = baseName + '-' + newConfig.modelName
+
+  aiConfigs.value.push(newConfig)
   const idx = aiConfigs.value.length - 1
   // 展开新配置 (F-10)
   nextTick(() => {
@@ -143,39 +158,92 @@ function removeAiConfig(index) {
     .map(n => String(Number(n) > index ? Number(n) - 1 : Number(n)))
 }
 
+// 复制一份 AI 配置，方便快速配置多个服务商
+function copyAiConfig(index) {
+  const src = aiConfigs.value[index]
+  if (!src) return
+  const clone = new data.AIConfig({ ...src })
+  clone.ID = 0
+  ;(clone as any)._nameTouched = false
+  clone.name = (src.name || `AI 配置 ${index + 1}`) + '（副本）'
+  aiConfigs.value.push(clone)
+  const idx = aiConfigs.value.length - 1
+  nextTick(() => {
+    aiConfigExpandedNames.value = [String(idx)]
+  })
+}
+
+// 测试连接：真实调用 /chat/completions 验证 baseUrl + apiKey + modelName 可用（兼容不支持 /models 的服务）
+async function testAiConfig(aiConfig, index) {
+  if (!aiConfig.baseUrl) {
+    message.warning('请先填写接口地址再测试')
+    return
+  }
+  const isLocalOllama = /localhost:11434|127\.0\.0\.1:11434/.test(aiConfig.baseUrl)
+  if (!aiConfig.apiKey && !isLocalOllama) {
+    message.warning('请先填写接口地址和 apiKey 再测试')
+    return
+  }
+  if (!aiConfig.modelName) {
+    const list = await fetchAiModels(aiConfig, index, { silent: true })
+    if (!list.length) {
+      message.warning('模型名为空且无法自动获取，请先在「模型名」中选择或填写')
+      return
+    }
+  }
+  const meta = getMeta(index, aiConfig.ID)
+  if (meta.testing) return
+  meta.testing = true
+  try {
+    const errMsg = await TestAiConnection(aiConfig.baseUrl, aiConfig.apiKey, aiConfig.modelName)
+    if (errMsg) {
+      message.error('连接失败：' + errMsg)
+    } else {
+      message.success('连接成功！配置可用')
+      if (meta.modelOptions.length === 0) fetchAiModels(aiConfig, index, { silent: true })
+    }
+  } catch (e) {
+    console.error('testAiConfig error', e)
+    message.error('连接失败：无法访问该接口，请检查网络和地址')
+  } finally {
+    meta.testing = false
+  }
+}
+
 // ========================
 // 模型列表获取（带请求去重）(F-04)
 // ========================
 let fetchModelsId = 0
-async function fetchAiModels(aiConfig, index) {
-  if (!aiConfig.baseUrl || !aiConfig.apiKey) {
-    message.warning('请先填写接口地址和 apiKey')
-    return
+async function fetchAiModels(aiConfig, index, opts = {}) {
+  const isLocalOllama = /localhost:11434|127\.0\.0\.1:11434/.test(aiConfig.baseUrl || '')
+  if (!aiConfig.baseUrl || (!aiConfig.apiKey && !isLocalOllama)) {
+    if (!opts.silent) message.warning('请先填写接口地址和 apiKey')
+    return []
   }
   const meta = getMeta(index, aiConfig.ID)
-  if (meta.loadingModels) return
+  if (meta.loadingModels) return meta.modelOptions.map(o => o.value)
   meta.loadingModels = true
   const reqId = ++fetchModelsId
   try {
-    const list = await FetchAiModels(aiConfig.baseUrl, aiConfig.apiKey)
-    if (reqId !== fetchModelsId) return // 已过期
+    const list = await FetchAiModels(aiConfig.baseUrl, aiConfig.apiKey || (isLocalOllama ? 'ollama' : ''))
+    if (reqId !== fetchModelsId) return []
     const options = (list || []).map(id => ({ label: id, value: id }))
     meta.modelOptions = options
     if (!aiConfig.modelName && options.length > 0) {
       aiConfig.modelName = options[0].value
       onModelNameChange(aiConfig, aiConfig.modelName)
     }
-    if (!options.length) {
-      message.warning('未从接口获取到可用模型，请检查地址和 apiKey')
+    if (!options.length && !opts.silent) {
+      message.warning('未从接口获取到可用模型，可手动填写模型名')
     }
+    return list || []
   } catch (e) {
-    if (reqId !== fetchModelsId) return
+    if (reqId !== fetchModelsId) return []
     console.error('FetchAiModels error', e)
-    message.error('获取模型列表失败，请检查接口地址和 apiKey')
+    if (!opts.silent) message.error('获取模型列表失败，可手动填写模型名')
+    return []
   } finally {
-    if (reqId === fetchModelsId) {
-      meta.loadingModels = false
-    }
+    meta.loadingModels = false
   }
 }
 
@@ -209,7 +277,29 @@ function getPlatformName(baseUrl) {
   return ''
 }
 
+// 常用向量（Embedding）模型与服务地址建议
+const embeddingModelOptions = [
+  { label: 'bge-m3（BAAI 多语言）', value: 'bge-m3' },
+  { label: 'bge-large-zh-v1.5', value: 'bge-large-zh-v1.5' },
+  { label: 'bge-small-zh-v1.5', value: 'bge-small-zh-v1.5' },
+  { label: 'm3e-base（Moka）', value: 'm3e-base' },
+  { label: 'text-embedding-3-small（OpenAI）', value: 'text-embedding-3-small' },
+  { label: 'text-embedding-ada-002（OpenAI）', value: 'text-embedding-ada-002' },
+  { label: 'BAAI/bge-m3（硅基流动）', value: 'BAAI/bge-m3' },
+]
+const embeddingBaseUrlOptions = [
+  { label: 'Ollama 本地 (http://localhost:11434/v1)', value: 'http://localhost:11434/v1' },
+  { label: '硅基流动 (https://api.siliconflow.cn/v1)', value: 'https://api.siliconflow.cn/v1' },
+  { label: 'OpenAI (https://api.openai.com/v1)', value: 'https://api.openai.com/v1' },
+  { label: '阿里云百炼 (https://dashscope.aliyuncs.com/compatible-mode/v1)', value: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+]
+
+function markNameTouched(aiConfig) {
+  if (aiConfig) (aiConfig as any)._nameTouched = true
+}
+
 function onBaseUrlChange(aiConfig, newBaseUrl) {
+  if ((aiConfig as any)._nameTouched) return
   const platformName = getPlatformName(newBaseUrl)
   if (platformName && aiConfig.name && !aiConfig.name.startsWith(platformName)) {
     aiConfig.name = platformName + '-' + aiConfig.name
@@ -220,21 +310,10 @@ function onBaseUrlChange(aiConfig, newBaseUrl) {
 
 function onModelNameChange(aiConfig, newModelName) {
   if (!newModelName) return
-  const platformName = getPlatformName(aiConfig.baseUrl)
-  const baseName = platformName || 'AI'
-
-  if (!aiConfig.name) {
+  if (!(aiConfig as any)._nameTouched) {
+    const platformName = getPlatformName(aiConfig.baseUrl)
+    const baseName = platformName || 'AI'
     aiConfig.name = baseName + '-' + newModelName
-  } else if (aiConfig.name === platformName) {
-    aiConfig.name = platformName + '-' + newModelName
-  } else {
-    const parts = aiConfig.name.split('-')
-    if (parts.length >= 2 && parts[0] === platformName) {
-      parts[parts.length - 1] = newModelName
-      aiConfig.name = parts.join('-')
-    } else if (!aiConfig.name.endsWith(newModelName)) {
-      aiConfig.name = aiConfig.name + '-' + newModelName
-    }
   }
 
   fetchModelInfo(aiConfig, newModelName)
@@ -277,6 +356,7 @@ onMounted(() => {
 
     openAiEnable.value = res.openAiEnable
     aiConfigs.value = res.aiConfigs || []
+    aiConfigs.value.forEach(c => { (c as any)._nameTouched = true })
     defaultAiConfigId.value = res.aiConfigId ?? 0
     aiPrompt.value = res.prompt || ''
     questionTemplate.value = res.questionTemplate || '{{stockName}}分析和总结'
@@ -314,6 +394,10 @@ onMounted(() => {
     formValue.value.akshareServiceUrl = res.akshareServiceUrl || 'http://115.190.72.22:8089';
     formValue.value.aDataServiceUrl = res.aDataServiceUrl || 'http://115.190.72.22:8000';
     formValue.value.defaultDataSource = res.defaultDataSource || 'adata';
+    formValue.value.embeddingEnabled = !!res.embeddingEnabled;
+    formValue.value.embeddingModelName = res.embeddingModelName || '';
+    formValue.value.embeddingBaseUrl = res.embeddingBaseUrl || '';
+    formValue.value.embeddingApiKey = res.embeddingApiKey || '';
   }).catch(err => {
     message.error('加载配置失败: ' + (err?.message || err))
   })
@@ -373,6 +457,10 @@ async function saveConfig() {
     akshareServiceUrl: formValue.value.akshareServiceUrl,
     aDataServiceUrl: formValue.value.aDataServiceUrl,
     defaultDataSource: formValue.value.defaultDataSource,
+    embeddingEnabled: formValue.value.embeddingEnabled,
+    embeddingModelName: formValue.value.embeddingModelName,
+    embeddingBaseUrl: formValue.value.embeddingBaseUrl,
+    embeddingApiKey: formValue.value.embeddingApiKey,
   })
 
   try {
@@ -544,12 +632,13 @@ function importConfig() {
       formValue.value.refreshInterval = config.refreshInterval ?? 1
       openAiEnable.value = !!config.openAiEnable
       aiConfigs.value = (config.aiConfigs || []).map(c => new data.AIConfig({
-        ...{ ID: 0, name: '', baseUrl: '', apiKey: '', modelName: '', temperature: 0.1, maxTokens: 8192, timeOut: 300, httpProxy: '', httpProxyEnabled: false, thinking: false, embeddingEnabled: false, embeddingModelName: '', embeddingBaseUrl: '' },
+        ...{ ID: 0, name: '', baseUrl: '', apiKey: '', modelName: '', temperature: 0.7, maxTokens: 8192, timeOut: 300, httpProxy: '', httpProxyEnabled: false, thinking: false, embeddingEnabled: false, embeddingModelName: '', embeddingBaseUrl: '', llmConcurrencyLimit: 2, subAgentTimeout: 20 },
         ...c,
-        temperature: Number(c.temperature) || 0.1,
+        temperature: Number(c.temperature) || 0.7,
         maxTokens: Number(c.maxTokens) || 8192,
         timeOut: Number(c.timeOut) || 300,
       }))
+      aiConfigs.value.forEach(c => { (c as any)._nameTouched = true })
       aiPrompt.value = config.prompt ?? ''
       questionTemplate.value = config.questionTemplate ?? '{{stockName}}分析和总结'
       crawlTimeOut.value = config.crawlTimeOut ?? 30
@@ -569,6 +658,10 @@ function importConfig() {
       formValue.value.akshareServiceUrl = config.akshareServiceUrl ?? 'http://115.190.72.22:8089'
       formValue.value.aDataServiceUrl = config.aDataServiceUrl ?? 'http://115.190.72.22:8000'
       formValue.value.defaultDataSource = config.defaultDataSource ?? 'adata'
+      formValue.value.embeddingEnabled = !!config.embeddingEnabled
+      formValue.value.embeddingModelName = config.embeddingModelName ?? ''
+      formValue.value.embeddingBaseUrl = config.embeddingBaseUrl ?? ''
+      formValue.value.embeddingApiKey = config.embeddingApiKey ?? ''
       formValue.value.updateChannel = config.updateChannel || 'release'
       // 导入后同步 Store (F-08)
       if (aiConfigs.value.length > 0) {
@@ -828,7 +921,72 @@ function importConfig() {
             </n-gi>
             <n-form-item-gi :span="12" v-if="openAiEnable && aiConfigs.length > 0" label="默认AI配置">
               <n-select v-model:value="defaultAiConfigId" :options="aiConfigOptions" filterable placeholder="选择默认AI配置" clearable />
+              <n-tooltip placement="top">
+                <template #trigger>
+                  <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
+                    <HelpCircleFilledIcon />
+                  </n-icon>
+                </template>
+                <template #default>
+                  <n-gradient-text :type="'warning'">
+                  <div style="max-width: 400px;text-align: left">
+                    指定用于 AI 对话/分析的默认模型配置。<br>
+                    可配置多个服务商（DeepSeek、硅基流动、智谱、豆包、Ollama 本地等），<br>
+                    通过「测试连接」可验证配置是否可用。
+                  </div>
+                  </n-gradient-text>
+                </template>
+              </n-tooltip>
             </n-form-item-gi>
+
+            <n-gi :span="24" v-if="openAiEnable">
+              <n-divider title-placement="left">向量模型配置 (全局独立，用于语义检索/技能匹配/长期记忆)</n-divider>
+            </n-gi>
+            <n-form-item-gi :span="4" v-if="openAiEnable" label="启用向量模型">
+              <n-switch v-model:value="formValue.embeddingEnabled"/>
+              <n-tooltip placement="top">
+                <template #trigger>
+                  <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
+                    <HelpCircleFilledIcon />
+                  </n-icon>
+                </template>
+                <template #default>
+                  <n-gradient-text :type="'warning'">
+                  <div style="max-width: 400px;text-align: left">
+                    启用后使用 Embedding 模型进行语义向量化：<br>
+                    • 技能关键词匹配 (bge-m3 等)<br>
+                    • 长期记忆向量存储/检索<br>
+                    • 全局独立于每个 Chat 模型配置，通常使用专用 Embedding 服务<br>
+                    • 服务地址留空时复用所选 AI 配置的接口地址
+                  </div>
+                  </n-gradient-text>
+                </template>
+              </n-tooltip>
+            </n-form-item-gi>
+            <n-form-item-gi :span="6" v-if="openAiEnable && formValue.embeddingEnabled" label="向量模型名" path="embeddingModelName">
+              <n-select
+                v-model:value="formValue.embeddingModelName"
+                :options="embeddingModelOptions"
+                filterable
+                tag
+                clearable
+                placeholder="bge-m3"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi :span="7" v-if="openAiEnable && formValue.embeddingEnabled" label="向量服务地址" path="embeddingBaseUrl">
+              <n-select
+                v-model:value="formValue.embeddingBaseUrl"
+                :options="embeddingBaseUrlOptions"
+                filterable
+                tag
+                clearable
+                placeholder="留空则使用所选 AI 配置的服务地址"
+              />
+            </n-form-item-gi>
+            <n-form-item-gi :span="7" v-if="openAiEnable && formValue.embeddingEnabled" label="向量服务 ApiKey" path="embeddingApiKey">
+              <n-input type="password" placeholder="ApiKey" v-model:value="formValue.embeddingApiKey" clearable show-password-on="click"/>
+            </n-form-item-gi>
+
             <n-gi :span="24" v-if="openAiEnable">
               <n-space vertical>
                 <n-collapse v-model:expanded-names="aiConfigExpandedNames" accordion>
@@ -847,7 +1005,8 @@ function importConfig() {
                         <n-input type="text" placeholder="配置ID" v-model:value="aiConfig.ID" clearable/>
                       </n-form-item-gi>
                       <n-form-item-gi :span="12" label="配置名称" :path="`openAI.aiConfigs[${index}].name`">
-                        <n-input type="text" placeholder="配置名称" v-model:value="aiConfig.name" clearable/>
+                        <n-input type="text" placeholder="配置名称（可自定义，后续不会自动覆盖）" v-model:value="aiConfig.name"
+                                 clearable @update:value="() => markNameTouched(aiConfig)"/>
                       </n-form-item-gi>
                       <n-form-item-gi :span="12" label="接口地址" :path="`openAI.aiConfigs[${index}].baseUrl`">
                         <n-select
@@ -856,7 +1015,7 @@ function importConfig() {
                           filterable
                           tag
                           clearable
-                          placeholder="选择或输入AI接口地址"
+                          placeholder="选择或输入 AI 接口地址（OpenAI 兼容）"
                           @update:value="(val) => onBaseUrlChange(aiConfig, val)"
                         />
                       </n-form-item-gi>
@@ -864,7 +1023,7 @@ function importConfig() {
                         <n-input type="password" placeholder="apiKey" v-model:value="aiConfig.apiKey" clearable
                                  show-password-on="click"/>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="8" label="模型名称" :path="`openAI.aiConfigs[${index}].modelName`">
+                      <n-form-item-gi :span="12" label="模型名称" :path="`openAI.aiConfigs[${index}].modelName`">
                         <n-select
                           v-model:value="aiConfig.modelName"
                           :options="getMeta(index, aiConfig.ID).modelOptions"
@@ -876,16 +1035,63 @@ function importConfig() {
                           @update:value="(val) => onModelNameChange(aiConfig, val)"
                         />
                       </n-form-item-gi>
-                      <n-form-item-gi :span="5" label="Temperature" :path="`openAI.aiConfigs[${index}].temperature`">
-                        <n-input-number placeholder="temperature" v-model:value="aiConfig.temperature" :step="0.1" :min="0" :max="2"/>
+                      <n-form-item-gi :span="6" label="Temperature" :path="`openAI.aiConfigs[${index}].temperature`">
+                        <n-input-number placeholder="0~2" v-model:value="aiConfig.temperature" :step="0.1" :min="0" :max="2"/>
+                        <n-tooltip placement="top">
+                          <template #trigger>
+                            <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
+                              <HelpCircleFilledIcon />
+                            </n-icon>
+                          </template>
+                          <template #default>
+                            <n-gradient-text :type="'warning'">
+                            <div style="max-width: 400px;text-align: left">
+                              采样随机度（0~2）。<br>
+                              股票分析等偏严谨任务建议 0.2~0.5，过高易臆造结论；<br>
+                              深度思考(reasoning)模型建议 ≤0.7。
+                            </div>
+                            </n-gradient-text>
+                          </template>
+                        </n-tooltip>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="5" label="MaxTokens" :path="`openAI.aiConfigs[${index}].maxTokens`">
+                      <n-form-item-gi :span="6" label="MaxTokens" :path="`openAI.aiConfigs[${index}].maxTokens`">
                         <n-input-number placeholder="maxTokens" v-model:value="aiConfig.maxTokens" :min="1" :max="128000"/>
+                        <n-tooltip placement="top">
+                          <template #trigger>
+                            <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
+                              <HelpCircleFilledIcon />
+                            </n-icon>
+                          </template>
+                          <template #default>
+                            <n-gradient-text :type="'warning'">
+                            <div style="max-width: 400px;text-align: left">
+                              单次回答的最大输出 Token 数。<br>
+                              4096 适合一般分析；回答被截断时再调大（如 8192）。<br>
+                              过大会更慢、更贵，建议按需设置。
+                            </div>
+                            </n-gradient-text>
+                          </template>
+                        </n-tooltip>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="5" label="Timeout(秒)" :path="`openAI.aiConfigs[${index}].timeOut`">
+                      <n-form-item-gi :span="6" label="Timeout(秒)" :path="`openAI.aiConfigs[${index}].timeOut`">
                         <n-input-number :min="60" :max="600" step="1" placeholder="超时(秒)" v-model:value="aiConfig.timeOut"/>
+                        <n-tooltip placement="top">
+                          <template #trigger>
+                            <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
+                              <HelpCircleFilledIcon />
+                            </n-icon>
+                          </template>
+                          <template #default>
+                            <n-gradient-text :type="'warning'">
+                            <div style="max-width: 400px;text-align: left">
+                              单次请求超时秒数。<br>
+                              普通场景 120~300 足够；经常超时再加大。
+                            </div>
+                            </n-gradient-text>
+                          </template>
+                        </n-tooltip>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="12" label="深度思考">
+                      <n-form-item-gi :span="6" label="深度思考">
                         <n-switch v-model:value="aiConfig.thinking"/>
                         <n-tooltip placement="top">
                           <template #trigger>
@@ -904,14 +1110,14 @@ function importConfig() {
                           </template>
                         </n-tooltip>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="12" label="http代理" :path="`openAI.aiConfigs[${index}].httpProxyEnabled`">
+                      <n-form-item-gi :span="6" label="http代理">
                         <n-switch v-model:value="aiConfig.httpProxyEnabled"/>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="12" v-if="aiConfig.httpProxyEnabled" title="http代理地址" :path="`openAI.aiConfigs[${index}].httpProxy`">
-                        <n-input type="text" placeholder="http代理地址" v-model:value="aiConfig.httpProxy" clearable/>
+                      <n-form-item-gi :span="18" v-if="aiConfig.httpProxyEnabled" title="http代理地址" :path="`openAI.aiConfigs[${index}].httpProxy`">
+                        <n-input type="text" placeholder="http代理地址（如 http://127.0.0.1:7890）" v-model:value="aiConfig.httpProxy" clearable/>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="12" label="语义向量记忆">
-                        <n-switch v-model:value="aiConfig.embeddingEnabled"/>
+                      <n-form-item-gi :span="8" label="并发限制">
+                        <n-input-number v-model:value="aiConfig.llmConcurrencyLimit" :min="1" :max="20" step="1" placeholder="默认2"/>
                         <n-tooltip placement="top">
                           <template #trigger>
                             <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
@@ -920,20 +1126,53 @@ function importConfig() {
                           </template>
                           <template #default>
                             <n-gradient-text :type="'warning'">
-                            <div style="max-width: 400px;text-align: left"></div>
+                            <div style="max-width: 400px;text-align: left">
+                              多 Agent 协作分析时的并发调用数（默认 2）。<br>
+                              值越大速度越快，但更消耗 Tokens 与接口限额。
+                            </div>
                             </n-gradient-text>
                           </template>
                         </n-tooltip>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="12" v-if="aiConfig.embeddingEnabled" label="Embedding模型名" :path="`openAI.aiConfigs[${index}].embeddingModelName`">
-                        <n-input type="text" placeholder="bge-m3" v-model:value="aiConfig.embeddingModelName" clearable/>
+                      <n-form-item-gi :span="8" label="子Agent超时(秒)">
+                        <n-input-number v-model:value="aiConfig.subAgentTimeout" :min="5" :max="300" step="1" placeholder="默认20"/>
+                        <n-tooltip placement="top">
+                          <template #trigger>
+                            <n-icon color="#0e7a0d" size="20" style="margin-left: 8px;">
+                              <HelpCircleFilledIcon />
+                            </n-icon>
+                          </template>
+                          <template #default>
+                            <n-gradient-text :type="'warning'">
+                            <div style="max-width: 400px;text-align: left">
+                              子 Agent 每次调用的超时时间（秒，默认 20）。<br>
+                              过小易中断复杂分析，过大会拖慢整体响应。
+                            </div>
+                            </n-gradient-text>
+                          </template>
+                        </n-tooltip>
                       </n-form-item-gi>
-                      <n-form-item-gi :span="12" v-if="aiConfig.embeddingEnabled" label="Embedding服务地址" :path="`openAI.aiConfigs[${index}].embeddingBaseUrl`">
-                        <n-input type="text" placeholder="留空则使用AI服务地址" v-model:value="aiConfig.embeddingBaseUrl" clearable/>
+                      <n-form-item-gi :span="8" label="参数提示">
+                        <n-text depth="3" style="font-size: 12px;">
+                          建议：分析类任务 Temperature 0.2~0.5；<br>回答被截断再调大 MaxTokens；<br>并发限制默认 2 即可，过高更耗 Token 且易触发限流。
+                        </n-text>
                       </n-form-item-gi>
+                      <n-gi :span="24">
+                        <n-flex justify="end" style="margin-bottom: 8px;">
+                          <n-button type="primary" ghost size="small"
+                                    :loading="getMeta(index, aiConfig.ID).testing"
+                                    @click="testAiConfig(aiConfig, index)">
+                            测试连接
+                          </n-button>
+                          <n-button type="info" ghost size="small" @click="copyAiConfig(index)">
+                            复制配置
+                          </n-button>
+                        </n-flex>
+                      </n-gi>
                     </n-grid>
                   </n-collapse-item>
                 </n-collapse>
+                <n-empty v-if="aiConfigs.length === 0" description="还没有 AI 配置，点击下方按钮添加" style="padding: 12px 0;"/>
                 <n-button type="primary" dashed @click="addAiConfig" style="width: 100%;">+ 添加AI配置</n-button>
               </n-space>
             </n-gi>

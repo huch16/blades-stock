@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/paths"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,6 +57,10 @@ type Settings struct {
 	AkshareServiceUrl         string  `json:"akshareServiceUrl" gorm:"column:akshare_service_url;default:http://115.190.72.22:8089"`
 	ADataServiceUrl           string  `json:"aDataServiceUrl" gorm:"column:adata_service_url;default:http://115.190.72.22:8000"`
 	DefaultDataSource         string  `json:"defaultDataSource" gorm:"column:default_data_source;default:adata"`
+	EmbeddingEnabled          bool    `json:"embeddingEnabled" gorm:"column:embedding_enabled;default:false"`
+	EmbeddingModelName        string  `json:"embeddingModelName" gorm:"column:embedding_model_name"`
+	EmbeddingBaseUrl          string  `json:"embeddingBaseUrl" gorm:"column:embedding_base_url"`
+	EmbeddingApiKey           string  `json:"embeddingApiKey" gorm:"column:embedding_api_key"`
 }
 
 func (receiver Settings) TableName() string {
@@ -271,11 +276,7 @@ func cleanupBrowserTemp() string {
 	return fmt.Sprintf("已清理 %d 个浏览器临时目录", removed)
 }
 func backupDirPath() string {
-	exe, err := os.Executable()
-	if err == nil {
-		return filepath.Join(filepath.Dir(exe), "backups")
-	}
-	return "backups"
+	return filepath.Join(paths.BaseDir(), "backups")
 }
 
 // BackupData 导出用户数据到 CSV，返回生成的文件路径
@@ -650,6 +651,9 @@ func UpdateConfig(s *SettingConfig) string {
 			return fmt.Sprintf("保存失败: 第 %d 项 %s", i+1, msg)
 		}
 	}
+	if s.EmbeddingEnabled && strings.TrimSpace(s.EmbeddingModelName) == "" {
+		return "保存失败: 向量模型已启用但未配置模型名称"
+	}
 	err := db.Dao.Transaction(func(tx *gorm.DB) error {
 		count := int64(0)
 		// 清理已废弃字段，避免旧数据污染
@@ -691,6 +695,10 @@ func UpdateConfig(s *SettingConfig) string {
 				"window_width":               s.WindowWidth,
 				"window_height":              s.WindowHeight,
 				"prompt_plaza_api_base":      s.PromptPlazaApiBase,
+				"embedding_enabled":          s.EmbeddingEnabled,
+				"embedding_model_name":       s.EmbeddingModelName,
+				"embedding_base_url":         s.EmbeddingBaseUrl,
+				"embedding_api_key":          s.EmbeddingApiKey,
 			})
 			if result.Error != nil {
 				return result.Error
@@ -762,6 +770,8 @@ func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
 				"http_proxy_enabled":   item.HttpProxyEnabled,
 				"session_id":           item.SessionId,
 				"thinking":             item.Thinking,
+				"llm_concurrency_limit": item.LLMConcurrencyLimit,
+				"sub_agent_timeout":     item.SubAgentTimeout,
 				"embedding_enabled":    item.EmbeddingEnabled,
 				"embedding_model_name": item.EmbeddingModelName,
 				"embedding_base_url":   item.EmbeddingBaseUrl,
@@ -820,6 +830,12 @@ func GetSettingConfig() *SettingConfig {
 			}
 			if item.Temperature <= 0 {
 				item.Temperature = 0.7
+			}
+			if item.LLMConcurrencyLimit <= 0 {
+				item.LLMConcurrencyLimit = 2
+			}
+			if item.SubAgentTimeout <= 0 {
+				item.SubAgentTimeout = 20
 			}
 		})
 	}

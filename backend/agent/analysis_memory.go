@@ -15,9 +15,14 @@ func NewAnalysisMemoryService() *AnalysisMemoryService {
 }
 
 // LoadRelevantReports 查询与当前问题相关的历史分析报告
+// 注意：未提供股票代码/名称（通用性问题，如"推荐ETF"）时不注入个股记忆，
+// 否则会把最近一次个股分析报告错误地塞给无关问题，导致答非所问。
 func (s *AnalysisMemoryService) LoadRelevantReports(stockCode, stockName string, limit int) []models.AIResponseResult {
 	if limit <= 0 {
 		limit = 5
+	}
+	if stockCode == "" && stockName == "" {
+		return nil
 	}
 	var results []models.AIResponseResult
 	q := db.Dao.Model(&models.AIResponseResult{}).Where("is_del = 0")
@@ -30,12 +35,6 @@ func (s *AnalysisMemoryService) LoadRelevantReports(stockCode, stockName string,
 	}
 
 	q.Order("id desc").Limit(limit).Find(&results)
-
-	if len(results) == 0 && stockCode == "" && stockName == "" {
-		var recent []models.AIResponseResult
-		db.Dao.Model(&models.AIResponseResult{}).Where("is_del = 0").Order("id desc").Limit(limit).Find(&recent)
-		return recent
-	}
 
 	return results
 }

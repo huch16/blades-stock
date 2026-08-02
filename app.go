@@ -2385,6 +2385,87 @@ func (a *App) FetchAiModels(baseUrl, apiKey string) []string {
 	return modelsList
 }
 
+// TestAiConnection
+//
+//	@Description: 真实调用 /chat/completions 验证 AI 配置连通性（兼容 DeepSeek/Ollama 等不支持 /models 的服务）
+//	@receiver a
+//	@param baseUrl  接口地址（如 https://api.deepseek.com）
+//	@param apiKey   鉴权令牌（Ollama 本地可留空）
+//	@param modelName 模型名（必填，用于真实请求）
+//	@return string 空串表示连接成功，否则为可读的错误信息
+func (a *App) TestAiConnection(baseUrl, apiKey, modelName string) string {
+	baseUrl = strutil.Trim(baseUrl)
+	apiKey = strutil.Trim(apiKey)
+	modelName = strutil.Trim(modelName)
+	if baseUrl == "" {
+		return "接口地址不能为空"
+	}
+	if modelName == "" {
+		return "请先在「模型名」中选择或填写一个模型"
+	}
+	isLocalOllama := strings.Contains(baseUrl, "localhost:11434") || strings.Contains(baseUrl, "127.0.0.1:11434")
+	if apiKey == "" && !isLocalOllama {
+		return "请填写 ApiKey"
+	}
+
+	client := resty.New()
+	client.SetBaseURL(baseUrl)
+	client.SetTimeout(20 * time.Second)
+
+	payload := map[string]any{
+		"model":     modelName,
+		"max_tokens": 1,
+		"stream":    false,
+		"messages": []map[string]string{
+			{"role": "user", "content": "ping"},
+		},
+	}
+	resp, err := client.R().
+		SetHeader("Authorization", "Bearer "+apiKey).
+		SetHeader("Content-Type", "application/json").
+		SetBody(payload).
+		Post("/chat/completions")
+	if err != nil {
+		logger.SugaredLogger.Errorf("TestAiConnection error: %v", err)
+		return "无法访问接口：" + err.Error()
+	}
+	if resp.IsError() {
+		msg := parseOpenAIErrorBody(resp.Body())
+		if msg == "" {
+			msg = "HTTP " + resp.Status()
+		}
+		logger.SugaredLogger.Errorf("TestAiConnection http error: %s body: %s", resp.Status(), string(resp.Body()))
+		return msg
+	}
+	return ""
+}
+
+// parseOpenAIErrorBody 提取 OpenAI 兼容服务错误体中的可读信息
+func parseOpenAIErrorBody(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var v struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &v); err == nil && v.Error.Message != "" {
+		if v.Error.Type != "" {
+			return v.Error.Type + ": " + v.Error.Message
+		}
+		return v.Error.Message
+	}
+	var e struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &e); err == nil && e.Error != "" {
+		return e.Error
+	}
+	return ""
+}
+
 type AiModelInfo struct {
 	ModelName string `json:"modelName"`
 	MaxTokens int    `json:"maxTokens"`
