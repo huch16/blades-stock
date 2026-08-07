@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,7 @@ func decomposeIntoSubPrompts(question string, groups map[tools.ToolGroup]bool) m
 		tools.GroupScreening:     "请获取符合筛选条件的股票/ETF/基金列表及其关键指标。",
 		tools.GroupAIAnalysis:    "请获取AI历史分析记录和回测数据。",
 		tools.GroupOperations:    "请获取基金信息和操作相关数据。",
+		tools.GroupProject:       "请获取项目相关数据（MCP服务器、回测策略等）。",
 	}
 
 	for g := range groups {
@@ -138,7 +140,7 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 			subCtx, cancel := context.WithTimeout(ctx, subAgentTimeout)
 			defer cancel()
 
-			groupTools := tools.FilterToolsByGroups(allTools, map[tools.ToolGroup]bool{
+			groupTools := tools.FilterToolsByGroupsCapped(allTools, map[tools.ToolGroup]bool{
 				tools.GroupBase: true,
 				group:           true,
 			})
@@ -158,8 +160,8 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 			subAgent, err := blades.NewAgent("sub-"+string(group),
 				blades.WithModel(subModel),
 				blades.WithTools(groupTools...),
-				blades.WithMaxIterations(20),
-				blades.WithInstruction("你是专业的数据采集助手，专注于"+describeGroup(group)+"领域。\n\n【重要】你拥有 "+fmt.Sprintf("%d", len(groupTools))+" 个可用工具，所有工具名称和功能已自动注入，请直接使用。\n\n【行为准则】\n1. 工具调用失败立即换工具，不要放弃；\n2. 只返回原始数据，不要冗余分析；\n3. 所有工具均失败时，说明已尝试的工具列表。"),
+				blades.WithMaxIterations(8),
+				blades.WithInstruction(fmt.Sprintf(GetPromptTemplates().SubAgentInstruction, describeGroup(group))),
 			)
 			if err != nil {
 				logger.SugaredLogger.Errorf("[parallel] failed to create sub-agent for %s: %v", group, err)
@@ -223,30 +225,202 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 }
 
 // buildParallelContext builds a system-context string from pre-fetched data
-// that the main agent can use without making additional tool calls.
+// that the main agent can use without making additional tool calls. Results
+// from overlapping tool groups are deduplicated and cross-group conflicts are
+// flagged so the main agent doesn't repeat tool calls or trust contradictions.
 func buildParallelContext(data []PreFetchedData) string {
 	if len(data) == 0 {
 		return ""
 	}
 
+	merged := mergeParallelResults(data)
+
 	var sb strings.Builder
 	sb.WriteString("【以下是通过并行数据采集预先获取的原始数据，供你在生成最终回答时直接参考使用】\n\n")
-	fallbackCount := 0
-	for _, d := range data {
-		if d.Fallback {
-			fallbackCount++
-			sb.WriteString("===== " + describeGroup(tools.ToolGroup(d.Group)) + " [FALLBACK: 数据可能不完整] =====\n")
+
+	for _, section := range merged.sections {
+		if section.Fallback {
+			sb.WriteString("===== " + section.Group + " [FALLBACK: 数据可能不完整] =====\n")
 		} else {
-			sb.WriteString("===== " + describeGroup(tools.ToolGroup(d.Group)) + " =====\n")
+			sb.WriteString("===== " + section.Group + " =====\n")
 		}
-		sb.WriteString(truncateString(d.Summary, 4000))
+		sb.WriteString(truncateString(section.Summary, 4000))
 		sb.WriteString("\n\n")
 	}
-	if fallbackCount > 0 {
-		sb.WriteString(fmt.Sprintf("【注意】上述 %d 个并行子任务出现超时/降级，数据可能不完整。主Agent可根据需要补充调用工具。\n\n", fallbackCount))
+
+	if len(merged.consistencyNotes) > 0 {
+		sb.WriteString("【数据一致性提示】以下信息已在多个数据组中交叉出现，主Agent可直接采信；对其中互相矛盾的部分请谨慎处理或补充验证：\n")
+		for _, note := range merged.consistencyNotes {
+			sb.WriteString("- " + note + "\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	if merged.fallbackCount > 0 {
+		sb.WriteString(fmt.Sprintf("【注意】上述 %d 个并行子任务出现超时/降级，数据可能不完整。主Agent可根据需要补充调用工具。\n\n", merged.fallbackCount))
 	}
 	sb.WriteString("【预采集数据结束】\n\n以上数据已由系统并行采集完毕。你无需再次调用工具查询同样的内容，直接基于以上数据进行分析和回答即可。如有额外需求，仍可使用你的工具。")
 	return sb.String()
+}
+
+type parallelSection struct {
+	Group    string
+	Summary  string
+	Fallback bool
+}
+
+type mergedParallel struct {
+	sections         []parallelSection
+	consistencyNotes []string
+	fallbackCount    int
+}
+
+// mergeParallelResults deduplicates repeated facts across tool groups and
+// detects likely contradictions (e.g. the same stock reported up by one group
+// and down by another) so the final context is cleaner and safer.
+func mergeParallelResults(data []PreFetchedData) mergedParallel {
+	out := mergedParallel{}
+
+	stockSigns := make(map[string]map[string]string) // code -> group -> "up"/"down"
+
+	for _, d := range data {
+		if d.Fallback {
+			out.fallbackCount++
+		}
+	}
+
+	// 1) Collect stock-code mentions + polarity for conflict detection.
+	for _, d := range data {
+		if d.Fallback {
+			continue
+		}
+		groupName := describeGroup(tools.ToolGroup(d.Group))
+		for _, code := range codeMentionRe.FindAllString(d.Summary, -1) {
+			if stockSigns[code] == nil {
+				stockSigns[code] = make(map[string]string)
+			}
+			stockSigns[code][groupName] = inferPolarity(d.Summary)
+		}
+	}
+
+	// 2) Build per-group deduplicated sections.
+	seenLines := make(map[string]string) // normalized line -> originating group
+	for _, d := range data {
+		groupName := describeGroup(tools.ToolGroup(d.Group))
+		deduped := dedupeSummaryLines(d.Summary, seenLines)
+		out.sections = append(out.sections, parallelSection{
+			Group:    groupName,
+			Summary:  deduped,
+			Fallback: d.Fallback,
+		})
+	}
+
+	// 3) Conflict detection: same stock reported with opposite polarity.
+	for code, signs := range stockSigns {
+		var upGroups, downGroups []string
+		for g, s := range signs {
+			switch s {
+			case "up":
+				upGroups = append(upGroups, g)
+			case "down":
+				downGroups = append(downGroups, g)
+			}
+		}
+		if len(upGroups) > 0 && len(downGroups) > 0 {
+			out.consistencyNotes = append(out.consistencyNotes, fmt.Sprintf(
+				"股票 %s 在不同数据组中出现方向性矛盾：%s 组看涨，%s 组看跌，请交叉验证", code,
+				strings.Join(upGroups, "/"), strings.Join(downGroups, "/")))
+		}
+	}
+
+	return out
+}
+
+// Precompiled regex + polarity word lists used by the parallel result merge.
+var (
+	codeMentionRe = regexp.MustCompile(`\d{6}`)
+	polarityUp    = []string{"上涨", "涨", "拉升", "走高", "净流入", "流入", "买入", "增持", "放量", "阳", "反弹"}
+	polarityDown  = []string{"下跌", "跌", "跳水", "走低", "净流出", "流出", "卖出", "减持", "缩量", "阴", "回调"}
+)
+
+// inferPolarity does a cheap keyword-based direction guess for conflict checks.
+// Returns "up", "down" or "" when unclear.
+func inferPolarity(text string) string {
+	up := 0
+	down := 0
+	for _, w := range polarityUp {
+		if strings.Contains(text, w) {
+			up++
+		}
+	}
+	for _, w := range polarityDown {
+		if strings.Contains(text, w) {
+			down++
+		}
+	}
+	if up > down {
+		return "up"
+	}
+	if down > up {
+		return "down"
+	}
+	return ""
+}
+
+// dedupeSummaryLines removes lines already emitted by an earlier group so the
+// same fact (e.g. identical quote line) isn't injected twice.
+func dedupeSummaryLines(summary string, seen map[string]string) string {
+	if summary == "" {
+		return summary
+	}
+	lines := strings.Split(summary, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		norm := normalizeFactLine(line)
+		if norm == "" {
+			out = append(out, line)
+			continue
+		}
+		if origin, ok := seen[norm]; ok {
+			if origin != "" {
+				out = append(out, line+"（与"+origin+"组重复，已合并）")
+			}
+			continue
+		}
+		seen[norm] = ""
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+// normalizeFactLine builds a stable key for a data-ish line so identical facts
+// across groups collapse. Pure text lines (analysis prose) are returned as-is
+// and treated as unique per group.
+func normalizeFactLine(line string) string {
+	t := strings.TrimSpace(line)
+	if t == "" {
+		return ""
+	}
+	if !containsAnyDigit(t) {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range t {
+		if r == ' ' || r == '\t' || r == '，' || r == ',' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+func containsAnyDigit(s string) bool {
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+	}
+	return false
 }
 
 // describeGroup returns a human-readable Chinese description for a tool group.

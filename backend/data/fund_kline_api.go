@@ -7,6 +7,7 @@ import (
 	"blades-stock/backend/logger"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -43,11 +44,90 @@ var (
 	reACWorthTrend  = regexp.MustCompile(`var\s+Data_ACWorthTrend\s*=\s*(\[.+?\]);`)
 )
 
-func (f *FundKLineApi) GetFundKLine(fundCode, klt string, limit int) *KLineSourceResult {
-	if IsOnExchangeFund(fundCode) {
-		return f.getOnExchangeFundKLine(fundCode, klt, limit)
+// fundKLineCache guards repeated GetFundKLine calls from re-hitting the
+// multi-source fallback chain (EastMoney→Tencent→Sina→NAV synth) for the same
+// fund within a short window. Failures get a short cooldown so a dead data
+// source does not flood the log every call; successes are served for 5 minutes.
+const (
+	fundKLineCacheTTL   = 5 * time.Minute
+	fundKLineFailTTL    = 60 * time.Second
+	fundKLineCacheLimit = 4096
+)
+
+type fundKLineCacheEntry struct {
+	data      []KLineData
+	source    string
+	limit     int
+	fetchedAt time.Time
+	failed    bool
+}
+
+var (
+	fundKLineCacheMu sync.RWMutex
+	fundKLineCache   = make(map[string]*fundKLineCacheEntry)
+)
+
+func fundKLineCacheKey(fundCode, klt string) string {
+	return fundCode + "|" + klt
+}
+
+func fundKLineCacheGet(fundCode, klt string, limit int) *KLineSourceResult {
+	fundKLineCacheMu.RLock()
+	e, ok := fundKLineCache[fundKLineCacheKey(fundCode, klt)]
+	fundKLineCacheMu.RUnlock()
+	if !ok {
+		return nil
 	}
-	return f.getOffExchangeFundKLine(fundCode, klt, limit)
+	if e.failed {
+		if time.Since(e.fetchedAt) <= fundKLineFailTTL {
+			data := append([]KLineData(nil), e.data...)
+			return &KLineSourceResult{Data: &data, Source: e.source}
+		}
+		return nil
+	}
+	if time.Since(e.fetchedAt) > fundKLineCacheTTL || e.limit < limit {
+		return nil
+	}
+	data := append([]KLineData(nil), e.data...)
+	return &KLineSourceResult{Data: &data, Source: e.source}
+}
+
+func fundKLineCacheSet(fundCode, klt string, result *KLineSourceResult, limit int) {
+	var data []KLineData
+	source := ""
+	if result != nil && result.Data != nil {
+		data = *result.Data
+		source = result.Source
+	}
+	failed := len(data) == 0
+	fundKLineCacheMu.Lock()
+	defer fundKLineCacheMu.Unlock()
+	if len(fundKLineCache) >= fundKLineCacheLimit {
+		fundKLineCache = map[string]*fundKLineCacheEntry{}
+	}
+	fundKLineCache[fundKLineCacheKey(fundCode, klt)] = &fundKLineCacheEntry{
+		data:      append([]KLineData(nil), data...),
+		source:    source,
+		limit:     limit,
+		fetchedAt: time.Now(),
+		failed:    failed,
+	}
+}
+
+func (f *FundKLineApi) GetFundKLine(fundCode, klt string, limit int) *KLineSourceResult {
+	if cached := fundKLineCacheGet(fundCode, klt, limit); cached != nil {
+		return cached
+	}
+
+	var result *KLineSourceResult
+	if IsOnExchangeFund(fundCode) {
+		result = f.getOnExchangeFundKLine(fundCode, klt, limit)
+	} else {
+		result = f.getOffExchangeFundKLine(fundCode, klt, limit)
+	}
+
+	fundKLineCacheSet(fundCode, klt, result, limit)
+	return result
 }
 
 func (f *FundKLineApi) GetFundKLineWithFallback(fundCode, klt string, limit int) *KLineSourceResult {

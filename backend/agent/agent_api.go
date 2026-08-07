@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
 	"regexp"
 	"strings"
@@ -32,7 +33,7 @@ func NewStockAiAgentApi() *StockAiAgent {
 	return &StockAiAgent{}
 }
 
-func (receiver StockAiAgent) newStockAiAgent(ctx *context.Context, aiConfigId int, thinkingMode bool, question string, agentMode string, extraTools ...bladesTools.Tool) *StockAiAgent {
+func (receiver StockAiAgent) newStockAiAgent(ctx *context.Context, aiConfigId int, thinkingMode bool, question string, agentMode string, matchedSkills []models.Skill, extraTools ...bladesTools.Tool) *StockAiAgent {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.SugaredLogger.Errorf("panic in newStockAiAgent: %v", r)
@@ -78,7 +79,7 @@ func (receiver StockAiAgent) newStockAiAgent(ctx *context.Context, aiConfigId in
 		sessionID = fmt.Sprintf("ai-config-%d", aiConfig.ID)
 	}
 
-	agentInstance := GetStockAiAgent(*ctx, *aiConfig, question, agentMode, extraTools...)
+	agentInstance := GetStockAiAgent(*ctx, *aiConfig, question, agentMode, matchedSkills, extraTools...)
 	if agentInstance == nil {
 		logger.SugaredLogger.Errorf("failed to create agent for config id: %d", aiConfigId)
 		return nil
@@ -121,53 +122,28 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		settingConfig := data.GetSettingConfig()
 
-		// Build embedding service. Priority:
-		// 1) Global standalone embedding config (vector model) from settings.
-		// 2) Selected chat config's own embedding settings.
-		// 3) Scan all configs for an embedding-enabled one (e.g. bge-m3)
-		//    so that chat models without embedding support still get semantic matching.
-		var embedService *EmbeddingService
-		originalAiConfig, _ := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
-			return uint(aiConfigId) == item.ID
-		})
-		embedEnabled := settingConfig.EmbeddingEnabled && settingConfig.EmbeddingModelName != ""
-		if embedEnabled {
-			embedBaseUrl := settingConfig.EmbeddingBaseUrl
-			if embedBaseUrl == "" && originalAiConfig != nil {
-				embedBaseUrl = originalAiConfig.BaseUrl
-			}
-			embedService = NewEmbeddingService(
-				embedBaseUrl,
-				settingConfig.EmbeddingApiKey,
-				settingConfig.EmbeddingModelName,
-			)
-		} else {
-			embedCfg := originalAiConfig
-			if embedCfg == nil || !embedCfg.EmbeddingEnabled || embedCfg.EmbeddingModelName == "" {
-				for _, cfg := range settingConfig.AiConfigs {
-					if cfg.EmbeddingEnabled && cfg.EmbeddingModelName != "" {
-						embedCfg = cfg
-						break
-					}
-				}
-			}
-			if embedCfg != nil && embedCfg.EmbeddingEnabled && embedCfg.EmbeddingModelName != "" {
-				embedBaseUrl := embedCfg.EmbeddingBaseUrl
-				if embedBaseUrl == "" {
-					embedBaseUrl = embedCfg.BaseUrl
-				}
-				embedService = NewEmbeddingService(
-					embedBaseUrl,
-					embedCfg.ApiKey,
-					embedCfg.EmbeddingModelName,
-				)
+		var originalAiConfig *data.AIConfig
+		for _, cfg := range settingConfig.AiConfigs {
+			if cfg != nil && uint(aiConfigId) == cfg.ID {
+				originalAiConfig = cfg
+				break
 			}
 		}
+		embedService := ResolveEmbeddingService(settingConfig, originalAiConfig)
 
-		// Detect skill before creating agent, so we can log skill usage
-		skillPrompt := buildSkillPrompt(question, embedService)
+		// Match skills once, then reuse both for the skill prompt and for
+		// force-enabling each skill's required tool groups in the agent.
+		matchedSkills := matchSkills(question, embedService)
+		if len(matchedSkills) > 0 {
+			names := make([]string, 0, len(matchedSkills))
+			for _, s := range matchedSkills {
+				names = append(names, s.Name)
+			}
+			logger.SugaredLogger.Infof("skills matched: %v", names)
+		}
+		skillPrompt := BuildShortSkillPrompt(matchedSkills)
 
-		stockAiAgent := receiver.newStockAiAgent(&ctx, aiConfigId, thinkingMode, question, agentMode)
+		stockAiAgent := receiver.newStockAiAgent(&ctx, aiConfigId, thinkingMode, question, agentMode, matchedSkills)
 		if stockAiAgent == nil {
 			logger.SugaredLogger.Errorf("stockAiAgent is nil")
 			ch <- &StreamMessage{
@@ -184,11 +160,17 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		// Apply timeout from AI config to the context, so the LLM HTTP call
 		// respects the configured timeout instead of hanging indefinitely.
-		// Default to 300s (5 min) if not configured, matching the frontend timeout.
+		// Default to 300s (5 min) if not configured. Floor at 900s (15 min):
+		// multi-step skill analysis (e.g. ETF轮动) with a thinking model plus
+		// data-source fallbacks can legitimately exceed 10 minutes, and the
+		// frontend streams via the Wails binding without a shorter cap.
 		if stockAiAgent.instance != nil {
 			timeOutSec := stockAiAgent.instance.AIConfig.TimeOut
 			if timeOutSec <= 0 {
 				timeOutSec = 300
+			}
+			if timeOutSec < 900 {
+				timeOutSec = 900
 			}
 			toCtx, cancel := context.WithTimeout(ctx, time.Duration(timeOutSec)*time.Second)
 			ctx = toCtx
@@ -219,20 +201,13 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if skillPrompt != "" {
 				sysPrompt += skillPrompt + "\n\n"
 			}
-			sysPrompt += `【强制规则】你必须通过工具调用获取实时数据，严禁凭记忆编造或使用过时数据。以下场景必须调用工具：
-1. 股票/指数行情数据（价格、涨跌幅、成交量等）——必须调用工具获取最新实时数据
-2. 财务数据（营收、利润、市盈率PE、市净率PB、ROE、毛利率、净利率等）——必须调用工具获取最新财报数据
-3. 资金流向数据（主力净流入/流出、大单、超大单、散户）——必须调用工具获取
-4. 技术指标（均线MA、MACD、KDJ、RSI等）——必须调用工具或基于实时行情推算
-5. 新闻资讯——必须调用工具获取最新新闻
-6. 宏观经济数据——必须调用工具获取最新数据
+			sysPrompt += GetPromptTemplates().SystemRules
+		}
 
-【数据真实性红线】这是最高优先级规则：
-- 严禁凭空编造PE、PB、ROE、营收、利润、毛利率、净利率、资金流向金额、成交额、股东人数、换手率、均线价格等任何数字指标
-- 如果你没有通过工具获取到某个指标的确切数值，必须明确说"数据不可得"或"未查询到"，绝不能编造一个数字充数
-- 如果你不确定某个信息的来源，不要声称它来自"公告"、"公司披露"或"机构调研"
-- 任何涉及具体数字的回答，都必须先通过工具查询确认，不得使用训练数据中的过时信息
-- 如果你没有获取到最新数据，必须明确告知用户"当前未能获取到最新数据"`
+		// 当日市场状态注入（TTL 缓存，复用 GetMarketData 数据源）：市场相关
+		// 问题附带今日大盘概览，让 Agent 有"今天"的真实上下文。
+		if brief := getDailyMarketBrief(question); brief != "" {
+			sysPrompt += "\n\n" + brief
 		}
 
 		aiConfig, _ := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
@@ -240,7 +215,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		})
 		maxInputTokens := 0
 		if aiConfig != nil {
-			maxInputTokens = getMaxInputTokens(aiConfig.MaxTokens)
+			modeIsPlanExecute := agentMode == string(AgentModePlanExecute)
+			maxInputTokens = getMaxInputTokens(aiConfig.ModelName, modeIsPlanExecute)
 		}
 
 		sysPromptTokens := estimateTokens(sysPrompt)
@@ -286,6 +262,15 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			bladeHistory = append([]*blades.Message{blades.SystemMessage(analysisMem)}, bladeHistory...)
 		}
 
+		// inject long-term facts + reflection lessons so the quality loop's
+		// output actually reaches future conversations (write side only used to
+		// store; this is the missing read-side wiring of MemoryPrompt).
+		if memoryManager := DefaultMemoryManager(); memoryManager != nil {
+			if memPrompt := memoryManager.MemoryPrompt(stockAiAgent.sessionID); memPrompt != "" {
+				bladeHistory = append([]*blades.Message{blades.SystemMessage(memPrompt)}, bladeHistory...)
+			}
+		}
+
 		// inject backtest track record
 		btMgr := quant.NewBacktestManager()
 		if stockCode != "" {
@@ -319,97 +304,166 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			ReasoningContent: "[STATUS]🤔 正在理解问题并制定分析计划...",
 		}
 
-		invocation := &blades.Invocation{
-			Message:     blades.UserMessage(question),
-			Instruction: blades.SystemMessage(sysPrompt),
-			History:     bladeHistory,
-			Streamable:  true,
-		}
-		invocation.Message.Metadata = map[string]any{
-			"agent_mode": string(stockAiAgent.instance.Mode),
-		}
-
 		var fullResponse strings.Builder
 		var toolNames []string
+		var toolSuccess []bool
 		var agentErr error
-		for msg, err := range stockAiAgent.instance.Agent.Run(ctx, invocation) {
-			if err != nil {
-				agentErr = err
-				logger.SugaredLogger.Errorf("agent run error: %v", err)
 
-				errMsg := fmt.Sprintf("❌ Agent 调用失败：%v", err)
-				if strings.Contains(err.Error(), "exceeds max iterations") {
-					errMsg += "\n\n**可能原因**：模型在执行过程中进行了过多轮工具调用仍无法收敛，可能陷入了循环。\n\n**解决方案**：\n1. 尝试更精确地描述你的问题，减少模糊性\n2. 切换到支持更长上下文或更强推理能力的模型\n3. 简化查询条件"
-				} else if strings.Contains(err.Error(), "reasoning") || strings.Contains(err.Error(), "thinking") {
-					errMsg += "\n\n**可能原因**：当前模型开启了 thinking/reasoning 模式，但该模式与 Agent 工具调用不兼容。\n\n**解决方案**：请在 AI 配置中关闭 thinking 模式，或切换到支持工具调用的模型（如 deepseek-chat、gpt-4o 等）。"
+		// runOnce executes one full agent pass (react loop + tool calls) and streams
+		// to ch. A fresh invocation is built per attempt so a failed pass never
+		// carries resume/session state into the retry.
+		runOnce := func() error {
+			// Stateful filter that drops <think>...</think> reasoning blocks the
+			// model wrote into its content (MiniMax-M3 style) as the stream
+			// arrives. Fresh per attempt so a retry never inherits a stuck state.
+			var thinkFilter thinkStreamFilter
+			invocation := &blades.Invocation{
+				Message:     blades.UserMessage(question),
+				Instruction: blades.SystemMessage(sysPrompt),
+				History:     bladeHistory,
+				Streamable:  true,
+			}
+			invocation.Message.Metadata = map[string]any{
+				"agent_mode":      string(stockAiAgent.instance.Mode),
+				"available_tools": toolNameList(stockAiAgent.instance.AllTools),
+			}
+
+			for msg, err := range stockAiAgent.instance.Agent.Run(ctx, invocation) {
+				if err != nil {
+					return err
 				}
 
-				ch <- &StreamMessage{
-					Role:    "assistant",
-					Content: errMsg,
+				if msg == nil {
+					continue
 				}
+
+				if msg.Role == blades.RoleAssistant {
+					text := msg.Text()
+					if text != "" {
+						// Strip <think> reasoning blocks the model wrote into the
+						// content before streaming, so the live UI never shows them.
+						text = thinkFilter.Clean(text)
+						if text != "" {
+							// 质量校验：模型输出 <unk> 乱码流时，拒绝写入并立即终止
+							// 本次尝试，让外层重试逻辑用干净状态重新生成。
+							if data.IsDegenerateGarbage(text) {
+								logger.SugaredLogger.Warnf("agent stream degenerate <unk> garbage, aborting attempt (len=%d)", len(text))
+								return data.DegenerateOutputError{}
+							}
+							// The model is now writing the final answer — announce it
+							// before the first content delta so the status appears ahead
+							// of the body instead of after it.
+							if fullResponse.Len() == 0 {
+								ch <- &StreamMessage{
+									Role:             "assistant",
+									Content:          "",
+									ReasoningContent: "[STATUS]✍️ 正在根据数据生成回答...",
+								}
+							}
+							// Skip if this is the final accumulated message (openai stream
+							// yields both delta chunks and the final full text — appending
+							// the full text again causes duplication in the frontend).
+							if fullResponse.Len() > 0 && text == fullResponse.String() {
+								// final accumulated message, already streamed as deltas
+							} else {
+								fullResponse.WriteString(text)
+								ch <- &StreamMessage{
+									Role:    "assistant",
+									Content: text,
+								}
+							}
+						}
+					}
+
+					if msg.Metadata != nil {
+						if rc, ok := msg.Metadata["reasoning_content"].(string); ok && rc != "" {
+							ch <- &StreamMessage{
+								Role:             "assistant",
+								Content:          "",
+								ReasoningContent: rc,
+							}
+						}
+					}
+				}
+
+				for _, part := range msg.Parts {
+					if tp, ok := part.(*blades.ToolPart); ok {
+						toolNames = append(toolNames, tp.Name)
+						toolSuccess = append(toolSuccess, toolCallSucceeded(tp.Response))
+						logger.SugaredLogger.Infof("[ToolCall] %s(%s)", tp.Name, tp.Request)
+						ch <- &StreamMessage{
+							Role:             "assistant",
+							Content:          "",
+							ReasoningContent: fmt.Sprintf("[STEP]🔧 调用工具：%s(%s)\n", tp.Name, tp.Request),
+						}
+						if tp.Response != "" {
+							resultLen := len(tp.Response)
+							status := "✅"
+							if resultLen == 0 || strings.Contains(tp.Response, "error") || strings.Contains(tp.Response, "失败") {
+								status = "⚠️"
+							}
+							summary := tp.Response
+							if len(summary) > 80 {
+								summary = summary[:80] + "..."
+							}
+							summary = strings.ReplaceAll(summary, "\n", " ")
+							ch <- &StreamMessage{
+								Role:             "assistant",
+								Content:          "",
+								ReasoningContent: fmt.Sprintf("[STEP]%s 工具 %s 返回数据 (%d 字符): %s\n", status, tp.Name, resultLen, summary),
+							}
+						}
+					}
+				}
+			}
+			return nil
+		}
+
+		// Retry the whole pass only for transient server-side failures (rate limit /
+		// overload / 5xx) or degenerate <unk> streams, that happen before any answer
+		// text was streamed — a partial answer cannot be un-sent to the frontend,
+		// so those surface as errors.
+		const maxAttempts = 3
+		for attempt := 1; attempt <= maxAttempts; attempt++ {
+			agentErr = runOnce()
+			if agentErr == nil {
 				break
 			}
+			if attempt == maxAttempts {
+				break
+			}
+			_, isDegenerate := agentErr.(data.DegenerateOutputError)
+			if (!isTransientModelError(agentErr) && !isDegenerate) || fullResponse.Len() > 0 {
+				break
+			}
+			logger.SugaredLogger.Infof("transient model error (attempt %d/%d), retrying: %v", attempt, maxAttempts, agentErr)
+			select {
+			case <-ctx.Done():
+				agentErr = ctx.Err()
+			case <-time.After(time.Duration(attempt) * 2 * time.Second):
+			}
+			if ctx.Err() != nil {
+				break
+			}
+		}
 
-			if msg == nil {
-				continue
+		if agentErr != nil {
+			logger.SugaredLogger.Errorf("agent run error: %v", agentErr)
+
+			errMsg := fmt.Sprintf("❌ Agent 调用失败：%v", agentErr)
+			if _, ok := agentErr.(data.DegenerateOutputError); ok {
+				errMsg = "❌ 模型输出异常：检测到乱码(<unk>)流，已自动重试仍失败。\n\n**建议**：请重试一次；若反复出现，请切换 AI 配置中的模型。"
+			} else if strings.Contains(agentErr.Error(), "exceeds max iterations") {
+				errMsg += "\n\n**可能原因**：模型在执行过程中进行了过多轮工具调用仍无法收敛，可能陷入了循环。\n\n**解决方案**：\n1. 尝试更精确地描述你的问题，减少模糊性\n2. 切换到支持更长上下文或更强推理能力的模型\n3. 简化查询条件"
+			} else if strings.Contains(agentErr.Error(), "reasoning") || strings.Contains(agentErr.Error(), "thinking") {
+				errMsg += "\n\n**可能原因**：当前模型开启了 thinking/reasoning 模式，但该模式与 Agent 工具调用不兼容。\n\n**解决方案**：请在 AI 配置中关闭 thinking 模式，或切换到支持工具调用的模型（如 deepseek-chat、gpt-4o 等）。"
+			} else if isTransientModelError(agentErr) {
+				errMsg += "\n\n**提示**：模型服务端暂时繁忙（限流/过载），已自动重试仍失败，请稍后再试或切换其他 AI 配置。"
 			}
 
-			if msg.Role == blades.RoleAssistant {
-				text := msg.Text()
-				if text != "" {
-					// Skip if this is the final accumulated message (openai stream
-					// yields both delta chunks and the final full text — appending
-					// the full text again causes duplication in the frontend).
-					if fullResponse.Len() > 0 && text == fullResponse.String() {
-						// final accumulated message, already streamed as deltas
-					} else {
-						fullResponse.WriteString(text)
-						ch <- &StreamMessage{
-							Role:    "assistant",
-							Content: text,
-						}
-					}
-				}
-
-				if msg.Metadata != nil {
-					if rc, ok := msg.Metadata["reasoning_content"].(string); ok && rc != "" {
-						ch <- &StreamMessage{
-							Role:             "assistant",
-							Content:          "",
-							ReasoningContent: rc,
-						}
-					}
-				}
-			}
-
-			for _, part := range msg.Parts {
-				if tp, ok := part.(*blades.ToolPart); ok {
-					toolNames = append(toolNames, tp.Name)
-					logger.SugaredLogger.Infof("[ToolCall] %s(%s)", tp.Name, tp.Request)
-					ch <- &StreamMessage{
-						Role:             "assistant",
-						Content:          "",
-						ReasoningContent: fmt.Sprintf("[STEP]🔧 调用工具：%s(%s)\n", tp.Name, tp.Request),
-					}
-					if tp.Response != "" {
-						resultLen := len(tp.Response)
-						status := "✅"
-						if resultLen == 0 || strings.Contains(tp.Response, "error") || strings.Contains(tp.Response, "失败") {
-							status = "⚠️"
-						}
-						summary := tp.Response
-						if len(summary) > 80 {
-							summary = summary[:80] + "..."
-						}
-						summary = strings.ReplaceAll(summary, "\n", " ")
-						ch <- &StreamMessage{
-							Role:             "assistant",
-							Content:          "",
-							ReasoningContent: fmt.Sprintf("[STEP]%s 工具 %s 返回数据 (%d 字符): %s\n", status, tp.Name, resultLen, summary),
-						}
-					}
-				}
+			ch <- &StreamMessage{
+				Role:    "assistant",
+				Content: errMsg,
 			}
 		}
 
@@ -419,10 +473,13 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			return
 		}
 
-		ch <- &StreamMessage{
-			Role:             "assistant",
-			Content:          "",
-			ReasoningContent: "[STATUS]✍️ 正在根据数据生成回答...",
+		// Fold a duplicated final answer (MiniMax-M3 sometimes emits the whole
+		// answer twice, once before and once after a re-confirmation think block)
+		// so memory and post-processing persist a single copy. The frontend
+		// performs the same collapse at finish time for its rendered copy.
+		if collapsed := cleanFinalContent(fullResponse.String()); collapsed != fullResponse.String() {
+			fullResponse.Reset()
+			fullResponse.WriteString(collapsed)
 		}
 
 		if fullResponse.Len() != 0 && memoryService != nil {
@@ -433,7 +490,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		// fire-and-forget post-processing: memory, evaluation, tool ranking
 		if fullResponse.Len() > 0 && stockAiAgent != nil && stockAiAgent.sessionID != "" {
-			go postProcessResponse(stockAiAgent.sessionID, question, fullResponse.String(), toolNames)
+			go postProcessResponse(stockAiAgent.sessionID, question, fullResponse.String(), toolNames, toolSuccess)
 		}
 
 		ch <- &StreamMessage{
@@ -449,7 +506,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 // postProcessResponse runs memory storage, evaluation, and tool ranking in
 // parallel after the agent response is complete. It is fire-and-forget and
 // must not block the response stream.
-func postProcessResponse(sessionID, question, response string, toolNames []string) {
+func postProcessResponse(sessionID, question, response string, toolNames []string, toolSuccess []bool) {
 	recoverLog := func(label string) {
 		if r := recover(); r != nil {
 			logger.SugaredLogger.Errorf("panic in postProcessResponse [%s]: %v", label, r)
@@ -466,22 +523,31 @@ func postProcessResponse(sessionID, question, response string, toolNames []strin
 		DefaultMemoryManager().Add(sessionID, "assistant", response)
 	}()
 
-	// 2. Score and store reflection
+	// 2. Score and store reflection. LLM scoring is gated (substantive / negative
+	// / sampled answers) to bound cost; otherwise the cheap keyword scorer runs.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer recoverLog("reflection")
-		score := DefaultEvaluator().ScoreResult(response)
-		DefaultEvaluator().GenerateReflection(sessionID, question, response, 0, nil, score)
+		fallback := DefaultEvaluator().ScoreResultStructured(response)
+		var reflectionLLM LLMReflectionFunc
+		if shouldRunLLMReflection(response, fallback.Score) {
+			reflectionLLM = defaultLLMReflectionFunc()
+		}
+		DefaultEvaluator().GenerateReflection(sessionID, question, response, 0, reflectionLLM, strings.Join(toolNames, ","))
 	}()
 
-	// 3. Record tool usage
+	// 3. Update tool ranking stats (success-aware, non-blocking).
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer recoverLog("tool_ranking")
-		for _, name := range toolNames {
-			DefaultEvolver().RecordToolUse(name, true, 0)
+		for i, name := range toolNames {
+			ok := true
+			if i < len(toolSuccess) {
+				ok = toolSuccess[i]
+			}
+			DefaultEvolver().RecordToolUse(name, ok, 0)
 		}
 	}()
 
@@ -489,16 +555,44 @@ func postProcessResponse(sessionID, question, response string, toolNames []strin
 	logger.SugaredLogger.Debugf("postProcessResponse completed for session %s", sessionID)
 }
 
+// isTransientModelError reports whether an agent/model error is a transient
+// server-side condition (rate limit, overload, 5xx) that may succeed on retry.
+func isTransientModelError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	markers := []string{
+		"429", "500", "502", "503", "504", "529",
+		"rate limit", "rate_limit",
+		"resourceexhausted", "resource exhausted",
+		"internal_server_error", "internal server error",
+		"overloaded", "too many requests", "request limit reached",
+		"temporarily unavailable", "try again later", "server busy", "service busy",
+		"over capacity",
+	}
+	for _, m := range markers {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// Precompiled regexes used across request hot paths (avoid MustCompile per call).
+var (
+	stockCodeRe = regexp.MustCompile(`(?:sh|SH|sz|SZ)?\d{6}`)
+	stockNameRe = regexp.MustCompile(`([\p{Han}]{2,4})(?:股票|股价|行情|走势|代码)`)
+)
+
 // extractStockInfo 从用户问题中提取股票代码/名称（简单启发式匹配）
 func extractStockInfo(question string) (stockCode, stockName string) {
 	// 匹配股票代码: 6 位数字（A股），或 sh/SH/sz/SZ 前缀
-	codeRe := regexp.MustCompile(`(?:sh|SH|sz|SZ)?\d{6}`)
-	if m := codeRe.FindString(question); m != "" {
+	if m := stockCodeRe.FindString(question); m != "" {
 		stockCode = m
 	}
 	// 匹配常见股票名称关键词（中文 2-4 字，出现在特定语境）
-	nameRe := regexp.MustCompile(`([\p{Han}]{2,4})(?:股票|股价|行情|走势|代码)`)
-	if m := nameRe.FindStringSubmatch(question); len(m) > 1 {
+	if m := stockNameRe.FindStringSubmatch(question); len(m) > 1 {
 		stockName = m[1]
 	}
 	return

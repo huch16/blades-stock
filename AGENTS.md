@@ -14,6 +14,14 @@
 
 > Legacy build scripts (`*.bat`, `clean_build*.ps1`, `do_build.ps1`) remain for reference but `.\build.ps1` is the unified entry point.
 
+## Database Canonical Source (READ FIRST — 避免改错库)
+- **唯一权威库 = 仓库根 `G:\stock\blades-stock\data\stock.db`**。运行时 `paths.BaseDir()` 规则：exe 位于 `<仓库>/build/bin/` 且仓库根存在 `go.mod` + `data/stock.db` → 一律使用仓库根 `data/stock.db`（开发与本地发布共用）。
+- **`build/bin/data/stock.db` = 打包快照**：由 `build.ps1` 每次构建时从根库 `Copy-Item` 生成，仅"自包含部署"形态使用，本地运行**永不读取**。除非打包，否则不要改它。
+- **禁止**存在/新增任何其他 `stock.db` 副本（如 `backend/data/stock.db` 已被删除，属孤儿遗留）。若再发现第 3 份，先确认来源再删。
+- 所有 DB 操作（改技能、改配置、checkpoint、迁移）一律针对**仓库根 `data/stock.db`**。
+- 判定当前库文件路径的方法：先看 `backend/paths/paths.go` 的 `BaseDir()` 解析顺序，再确认该文件时间戳为最新。
+- checkpoint 命令从仓库根执行：`go run ./cmd/checkpoint_db/ "data/stock.db"`（即根库）。
+
 ## Architecture
 - **Wails v2** desktop app: Go backend + Vue 3 frontend (Naive UI + Pinia + Vite 7)
 - **Module**: `blades-stock`, Go 1.26, Wails v2.12.0
@@ -42,7 +50,7 @@ Detected by baseURL pattern matching in `detectChatModelProvider()`.
 ## Skills (DB-driven)
 - Stored in `models.Skill` table, inserted via `cmd/insert_*_skill/main.go`
 - Loaded at runtime by `buildSkillPrompt()` — DB-only changes need app restart only
-- Current skills: ETF轮动多Agent分析 (ID=9), Serenity式产业分析 (ID=10)
+- Current skills: ETF轮动多Agent分析 (ID=7), Serenity式产业分析 (ID=4)
 - Skill keywords trigger injection; non-matching questions skip skill prompt
 
 ## Memory / Reflection / Evolution

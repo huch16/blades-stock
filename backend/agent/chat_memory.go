@@ -6,6 +6,7 @@ import (
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -42,13 +43,6 @@ func (s *ChatMemoryService) addMessage(role, content string, skipEmbedding bool)
 		Role:      role,
 		Content:   content,
 	}
-	if !skipEmbedding && s.embeddingService != nil {
-		if vec, err := s.embeddingService.Embed(content); err != nil {
-			logger.SugaredLogger.Warnf("embed %s message failed: %v", role, err)
-		} else {
-			memory.Embedding, _ = json.Marshal(vec)
-		}
-	}
 	if err := memory.Save(); err != nil {
 		return err
 	}
@@ -60,7 +54,68 @@ func (s *ChatMemoryService) addMessage(role, content string, skipEmbedding bool)
 		s.cache = s.cache[len(s.cache)-s.maxMemory:]
 	}
 	s.mu.Unlock()
+
+	// Embedding is offloaded to a background worker so the chat request path
+	// never blocks on the embedding HTTP call (which can take seconds).
+	if !skipEmbedding && s.embeddingService != nil {
+		enqueueEmbedding(s, memory.ID, content)
+	}
 	return nil
+}
+
+type chatMemoryEmbedTask struct {
+	svc      *ChatMemoryService
+	memoryID uint
+	content  string
+}
+
+var (
+	chatMemoryEmbedCh     chan chatMemoryEmbedTask
+	chatMemoryEmbedWorker sync.Once
+)
+
+// enqueueEmbedding schedules an async embedding update for a saved chat
+// message. The worker persists the vector to DB and refreshes the in-memory
+// cache so subsequent semantic retrieval in the same session can use it.
+func enqueueEmbedding(s *ChatMemoryService, memoryID uint, content string) {
+	chatMemoryEmbedWorker.Do(func() {
+		chatMemoryEmbedCh = make(chan chatMemoryEmbedTask, 256)
+		go chatMemoryEmbedLoop()
+	})
+	select {
+	case chatMemoryEmbedCh <- chatMemoryEmbedTask{svc: s, memoryID: memoryID, content: content}:
+	default:
+		logger.SugaredLogger.Warn("chat memory embedding queue full, dropping async embed")
+	}
+}
+
+func chatMemoryEmbedLoop() {
+	for task := range chatMemoryEmbedCh {
+		svc := task.svc
+		if svc == nil || svc.embeddingService == nil {
+			continue
+		}
+		vec, err := svc.embeddingService.Embed(task.content)
+		if err != nil {
+			logger.SugaredLogger.Warnf("async embed chat memory %d failed: %v", task.memoryID, err)
+			continue
+		}
+		raw, err := json.Marshal(vec)
+		if err != nil {
+			continue
+		}
+		if err := db.Dao.Model(&db.ChatMemory{}).Where("id = ?", task.memoryID).UpdateColumn("embedding", raw).Error; err != nil {
+			logger.SugaredLogger.Warnf("update chat_memory embedding failed (id=%d): %v", task.memoryID, err)
+		}
+		svc.mu.Lock()
+		for i := range svc.cache {
+			if svc.cache[i].ID == task.memoryID {
+				svc.cache[i].Embedding = raw
+				break
+			}
+		}
+		svc.mu.Unlock()
+	}
 }
 
 func (s *ChatMemoryService) AddUserMessage(content string) error {
@@ -138,7 +193,16 @@ func (s *ChatMemoryService) recentRetrieve(memories []db.ChatMemory) ([]map[stri
 type scoredMemory struct {
 	msg   map[string]string
 	score float32
+	idx   int
 }
+
+// 语义召回 = 语义相似度 + 新鲜度加权。刚写入的消息嵌入尚未异步生成（无向量），
+// 若只按相似度打分会把它们全压到 0 分而被旧消息挤出，这里给它们一条新鲜度基线，
+// 使最近的对话尾部始终可见，同时语义更相关的旧消息仍能胜出。
+const (
+	semanticWeight = float32(0.7)
+	recencyWeight  = float32(0.3)
+)
 
 func (s *ChatMemoryService) semanticRetrieve(memories []db.ChatMemory, query string) ([]map[string]string, error) {
 	queryEmbedding, err := s.embeddingService.Embed(query)
@@ -147,35 +211,40 @@ func (s *ChatMemoryService) semanticRetrieve(memories []db.ChatMemory, query str
 		return s.recentRetrieve(memories)
 	}
 
+	n := float32(len(memories))
 	var scored []scoredMemory
-	for _, m := range memories {
+	for i, m := range memories {
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
 		}
-		if len(m.Embedding) == 0 {
-			scored = append(scored, scoredMemory{
-				msg:   map[string]string{"role": m.Role, "content": m.Content},
-				score: 0,
-			})
-			continue
+		// memories 按时间升序（旧→新），新鲜度按位置线性归一。
+		recency := float32(1.0)
+		if n > 1 {
+			recency = float32(i+1) / n
 		}
-		var vec []float32
-		if err := json.Unmarshal(m.Embedding, &vec); err != nil || len(vec) == 0 {
-			scored = append(scored, scoredMemory{
-				msg:   map[string]string{"role": m.Role, "content": m.Content},
-				score: 0,
-			})
-			continue
+		sim := float32(0)
+		if len(m.Embedding) > 0 {
+			var vec []float32
+			if err := json.Unmarshal(m.Embedding, &vec); err == nil && len(vec) > 0 {
+				sim = CosineSimilarity(queryEmbedding, vec)
+				if sim < 0 {
+					sim = 0
+				}
+			}
 		}
-		sim := CosineSimilarity(queryEmbedding, vec)
+		score := semanticWeight*sim + recencyWeight*recency
 		scored = append(scored, scoredMemory{
 			msg:   map[string]string{"role": m.Role, "content": m.Content},
-			score: sim,
+			score: score,
+			idx:   i,
 		})
 	}
 
 	sort.Slice(scored, func(i, j int) bool {
-		return scored[i].score > scored[j].score
+		if scored[i].score != scored[j].score {
+			return scored[i].score > scored[j].score
+		}
+		return scored[i].idx > scored[j].idx
 	})
 
 	topN := s.maxMemory / 2
@@ -287,10 +356,11 @@ func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) 
 		return latestMessages, nil
 	}
 
-	summaryText := fmt.Sprintf("以下是最初(%d轮)对话的摘要：\n", len(pairs)/2)
-	for _, p := range pairs {
-		summaryText += p + "\n"
-	}
+	// 滚动摘要：基于上一轮摘要 + 本次被压缩对话的关键要点拼接，而不是把全部
+	// 历史截断拼成一个伪"摘要"。真正的 LLM 摘要随后异步生成并覆盖本占位版本，
+	// 下一轮请求通过 GetSummary 即可读到自然语言摘要。
+	prevSummary, _ := s.GetSummary()
+	summaryText := buildRollingSummary(prevSummary, pairs)
 
 	for i := 0; i < compressEnd; i++ {
 		if err := allMessages[i].Delete(); err != nil {
@@ -307,6 +377,9 @@ func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) 
 		CreatedAt: time.Now(),
 	}).Save()
 
+	// 异步 LLM 升级为真正的自然语言摘要（不阻塞请求路径）。
+	s.summarizeHistoryAsync(s.sessionID, pairs)
+
 	logger.SugaredLogger.Infof("compressed %d messages into summary for session %s", len(compressible), s.sessionID)
 
 	s.mu.Lock()
@@ -320,6 +393,89 @@ func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) 
 		"content": summaryText,
 	}}
 	return append(summaryMsg, latestMessages...), nil
+}
+
+// buildRollingSummary compacts the previous summary plus this round's
+// compressible messages into a bounded key-points block. It is the cheap
+// synchronous fallback until the async LLM summary lands.
+func buildRollingSummary(prevSummary string, pairs []string) string {
+	var b strings.Builder
+	if prev := strings.TrimSpace(prevSummary); prev != "" {
+		b.WriteString(prev)
+		b.WriteString("\n")
+	}
+	rounds := len(pairs) / 2
+	if rounds < 1 {
+		rounds = 1
+	}
+	b.WriteString(fmt.Sprintf("早期对话要点(%d轮，已压缩)：\n", rounds))
+	kept := 0
+	for _, p := range pairs {
+		if kept >= 24 {
+			b.WriteString("...(更早对话要点已省略)\n")
+			break
+		}
+		b.WriteString(truncateString(p, 120) + "\n")
+		kept++
+	}
+	return b.String()
+}
+
+// summaryGenMu serializes async LLM summary generation so concurrent
+// CompressHistory calls don't interleave LLM writes.
+var summaryGenMu sync.Mutex
+
+// summarizeHistoryAsync uses the configured LLM to turn the compressed round
+// into a true prose summary, replacing the placeholder written by the sync
+// path. It runs in the background and is best-effort: on any failure the
+// rolling key-points summary stays in place.
+func (s *ChatMemoryService) summarizeHistoryAsync(sessionID string, pairs []string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Errorf("panic in summarizeHistoryAsync: %v", r)
+		}
+	}()
+	if len(pairs) == 0 {
+		return
+	}
+	llm := defaultLLMReflectionFunc()
+	if llm == nil {
+		return
+	}
+
+	var sb strings.Builder
+	for i, p := range pairs {
+		if i >= 40 {
+			sb.WriteString("...(更早对话内容省略)\n")
+			break
+		}
+		sb.WriteString(p)
+		sb.WriteString("\n")
+	}
+	raw := sb.String()
+	if len(raw) > 8000 {
+		raw = raw[:8000] + "\n...(内容截断)"
+	}
+
+	summaryGenMu.Lock()
+	defer summaryGenMu.Unlock()
+
+	resp, err := llm(
+		"你是一个严谨的对话摘要助手，只输出中文摘要，不输出任何其他内容。",
+		"请把以下多轮对话压缩为一段精炼的中文摘要（保留关键事实、结论、股票/代码/具体数字、已明确的用户偏好与风险提示，丢弃寒暄与重复），控制在 300 字以内：\n\n" + raw,
+	)
+	if err != nil || strings.TrimSpace(resp) == "" {
+		return
+	}
+	if err := db.DeleteChatMemorySummary(sessionID); err != nil {
+		logger.SugaredLogger.Errorf("delete summary before async write failed: %v", err)
+	}
+	_ = (&db.ChatMemorySummary{
+		SessionID: sessionID,
+		Summary:   truncateString(strings.TrimSpace(resp), 2000),
+		CreatedAt: time.Now(),
+	}).Save()
+	logger.SugaredLogger.Debugf("async LLM summary stored for session %s", sessionID)
 }
 
 func (s *ChatMemoryService) Clear() error {

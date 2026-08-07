@@ -16,7 +16,6 @@ import (
 	"blades-stock/backend/quant"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -392,6 +391,8 @@ func (a *App) domReady(ctx context.Context) {
 		a.cron.AddFunc("30 05 8,12,20 * * *", func() {
 			syncAllStockInfo(a.ctx)
 		})
+		// 进化闭环：每日从高质量轨迹提取技能草稿（7 天限频，仅记录供人工审阅）。
+		a.cron.AddFunc("30 2 * * *", agent.RunSkillExtractionPass)
 	}()
 
 	//检查谷歌浏览器
@@ -1311,22 +1312,9 @@ func addStockFollowData(follow data.FollowedStock, stockData *data.StockInfo) {
 
 // shutdown is called at application termination
 func (a *App) shutdown(ctx context.Context) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("[shutdown] recovered from panic: %v\n", r)
-			debug.PrintStack()
-		}
-	}()
-	// 记录当前窗口大小，供下次启动时还原
-	if a.ctx != nil {
-		w, h := runtime.WindowGetSize(a.ctx)
-		if w > 0 && h > 0 {
-			cfg := data.GetSettingConfig()
-			cfg.WindowWidth = w
-			cfg.WindowHeight = h
-			data.UpdateConfig(cfg)
-		}
-	}
+	// 窗口大小已在 beforeClose 中保存（app_windows.go / app_linux.go）。
+	// 这里不再调用 runtime.WindowGetSize —— 在 Wails 内部控件销毁阶段调用
+	// 会在 winc.ScaleToDefaultDPI 触发 panic，导致关窗卡死 / 进程残留。
 }
 
 // BatchGreet returns stock info for multiple stock codes in a single call

@@ -23,7 +23,7 @@ func TestGetStockAiAgent(t *testing.T) {
 	if len(config.AiConfigs) == 0 {
 		t.Skip("no AI config in DB; skipping live agent run")
 	}
-	agentInstance := GetStockAiAgent(ctx, *config.AiConfigs[0], "分析当前市场情绪和热点", "")
+	agentInstance := GetStockAiAgent(ctx, *config.AiConfigs[0], "分析当前市场情绪和热点", "", nil)
 
 	if agentInstance == nil {
 		t.Fatal("agent instance is nil")

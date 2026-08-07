@@ -35,6 +35,7 @@ var toolGroupMap = map[string]ToolGroup{
 
 	"GetStockInfo":            GroupStockAnalysis,
 	"GetStockKLine":           GroupStockAnalysis,
+	"GetETFMomentumRanking":   GroupStockAnalysis,
 	"GetEastMoneyKLine":       GroupStockAnalysis,
 	"GetEastMoneyKLineWithMA": GroupStockAnalysis,
 	"GetStockMinuteData":      GroupStockAnalysis,
@@ -42,14 +43,6 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetStockHolderNum":       GroupStockAnalysis,
 	"GetStockRZRQInfo":        GroupStockAnalysis,
 	"GetStockConceptInfo":     GroupStockAnalysis,
-
-	"QueryEvent":        GroupStockAnalysis,
-	"QueryBasicInfo":    GroupStockAnalysis,
-	"QueryFinance":      GroupStockAnalysis,
-	"QueryIndustry":     GroupStockAnalysis,
-	"QueryManagement":   GroupStockAnalysis,
-	"QueryFundFinance":  GroupStockAnalysis,
-	"QueryBusinessData": GroupStockAnalysis,
 
 	"GetMarketData":              GroupMarket,
 	"GlobalStockIndexesReadable": GroupMarket,
@@ -59,11 +52,6 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetChangeRank":              GroupMarket,
 	"GetDailyDimensionStats":     GroupMarket,
 	"GetTypeStatsByDate":         GroupMarket,
-	"QueryIwencai":               GroupMarket,
-	"QueryZhishu":                GroupMarket,
-	"QueryMacro":                 GroupMarket,
-	"QueryFutures":               GroupMarket,
-	"QueryStockConnect":          GroupMarket,
 
 	"StockEarningsReview":         GroupStockAnalysis,
 	"FinancialQA":                 GroupAIAnalysis,
@@ -86,27 +74,13 @@ var toolGroupMap = map[string]ToolGroup{
 	"TrackingReport":              GroupStockAnalysis,
 	"FinanceDataQuery":            GroupStockAnalysis,
 	"FinanceSearch":               GroupNewsResearch,
-	"SearchReport":                GroupNewsResearch,
-	"QueryInsResearch":            GroupNewsResearch,
-	"SearchNews":                  GroupNewsResearch,
-	"SearchInvestor":              GroupNewsResearch,
-	"SearchAnnouncement":          GroupNewsResearch,
 	"FilterStocks":                GroupScreening,
 	"SearchStockByIndicators":     GroupScreening,
-	"SelectAStock":                GroupScreening,
-	"SelectSector":                GroupScreening,
-	"SelectETF":                   GroupScreening,
-	"SelectFundManager":           GroupScreening,
-	"SelectConvertibleBond":       GroupScreening,
-	"SelectFundCompany":           GroupScreening,
-	"SelectFund":                  GroupScreening,
-	"SelectFuturesOption":         GroupScreening,
-	"SelectHKStock":               GroupScreening,
-	"SelectUSStock":               GroupScreening,
 	"SearchBk":                    GroupScreening,
 	"SearchETF":                   GroupScreening,
 	"HotStrategyTable":            GroupScreening,
 	"HotStockTable":               GroupScreening,
+	"ScreenByStrategy":            GroupScreening,
 	"GetStockMoneyData":           GroupMoneyFlow,
 	"GetMutualTop10Deal":          GroupMoneyFlow,
 	"GetStockHistoryMoneyData":    GroupMoneyFlow,
@@ -303,6 +277,7 @@ var groupKeywordsList = []groupKeywords{
 }
 
 func ClassifyQuestion(question string) map[ToolGroup]bool {
+	applyToolGroupConfig()
 	matched := map[ToolGroup]bool{
 		GroupBase: true,
 	}
@@ -325,6 +300,8 @@ func ClassifyQuestion(question string) map[ToolGroup]bool {
 	return matched
 }
 
+// FilterToolsByGroups curates tools per group; groups not in map are excluded.
+// Tools not mapped to any group (e.g. WebSearch) are always included.
 func FilterToolsByGroups(allTools []tools.Tool, groups map[ToolGroup]bool) []tools.Tool {
 	var filtered []tools.Tool
 	for _, t := range allTools {
@@ -334,4 +311,136 @@ func FilterToolsByGroups(allTools []tools.Tool, groups map[ToolGroup]bool) []too
 		}
 	}
 	return filtered
+}
+
+// groupToolCaps 每组允许注入模型的最大工具数。每注入一个工具，其名称、描述、
+// 参数 schema 都会全量发送给模型消耗 tokens；这些上限保证命中多组时不会把
+// 上百个工具定义全部塞进提示词。无上限的组（GroupBase/GroupProject 等体量小
+// 或必须完整的组）不在此表。
+var groupToolCaps = map[ToolGroup]int{
+	GroupStockAnalysis: 20,
+	GroupMarket:        14,
+	GroupScreening:     10,
+	GroupMoneyFlow:     4,
+	GroupNewsResearch:  14,
+	GroupAIAnalysis:    8,
+	GroupOperations:    5,
+}
+
+// coreToolByGroup 每组的高频核心工具白名单（按优先级排序，越靠前越优先保留）。
+// 组内工具超过 groupToolCaps 上限时，只保留白名单内的工具；白名单外的工具丢弃。
+var coreToolByGroup = map[ToolGroup][]string{
+	GroupStockAnalysis: {
+		"GetStockInfo", "GetStockKLine", "GetStockFinancialInfo", "GetStockLatestFinance",
+		"GetEastMoneyKLineWithMA", "GetStockConceptInfo", "GetStockValuationPercentile",
+		"GetStockRZRQInfo", "GetStockMarginTrading", "GetStockHolderTrend",
+		"GetStockBillboard", "AnalyzeHotMoneyActivity", "GetStockQtrMainFinance",
+		"GetStockOrgPredict", "GetETFHistorical",
+	},
+	GroupMarket: {
+		"GetMarketData", "GlobalStockIndexesReadable", "GetStockChanges", "GetChangeRank",
+		"GetBoardConcept", "GetETFSpot", "HotspotDiscovery",
+	},
+	GroupScreening: {
+		"SearchStockByIndicators", "FilterStocks", "SearchBk", "SearchETF",
+	},
+	GroupMoneyFlow: {
+		"GetStockMoneyData", "GetStockHistoryMoneyData", "GetIndustryMoneyRank",
+		"GetMutualTop10Deal",
+	},
+	GroupNewsResearch: {
+		"GetNewsListData", "GetStockResearchReport",
+		"GetStockNotice", "GetHotStockList", "GetHotEventList",
+		"GetUplimitHotStocks", "GetUplimitHotPlates", "GetWallstreetcnLives",
+	},
+	GroupAIAnalysis: {
+		"FinancialQA", "AiRecommendStocks", "GetAIAnalysisHistory", "RunBacktest",
+	},
+	GroupOperations: {
+		"SetTradingPrice", "SendToDingDing", "GetFundInfo", "SearchFund",
+	},
+}
+
+// FilterToolsByGroupsCapped 在按组过滤基础上对每组工具数设上限：
+// 组内工具超过 caps[group] 时，仅保留 coreToolByGroup 白名单中的工具；
+// 未设置上限或未定义白名单的组保持全量。用于削减注入模型的工具定义 token 开销。
+func FilterToolsByGroupsCapped(allTools []tools.Tool, groups map[ToolGroup]bool) []tools.Tool {
+	var filtered []tools.Tool
+	coreSet := make(map[string]bool)
+	for _, group := range []ToolGroup{GroupBase, GroupStockAnalysis, GroupMarket, GroupScreening, GroupMoneyFlow, GroupNewsResearch, GroupAIAnalysis, GroupOperations, GroupProject} {
+		if !groups[group] {
+			continue
+		}
+		for _, n := range coreToolByGroup[group] {
+			coreSet[n] = true
+		}
+	}
+
+	// 第一遍：未映射组工具 + 命中组内属于白名单的工具 + 无上限组的工具。
+	added := make(map[ToolGroup]int)
+	for _, t := range allTools {
+		group, exists := toolGroupMap[t.Name()]
+		if !exists {
+			// 未映射到任何组的工具（如 WebSearch）始终注入
+			filtered = append(filtered, t)
+			continue
+		}
+		if !groups[group] {
+			continue
+		}
+		_, capped := groupToolCaps[group]
+		if !capped {
+			filtered = append(filtered, t)
+			continue
+		}
+		if coreSet[t.Name()] {
+			filtered = append(filtered, t)
+			added[group]++
+			continue
+		}
+	}
+	// 第二遍：白名单工具数未达上限的组，按原顺序补充剩余工具，直至上限。
+	for _, t := range allTools {
+		group, exists := toolGroupMap[t.Name()]
+		if !exists || !groups[group] {
+			continue
+		}
+		cap, capped := groupToolCaps[group]
+		if !capped {
+			continue
+		}
+		if added[group] >= cap {
+			continue
+		}
+		if coreSet[t.Name()] {
+			continue // 已注入
+		}
+		filtered = append(filtered, t)
+		added[group]++
+	}
+	return filtered
+}
+
+// ParseToolGroups parses a comma-separated list of tool group names into a set.
+// Unknown names are ignored so a typo can never silently drop required tools.
+func ParseToolGroups(str string) map[ToolGroup]bool {
+	groups := map[ToolGroup]bool{}
+	for _, part := range strings.Split(str, ",") {
+		name := strings.TrimSpace(part)
+		if name == "" || !isValidToolGroup(ToolGroup(name)) {
+			continue
+		}
+		groups[ToolGroup(name)] = true
+	}
+	return groups
+}
+
+func isValidToolGroup(g ToolGroup) bool {
+	switch g {
+	case GroupBase, GroupStockAnalysis, GroupMarket, GroupScreening,
+		GroupMoneyFlow, GroupNewsResearch, GroupAIAnalysis,
+		GroupOperations, GroupProject:
+		return true
+	}
+	return false
 }

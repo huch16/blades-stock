@@ -2,19 +2,19 @@
 package agent
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"sync"
 	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
+	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -95,7 +95,7 @@ func classifyComplexity(question string) AgentMode {
 	return AgentModeReact
 }
 
-func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question string, agentMode string, extraTools ...bladesTools.Tool) *AgentInstance {
+func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question string, agentMode string, matchedSkills []models.Skill, extraTools ...bladesTools.Tool) *AgentInstance {
 	logger.SugaredLogger.Infof("GetStockAiAgent aiConfig: %+v", redactAIConfig(aiConfig))
 
 	modelProvider, err := createChatModel(ctx, aiConfig)
@@ -104,7 +104,7 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		return nil
 	}
 
-	allTools := getToolsByQuestion(question)
+	allTools := getToolsByQuestion(question, matchedSkills)
 	allTools = append(allTools, extraTools...)
 
 	var mode AgentMode
@@ -145,50 +145,7 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 }
 
 func personalityPrompt() string {
-	return `你叫"财智"，是一位拥有20年实战经验、性格鲜明的股票投资大师。
-
-## 人格特质
-- 风格：犀利、直率、一针见血，偶尔带点冷幽默，绝不拐弯抹角
-- 原则：始终秉持"风险控制第一"，看到用户忽视风险时会直接提醒
-- 特长：价值投资、趋势交易、量化分析多策略融合，对A股/港股/美股都有深刻理解
-- 语言：善用生活化的比喻解释复杂金融概念，让初学者也能听懂
-
-## 行为准则
-1. 必须调用工具获取实时数据，严禁凭记忆编造或使用过时数据
-2. 所有投资建议必须附带风险提示，但禁止反复添加"祝您投资顺利"等无意义后缀，一句话带过即可
-3. 数据获取失败时明确告知用户"当前未能获取到最新数据"，绝不伪造
-4. 对模糊的问题主动反问澄清意图
-5. 当本地金融工具无法直接回答"上市公司名单/地域分布/城市总部/省份区域/注册地/办公地址"等定位类问题时，必须优先调用 WebSearch 工具进行互联网搜索，禁止直接回答"无法查询"
-6. 你的默认搜索引擎是 SearXNG（JSON API），搜索效率远高于浏览器方案。仅在 SearXNG 和百度 HTTP 均无法返回结果时，才回退到浏览器搜索。
-
-## 股票推荐方法论（核心！必须遵守）
-进行市场资讯分析和股票推荐时，必须按以下流程操作，
-**禁止只罗列概念不推荐具体股票**，
-**严禁推荐贵州茅台/宁德时代/比亚迪/中国平安等总市值 >500亿的耳熟能详大盘股**：
-
-**第0步 — 用 WebSearch 发现细分龙头候选池**
-先通过 WebSearch 搜索目标板块的"细分龙头""隐形冠军""专精特新""高成长中小盘"等关键词，
-例如：WebSearch("人形机器人 细分龙头 高增长 中小盘") 或 WebSearch("AI算力 细分龙头 专精特新").
-将搜索结果中的候选股票代码作为后续筛选的依据之一。
-
-**第1步 — 锁定方向 + 多维筛选**
-用概念关键词锁定板块（如"机器人概念""半导体""AI算力"等），
-然后用 SearchStockByIndicators 叠加至少 3 个筛选条件：
-流通市值 20~200 亿（中小盘优先）、市盈率>0、营收增长>10%、技术面信号等，
-并验证候选池中的股票是否符合条件。
-
-**第2步 — 交叉验证**
-筛选结果出来后，用 GetStockInfo 核实实时行情和财务数据真实性，
-排除业绩下滑或估值过高的标的。
-
-**第3步 — 聚焦有活力的细分龙头**
-- 优先选择目标板块中"市值 30~150 亿、近期业绩增长 >20%、有技术壁垒"的细分龙头
-- 排除总市值 >500 亿的超级大盘股
-- 同板块最多推荐 2 只，避免扎堆
-
-**第4步 — 精炼推荐**
-**必须**推荐 3~5 只具体个股（含代码），覆盖不同子方向，
-使用 BatchCreateAiRecommendStocks 批量保存。`
+	return GetPromptTemplates().Personality
 }
 
 func ReasoningMiddleware(next blades.Handler) blades.Handler {
@@ -196,97 +153,15 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 		question := inv.Message.Text()
 
 		mode, _ := inv.Message.Metadata["agent_mode"].(string)
+		availableTools, _ := inv.Message.Metadata["available_tools"].([]string)
 
 		var thinkingPrompt string
+		tpls := GetPromptTemplates()
 		if mode == "plan_execute" {
-			thinkingPrompt = `请严格遵循以下思考框架回答问题：
-
-## 通用思考框架
-1. 拆解问题 → 确定需要哪些维度（行情、财务、新闻、宏观等）
-2. 规划数据需求 → 明确每一步需要调用什么工具
-3. 逐步执行 → 每次调用一个工具，分析返回结果
-4. 综合判断 → 将所有信息整合成完整结论
-5. 风险提示 → 给出明确的风险警告
-
-不要一次性调用所有工具，应该根据上一步的结果决定下一步的行动。
-
-## 个股深度分析模板（当用户查询特定个股时使用）
-当用户要求对某只具体股票进行全方位分析时，请严格按照以下模板执行，确保分析完整且数据驱动：
-
-### 第一步：数据采集（并行获取基础数据）
-- 实时行情：GetStockInfo(股票代码) → 获取当前价、涨跌幅、成交量、换手率
-- K线数据：GetEastMoneyKLineWithMA(股票代码, day, 60) → 获取60日K线含均线
-- 财务数据：GetStockFinancialInfo(股票代码) + GetStockLatestFinance(股票代码) → 营收、利润、ROE、PE、PB
-- 资金流向：GetStockHistoryMoneyData(股票代码) → 近5日资金净流入
-- 概念归属：GetStockConceptInfo(股票代码) → 所属概念板块
-- 最新新闻：GetNewsListData(当天日期) + GetStockResearchReport(股票代码) → 近期新闻和研报
-- 估值百分位：GetStockValuationPercentile(股票代码) → 当前PE/PB历史百分位
-
-### 第二步：技术面分析
-- 均线趋势：判断股价与MA5/MA10/MA20/MA60的位置关系，是多头还是空头排列
-- 量价关系：近期成交量是否配合价格走势，有无放量突破或缩量回调
-- MACD/KDJ状态：金叉/死叉、顶背离/底背离
-- 支撑压力：根据K线形态和成交密集区判断关键支撑位和压力位
-
-### 第三步：基本面分析
-- 成长性：营收增长率、净利润增长率趋势（同比/环比）
-- 盈利能力：ROE、毛利率、净利率水平及行业对比
-- 财务健康：资产负债率、现金流状况
-- 估值评估：当前PE/PB在历史中的百分位位置，与同行业对比是否合理
-
-### 第四步：消息面分析
-- 近期公告：关注业绩预告、重大合同、股东减持/增持、分红方案
-- 行业动态：该股票所属行业近期是否有政策利好/利空
-- 机构观点：券商研报评级变化、目标价
-
-### 第五步：资金面分析
-- 主力资金：近5日主力资金净流入/流出趋势
-- 北向资金：如有沪深港通标的，查看北向持仓变化
-- 筹码分布：股东户数变化趋势，是集中还是分散
-
-### 第六步：综合研判
-- 核心逻辑：用2-3句话总结该股票当前的核心投资逻辑
-- 多空评分：对技术、基本面、资金、消息四个维度分别打分（★/☆）
-- 操作建议：短期（1-5日）/中期（1-3月）/长期（半年以上）三个时间维度的观点
-- 风险提示：当前面临的最大风险点
-
-## 市场选股方法论（当进行市场分析/新闻总结/推荐股票时必须遵守）
-当需要从市场资讯中挖掘投资机会时，必须按以下步骤操作。
-**严禁推荐茅台/宁德/比亚迪/平安等市值 >500 亿的超级大盘股，必须优先挖掘 30~150 亿的细分龙头**。
-
-第0步 - 先用 WebSearch 搜索"细分龙头""隐形冠军""专精特新"等关键词构建候选池，
-例如：WebSearch("机器人 细分龙头 高增长") / WebSearch("AI 算力 专精特新").
-
-第1步 - 锁定方向：根据新闻热点确定目标板块（如：机器人、半导体、AI、消费电子等），用 SearchBk 或 SearchETF 确认板块内个股范围
-
-第2步 - 多维筛选：使用 SearchStockByIndicators 按以下维度组合筛选（至少使用 3 个筛选条件）：
-  - 市值范围：排除超大盘股（流通市值>500亿），重点关注中小盘（流通市值 20亿~200亿）
-  - 估值区间：市盈率PE >0 且 <60（剔除亏损和泡沫）
-  - 业绩增长：营收增长率>10% 或 净利润增长率>20%（择一即可）
-  - 技术面：股价站上20日均线 或 MACD金叉
-  - 概念匹配：归属目标板块概念（如"机器人概念""芯片概念""AI概念"）
-  示例：SearchStockByIndicators("机器人概念,流通市值20亿~200亿,市盈率>0,营收增长率>10%,股价站上20日均线")
-  并将第0步的候选池交叉验证。
-
-第3步 - 交叉验证：筛选结果出来后，用 GetStockInfo 查看具体个股的实时行情，用 GetStockFinancialInfo 核实财务数据真实性
-
-第4步 - 聚焦细分龙头：优先选择目标板块中"市值 30~150 亿、业绩增长>20%、有技术壁垒"的细分龙头，同板块最多推 2 只
-
-第5步 - 精炼推荐：最终推荐 3~5 只最具性价比的标的（含代码），覆盖不同子方向，使用 BatchCreateAiRecommendStocks 批量保存
-
-## 高级分析工具（个股深度诊断时使用）
-以下工具用于对特定个股进行深度分析，在用户问及以下场景时使用：
-
-1. **AnalyzeHotMoneyActivity(股票代码)** — 当用户问"这只股票有没有游资参与""谁在炒作"时，分析龙虎榜判断游资风格和参与度
-2. **AnalyzeChipConcentration(股票代码)** — 当用户问"主力在建仓还是出货""筹码集中还是分散"时，综合股东户数/大宗交易/资金流向判断主力意图
-3. **AnalyzeCapitalGame(股票代码)** — 当用户问"资金博弈如何""主力散户谁在买"时，分析多空资金力量对比和博弈格局
-4. **GetStockBillboard(股票代码)** — 龙虎榜详细数据，查看近期是否有游资/机构上榜
-5. **GetStockValuationPercentile(股票代码)** — 当前估值在历史中的百分位位置
-6. **GetStockHolderTrend(股票代码)** — 股东户数变化趋势
-7. **GetStockBlockTrade(股票代码)** — 大宗交易数据
-8. **GetStockMarginTrading(股票代码)** — 融资融券余额变化`
+			thinkingPrompt = tpls.PlanExecuteThinking
+			thinkingPrompt = renderAvailableTools(thinkingPrompt, availableTools)
 		} else {
-			thinkingPrompt = `请直接调用相关工具获取最新数据后回答。如果问题不明确，主动反问用户。`
+			thinkingPrompt = tpls.ReactThinking
 		}
 
 		newMsg := blades.UserMessage(question + "\n\n" + thinkingPrompt)
@@ -297,20 +172,41 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 	})
 }
 
+// renderAvailableTools replaces the {{AVAILABLE_TOOLS}} placeholder in a
+// thinking prompt with the actual tools injected for this invocation, so
+// plan_execute guidance references the real inventory instead of hardcoded
+// tool names the model may not actually have.
+func renderAvailableTools(tpl string, toolNames []string) string {
+	if !strings.Contains(tpl, "{{AVAILABLE_TOOLS}}") {
+		return tpl
+	}
+	inventory := "（本会话已注入对应工具，按需调用）"
+	if len(toolNames) > 0 {
+		inventory = strings.Join(toolNames, "、")
+	}
+	return strings.Replace(tpl, "{{AVAILABLE_TOOLS}}", inventory, 1)
+}
+
 // buildSkillPrompt uses bge-m3 semantic matching (via EmbeddingService) to select relevant skills.
 // When EmbeddingService is nil or embedding fails, falls back to keyword matching.
 // Target prompt size: ~800 chars per skill (Directive mode), ~2000+ chars (full SystemPrompt mode).
 func buildSkillPrompt(question string, embedSvc *EmbeddingService) string {
-	if len(data.NewSkillApi().GetEnabledSkills()) == 0 {
-		return ""
-	}
-
-	skillEmbedSvc := GetSkillEmbeddingService(embedSvc)
-	matched := skillEmbedSvc.MatchSkills(question, 2)
+	matched := matchSkills(question, embedSvc)
 	if len(matched) == 0 {
 		return ""
 	}
 	return BuildShortSkillPrompt(matched)
+}
+
+// matchSkills returns up to 2 enabled skills relevant to the question. It is
+// the single source of truth used both for building the skill prompt and for
+// merging each matched skill's required tool groups into the agent's tool set.
+func matchSkills(question string, embedSvc *EmbeddingService) []models.Skill {
+	if len(data.NewSkillApi().GetEnabledSkills()) == 0 {
+		return nil
+	}
+	skillEmbedSvc := GetSkillEmbeddingService(embedSvc)
+	return skillEmbedSvc.MatchSkills(question, 2)
 }
 
 // BuildSkillPromptForTest exports buildSkillPrompt for testing purposes.
@@ -347,7 +243,7 @@ func GetAllTools() []bladesTools.Tool {
 	return allTools
 }
 
-func getToolsByQuestion(question string) []bladesTools.Tool {
+func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesTools.Tool {
 	var allTools []bladesTools.Tool
 
 	allTools = append(allTools, tools.GetQueryStockCodeInfoTool())
@@ -375,12 +271,35 @@ func getToolsByQuestion(question string) []bladesTools.Tool {
 	}
 
 	groups := tools.ClassifyQuestion(question)
-	filtered := tools.FilterToolsByGroups(allTools, groups)
+	merged := mergeSkillToolGroups(groups, matchedSkills)
+	filtered := tools.FilterToolsByGroupsCapped(allTools, groups)
 
-	logger.SugaredLogger.Infof("tool grouping: question=%q, matched_groups=%v, total=%d, filtered=%d",
-		question, groupNames(groups), len(allTools), len(filtered))
+	logger.SugaredLogger.Infof("tool grouping: question=%q, matched_groups=%v, skill_merged_groups=%v, total=%d, filtered=%d",
+		question, groupNames(groups), merged, len(allTools), len(filtered))
 
-	return filtered
+	// 进化回灌：按 agent_tool_ranks 实测成功率/延迟重排注入顺序。
+	return reorderToolsByRank(filtered)
+}
+
+// mergeSkillToolGroups force-enables each matched skill's required tool groups
+// (Skill.ToolGroups) in addition to keyword classification. Without this, a
+// matched skill's directive can never execute because the tools it depends on
+// (e.g. money_flow/news_research for the ETF skill) were filtered out.
+// Returns the list of group names contributed by skills (for logging).
+func mergeSkillToolGroups(groups map[tools.ToolGroup]bool, matchedSkills []models.Skill) []string {
+	var skillGroups []string
+	for _, skill := range matchedSkills {
+		if skill.ToolGroups == "" {
+			continue
+		}
+		for g := range tools.ParseToolGroups(skill.ToolGroups) {
+			if !groups[g] {
+				skillGroups = append(skillGroups, string(g))
+			}
+			groups[g] = true
+		}
+	}
+	return skillGroups
 }
 
 func groupNames(groups map[tools.ToolGroup]bool) []string {

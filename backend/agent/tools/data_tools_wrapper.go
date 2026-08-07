@@ -23,7 +23,32 @@ import (
 )
 
 func NewDataToolWrapper(name, description string, params map[string]*types.ParamDef, handler func(args string) (string, error)) bladesTools.Tool {
-	return types.NewTool(name, description, params, handler)
+	return types.NewTool(name, description, params, func(args string) (string, error) {
+		result, err := handler(args)
+		if err != nil {
+			return result, err
+		}
+		return truncateToolResult(name, result), nil
+	})
+}
+
+// maxToolResultLen 工具返回进模型上下文前的最大字符数。
+// K线/资金明细等大返回超限时保留头部（表头上下文）+ 尾部（最新数据），中间截断。
+const maxToolResultLen = 8000
+
+func truncateToolResult(name, result string) string {
+	if len(result) <= maxToolResultLen {
+		return result
+	}
+	runes := []rune(result)
+	if len(runes) <= maxToolResultLen {
+		return result
+	}
+	head := maxToolResultLen * 2 / 5
+	tail := maxToolResultLen - head
+	headText := string(runes[:head])
+	tailText := string(runes[len(runes)-tail:])
+	return headText + "\n...(工具 " + name + " 返回过长，中间已截断，保留最新数据)...\n" + tailText
 }
 
 func thsResultToMarkdown(res map[string]any, title string) string {
@@ -1070,7 +1095,7 @@ func GetAllDataTools() []bladesTools.Tool {
 		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
-				Desc:     "股票代码，如：600519.SH、000001.SZ",
+				Desc:     "股票代码，如：601138.SH；须与stockName双向匹配（来自工具真实数据），格式非法或代码-名称不一致时禁止填写",
 				Required: true,
 			},
 		},
@@ -1210,9 +1235,11 @@ func GetAllDataTools() []bladesTools.Tool {
 		},
 	))
 
+	result = append(result, GetETFMomentumRankingTool())
+
 	result = append(result, NewDataToolWrapper(
 		"GetEastMoneyKLine",
-		"获取股票 K 线数据。支持日/周/月/季/年 K 线及 1/5/15/30/60 分钟线，可选前复权或后复权。A股数据源优先级：通达信MAC→东方财富→新浪→腾讯→通达信。港股走东方财富。股票代码格式：A股 000001.SZ、600000.SH，港股 00700.HK 等。支持一次查询多只。",
+		"获取股票 K 线数据。支持日/周/月/季/年及1/5/15/30/60分钟线，可选前/后复权。A股代码格式 000001.SZ、600000.SH，港股 00700.HK。支持多只。",
 		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
@@ -1461,7 +1488,7 @@ func GetAllDataTools() []bladesTools.Tool {
 						},
 						"stockCode": {
 							Type:     "string",
-							Desc:     "股票代码，如：601138.SH",
+							Desc:     "股票代码，如：601138.SH；须与stockName双向匹配（来自工具真实数据），格式非法或代码-名称不一致时禁止填写",
 							Required: true,
 						},
 						"stockName": {
@@ -3012,7 +3039,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"StockEarningsReview",
-		"个股业绩点评。获取上市公司业绩点评报告，包含营收分析、利润分析、财务指标解读等深度内容。支持沪深京港美市场股票。当用户询问个股业绩点评、财报分析、业绩报告、营收利润分析等问题时使用此工具。数据来源于东方财富AI。",
+		"个股业绩点评。获取业绩点评报告，含营收/利润分析、财务指标解读。支持沪深京港美股。用于个股业绩点评、财报分析、业绩报告类问题。",
 		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
@@ -3038,7 +3065,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"FinancialQA",
-		"金融智能问答。基于东方财富权威金融数据库，覆盖数据查询、资讯搜索、宏观分析、选股选基、金融百科、市场分析、热点解读等全链条智能问答服务。支持标准模式和深度思考模式。当用户提出自然语言金融问题，如'帮我查一下'、'分析一下'、'选股'、'XX怎么样'、'XX是什么'、'最新政策'、'宏观数据'等问答类请求时使用此工具。数据来源于东方财富AI。",
+		"金融智能问答。覆盖数据查询、资讯搜索、宏观分析、选股选基、金融百科、市场分析、热点解读。用于自然语言金融问题：查数据、分析、选股、XX是什么、最新政策、宏观数据等。",
 		map[string]*types.ParamDef{
 			"question": {
 				Type:     "string",
@@ -3064,7 +3091,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"IndustryResearch",
-		"行业研究报告生成。根据行业关键词生成深度行业研究报告，包含行业概况、市场规模、竞争格局、发展趋势、投资建议等内容。当用户要求生成行业研究报告、行业深度分析、产业分析、行业趋势分析等时使用此工具。数据来源于东方财富AI。",
+		"行业研究报告生成。按行业关键词生成深度报告：行业概况、市场规模、竞争格局、发展趋势、投资建议。用于行业研究报告、深度分析、产业/趋势分析。",
 		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
@@ -3084,7 +3111,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"TrackingReport",
-		"个股/行业跟踪报告。根据用户输入的股票或行业关键词，生成跟踪报告，包含最新动态、核心观点、关键指标变化、重要事件梳理等内容。支持A股、港股、美股及行业板块。当用户要求生成跟踪报告、最新动态跟踪、个股跟踪、行业跟踪等时使用此工具。数据来源于东方财富AI。",
+		"个股/行业跟踪报告。按股票或行业关键词生成跟踪报告：最新动态、核心观点、关键指标变化、重要事件。支持A/港/美股及行业板块。用于跟踪报告、最新动态、个股/行业跟踪。",
 		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
@@ -3104,7 +3131,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"FinanceDataQuery",
-		"金融数据查询。基于东方财富数据库，支持自然语言查询金融结构化数据，覆盖A股、港股、美股、基金、债券等多种资产，包含实时行情、公司信息、估值指标、财务报表等。单次查询最多支持5个实体。当用户需要查询具体的金融数据、指标数值、财务数据、行情数据等结构化数据时使用此工具。数据来源于东方财富妙想。",
+		"金融数据查询。自然语言查询金融结构化数据：A股/港股/美股/基金/债券，含实时行情、公司信息、估值指标、财务报表。单次最多5个实体。用于查询具体数据/指标/财务/行情。",
 		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
@@ -3124,7 +3151,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"FinanceSearch",
-		"金融资讯搜索。基于东方财富数据库，支持自然语言搜索全网最新公告、研报、财经新闻、交易所动态及官方政策等，覆盖全球市场标的。适用于热点捕捉、舆情监控、研报速览、公告精读及投资决策等场景。当用户需要搜索最新金融资讯、新闻、公告、研报等文本类信息时使用此工具。数据来源于东方财富妙想。",
+		"金融资讯搜索。自然语言搜索最新公告、研报、财经新闻、交易所动态及官方政策，覆盖全球标的。用于热点捕捉、舆情监控、研报速览、公告精读、投资决策。",
 		map[string]*types.ParamDef{
 			"query": {
 				Type:     "string",
@@ -3222,7 +3249,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"GetUplimitLadder",
-		"获取连板梯队数据，包括连板统计（各层级数量）和连板梯队详情（最高连板到首板各层级的股票列表，含代码、名称、封单比、成交额、市值、概念板块等）。适用于分析连板高度、市场情绪、龙头股识别等场景。当用户提到连板、梯队、连板高度、最高板等关键词时使用此工具。",
+		"获取连板梯队数据：连板统计和各层级股票列表（代码、名称、封单比、成交额、市值、概念板块）。用于连板高度、市场情绪、龙头股识别。",
 		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
@@ -3426,7 +3453,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"GetUplimitHotPlates",
-		"获取涨停热门板块排名和接力主线数据，包括板块热度得分、涨停数、炸板数、接力主线板块等。适用于分析板块轮动、市场热点方向、主线题材等场景。当用户提到热门板块、板块热度、板块轮动、主线题材、接力板块等关键词时使用此工具。",
+		"获取涨停热门板块排名和接力主线数据：板块热度得分、涨停数、炸板数、接力主线。用于板块轮动、市场热点方向、主线题材分析。",
 		map[string]*types.ParamDef{
 			"date": {
 				Type:     "string",
@@ -3640,7 +3667,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"GetUplimitPlateStocks",
-		"获取指定板块的涨停股详情，包括板块内所有涨停股票的代码、名称、连板数、封单比、成交额、市值、概念板块等。适用于深入分析某个板块的涨停个股情况。当用户想查看某个板块的涨停股明细时使用此工具，必须提供板块名称参数。",
+		"获取指定板块的涨停股详情：代码、名称、连板数、封单比、成交额、市值、概念板块。用于分析板块涨停个股，需提供板块名称。",
 		map[string]*types.ParamDef{
 			"plate_name": {
 				Type:     "string",
@@ -3896,7 +3923,7 @@ func GetAllDataTools() []bladesTools.Tool {
 
 	result = append(result, NewDataToolWrapper(
 		"GetTdxCompanyCategory",
-		"通过通达信协议获取股票F10分类信息。不传category参数时返回所有可用分类名称列表；传入category参数时返回该分类的详细内容。可用分类包括：最新提示、公司概况、财务分析、股本结构、股东研究、机构持股、分红融资、高管治理、资金动向、资本运作、热点题材、公司公告、公司报道、经营分析、行业分析、研报评级。",
+		"获取股票F10分类信息（通达信协议）。不传category返回所有分类列表；传category返回该分类详情。分类：最新提示/公司概况/财务分析/股本结构/股东研究/机构持股/分红融资/高管治理/资金动向/资本运作/热点题材/公司公告/公司报道/经营分析/行业分析/研报评级。",
 		map[string]*types.ParamDef{
 			"stockCode": {
 				Type:     "string",
@@ -3978,6 +4005,9 @@ func GetAllDataTools() []bladesTools.Tool {
 	// 根据 API Key 配置过滤工具，未配置对应 Key 的工具不注册
 	// TickFlow tools (K线、标池、标的元数据)
 	result = append(result, GetTickFlowToolWrappers()...)
+
+	// 策略评分选股（YAML 声明策略 + 真实K线指标打分）
+	result = append(result, GetStrategyScreenTool())
 
 	var filtered []bladesTools.Tool
 	for _, t := range result {

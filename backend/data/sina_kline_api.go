@@ -3,15 +3,87 @@ package data
 import (
 	"encoding/json"
 	"fmt"
+	"blades-stock/backend/circuitbreaker"
 	"blades-stock/backend/logger"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 )
+
+// klineFallbackCache 缓存 FetchKLineWithFallback 的最近结果，避免同一标的
+// 在短时间窗内被重复走完整的慢速降级链（MAC 故障时尤甚）。
+type klineFallbackCacheEntry struct {
+	data      []KLineData
+	src       string
+	limit     int
+	fetchedAt time.Time
+	failed    bool // true: whole chain returned empty; served only within the fail TTL
+}
+
+const (
+	klineCacheTTL      = 5 * time.Minute
+	klineCacheFailTTL  = 60 * time.Second
+	klineCacheMaxSize  = 4096
+)
+
+var (
+	klineCacheMu sync.RWMutex
+	klineCache   = make(map[string]*klineFallbackCacheEntry)
+)
+
+func klineCacheGet(code, klt string, limit int) *KLineSourceResult {
+	klineCacheMu.RLock()
+	e, ok := klineCache[code+"|"+klt]
+	klineCacheMu.RUnlock()
+	if !ok {
+		return nil
+	}
+	if e.failed {
+		// Failed entries are limit-independent: an empty result stays empty no
+		// matter how many bars were requested. Serve within the cooldown to
+		// avoid re-running the full dead chain on every call.
+		if time.Since(e.fetchedAt) <= klineCacheFailTTL {
+			return &KLineSourceResult{Data: &[]KLineData{}, Source: e.src}
+		}
+		return nil
+	}
+	if time.Since(e.fetchedAt) > klineCacheTTL || e.limit < limit {
+		return nil
+	}
+	d := make([]KLineData, len(e.data))
+	copy(d, e.data)
+	return &KLineSourceResult{Data: &d, Source: e.src}
+}
+
+func klineCacheSet(code, klt string, res *KLineSourceResult, limit int) {
+	if res == nil {
+		return
+	}
+	empty := res.Data == nil || len(*res.Data) == 0
+	d := make([]KLineData, 0)
+	if !empty {
+		d = make([]KLineData, len(*res.Data))
+		copy(d, *res.Data)
+	}
+	klineCacheMu.Lock()
+	defer klineCacheMu.Unlock()
+	key := code + "|" + klt
+	if old := klineCache[key]; old != nil && old.limit >= limit && !old.failed {
+		return
+	}
+	if len(klineCache) >= klineCacheMaxSize {
+		for k := range klineCache {
+			delete(klineCache, k)
+			break
+		}
+	}
+	klineCache[key] = &klineFallbackCacheEntry{data: d, src: res.Source, limit: limit, fetchedAt: time.Now(), failed: empty}
+}
 
 type SinaKLineApi struct {
 	client *resty.Client
@@ -559,70 +631,156 @@ type KLineSourceResult struct {
 	Source string       `json:"source"`
 }
 
+// FetchKLineWithFallback 返回带短时缓存的 K 线降级链结果：同标的同周期在
+// 5 分钟内重复请求直接命中缓存，避免重复走完整的慢速降级链。
 func FetchKLineWithFallback(stockCode, stockName, klt string, limit int, end string) *KLineSourceResult {
-	macResult := fetchFromMACWithTimeout(stockCode, klt, limit, 5*time.Second)
-	if macResult != nil && macResult.Data != nil && len(*macResult.Data) > 0 {
+	if cached := klineCacheGet(stockCode, klt, limit); cached != nil {
+		cached.Source = "cache:" + cached.Source
+		fillVolumeRatio(cached.Data)
+		return cached
+	}
+	res := fetchKLineWithFallbackInner(stockCode, stockName, klt, limit, end)
+	klineCacheSet(stockCode, klt, res, limit)
+	return res
+}
+
+func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, end string) *KLineSourceResult {
+	// 港美股：仅走 MAC/东财（新浪/腾讯/通达信不支持港美股）
+	if IsHKStockCode(stockCode) || IsUSStockCode(stockCode) {
+		if macResult := tryKLineSource("tdx-mac", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
+			return fetchFromMAC(stockCode, klt, limit)
+		}); macResult != nil {
+			macResult.Source = "tdx-mac"
+			fillVolumeRatio(macResult.Data)
+			return macResult
+		}
+		if eastMoneyResult := tryKLineSource("eastmoney", 0, stockCode, klt, func() *KLineSourceResult {
+			return fetchFromEastMoney(stockCode, stockName, klt, limit, end)
+		}); eastMoneyResult != nil {
+			eastMoneyResult.Source = "eastmoney"
+			fillVolumeRatio(eastMoneyResult.Data)
+			return eastMoneyResult
+		}
+		return &KLineSourceResult{Data: &[]KLineData{}, Source: ""}
+	}
+
+	// A股：优先通达信本地数据源（最可靠），失败再逐级回退到远程源。
+	tdxResult := tryKLineSource("tdx", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
+		return fetchFromTdx(stockCode, klt, limit)
+	})
+	if tdxResult != nil {
+		tdxResult.Source = "tdx"
+		fillVolumeRatio(tdxResult.Data)
+		return tdxResult
+	}
+
+	macResult := tryKLineSource("tdx-mac", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
+		return fetchFromMAC(stockCode, klt, limit)
+	})
+	if macResult != nil {
 		macResult.Source = "tdx-mac"
 		fillVolumeRatio(macResult.Data)
 		return macResult
 	}
-	logger.SugaredLogger.Warnf("MAC K线数据为空或超时，尝试东方财富数据源: code=%s klt=%s", stockCode, klt)
 
-	eastMoneyResult := fetchFromEastMoney(stockCode, stockName, klt, limit, end)
-	if eastMoneyResult != nil && eastMoneyResult.Data != nil && len(*eastMoneyResult.Data) > 0 {
+	eastMoneyResult := tryKLineSource("eastmoney", 0, stockCode, klt, func() *KLineSourceResult {
+		return fetchFromEastMoney(stockCode, stockName, klt, limit, end)
+	})
+	if eastMoneyResult != nil {
 		eastMoneyResult.Source = "eastmoney"
 		fillVolumeRatio(eastMoneyResult.Data)
 		return eastMoneyResult
 	}
 
-	// 港美股：MAC失败后仅走东方财富，新浪/腾讯/通达信不支持港美股
-	if IsHKStockCode(stockCode) || IsUSStockCode(stockCode) {
-		if macResult != nil {
-			macResult.Source = "tdx-mac-ex"
-			return macResult
-		}
-		return &KLineSourceResult{Data: &[]KLineData{}, Source: ""}
-	}
-
-	logger.SugaredLogger.Warnf("EastMoney K线数据为空或失败，尝试Tushare数据源: code=%s klt=%s", stockCode, klt)
-
-	tushareResult := fetchFromTushare(stockCode, klt, limit)
-	if tushareResult != nil && tushareResult.Data != nil && len(*tushareResult.Data) > 0 {
+	tushareResult := tryKLineSource("tushare", 0, stockCode, klt, func() *KLineSourceResult {
+		return fetchFromTushare(stockCode, klt, limit)
+	})
+	if tushareResult != nil {
 		tushareResult.Source = "tushare"
 		fillVolumeRatio(tushareResult.Data)
 		return tushareResult
 	}
-	logger.SugaredLogger.Warnf("Tushare K线数据也为空，尝试新浪数据源: code=%s klt=%s", stockCode, klt)
 
-	sinaResult := fetchFromSina(stockCode, klt, limit)
-	if sinaResult != nil && sinaResult.Data != nil && len(*sinaResult.Data) > 0 {
+	sinaResult := tryKLineSource("sina", 0, stockCode, klt, func() *KLineSourceResult {
+		return fetchFromSina(stockCode, klt, limit)
+	})
+	if sinaResult != nil {
 		sinaResult.Source = "sina"
 		fillVolumeRatio(sinaResult.Data)
 		return sinaResult
 	}
-	logger.SugaredLogger.Warnf("新浪K线数据也为空，尝试腾讯数据源: code=%s klt=%s", stockCode, klt)
 
-	tencentResult := fetchFromTencent(stockCode, klt, limit)
-	if tencentResult != nil && tencentResult.Data != nil && len(*tencentResult.Data) > 0 {
+	tencentResult := tryKLineSource("tencent", 0, stockCode, klt, func() *KLineSourceResult {
+		return fetchFromTencent(stockCode, klt, limit)
+	})
+	if tencentResult != nil {
 		tencentResult.Source = "tencent"
 		fillVolumeRatio(tencentResult.Data)
 		return tencentResult
 	}
-	logger.SugaredLogger.Warnf("腾讯K线数据也为空，尝试通达信数据源: code=%s klt=%s", stockCode, klt)
 
-	tdxResult := fetchFromTdx(stockCode, klt, limit)
-	if tdxResult != nil && tdxResult.Data != nil && len(*tdxResult.Data) > 0 {
-		tdxResult.Source = "tdx"
-		fillVolumeRatio(tdxResult.Data)
-		return tdxResult
-	}
-	logger.SugaredLogger.Warnf("通达信K线数据也为空: code=%s klt=%s", stockCode, klt)
-
+	logger.SugaredLogger.Warnf("所有K线数据源均不可用: code=%s klt=%s", stockCode, klt)
 	if eastMoneyResult != nil {
 		eastMoneyResult.Source = "eastmoney"
 		return eastMoneyResult
 	}
 	return &KLineSourceResult{Data: &[]KLineData{}, Source: ""}
+}
+
+// klineSourceTimeout 单个数据源的探测超时。
+const klineSourceTimeout = 5 * time.Second
+
+// tryKLineSource 带断路器的数据源探测：
+//   - 断路器断开（Open）时快速跳过，不发起请求；
+//   - 超时/结果为 nil 视为数据源级故障，上报 Failure 计入连续失败，触发熔断；
+//   - 数据源可达但该标的无数据视为软失败，不惩罚断路器，仅继续降级；
+//   - 返回有效数据上报 Success。
+func tryKLineSource(name string, timeout time.Duration, stockCode, klt string, fn func() *KLineSourceResult) *KLineSourceResult {
+	cb := circuitbreaker.Get(name)
+	if !cb.Allow() {
+		logger.SugaredLogger.Debugf("断路器断开，跳过数据源 %s: code=%s klt=%s", name, stockCode, klt)
+		return nil
+	}
+
+	var rs *KLineSourceResult
+	ok := true
+	if timeout > 0 {
+		rs, ok = runKLineSourceWithTimeout(name, timeout, stockCode, klt, fn)
+	} else {
+		rs = fn()
+	}
+	if !ok {
+		cb.Failure()
+		return nil
+	}
+	if rs == nil {
+		cb.Failure()
+		return nil
+	}
+	if rs.Data == nil || len(*rs.Data) == 0 {
+		logger.SugaredLogger.Warnf("%s 数据为空，降级到下一个数据源: code=%s klt=%s", name, stockCode, klt)
+		return nil
+	}
+	cb.Success()
+	return rs
+}
+
+func runKLineSourceWithTimeout(name string, timeout time.Duration, stockCode, klt string, fn func() *KLineSourceResult) (*KLineSourceResult, bool) {
+	type result struct {
+		rs *KLineSourceResult
+	}
+	ch := make(chan result, 1)
+	go func() {
+		ch <- result{rs: fn()}
+	}()
+
+	select {
+	case r := <-ch:
+		return r.rs, true
+	case <-time.After(timeout):
+		logger.SugaredLogger.Warnf("%s 超时 (%v)，降级到下一个数据源: code=%s klt=%s", name, timeout, stockCode, klt)
+		return nil, false
+	}
 }
 
 // fillVolumeRatio 补算量比：量比 = 当日成交量 / 过去5日平均成交量
@@ -696,26 +854,6 @@ func fetchFromMAC(stockCode, klt string, limit int) *KLineSourceResult {
 	api := NewTdxKLineApi()
 	data := api.GetMACKLineData(stockCode, klt, limit)
 	return &KLineSourceResult{Data: data}
-}
-
-func fetchFromMACWithTimeout(stockCode, klt string, limit int, timeout time.Duration) *KLineSourceResult {
-	type result struct {
-		rs *KLineSourceResult
-		ok bool
-	}
-	ch := make(chan result, 1)
-	go func() {
-		rs := fetchFromMAC(stockCode, klt, limit)
-		ch <- result{rs: rs, ok: true}
-	}()
-
-	select {
-	case r := <-ch:
-		return r.rs
-	case <-time.After(timeout):
-		logger.SugaredLogger.Warnf("fetchFromMAC 超时 (%v)，降级到下一个数据源: code=%s klt=%s", timeout, stockCode, klt)
-		return nil
-	}
 }
 
 func AggregateSinaMonthKLine(dailyData *[]KLineData) *[]KLineData {

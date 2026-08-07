@@ -248,6 +248,7 @@ async function fetchAiModels(aiConfig, index, opts = {}) {
 }
 
 const aiPlatformOptions = [
+  { label: 'NVIDIA NIM (https://integrate.api.nvidia.com/v1)', value: 'https://integrate.api.nvidia.com/v1' },
   { label: 'DeepSeek (https://api.deepseek.com)', value: 'https://api.deepseek.com' },
   { label: '硅基流动 (https://api.siliconflow.cn/v1)', value: 'https://api.siliconflow.cn/v1' },
   { label: '智谱AI(GLM) (https://open.bigmodel.cn/api/paas/v4)', value: 'https://open.bigmodel.cn/api/paas/v4' },
@@ -279,6 +280,8 @@ function getPlatformName(baseUrl) {
 
 // 常用向量（Embedding）模型与服务地址建议
 const embeddingModelOptions = [
+  { label: 'nvidia/nv-embed-v1（NVIDIA，推荐·实测可用）', value: 'nvidia/nv-embed-v1' },
+  { label: 'nvidia/nemotron-3-embed-1b（NVIDIA，实测可用）', value: 'nvidia/nemotron-3-embed-1b' },
   { label: 'bge-m3（BAAI 多语言）', value: 'bge-m3' },
   { label: 'bge-large-zh-v1.5', value: 'bge-large-zh-v1.5' },
   { label: 'bge-small-zh-v1.5', value: 'bge-small-zh-v1.5' },
@@ -288,6 +291,7 @@ const embeddingModelOptions = [
   { label: 'BAAI/bge-m3（硅基流动）', value: 'BAAI/bge-m3' },
 ]
 const embeddingBaseUrlOptions = [
+  { label: 'NVIDIA NIM (https://integrate.api.nvidia.com/v1)', value: 'https://integrate.api.nvidia.com/v1' },
   { label: 'Ollama 本地 (http://localhost:11434/v1)', value: 'http://localhost:11434/v1' },
   { label: '硅基流动 (https://api.siliconflow.cn/v1)', value: 'https://api.siliconflow.cn/v1' },
   { label: 'OpenAI (https://api.openai.com/v1)', value: 'https://api.openai.com/v1' },
@@ -957,7 +961,9 @@ function importConfig() {
                     • 技能关键词匹配 (bge-m3 等)<br>
                     • 长期记忆向量存储/检索<br>
                     • 全局独立于每个 Chat 模型配置，通常使用专用 Embedding 服务<br>
-                    • 服务地址留空时复用所选 AI 配置的接口地址
+                    • 服务地址留空时自动解析：优先使用显式配置了 Embedding 的 AI 配置；<br>
+                    &nbsp;&nbsp;否则对 Ollama / 通义 / 豆包 / OpenAI / 硅基流动 自动派生端点<br>
+                    • 端点会自动健康检查，不可用时降级为关键词匹配（不再复用纯 Chat 提供商）
                   </div>
                   </n-gradient-text>
                 </template>
@@ -980,7 +986,7 @@ function importConfig() {
                 filterable
                 tag
                 clearable
-                placeholder="留空则使用所选 AI 配置的服务地址"
+                placeholder="留空则自动解析(Ollama/通义/豆包/OpenAI/硅基流动)"
               />
             </n-form-item-gi>
             <n-form-item-gi :span="7" v-if="openAiEnable && formValue.embeddingEnabled" label="向量服务 ApiKey" path="embeddingApiKey">

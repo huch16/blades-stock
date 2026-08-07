@@ -74,30 +74,9 @@ type APIPurchase struct {
 
 // handleGetMarketData 处理 GetMarketData 工具调用
 func handleGetMarketData(o *OpenAi, funcArguments string, ctx *ToolContext) error {
-	// 调用实际的API获取市场数据
-	client := SharedHTTPClient
-	apiURL := "https://x-quote.cls.cn/quote/index/home?app=CailianpressWeb&os=web&sv=8.4.6"
-
-	// 获取随机User-Agent
-	uaGen, err := fakeUserAgent.New()
+	apiResp, err := fetchMarketAPIResponse()
 	if err != nil {
-		// 如果获取失败，使用默认User-Agent
-		uaGen, _ = fakeUserAgent.New()
-	}
-	ua := uaGen.GetRandom()
-
-	var apiResp APIResponse
-	resp, err := client.R().
-		SetHeader("User-Agent", ua).
-		SetResult(&apiResp).
-		Get(apiURL)
-
-	if err != nil {
-		return fmt.Errorf("调用API失败: %v", err)
-	}
-
-	if resp.StatusCode() != 200 || apiResp.Code != 200 {
-		return fmt.Errorf("API返回错误: 状态码=%d, 错误信息=%s", resp.StatusCode(), apiResp.Msg)
+		return err
 	}
 
 	ctx.Ch <- map[string]any{
@@ -180,4 +159,47 @@ func handleGetMarketData(o *OpenAi, funcArguments string, ctx *ToolContext) erro
 	)
 
 	return nil
+}
+
+// fetchMarketAPIResponse 拉取财联社大盘数据，供 GetMarketData 工具与
+// GetMarketBrief（提示词注入）共用，避免重复实现 HTTP 调用。
+func fetchMarketAPIResponse() (*APIResponse, error) {
+	client := SharedHTTPClient
+	apiURL := "https://x-quote.cls.cn/quote/index/home?app=CailianpressWeb&os=web&sv=8.4.6"
+
+	uaGen, err := fakeUserAgent.New()
+	if err != nil {
+		uaGen, _ = fakeUserAgent.New()
+	}
+
+	var apiResp APIResponse
+	resp, err := client.R().
+		SetHeader("User-Agent", uaGen.GetRandom()).
+		SetResult(&apiResp).
+		Get(apiURL)
+	if err != nil {
+		return nil, fmt.Errorf("调用API失败: %v", err)
+	}
+	if resp.StatusCode() != 200 || apiResp.Code != 200 {
+		return nil, fmt.Errorf("API返回错误: 状态码=%d, 错误信息=%s", resp.StatusCode(), apiResp.Msg)
+	}
+	return &apiResp, nil
+}
+
+// GetMarketBrief 返回一行一指数的今日大盘概览（紧凑版），供系统提示词注入
+// "当日市场状态"。调用方负责缓存。
+func GetMarketBrief() (string, error) {
+	apiResp, err := fetchMarketAPIResponse()
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	b.WriteString("【今日市场状态（数据源：GetMarketData）】\n")
+	for _, idx := range apiResp.Data.IndexQuote {
+		b.WriteString(fmt.Sprintf("- %s %s: %.2f (%.2f%%)\n", idx.SecuCode, idx.SecuName, idx.LastPx, idx.Change*100))
+	}
+	ud := apiResp.Data.UpDownDis
+	b.WriteString(fmt.Sprintf("- 涨跌分布: 涨停%d 跌停%d 平均涨幅%.2f%% 上涨%d 下跌%d 平盘%d\n",
+		ud.UpNum, ud.DownNum, ud.AverageRise*100, ud.RiseNum, ud.FallNum, ud.FlatNum))
+	return b.String(), nil
 }

@@ -217,7 +217,7 @@ func cleanupCache() string {
 }
 
 func cleanupChatSessions() string {
-	result := db.Dao.Exec("DELETE FROM ai_assistant_session")
+	result := db.Dao.Exec("DELETE FROM ai_assistant_sessions")
 	if result.Error != nil {
 		return "清理AI对话失败: " + result.Error.Error()
 	}

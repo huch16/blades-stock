@@ -208,20 +208,44 @@ type Fact struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-func (m *MemoryManager) StoreFact(sessionID, content string) error {
+// StoreReflection persists a reflection conclusion as long-term memory
+// (category "reflection"). High/low quality samples flow back through here to
+// close the learn-from-experience loop.
+func (m *MemoryManager) StoreReflection(sessionID, content string) error {
+	if sessionID == "" || strings.TrimSpace(content) == "" {
+		return nil
+	}
 	mem := &AgentMemory{
 		SessionID: sessionID,
-		Role:      "fact",
+		Role:      "reflection",
 		Content:   content,
-		Category:  "fact",
+		Category:  "reflection",
 		CreatedAt: time.Now(),
 	}
 	if err := db.Dao.Create(mem).Error; err != nil {
-		return fmt.Errorf("store fact: %w", err)
+		return fmt.Errorf("store reflection: %w", err)
 	}
-	db.Dao.Model(&AgentSession{}).Where("session_id = ?", sessionID).
-		UpdateColumn("fact_count", db.Dao.Raw("fact_count + 1"))
 	return nil
+}
+
+// RetrieveReflections returns recent reflection memories for a session.
+func (m *MemoryManager) RetrieveReflections(sessionID string, limit int) []Fact {
+	if limit <= 0 {
+		limit = 5
+	}
+	var mems []AgentMemory
+	db.Dao.Where("session_id = ? AND category = ?", sessionID, "reflection").
+		Order("id desc").Limit(limit).Find(&mems)
+	refs := make([]Fact, 0, len(mems))
+	for _, mem := range mems {
+		refs = append(refs, Fact{
+			ID:        mem.ID,
+			SessionID: mem.SessionID,
+			Content:   mem.Content,
+			CreatedAt: mem.CreatedAt,
+		})
+	}
+	return refs
 }
 
 func (m *MemoryManager) RetrieveFacts(sessionID string, limit int) []Fact {
@@ -244,18 +268,58 @@ func (m *MemoryManager) RetrieveFacts(sessionID string, limit int) []Fact {
 }
 
 func (m *MemoryManager) DeleteFact(id uint) error {
+	return m.DeleteMemory(id)
+}
+
+// DeleteMemory removes any agent memory row by id (facts, reflections, or
+// evolution advice), used by the reflection dedup path.
+func (m *MemoryManager) DeleteMemory(id uint) error {
 	return db.Dao.Delete(&AgentMemory{}, id).Error
+}
+
+// RetrieveEvolutions returns recent evolution prompt-advice memories.
+func (m *MemoryManager) RetrieveEvolutions(sessionID string, limit int) []Fact {
+	if limit <= 0 {
+		limit = 1
+	}
+	var mems []AgentMemory
+	db.Dao.Where("session_id = ? AND category = ?", sessionID, "evolution").
+		Order("id desc").Limit(limit).Find(&mems)
+	evos := make([]Fact, 0, len(mems))
+	for _, mem := range mems {
+		evos = append(evos, Fact{
+			ID:        mem.ID,
+			SessionID: mem.SessionID,
+			Content:   mem.Content,
+			CreatedAt: mem.CreatedAt,
+		})
+	}
+	return evos
 }
 
 func (m *MemoryManager) MemoryPrompt(sessionID string) string {
 	facts := m.RetrieveFacts(sessionID, 10)
-	if len(facts) == 0 {
+	refs := m.RetrieveReflections(sessionID, 5)
+	evos := m.RetrieveEvolutions(sessionID, 1)
+	if len(facts) == 0 && len(refs) == 0 && len(evos) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("【长期记忆】\n")
 	for i, f := range facts {
 		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, f.Content))
+	}
+	if len(refs) > 0 {
+		b.WriteString("【历史反思教训】\n")
+		for i, r := range refs {
+			b.WriteString(fmt.Sprintf("%d. %s\n", i+1, r.Content))
+		}
+	}
+	if len(evos) > 0 {
+		b.WriteString("【进化建议】请结合以下提示词优化建议改进回答风格（如与本次问题无关可忽略）：\n")
+		for _, e := range evos {
+			b.WriteString(e.Content + "\n")
+		}
 	}
 	return b.String()
 }

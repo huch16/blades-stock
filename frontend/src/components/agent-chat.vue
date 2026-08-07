@@ -106,6 +106,7 @@ import {ChatWithAgent, GetConfig, GetVersionInfo} from "../../wailsjs/go/main/Ap
 import type { AIConfig } from '../../wailsjs/go/models'
 import { useAiConfigStore } from '../stores/aiConfig';
 import {EventsOff, EventsOn} from '../../wailsjs/runtime'
+import { cleanFinalContent } from '../utils/cleanText'
 import 'tdesign-vue-next/es/style/index.css';
 
 const aiConfigStore = useAiConfigStore()
@@ -427,6 +428,7 @@ const handleAgentMessage = (data: any) => {
     const lastItem = chatList.value[0]
     if (lastItem) {
       if (lastItem.rawContent) {
+        lastItem.rawContent = cleanFinalContent(lastItem.rawContent)
         const fmt = formatMarkdown(lastItem.rawContent)
         lastItem.content = fmt.content
         if (fmt.jsonMarkdown) lastItem.jsonMarkdown = fmt.jsonMarkdown

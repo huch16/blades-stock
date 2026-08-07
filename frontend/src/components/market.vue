@@ -20,6 +20,7 @@ import {
 } from "../../wailsjs/go/main/App";
 import {EventsOff, EventsOn} from "../../wailsjs/runtime";
 import NewsList from "./newsList.vue";
+import { cleanFinalContent } from "../utils/cleanText";
 import KLineChart from "./KLineChart.vue";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import { CaretDown, CaretUp, PulseOutline,} from "@vicons/ionicons5";
@@ -262,6 +263,10 @@ function industryRank() {
 }
 
 function reAiSummary() {
+  if (loading.value) {
+    message.warning('AI分析正在进行中，请稍候')
+    return
+  }
   if (!aiConfigs.value || aiConfigs.value.length === 0) {
     message.warning('请先在设置页面添加 AI 配置')
     return
@@ -277,13 +282,23 @@ function reAiSummary() {
   SummaryStockNews(question.value, aiConfigId.value, sysPromptId.value, enableTools.value, thinkingMode.value, "summaryStockNews", "")
 }
 
+function stripStatusLines(text) {
+  if (!text) return text
+  return text
+    .replace(/\[STATUS\][^\r\n]*?(?:\.\.\.|$)/g, "")
+    .replace(/\[STEP\][^\r\n]*?(?:\.\.\.|$)/g, "")
+    .replace(/\[ToolCall\][^\r\n]*?(?:\)|$)/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+}
+
 function getAiSummary() {
   summaryModal.value = true
   loading.value = true
   GetAIResponseResult("市场资讯").then(result => {
     loading.value = false
     if (result.content) {
-      aiSummary.value = result.content
+      aiSummary.value = stripStatusLines(result.content)
       question.value = result.question
       loading.value = false
 
@@ -314,7 +329,9 @@ EventsOn("summaryStockNews", async (msg) => {
   if (msg === "DONE") {
     loading.value = false
     if (aiSummary.value && !aiSummary.value.startsWith("❌")) {
-      await SaveAIResponseResult("市场资讯", "市场资讯", aiSummary.value, chatId.value, question.value,aiConfigId.value)
+      const cleaned = cleanFinalContent(aiSummary.value)
+      aiSummary.value = cleaned
+      await SaveAIResponseResult("市场资讯", "市场资讯", stripStatusLines(cleaned), chatId.value, question.value,aiConfigId.value)
       analysisStatus.value = "分析完成"
       notify.success({
         title: 'AI分析完成',
@@ -345,8 +362,13 @@ EventsOn("summaryStockNews", async (msg) => {
     if (msg.content && msg.content !== "agent-DONE") {
       aiSummary.value = aiSummary.value + msg.content
     }
+    // reasoning_content 仅用于状态/进度展示，绝不混入答案正文，
+    // 避免思考模型把完整草稿（重复正文）与 [STATUS]/[STEP] 状态行拼进结果。
     if (msg.reasoning_content) {
-      aiSummary.value = aiSummary.value + msg.reasoning_content
+      if (msg.reasoning_content.startsWith("[STATUS]")) {
+        analysisStatus.value = msg.reasoning_content.replace("[STATUS]", "").trim()
+      }
+      // [STEP] 工具调用日志与其它纯思考文本一律忽略
     }
     if (msg.extraContent) {
       aiSummary.value = aiSummary.value + msg.extraContent

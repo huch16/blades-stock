@@ -3,9 +3,12 @@ package data
 import (
 	"fmt"
 	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 type SkillApi struct{}
@@ -14,8 +17,31 @@ func NewSkillApi() *SkillApi {
 	return &SkillApi{}
 }
 
+// enabledSkillsCache caches GetEnabledSkills() for a short TTL. Skills are
+// loaded on every chat request (buildSkillPrompt + skill matching), which
+// turns a trivial query into avoidable per-request DB round-trips. The cache
+// is invalidated by any write path (Create/Update/Delete/EnableSkill) so
+// runtime edits stay consistent.
+var (
+	enabledSkillsCache      []models.Skill
+	enabledSkillsCacheTime  time.Time
+	enabledSkillsCacheMu    sync.Mutex
+	enabledSkillsCacheTTL   = 10 * time.Second
+)
+
+func invalidateEnabledSkillsCache() {
+	enabledSkillsCacheMu.Lock()
+	enabledSkillsCache = nil
+	enabledSkillsCacheTime = time.Time{}
+	enabledSkillsCacheMu.Unlock()
+}
+
 func (a *SkillApi) Create(skill *models.Skill) error {
-	return db.Dao.Create(skill).Error
+	if err := db.Dao.Create(skill).Error; err != nil {
+		return err
+	}
+	invalidateEnabledSkillsCache()
+	return nil
 }
 
 func (a *SkillApi) Update(skill *models.Skill) error {
@@ -31,16 +57,23 @@ func (a *SkillApi) Update(skill *models.Skill) error {
 		"directive":        skill.Directive,
 		"examples":         skill.Examples,
 		"trigger_keywords": skill.TriggerKeywords,
+		"tool_groups":      skill.ToolGroups,
 		"mcp_server_ids":   skill.MCPServerIDs,
 		"enable":           skill.Enable,
 		"sort_order":       skill.SortOrder,
 	}
 
-	return db.Dao.Model(&models.Skill{}).Where("id = ?", skill.ID).Updates(updates).Error
+	if err := db.Dao.Model(&models.Skill{}).Where("id = ?", skill.ID).Updates(updates).Error; err != nil {
+		return err
+	}
+	invalidateEnabledSkillsCache()
+	return nil
 }
 
 func (a *SkillApi) Delete(id uint) error {
-	return db.Dao.Delete(&models.Skill{}, id).Error
+	err := db.Dao.Delete(&models.Skill{}, id).Error
+	invalidateEnabledSkillsCache()
+	return err
 }
 
 func (a *SkillApi) GetByID(id uint) (*models.Skill, error) {
@@ -86,12 +119,27 @@ func (a *SkillApi) GetAll() []models.Skill {
 }
 
 func (a *SkillApi) EnableSkill(id uint, enable bool) error {
-	return db.Dao.Model(&models.Skill{}).Where("id = ?", id).Update("enable", enable).Error
+	err := db.Dao.Model(&models.Skill{}).Where("id = ?", id).Update("enable", enable).Error
+	invalidateEnabledSkillsCache()
+	return err
 }
 
 func (a *SkillApi) GetEnabledSkills() []models.Skill {
+	enabledSkillsCacheMu.Lock()
+	defer enabledSkillsCacheMu.Unlock()
+	if enabledSkillsCache != nil && time.Since(enabledSkillsCacheTime) < enabledSkillsCacheTTL {
+		return enabledSkillsCache
+	}
 	var skills []models.Skill
-	db.Dao.Where("enable = ?", true).Order("sort_order ASC, created_at DESC").Find(&skills)
+	if err := db.Dao.Where("enable = ?", true).Order("sort_order ASC, created_at DESC").Find(&skills).Error; err != nil {
+		logger.SugaredLogger.Warnf("GetEnabledSkills query failed: %v", err)
+		if enabledSkillsCache != nil {
+			return enabledSkillsCache
+		}
+		return nil
+	}
+	enabledSkillsCache = skills
+	enabledSkillsCacheTime = time.Now()
 	return skills
 }
 

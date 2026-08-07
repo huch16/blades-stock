@@ -420,6 +420,11 @@ func AskAi(o *OpenAi, _ error, messages []map[string]interface{}, ch chan map[st
 			if err := json.Unmarshal([]byte(data), &streamResponse); err == nil {
 				for _, choice := range streamResponse.Choices {
 					if content := choice.Delta.Content; content != "" {
+						// 质量校验：丢弃 <unk> 乱码 chunk，避免垃圾内容流到前端。
+						if IsDegenerateGarbage(content) {
+							logger.SugaredLogger.Warnf("AskAi dropped degenerate <unk> chunk (model=%s)", streamResponse.Model)
+							continue
+						}
 						if content == "###" || content == "##" || content == "#" {
 							ch <- map[string]any{
 								"code":     1,
@@ -754,6 +759,11 @@ func AskAiWithToolsDepth(o *OpenAi, err error, messages []map[string]interface{}
 				}
 				for _, choice := range streamResponse.Choices {
 					if content := choice.Delta.Content; content != "" {
+						// 质量校验：丢弃 <unk> 乱码 chunk，避免垃圾内容流到前端。
+						if IsDegenerateGarbage(content) {
+							logger.SugaredLogger.Warnf("AskAiWithTools dropped degenerate <unk> chunk (model=%s)", streamResponse.Model)
+							continue
+						}
 						contentText.WriteString(content)
 
 						if content == "###" || content == "##" || content == "#" {
@@ -867,12 +877,48 @@ func AskAiWithToolsDepth(o *OpenAi, err error, messages []map[string]interface{}
 	}
 }
 
+// deduplicateCheck 同 stock_code + 同 question 近 4h 内已生成则返回 true（去重/跳过）
+func deduplicateCheck(stockCode, question string) bool {
+	if question == "" {
+		return false
+	}
+	var count int64
+	fourHoursAgo := time.Now().Add(-4 * time.Hour)
+	err := db.Dao.Model(&models.AIResponseResult{}).
+		Where("stock_code = ? AND question = ? AND created_at > ? AND is_del = 0", stockCode, question, fourHoursAgo).
+		Count(&count).Error
+	if err != nil {
+		logger.SugaredLogger.Errorf("deduplicateCheck query error: %v", err)
+		return false
+	}
+	return count > 0
+}
+
 func (o *OpenAi) SaveAIResponseResult(stockCode, stockName, result, chatId, question string) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.SugaredLogger.Errorf("panic in SaveAIResponseResult: %v", r)
 		}
 	}()
+
+	// D. 去重：同 stock_code + 同 question 近 4h 内已生成则跳过保存
+	if deduplicateCheck(stockCode, question) {
+		logger.SugaredLogger.Infof("SaveAIResponseResult: 重复生成，跳过保存 code=%q question=%q", stockCode, question)
+		return
+	}
+
+	// C. 事后硬校验（仅对泛化报告）：抽取代码校验存在性/行情，标注市值未核验
+	corrected := verifyAndCorrectContent(result, stockCode, question)
+	if corrected != result {
+		logger.SugaredLogger.Infof("SaveAIResponseResult: 内容经校验修正 code=%q", stockCode)
+		result = corrected
+	}
+
+	// 非个股代码（"市场分析"/"agent"/空串等）不会进入回测准确度追踪，
+	// 提前打点便于发现是否误把泛化分析当成个股报告保存。
+	if !models.IsStockReportCode(stockCode) {
+		logger.SugaredLogger.Warnf("SaveAIResponseResult: 非个股代码，不计入回测追踪: code=%q name=%q question=%q", stockCode, stockName, question)
+	}
 	err := db.Dao.Create(&models.AIResponseResult{
 		StockCode: stockCode,
 		StockName: stockName,

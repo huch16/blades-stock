@@ -1,14 +1,17 @@
 package data
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
+	"blades-stock/backend/circuitbreaker"
 	"blades-stock/backend/logger"
 )
 
 // ============================================================================
 // 交易日历 — 优先使用 AData（8000端口），降级 Baostock（8090端口），最终降级周末判断
+// 各数据源由断路器保护：连续失败自动熔断，冷却后自动探测恢复。
 // ============================================================================
 
 var (
@@ -21,34 +24,42 @@ var (
 // 优先从 AData 获取，失败则尝试 Baostock，最终降级到周末判断
 func InitTradingCalendar() {
 	// 优先：AData（8000端口，稳定运行）
-	adataClient := NewAdataClient()
-	days, err := adataClient.GetTradeCalendarDays()
-	if err == nil && len(days) > 0 {
+	if cache := tryTradingCalendarSource("adata", func() (map[string]bool, error) {
+		adataClient := NewAdataClient()
+		days, err := adataClient.GetTradeCalendarDays()
+		if err != nil {
+			return nil, err
+		}
 		cache := make(map[string]bool, len(days))
 		for _, day := range days {
 			cache[day] = true
 		}
+		return cache, nil
+	}); cache != nil {
 		tradingDayCacheMu.Lock()
 		tradingDayCache = cache
 		tradingDayInited = true
 		tradingDayCacheMu.Unlock()
-		logger.SugaredLogger.Infof("InitTradingCalendar: AData 已加载交易日历，共 %d 个交易日", len(days))
+		logger.SugaredLogger.Infof("InitTradingCalendar: AData 已加载交易日历，共 %d 个交易日", len(cache))
 		return
-	}
-	if err != nil {
-		logger.SugaredLogger.Warnf("InitTradingCalendar: AData 获取交易日历失败: %v", err)
 	}
 
 	// 降级：Baostock（8090端口）
 	year := time.Now().Year()
-	api := NewBaostockApi()
-	resp, err := api.GetTradeCalendarYear(year)
-	if err == nil && resp != nil && len(resp.TradingDays) > 0 {
+	if cache := tryTradingCalendarSource("baostock", func() (map[string]bool, error) {
+		api := NewBaostockApi()
+		resp, err := api.GetTradeCalendarYear(year)
+		if err != nil {
+			return nil, err
+		}
+		if resp == nil || len(resp.TradingDays) == 0 {
+			return nil, fmt.Errorf("baostock 返回空交易日历")
+		}
 		cache := make(map[string]bool, len(resp.TradingDays))
 		for _, day := range resp.TradingDays {
 			cache[day] = true
 		}
-		// 获取下一年1月
+		// 合并下一年1月
 		if resp2, err := api.GetTradeCalendarYear(year + 1); err == nil {
 			for _, day := range resp2.TradingDays {
 				if len(day) >= 7 && day[:4] == time.Date(year+1, 1, 1, 0, 0, 0, 0, time.Local).Format("2006")[:4] {
@@ -56,15 +67,14 @@ func InitTradingCalendar() {
 				}
 			}
 		}
+		return cache, nil
+	}); cache != nil {
 		tradingDayCacheMu.Lock()
 		tradingDayCache = cache
 		tradingDayInited = true
 		tradingDayCacheMu.Unlock()
-		logger.SugaredLogger.Infof("InitTradingCalendar: Baostock 已加载交易日历，共 %d 个交易日", resp.TradingCount)
+		logger.SugaredLogger.Infof("InitTradingCalendar: Baostock 已加载交易日历，共 %d 个交易日", len(cache))
 		return
-	}
-	if err != nil {
-		logger.SugaredLogger.Warnf("InitTradingCalendar: Baostock 获取交易日历失败，降级到周末判断: %v", err)
 	}
 
 	tradingDayCacheMu.Lock()
@@ -72,6 +82,29 @@ func InitTradingCalendar() {
 	tradingDayInited = false
 	tradingDayCacheMu.Unlock()
 }
+
+// tryTradingCalendarSource 带断路器的交易日历数据源探测。
+// 返回 nil 表示该源不可用（断路器断开 / 调用失败 / 返回空数据），由调用方继续降级。
+func tryTradingCalendarSource(name string, fn func() (map[string]bool, error)) map[string]bool {
+	cb := circuitbreaker.Get(name)
+	if !cb.Allow() {
+		logger.SugaredLogger.Debugf("断路器断开，跳过交易日历数据源 %s", name)
+		return nil
+	}
+	cache, err := fn()
+	if err != nil {
+		cb.Failure()
+		logger.SugaredLogger.Warnf("InitTradingCalendar: %s 获取交易日历失败: %v", name, err)
+		return nil
+	}
+	if len(cache) == 0 {
+		logger.SugaredLogger.Warnf("InitTradingCalendar: %s 返回空交易日历", name)
+		return nil
+	}
+	cb.Success()
+	return cache
+}
+
 
 // IsTradingDay 判断指定日期是否为交易日
 // 优先查交易日历缓存，降级到周末判断

@@ -71,6 +71,23 @@ func main() {
 		log.SugaredLogger.Warnf("chdir to base dir failed: %v", err)
 	}
 
+	// GUI 程序无 stderr，未被 recover 的 panic 会静默退出。重定向 stderr 到
+	// logs/panic.log，使任何未捕获崩溃（含堆栈）可被追溯。
+	if err := os.MkdirAll(paths.LogDir(), 0755); err == nil {
+		if f, err := os.OpenFile(filepath.Join(paths.LogDir(), "panic.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644); err == nil {
+			os.Stderr = f
+			log.SugaredLogger.Infof("stderr redirected to %s", filepath.Join(paths.LogDir(), "panic.log"))
+		}
+	}
+
+	// 单实例保护：避免双开抢同一份 SQLite/WAL 导致进程静默闪退。
+	if !acquireSingleInstanceLock() {
+		showAlreadyRunningMessage()
+		log.SugaredLogger.Warn("another instance already running, exit")
+		return
+	}
+	defer releaseSingleInstanceLock()
+
 	checkDir("data")
 	machineid.Init(BuildKey)
 	data.SetAppIcon(icon)
@@ -360,6 +377,7 @@ func SeedDefaultSkills() {
 			TriggerKeywords: "ETF,轮动,动量,板块轮动,资金流向,北向资金,技术面,消息面,开盘前决策,集合竞价,ETF池,动量轮动,因子分析,投委会,持仓评审,海外联动,宏观,资金流,申赎,主力资金,溢价率,双动量,回撤冷却,盈亏比,仓位管理,集合竞价复核,投委会精选",
 			Examples: "用户：今天ETF开盘前有什么建议？我持有159915和512660\n助手：必须输出完整的ETF轮动分析报告结构，从动量筛选开始逐步分析到最终决策，包含持仓评审。",
 			Enable: true, SortOrder: 1,
+			ToolGroups: "money_flow,news_research,stock_analysis,market",
 		},
 		{
 			Name: "Serenity式产业分析",
@@ -390,6 +408,7 @@ func SeedDefaultSkills() {
 			TriggerKeywords: "产业分析,产业链,稀缺性,瓶颈,行业研究,赛道分析,上下游,供需格局,渗透率,国产替代,市场份额,竞争格局,华阳集团,投资机会,细分龙头",
 			Examples: "用户：分析华阳集团在汽车电子产业链中的位置\n助手：必须输出Serenity报告结构：产业链全景图→稀缺层识别→优先级排序→证据链→证伪条件",
 			Enable: true, SortOrder: 2,
+			ToolGroups: "stock_analysis,market,news_research,screening",
 		},
 	}
 	for _, s := range skills {

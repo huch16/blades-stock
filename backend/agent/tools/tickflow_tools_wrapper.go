@@ -17,7 +17,7 @@ func GetTickFlowToolWrappers() []bladesTools.Tool {
 	// TickFlowKlines
 	result = append(result, NewDataToolWrapper(
 		"TickFlowKlines",
-		"获取个股/指数历史K线数据（TickFlow API）。支持A股、港股、美股、指数。返回Markdown表格，包含开盘/最高/最低/收盘/成交量/成交额。当需要用结构化API获取K线（而非爬虫）时使用。",
+		"获取个股/指数历史K线（TickFlow API）。支持A/港/美股及指数，返回Markdown含开高低收/量额。需要结构化K线数据时使用。",
 		map[string]*types.ParamDef{
 			"symbol": {
 				Type:     "string",

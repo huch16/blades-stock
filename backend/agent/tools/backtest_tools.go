@@ -134,7 +134,7 @@ func GetRunBacktestTool() bladesTools.Tool {
 func GetVectorBacktestTool() bladesTools.Tool {
 	return NewDataToolWrapper(
 		"VectorBacktest",
-		"【VectorBT向量化回测】对单只股票运行策略回测。支持MA均线交叉、MACD、RSI、布林带等多种策略，返回夏普比率、最大回撤、胜率等完整指标。适用场景：测试策略参数、对比不同策略表现、寻找最优参数组合。",
+		"【VectorBT向量化回测】对单只股票运行策略回测。支持MA均线交叉、MACD、RSI、布林带等策略，返回夏普比率、最大回撤、胜率。用于测试策略参数、对比策略、寻优参数。",
 		map[string]*types.ParamDef{
 			"stock_code":   {Type: "string", Desc: "股票代码，如 000001（平安银行）、600519（贵州茅台）", Required: true},
 			"strategy":     {Type: "string", Desc: "策略类型：MA（均线交叉）、MACD、RSI、BOLL（布林带）、DualThrust", Required: false},

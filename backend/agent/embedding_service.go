@@ -13,21 +13,35 @@ import (
 )
 
 type EmbeddingService struct {
-	baseURL   string
-	apiKey    string
-	modelName string
-	client    *http.Client
+	embeddingsURL string // full /embeddings endpoint, provider-aware
+	apiKey        string
+	modelName     string
+	client        *http.Client
 }
 
 func NewEmbeddingService(baseURL, apiKey, modelName string) *EmbeddingService {
+	baseURL = strings.TrimSpace(baseURL)
 	baseURL = strings.TrimRight(baseURL, "/")
 	baseURL = strings.TrimSuffix(baseURL, "/chat/completions")
-	baseURL = strings.TrimSuffix(baseURL, "/v1")
+
+	embeddingsURL := ""
+	if baseURL != "" {
+		switch {
+		case strings.Contains(strings.ToLower(baseURL), "volces.com"):
+			// VolcArk OpenAI-compatible embeddings live at /api/v3/embeddings (no /v1 layer)
+			embeddingsURL = baseURL + "/embeddings"
+		case strings.HasSuffix(baseURL, "/v1"):
+			embeddingsURL = baseURL + "/embeddings"
+		default:
+			embeddingsURL = baseURL + "/v1/embeddings"
+		}
+	}
+
 	return &EmbeddingService{
-		baseURL:   baseURL + "/v1",
-		apiKey:    apiKey,
-		modelName: modelName,
-		client:    &http.Client{Timeout: 15 * time.Second},
+		embeddingsURL: embeddingsURL,
+		apiKey:        apiKey,
+		modelName:     modelName,
+		client:        &http.Client{Timeout: 40 * time.Second},
 	}
 }
 
@@ -46,7 +60,7 @@ type embeddingResponse struct {
 }
 
 func (s *EmbeddingService) Embed(text string) ([]float32, error) {
-	if s == nil || s.baseURL == "" || s.modelName == "" {
+	if s == nil || s.embeddingsURL == "" || s.modelName == "" {
 		return nil, fmt.Errorf("embedding service not configured")
 	}
 
@@ -59,7 +73,7 @@ func (s *EmbeddingService) Embed(text string) ([]float32, error) {
 		return nil, fmt.Errorf("marshal embedding request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", s.baseURL+"/embeddings", bytes.NewReader(data))
+	req, err := http.NewRequest("POST", s.embeddingsURL, bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("create embedding request: %w", err)
 	}
@@ -112,7 +126,21 @@ func CosineSimilarity(a, b []float32) float32 {
 	return float32(dot / (math.Sqrt(normA) * math.Sqrt(normB)))
 }
 
-// IsConfigured returns true if the embedding service has a valid baseURL and modelName.
+// IsConfigured returns true if the embedding service has a valid endpoint and modelName.
 func (s *EmbeddingService) IsConfigured() bool {
-	return s != nil && s.baseURL != "" && s.modelName != ""
+	return s != nil && s.embeddingsURL != "" && s.modelName != ""
+}
+
+// Ping health-checks the endpoint with a minimal embedding call.
+func (s *EmbeddingService) Ping() error {
+	_, err := s.Embed("ping")
+	return err
+}
+
+// Describe returns a compact loggable identity of the service.
+func (s *EmbeddingService) Describe() string {
+	if s == nil {
+		return "nil"
+	}
+	return s.embeddingsURL + " model=" + s.modelName
 }

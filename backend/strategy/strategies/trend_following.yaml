@@ -1,0 +1,43 @@
+name: 趋势跟随
+alias:
+  - trend_following
+  - 均线多头
+  - 多头趋势
+category: trend_following
+judgment_criteria: 均线多头排列、价格站上关键均线且 MACD 位于零轴上方，跟随上升趋势买入。
+description: 经典趋势跟踪策略：仅参与已形成多头排列的趋势股，避免抄底与逆势交易。
+base_score: 50
+bonuses:
+  - when: "ma_bullish_alignment()"
+    score: 25
+    desc: "MA5>MA10>MA20>MA60 均线多头排列"
+  - when: "ma_golden_cross(5,10)"
+    score: 15
+    desc: "MA5 上穿 MA10 金叉"
+  - when: "above_ma(20)"
+    score: 10
+    desc: "收盘价站上 20 日均线"
+  - when: "macd_above_zero()"
+    score: 10
+    desc: "MACD DIF 位于零轴上方"
+  - when: "volume_ratio_gt(1.2)"
+    score: 5
+    desc: "量比大于 1.2，量能温和放大"
+penalties:
+  - when: "ma_death_cross(5,10)"
+    score: 20
+    desc: "MA5 下穿 MA10 死叉"
+  - when: "below_ma(60)"
+    score: 25
+    desc: "收盘价跌破 60 日均线"
+  - when: "change_pct_lt(-3)"
+    score: 10
+    desc: "单日跌幅超过 3%"
+required_indicators:
+  - ma5
+  - ma10
+  - ma20
+  - ma60
+  - macd
+risk_level: 中风险
+hold_period: 5-20 个交易日

@@ -25,7 +25,9 @@ func (s *AnalysisMemoryService) LoadRelevantReports(stockCode, stockName string,
 		return nil
 	}
 	var results []models.AIResponseResult
-	q := db.Dao.Model(&models.AIResponseResult{}).Where("is_del = 0")
+	q := db.Dao.Model(&models.AIResponseResult{}).
+		Where("is_del = 0").
+		Where(models.StockReportCodeSQL())
 
 	if stockCode != "" {
 		q = q.Where("stock_code = ?", stockCode)

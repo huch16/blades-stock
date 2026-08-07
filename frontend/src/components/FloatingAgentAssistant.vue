@@ -315,6 +315,7 @@ import { EventsOff, EventsOn } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 import html2canvas from 'html2canvas'
+import { cleanFinalContent } from '../utils/cleanText'
 
 const STORAGE_KEY_MODEL_ID = 'blades-stock-agent-last-model-id'
 
@@ -665,13 +666,14 @@ function abortStream(showTip = true) {
   isAborted.value = true
   isStreamLoad.value = false
   stopFormatTimer()
-  const last = messages.value[messages.value.length - 1]
-  if (last && last.role === 'assistant') {
-    if (last.rawContent) {
-      const fmt = formatMarkdown(last.rawContent)
-      last.content = fmt.content
-      if (fmt.jsonMarkdown) last.jsonMarkdown = fmt.jsonMarkdown
-    }
+    const last = messages.value[messages.value.length - 1]
+    if (last && last.role === 'assistant') {
+      if (last.rawContent) {
+        last.rawContent = cleanFinalContent(last.rawContent)
+        const fmt = formatMarkdown(last.rawContent)
+        last.content = fmt.content
+        if (fmt.jsonMarkdown) last.jsonMarkdown = fmt.jsonMarkdown
+      }
     if (last.rawReasoning) {
       const fmt = formatMarkdown(last.rawReasoning)
       last.reasoning = fmt.content

@@ -134,7 +134,10 @@ func handleGetStockInfoTool(o *OpenAi, funcArguments string, ctx *ToolContext) e
 		return nil
 	}
 	md := parallelStockToolSections(codes, func(code string) string {
-		res, _ := NewStockDataApi().GetStockCodeRealTimeData(code)
+		res, err := NewStockDataApi().GetStockCodeRealTimeData(code)
+		if err != nil || res == nil || len(*res) == 0 {
+			return "数据源暂不可用"
+		}
 		jsonBytes, _ := json.Marshal(res)
 		return string(jsonBytes)
 	})

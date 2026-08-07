@@ -64,6 +64,11 @@ type Skill struct {
 	Directive       string `json:"directive" gorm:"type:text"`
 	Examples        string `json:"examples" gorm:"type:text"`
 	TriggerKeywords string `json:"triggerKeywords" gorm:"size:500"`
+	// ToolGroups is a comma-separated list of tool group names (see
+	// tools.ToolGroup) that must be force-enabled whenever this skill is
+	// matched, so a matched skill's directive can actually execute its tools
+	// even when keyword classification would not include them.
+	ToolGroups      string `json:"toolGroups" gorm:"size:500"`
 	MCPServerIDs    string `json:"mcpServerIds" gorm:"size:500"`
 	Enable          bool   `json:"enable" gorm:"default:true"`
 	SortOrder       int    `json:"sortOrder" gorm:"default:0"`

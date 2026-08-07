@@ -9,6 +9,7 @@ import (
 
 func main() {
 	db.Init("data/stock.db?_busy_timeout=10000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-524288")
+	db.Dao.AutoMigrate(&models.Skill{})
 
 	promptBytes, err := os.ReadFile("cmd/insert_serenity_skill/serenity_prompt.txt")
 	if err != nil {
@@ -61,8 +62,9 @@ Research support only. 不保证收益,不下买卖指令,不炒作低流动性�
 		TriggerKeywords: "产业分析,产业链,稀缺性,瓶颈,行业研究,赛道分析,上下游,供需格局,渗透率,国产替代,市场份额,竞争格局,华阳集团,投资机会,细分龙头",
 		Examples: `用户：分析华阳集团在汽车电子产业链中的位置
 助手：必须输出Serenity报告结构：产业链全景图→稀缺层识别→优先级排序→证据链→证伪条件`,
-		Enable:    true,
-		SortOrder: 1,
+		Enable:     true,
+		SortOrder:  1,
+		ToolGroups: "stock_analysis,market,news_research,screening",
 	}
 
 	if err := db.Dao.Create(skill).Error; err != nil {

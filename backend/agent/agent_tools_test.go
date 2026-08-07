@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"blades-stock/backend/agent/tools"
+	"blades-stock/backend/models"
 )
 
 func TestGetAllTools(t *testing.T) {
-	allTools := getToolsByQuestion("分析一下茅台的股票行情和资金流向")
+	allTools := getToolsByQuestion("分析一下茅台的股票行情和资金流向", nil)
 	t.Logf("Total tools count: %d", len(allTools))
 
 	toolNames := make(map[string]int)
@@ -61,5 +62,40 @@ func TestAgentGoTools(t *testing.T) {
 
 	for i, tool := range dataTools {
 		t.Logf("Data tool %d: %s", i+1, tool.Name())
+	}
+}
+
+func TestMergeSkillToolGroups(t *testing.T) {
+	groups := map[tools.ToolGroup]bool{tools.GroupBase: true}
+	skills := []models.Skill{
+		{ToolGroups: "money_flow, news_research , stock_analysis, bogus_group"},
+		{ToolGroups: "market"},
+		{ToolGroups: ""},
+	}
+	added := mergeSkillToolGroups(groups, skills)
+
+	want := []tools.ToolGroup{
+		tools.GroupMoneyFlow, tools.GroupNewsResearch, tools.GroupStockAnalysis, tools.GroupMarket,
+	}
+	for _, g := range want {
+		if !groups[g] {
+			t.Errorf("group %s not merged", g)
+		}
+	}
+	if groups[tools.GroupScreening] || groups[tools.GroupOperations] {
+		t.Errorf("unexpected groups merged: %v", groups)
+	}
+	if len(added) != len(want) {
+		t.Errorf("added = %v, want %d skill-contributed groups", added, len(want))
+	}
+}
+
+func TestMergeSkillToolGroupsNilSkills(t *testing.T) {
+	groups := map[tools.ToolGroup]bool{tools.GroupBase: true}
+	if added := mergeSkillToolGroups(groups, nil); len(added) != 0 {
+		t.Errorf("nil skills should add nothing, got %v", added)
+	}
+	if !groups[tools.GroupBase] {
+		t.Error("base group should remain")
 	}
 }

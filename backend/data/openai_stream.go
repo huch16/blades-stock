@@ -69,7 +69,8 @@ func (o *OpenAi) NewSummaryStockNewsStreamWithTools(userQuestion string, sysProm
   常用筛选维度：流通市值(优先20~200亿中小盘)、市盈率PE>0、营收增长>10%、技术面站上均线
 第3步 - 核查：用 GetStockInfo 确认实时行情和财务数据真实性
 第4步 - 聚焦细分龙头：目标板块中市值50~200亿、有技术壁垒、业绩确定的中小盘标的
-第5步 - 推荐3~5只覆盖不同子方向，用 BatchCreateAiRecommendStocks 批量保存`
+第5步 - 推荐3~5只覆盖不同子方向，用 BatchCreateAiRecommendStocks 批量保存
+【代码-名称一致性硬性要求】每个股票代码必须来自工具返回的真实数据并与名称双向匹配；代码格式必须合法（6位数字：6开头=沪市.688=科创板.0/3开头=深市.300/301=创业板），格式非法或代码-名称不一致（如把000039当"中集车辆"）时禁止推荐；名称用最新官方名称，注意更名与ST标记。`
 
 		msg := []map[string]interface{}{
 			{

@@ -30,15 +30,19 @@ type AgentSession struct {
 func (AgentSession) TableName() string { return "agent_sessions" }
 
 type AgentTrace struct {
-	ID        uint      `json:"id" gorm:"primarykey"`
-	SessionID string    `json:"sessionId" gorm:"index;size:64"`
-	Question  string    `json:"question" gorm:"type:text"`
-	Answer    string    `json:"answer" gorm:"type:text"`
-	ToolsUsed string    `json:"toolsUsed" gorm:"type:text"`
-	Score     int       `json:"score" gorm:"default:0"`
-	Feedback  string    `json:"feedback" gorm:"type:text"`
-	DurationMs int64    `json:"durationMs" gorm:"default:0"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID          uint      `json:"id" gorm:"primarykey"`
+	SessionID   string    `json:"sessionId" gorm:"index;size:64"`
+	Question    string    `json:"question" gorm:"type:text"`
+	Answer      string    `json:"answer" gorm:"type:text"`
+	ToolsUsed   string    `json:"toolsUsed" gorm:"type:text"`
+	Score       int       `json:"score" gorm:"default:0"`
+	Accuracy    int       `json:"accuracy" gorm:"default:0"`
+	Relevance   int       `json:"relevance" gorm:"default:0"`
+	ToolUse     int       `json:"toolUse" gorm:"default:0"`
+	Completeness int      `json:"completeness" gorm:"default:0"`
+	Feedback    string    `json:"feedback" gorm:"type:text"`
+	DurationMs  int64     `json:"durationMs" gorm:"default:0"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 func (AgentTrace) TableName() string { return "agent_traces" }

@@ -103,6 +103,17 @@
         </n-form-item-gi>
       </n-grid>
 
+      <n-form-item label="强制工具组" path="toolGroups">
+        <n-select
+          v-model:value="formData.toolGroups"
+          :options="toolGroupOptions"
+          placeholder="命中本技能时强制启用的工具组（否则被关键词分类过滤掉，指令永远执行不）"
+          multiple
+          clearable
+          tag
+        />
+      </n-form-item>
+
       <n-form-item label="技能描述" path="description">
         <n-input
           v-model:value="formData.description"
@@ -218,10 +229,23 @@ const formData = reactive({
   systemPrompt: '',
   examples: '',
   triggerKeywords: '',
+  toolGroups: [],
   mcpServerIds: [],
   enable: true,
   sortOrder: 0
 })
+
+const toolGroupOptions = [
+  { label: '基础 base', value: 'base' },
+  { label: '个股/ETF分析 stock_analysis', value: 'stock_analysis' },
+  { label: '市场与宏观 market', value: 'market' },
+  { label: '条件筛选 screening', value: 'screening' },
+  { label: '资金流向 money_flow', value: 'money_flow' },
+  { label: '新闻与研报 news_research', value: 'news_research' },
+  { label: 'AI分析 ai_analysis', value: 'ai_analysis' },
+  { label: '操作 operations', value: 'operations' },
+  { label: '项目 project', value: 'project' }
+]
 
 const formRules = {
   name: { required: true, message: '请输入技能名称', trigger: ['input', 'blur'] }
@@ -411,6 +435,7 @@ const handleEdit = async (row) => {
       formData.systemPrompt = skill.systemPrompt
       formData.examples = skill.examples
       formData.triggerKeywords = skill.triggerKeywords
+      formData.toolGroups = skill.toolGroups ? skill.toolGroups.split(',').filter(s => s.trim()) : []
       formData.mcpServerIds = skill.mcpServerIds ? skill.mcpServerIds.split(',').filter(s => s.trim()) : []
       formData.enable = skill.enable
       formData.sortOrder = skill.sortOrder
@@ -465,6 +490,7 @@ const handleSubmit = async () => {
       systemPrompt: formData.systemPrompt,
       examples: formData.examples,
       triggerKeywords: formData.triggerKeywords,
+      toolGroups: formData.toolGroups.join(','),
       mcpServerIds: formData.mcpServerIds.join(','),
       enable: formData.enable,
       sortOrder: formData.sortOrder
@@ -501,6 +527,7 @@ const resetForm = () => {
     systemPrompt: '',
     examples: '',
     triggerKeywords: '',
+    toolGroups: [],
     mcpServerIds: [],
     enable: true,
     sortOrder: 0

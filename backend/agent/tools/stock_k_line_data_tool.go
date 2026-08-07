@@ -38,7 +38,7 @@ func GetStockKLineTool() bladesTools.Tool {
 				logger.SugaredLogger.Errorf("Failed to marshal KLine data: %v", err)
 				return "", err
 			}
-			return string(bytes), nil
+			return truncateToolResult("GetStockKLine", string(bytes)), nil
 		},
 	)
 }
@@ -69,7 +69,7 @@ func GetStockEastMoneyKLineTool() bladesTools.Tool {
 				logger.SugaredLogger.Errorf("Failed to marshal EastMoneyKLine data: %v", err)
 				return "", err
 			}
-			return string(bytes), nil
+			return truncateToolResult("GetEastMoneyKLine", string(bytes)), nil
 		},
 	)
 }
@@ -111,7 +111,7 @@ func GetEastMoneyKLineWithMATool() bladesTools.Tool {
 				logger.SugaredLogger.Errorf("Failed to marshal EastMoneyKLineMA data: %v", err)
 				return "", err
 			}
-			return string(bytes), nil
+			return truncateToolResult("GetEastMoneyKLineWithMA", string(bytes)), nil
 		},
 	)
 }
@@ -133,7 +133,7 @@ func GetStockMinuteDataTool() bladesTools.Tool {
 				logger.SugaredLogger.Errorf("Failed to marshal minute data: %v", err)
 				return "", err
 			}
-			return string(bytes), nil
+			return truncateToolResult("GetStockMinuteData", string(bytes)), nil
 		},
 	)
 }

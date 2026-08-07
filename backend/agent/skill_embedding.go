@@ -15,7 +15,7 @@ import (
 type SkillEmbedding struct {
 	ID        uint `gorm:"primaryKey"`
 	SkillID   uint `gorm:"uniqueIndex;not null"`
-	Embedding []float32
+	Embedding []float32 `gorm:"serializer:json"`
 }
 
 func (SkillEmbedding) TableName() string { return "skill_embeddings" }
@@ -49,9 +49,12 @@ func GetSkillEmbeddingService(es *EmbeddingService) *SkillEmbeddingService {
 	}
 	skillEmbedSvc.enabled = enabled
 	if enabled {
-		logger.SugaredLogger.Info("SkillEmbeddingService 已启用（bge-m3语义匹配）")
+		logger.SugaredLogger.Info("SkillEmbeddingService 已启用（语义匹配）")
 		if err := skillEmbedSvc.loadFromDB(); err != nil {
 			logger.SugaredLogger.Warnf("从DB加载skill embedding失败: %v，将重新计算", err)
+			_ = skillEmbedSvc.RefreshEmbeddings()
+		} else if skillEmbedSvc.embeddingCount() == 0 {
+			logger.SugaredLogger.Info("skill_embeddings 为空，重新计算")
 			_ = skillEmbedSvc.RefreshEmbeddings()
 		}
 	} else {
@@ -60,9 +63,22 @@ func GetSkillEmbeddingService(es *EmbeddingService) *SkillEmbeddingService {
 	return skillEmbedSvc
 }
 
+func (s *SkillEmbeddingService) embeddingCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.embeddings)
+}
+
 
 
 func (s *SkillEmbeddingService) loadFromDB() error {
+	// Ensure the table exists before querying. The package-level init() runs
+	// before db.Dao is connected, so AutoMigrate is performed lazily here.
+	if db.Dao != nil {
+		if err := db.Dao.AutoMigrate(&SkillEmbedding{}); err != nil {
+			logger.SugaredLogger.Warnf("AutoMigrate skill_embeddings 失败: %v", err)
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var rows []SkillEmbedding
@@ -96,9 +112,7 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 		wg.Add(1)
 		go func(sk models.Skill) {
 			defer wg.Done()
-			// Embed description + system prompt (the meaningful part)
-			text := sk.Description + "\n" + sk.SystemPrompt
-			vec, err := s.es.Embed(text)
+			vec, err := s.es.Embed(skillEmbedText(sk))
 			if err != nil {
 				logger.SugaredLogger.Warnf("skill %s embedding失败: %v", sk.Name, err)
 				return
@@ -111,7 +125,7 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 	wg.Wait()
 
 	if len(results) == 0 {
-		logger.SugaredLogger.Warn("所有skill embedding计算失败")
+		logger.SugaredLogger.Warn("所有skill embedding计算失败，技能触发将降级为关键词匹配")
 		return nil
 	}
 
@@ -133,8 +147,30 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 		logger.SugaredLogger.Warnf("批量写入skill_embeddings失败: %v", err)
 	}
 
-	logger.SugaredLogger.Infof("已刷新 %d 个skill embedding（bge-m3）", len(results))
+	logger.SugaredLogger.Infof("已刷新 %d 个skill embedding", len(results))
 	return nil
+}
+
+// skillEmbedText builds a compact embedding source for a skill. The full
+// SystemPrompt is intentionally excluded — it can exceed the provider's token
+// limit (e.g. nv-embed-v1 max 4096), which would 400 the whole refresh.
+func skillEmbedText(sk models.Skill) string {
+	var parts []string
+	if strings.TrimSpace(sk.Name) != "" {
+		parts = append(parts, sk.Name)
+	}
+	if strings.TrimSpace(sk.Description) != "" {
+		parts = append(parts, sk.Description)
+	}
+	if strings.TrimSpace(sk.TriggerKeywords) != "" {
+		parts = append(parts, "触发关键词："+sk.TriggerKeywords)
+	}
+	text := strings.Join(parts, "\n")
+	const maxRunes = 2000
+	if r := []rune(text); len(r) > maxRunes {
+		text = string(r[:maxRunes])
+	}
+	return text
 }
 
 func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.Skill {
@@ -143,20 +179,35 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 		return nil
 	}
 
-	// Fallback: if embedding not enabled, use keyword match
+	// Keyword matching first: instant and deterministic. Skill triggering must
+	// never depend on a slow or unhealthy embedding endpoint, so the semantic
+	// layer is only consulted when no keyword hits.
+	if kwMatched := s.keywordMatch(skills, question, topK); len(kwMatched) > 0 {
+		return kwMatched
+	}
+
+	// Semantic matching only when keywords miss and embeddings are available.
 	if !s.enabled || s.es == nil {
-		return s.keywordMatch(skills, question, topK)
+		return nil
 	}
 
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	embCount := len(s.embeddings)
+	s.mu.RUnlock()
+	if embCount == 0 {
+		logger.SugaredLogger.Warnf("question %q 关键词未命中且无skill embedding可用（刷新失败），无技能匹配", truncateQuestion(question))
+		return nil
+	}
 
 	// Embed question
 	vec, err := s.es.Embed(question)
 	if err != nil {
-		logger.SugaredLogger.Warnf("question embedding失败，降级关键词: %v", err)
-		return s.keywordMatch(skills, question, topK)
+		logger.SugaredLogger.Warnf("question embedding失败，关键词未命中，无技能匹配: %v", err)
+		return nil
 	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	// Score all skills by cosine similarity
 	type scored struct {
@@ -191,6 +242,14 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 	return matched
 }
 
+func truncateQuestion(q string) string {
+	r := []rune(q)
+	if len(r) > 40 {
+		return string(r[:40]) + "…"
+	}
+	return q
+}
+
 func (s *SkillEmbeddingService) keywordMatch(skills []models.Skill, question string, topK int) []models.Skill {
 	var matched, universal []models.Skill
 	for _, skill := range skills {
@@ -198,9 +257,8 @@ func (s *SkillEmbeddingService) keywordMatch(skills []models.Skill, question str
 			universal = append(universal, skill)
 			continue
 		}
-		keywords := strings.Split(skill.TriggerKeywords, ",")
+		keywords := s.splitKeywords(skill.TriggerKeywords)
 		for _, kw := range keywords {
-			kw = strings.TrimSpace(kw)
 			if kw != "" && strings.Contains(question, kw) {
 				matched = append(matched, skill)
 				break
@@ -215,6 +273,39 @@ func (s *SkillEmbeddingService) keywordMatch(skills []models.Skill, question str
 		matched = append(matched, skill)
 	}
 	return matched
+}
+
+// splitKeywords returns the trimmed, non-empty keywords for a comma-separated
+// trigger keyword string, caching results to avoid re-splitting the same
+// keyword set on every question (MatchSkills is called per chat request).
+var splitKwCache = struct {
+	sync.RWMutex
+	m map[string][]string
+}{m: make(map[string][]string)}
+
+func (s *SkillEmbeddingService) splitKeywords(raw string) []string {
+	splitKwCache.RLock()
+	cached, ok := splitKwCache.m[raw]
+	splitKwCache.RUnlock()
+	if ok {
+		return cached
+	}
+
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	if out == nil {
+		out = []string{}
+	}
+
+	splitKwCache.Lock()
+	splitKwCache.m[raw] = out
+	splitKwCache.Unlock()
+	return out
 }
 
 // BuildShortSkillPrompt generates a short directive-only prompt for matched skills.

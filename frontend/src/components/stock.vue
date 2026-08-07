@@ -38,6 +38,7 @@ import {
 } from '../../wailsjs/go/main/App'
 import StockCard from './StockCard.vue'
 import { useAiConfigStore } from '../stores/aiConfig'
+import { cleanFinalContent } from '../utils/cleanText'
 import {
   NAvatar,
   NButton,
@@ -404,6 +405,7 @@ onBeforeMount(() => {
       }
       data.loading = false
       if (data.airesult && !data.airesult.startsWith("❌")) {
+        data.airesult = cleanFinalContent(data.airesult)
         SaveAIResponseResult(data.code, data.name, data.airesult, data.chatId, data.question, aiConfigStore.activeConfigId)
         data.analysisStatus = "分析完成"
         notify.success({
@@ -427,7 +429,6 @@ onBeforeMount(() => {
         data.question = msg.question
       }
       // [STATUS] → 更新状态栏；[STEP] → 忽略（工具调用日志）
-      // reasoning_content 中真正的 AI 推理过程 → 保留到 result
       let hasContent = false
       if (msg.content && !msg.content.startsWith("[STATUS]") && !msg.content.startsWith("[STEP]") && msg.content !== "agent-DONE") {
         data.airesult += msg.content
@@ -435,13 +436,13 @@ onBeforeMount(() => {
       } else if (msg.content && msg.content.startsWith("[STATUS]")) {
         data.analysisStatus = msg.content.replace("[STATUS]", "").trim()
       }
+      // reasoning_content 仅用于状态/进度展示，绝不混入答案正文，
+      // 避免思考模型的完整草稿与 [STATUS]/[STEP] 状态行污染结果。
       if (msg.reasoning_content) {
         if (msg.reasoning_content.startsWith("[STATUS]")) {
           data.analysisStatus = msg.reasoning_content.replace("[STATUS]", "").trim()
-        } else if (!msg.reasoning_content.startsWith("[STEP]")) {
-          data.airesult += msg.reasoning_content
-          hasContent = true
         }
+        // [STEP] 工具调用日志与其它纯思考文本一律忽略
       }
       if (msg.extraContent) {
         data.airesult += msg.extraContent
@@ -1872,6 +1873,10 @@ function checkPriceLineAlerts(result) {
 }
 
 function aiReCheckStock(stock, stockCode) {
+  if (data.loading) {
+    message.warning("AI分析正在进行中，请稍候")
+    return
+  }
   if (!aiConfigStore.activeConfigId) {
     message.error("请先选择AI模型配置")
     return

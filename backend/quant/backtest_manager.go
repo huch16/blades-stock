@@ -87,6 +87,9 @@ func (m *BacktestManager) RunAIReportBacktest(ctx context.Context, limit int) (*
 
 // RunSingleReportBacktest 对单个 AI 报告回测
 func (m *BacktestManager) RunSingleReportBacktest(r models.AIResponseResult) (*models.BacktestResult, error) {
+	if !models.IsStockReportCode(r.StockCode) {
+		return nil, fmt.Errorf("非个股报告，不可回测: id=%d code=%q", r.ID, r.StockCode)
+	}
 	pred := extractPredictionFromReport(r.Content)
 	analysisDate := r.CreatedAt.Format("2006-01-02")
 
@@ -206,7 +209,10 @@ func (m *BacktestManager) GetOverallStats() *AccuracyStats {
 	stats := &AccuracyStats{DirectionStats: make(map[string]DirStat)}
 
 	var total int64
-	db.Dao.Model(&models.AIResponseResult{}).Where("is_del = 0").Count(&total)
+	db.Dao.Model(&models.AIResponseResult{}).
+		Where("is_del = 0").
+		Where(models.StockReportCodeSQL()).
+		Count(&total)
 	stats.TotalReports = int(total)
 
 	var results []models.BacktestResult
@@ -246,7 +252,10 @@ func (m *BacktestManager) GetStockStats(stockCode string) *AccuracyStats {
 	stats := &AccuracyStats{DirectionStats: make(map[string]DirStat)}
 
 	var total int64
-	db.Dao.Model(&models.AIResponseResult{}).Where("is_del = 0 AND stock_code = ?", stockCode).Count(&total)
+	db.Dao.Model(&models.AIResponseResult{}).
+		Where("is_del = 0 AND stock_code = ?", stockCode).
+		Where(models.StockReportCodeSQL()).
+		Count(&total)
 	stats.TotalReports = int(total)
 
 	var results []models.BacktestResult
@@ -286,6 +295,7 @@ func (m *BacktestManager) NeedBacktest() bool {
 	var count int64
 	db.Dao.Model(&models.AIResponseResult{}).
 		Where("is_del = 0").
+		Where(models.StockReportCodeSQL()).
 		Where("NOT EXISTS (SELECT 1 FROM backtest_results WHERE backtest_results.report_id = ai_response_result.id)").
 		Count(&count)
 	return count > 0
@@ -303,7 +313,9 @@ func (m *BacktestManager) GetLatestResults(limit int) []models.BacktestResult {
 
 // RunBacktestOnDateRange 对指定日期范围内的报告批量回测
 func (m *BacktestManager) RunBacktestOnDateRange(startDate, endDate string) (int, error) {
-	q := db.Dao.Model(&models.AIResponseResult{}).Where("is_del = 0")
+	q := db.Dao.Model(&models.AIResponseResult{}).
+		Where("is_del = 0").
+		Where(models.StockReportCodeSQL())
 	if startDate != "" {
 		q = q.Where("created_at >= ?", startDate)
 	}
@@ -339,6 +351,7 @@ func (m *BacktestManager) fetchPendingReports(limit int) ([]models.AIResponseRes
 	var reports []models.AIResponseResult
 	err := db.Dao.Model(&models.AIResponseResult{}).
 		Where("is_del = 0").
+		Where(models.StockReportCodeSQL()).
 		Where("NOT EXISTS (SELECT 1 FROM backtest_results WHERE backtest_results.report_id = ai_response_result.id)").
 		Order("id asc").
 		Limit(limit).
@@ -406,6 +419,9 @@ func (m *BacktestManager) parallelBacktestReports(ctx context.Context, reports [
 }
 
 func (m *BacktestManager) backtestSingleReport(r models.AIResponseResult, stockData map[string]*stockPriceData) aiReportResult {
+	if !models.IsStockReportCode(r.StockCode) {
+		return aiReportResult{reportID: r.ID, skipped: true, skipReason: "非个股报告"}
+	}
 	pred := extractPredictionFromReport(r.Content)
 	analysisDate := r.CreatedAt.Format("2006-01-02")
 
