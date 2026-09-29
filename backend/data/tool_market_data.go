@@ -76,7 +76,30 @@ type APIPurchase struct {
 func handleGetMarketData(o *OpenAi, funcArguments string, ctx *ToolContext) error {
 	apiResp, err := fetchMarketAPIResponse()
 	if err != nil {
-		return err
+		errMsg := fmt.Sprintf("⚠️ GetMarketData 工具调用失败（数据源暂不可用）: %v", err)
+		logger.SugaredLogger.Warnf("GetMarketData 工具调用失败: %v", err)
+		content := strings.Builder{}
+		content.WriteString("# 市场行情数据\r\n\r\n")
+		content.WriteString(errMsg + "\r\n\r\n")
+		content.WriteString("【回退】大盘指数/涨跌家数数据暂不可用。可改用 GlobalStockIndexesReadable / GetStockChanges 等其他已注入工具获取替代数据，并基于已成功获取的数据继续分析。\r\n")
+		ctx.Ch <- map[string]any{
+			"code":              0,
+			"question":          ctx.Question,
+			"chatId":            ctx.StreamResponseID,
+			"model":             ctx.Model,
+			"reasoning_content": "\r\n```\r\n🔧 开始调用工具：GetMarketData\r\n```\r\n",
+			"time":              time.Now().Format(time.DateTime),
+		}
+		appendToolMessages(
+			ctx.Messages,
+			ctx.CurrentAIContent.String(),
+			ctx.ReasoningContentText.String(),
+			ctx.CurrentCallID,
+			ctx.FuncName,
+			funcArguments,
+			content.String(),
+		)
+		return nil
 	}
 
 	ctx.Ch <- map[string]any{

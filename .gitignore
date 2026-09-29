@@ -127,8 +127,9 @@ frontend/package.json.md5
 # Vite/Webpack cache
 frontend/node_modules/.vite/
 
-# Wails build artefacts
-wails.json
+# Wails build artefacts (wails.json is TRACKED and required — do not ignore)
+/wails.old.json
+/wails.json.bak
 
 # Backup files
 cov

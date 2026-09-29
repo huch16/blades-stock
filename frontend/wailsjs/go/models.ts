@@ -950,7 +950,7 @@ export namespace data {
 	        this.updateBasicInfoOnStart = source["updateBasicInfoOnStart"];
 	        this.refreshInterval = source["refreshInterval"];
 	        this.openAiEnable = source["openAiEnable"];
-	        this.aiConfigId = source["aiConfigId"] ?? 0;
+	        this.aiConfigId = source["aiConfigId"];
 	        this.prompt = source["prompt"];
 	        this.checkUpdate = source["checkUpdate"];
 	        this.updateChannel = source["updateChannel"];
@@ -967,7 +967,7 @@ export namespace data {
 	        this.httpProxy = source["httpProxy"];
 	        this.httpProxyEnabled = source["httpProxyEnabled"];
 	        this.enableAgent = source["enableAgent"];
-	        this.disableBrowserSearch = source["disableBrowserSearch"] ?? false;
+	        this.disableBrowserSearch = source["disableBrowserSearch"];
 	        this.qgqpBId = source["qgqpBId"];
 	        this.tickFlowAPIKey = source["tickFlowAPIKey"];
 	        this.emApiKey = source["emApiKey"];
@@ -980,7 +980,7 @@ export namespace data {
 	        this.akshareServiceUrl = source["akshareServiceUrl"];
 	        this.aDataServiceUrl = source["aDataServiceUrl"];
 	        this.defaultDataSource = source["defaultDataSource"];
-	        this.embeddingEnabled = source["embeddingEnabled"] ?? false;
+	        this.embeddingEnabled = source["embeddingEnabled"];
 	        this.embeddingModelName = source["embeddingModelName"];
 	        this.embeddingBaseUrl = source["embeddingBaseUrl"];
 	        this.embeddingApiKey = source["embeddingApiKey"];
@@ -2639,7 +2639,7 @@ export namespace models {
 	        this.toolName = source["toolName"];
 	        this.description = source["description"];
 	        this.paramsSchema = source["paramsSchema"];
-	        this.enabled = source["enabled"] ?? true;
+	        this.enabled = source["enabled"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2754,6 +2754,7 @@ export namespace models {
 	    directive: string;
 	    examples: string;
 	    triggerKeywords: string;
+	    toolGroups: string;
 	    mcpServerIds: string;
 	    enable: boolean;
 	    sortOrder: number;
@@ -2774,6 +2775,7 @@ export namespace models {
 	        this.directive = source["directive"];
 	        this.examples = source["examples"];
 	        this.triggerKeywords = source["triggerKeywords"];
+	        this.toolGroups = source["toolGroups"];
 	        this.mcpServerIds = source["mcpServerIds"];
 	        this.enable = source["enable"];
 	        this.sortOrder = source["sortOrder"];

@@ -76,7 +76,10 @@ func thsResultToMarkdown(res map[string]any, title string) string {
 
 	headers := map[string]string{}
 	for _, v := range columns {
-		d := v.(map[string]any)
+		d, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
 		colTitle := convertor.ToString(d["title"])
 		if dm := convertor.ToString(d["dateMsg"]); dm != "" {
 			colTitle += "[" + dm + "]"
@@ -84,12 +87,17 @@ func thsResultToMarkdown(res map[string]any, title string) string {
 		if u := convertor.ToString(d["unit"]); u != "" {
 			colTitle += "(" + u + ")"
 		}
-		headers[d["key"].(string)] = colTitle
+		if keyStr, ok := d["key"].(string); ok {
+			headers[keyStr] = colTitle
+		}
 	}
 
 	table := &[]map[string]any{}
 	for _, v := range dataList {
-		d := v.(map[string]any)
+		d, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
 		row := map[string]any{}
 		for key, colTitle := range headers {
 			row[colTitle] = convertor.ToString(d[key])
@@ -804,7 +812,15 @@ func GetAllDataTools() []bladesTools.Tool {
 					continue
 				}
 				if len(m["columns"].([]any)) > 0 {
-					columns := m["columns"].([]any)[0].(map[string]any)
+					cols, ok := m["columns"].([]any)
+					if !ok || len(cols) == 0 {
+						continue
+					}
+					first, ok := cols[0].(map[string]any)
+					if !ok {
+						continue
+					}
+					columns := first
 					rows = append(rows, row{
 						Title:      convertor.ToString(m["title"]),
 						NoticeDate: convertor.ToString(m["notice_date"]),
@@ -4179,11 +4195,18 @@ func getMarketDataContent() (string, error) {
 		Get(apiURL)
 
 	if err != nil {
-		return "", fmt.Errorf("调用API失败: %v", err)
+		logger.SugaredLogger.Warnf("GetMarketData 工具调用失败: %v", err)
+		return "# 市场行情数据\r\n\r\n" +
+			"⚠️ GetMarketData 工具调用失败（数据源暂不可用）: " + err.Error() + "\r\n\r\n" +
+			"【回退】大盘指数/涨跌家数数据暂不可用。可改用 GlobalStockIndexesReadable / GetStockChanges 等其他已注入工具获取替代数据，并基于已成功获取的数据继续分析。\r\n", nil
 	}
 
 	if resp.StatusCode() != 200 || apiResp.Code != 200 {
-		return "", fmt.Errorf("API返回错误: 状态码=%d, 错误信息=%s", resp.StatusCode(), apiResp.Msg)
+		msg := fmt.Sprintf("API返回错误: 状态码=%d, 错误信息=%s", resp.StatusCode(), apiResp.Msg)
+		logger.SugaredLogger.Warnf("GetMarketData 工具调用失败: %s", msg)
+		return "# 市场行情数据\r\n\r\n" +
+			"⚠️ GetMarketData 工具调用失败（数据源暂不可用）: " + msg + "\r\n\r\n" +
+			"【回退】大盘指数/涨跌家数数据暂不可用。可改用 GlobalStockIndexesReadable / GetStockChanges 等其他已注入工具获取替代数据，并基于已成功获取的数据继续分析。\r\n", nil
 	}
 
 	content := strings.Builder{}

@@ -64,6 +64,11 @@ type Skill struct {
 	Directive       string `json:"directive" gorm:"type:text"`
 	Examples        string `json:"examples" gorm:"type:text"`
 	TriggerKeywords string `json:"triggerKeywords" gorm:"size:500"`
+	// Synonyms (P4.2) is a comma-separated list of alternative phrasings that
+	// should also trigger this skill. Distinct from TriggerKeywords (which is
+	// the canonical set): Synonyms covers cross-expressions like 深市↔深圳证券交易所,
+	// ETF轮动↔ETF调仓. Empty value = backward-compatible (only TriggerKeywords match).
+	Synonyms        string `json:"synonyms" gorm:"size:500"`
 	// ToolGroups is a comma-separated list of tool group names (see
 	// tools.ToolGroup) that must be force-enabled whenever this skill is
 	// matched, so a matched skill's directive can actually execute its tools

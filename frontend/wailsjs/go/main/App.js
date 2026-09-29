@@ -42,10 +42,6 @@ export function BackupData(arg1) {
   return window['go']['main']['App']['BackupData'](arg1);
 }
 
-export function RestoreData(arg1) {
-  return window['go']['main']['App']['RestoreData'](arg1);
-}
-
 export function BatchDeleteAIResponseResult(arg1) {
   return window['go']['main']['App']['BatchDeleteAIResponseResult'](arg1);
 }
@@ -66,8 +62,8 @@ export function CalculateNextRunTimes(arg1, arg2) {
   return window['go']['main']['App']['CalculateNextRunTimes'](arg1, arg2);
 }
 
-export function ChatWithAgent(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['ChatWithAgent'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function ChatWithAgent(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['ChatWithAgent'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
 export function CheckDeviceBinding(arg1, arg2) {
@@ -172,10 +168,6 @@ export function FetchAiModelInfo(arg1, arg2, arg3) {
 
 export function FetchAiModels(arg1, arg2) {
   return window['go']['main']['App']['FetchAiModels'](arg1, arg2);
-}
-
-export function TestAiConnection(arg1, arg2, arg3) {
-  return window['go']['main']['App']['TestAiConnection'](arg1, arg2, arg3);
 }
 
 export function FetchAndSaveMarketStatistic() {
@@ -642,6 +634,10 @@ export function RestartAsAdmin() {
   return window['go']['main']['App']['RestartAsAdmin']();
 }
 
+export function RestoreData(arg1) {
+  return window['go']['main']['App']['RestoreData'](arg1);
+}
+
 export function RunVectorBacktest(arg1, arg2, arg3) {
   return window['go']['main']['App']['RunVectorBacktest'](arg1, arg2, arg3);
 }
@@ -740,6 +736,10 @@ export function StockResearchReport(arg1) {
 
 export function SummaryStockNews(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['SummaryStockNews'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
+export function TestAiConnection(arg1, arg2, arg3) {
+  return window['go']['main']['App']['TestAiConnection'](arg1, arg2, arg3);
 }
 
 export function TestMCPServer(arg1) {

@@ -15,6 +15,10 @@ import (
 // We point the database at a temp file (rather than ./data/stock.db) so the
 // host project database is never mutated by `go test`.
 func TestMain(m *testing.M) {
+	// P1.1 启动期健康检查会在 db.Init 末尾跑，测试用临时空 DB 跳过
+	os.Setenv("BLADES_STOCK_SKIP_DB_HEALTHCHECK", "1")
+	defer os.Unsetenv("BLADES_STOCK_SKIP_DB_HEALTHCHECK")
+
 	tmpDir, err := os.MkdirTemp("", "blades-stock-test-")
 	if err != nil {
 		panic("test setup: mkdir temp: " + err.Error())

@@ -8,11 +8,11 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -160,6 +160,7 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 		if mode == "plan_execute" {
 			thinkingPrompt = tpls.PlanExecuteThinking
 			thinkingPrompt = renderAvailableTools(thinkingPrompt, availableTools)
+			thinkingPrompt = renderTaskTemplate(thinkingPrompt, question)
 		} else {
 			thinkingPrompt = tpls.ReactThinking
 		}
@@ -185,6 +186,51 @@ func renderAvailableTools(tpl string, toolNames []string) string {
 		inventory = strings.Join(toolNames, "、")
 	}
 	return strings.Replace(tpl, "{{AVAILABLE_TOOLS}}", inventory, 1)
+}
+
+// individualStockCodeRe 严格匹配 A 股个股代码：沪 60xxxx/688xxx，深 0xxxxx/30xxxx。
+// 明确排除 5 开头沪基金/ETF（510/560/588 等）与 1 开头深基金/ETF（159/16x 等）等非个股代码。
+var individualStockCodeRe = regexp.MustCompile(`(?:sh|SH|sz|SZ)?(?:60\d{4}|688\d{3}|0\d{4}|30\d{3})`)
+
+// individualStockNameRe 匹配 2-4 个汉字紧邻个股分析语境词。
+var individualStockNameRe = regexp.MustCompile(`[\p{Han}]{2,4}的?(?:股票|股价|行情|走势|代码|公司|投资价值|基本面|估值|财务|业绩|财报|研报|深度分析|个股)`)
+
+// nonIndividualStockKeywords 命中即判定为“非单只个股”问题（ETF/基金/板块/市场/资讯/对比/配置等），
+// 避免把 ETF 推荐等问题误套进个股深度分析模板。
+var nonIndividualStockKeywords = []string{
+	"etf", "基金", "板块", "行业", "指数", "市场", "大盘", "轮动", "配置", "组合",
+	"资讯", "新闻", "总结", "宏观", "对比", "复盘", "热点", "排行",
+}
+
+// isIndividualStockQuestion 判断用户问题是否针对单只个股。
+// 先做非个股关键词排除（ETF/基金/板块等），再按个股代码或个股名称语境识别。
+func isIndividualStockQuestion(question string) bool {
+	lower := strings.ToLower(question)
+	for _, kw := range nonIndividualStockKeywords {
+		if strings.Contains(lower, kw) {
+			return false
+		}
+	}
+	if individualStockCodeRe.MatchString(question) {
+		return true
+	}
+	return individualStockNameRe.MatchString(question)
+}
+
+// renderTaskTemplate replaces the {{TASK_TEMPLATE}} placeholder in the
+// plan_execute thinking prompt with the template matching the question type:
+// individual-stock questions get the deep stock-analysis template, while
+// ETF/板块/市场/资讯/对比等 questions get the generic task framework.
+func renderTaskTemplate(tpl, question string) string {
+	if !strings.Contains(tpl, "{{TASK_TEMPLATE}}") {
+		return tpl
+	}
+	templates := GetPromptTemplates()
+	task := templates.GenericTaskTemplate
+	if isIndividualStockQuestion(question) {
+		task = templates.StockAnalysisTemplate
+	}
+	return strings.Replace(tpl, "{{TASK_TEMPLATE}}", task, 1)
 }
 
 // buildSkillPrompt uses bge-m3 semantic matching (via EmbeddingService) to select relevant skills.
@@ -221,6 +267,7 @@ func GetAllTools() []bladesTools.Tool {
 	allTools = append(allTools, tools.GetQueryBKDictTool())
 	allTools = append(allTools, tools.GetWebSearchTool())
 	allTools = append(allTools, tools.GetFetchWebPageTool())
+	allTools = append(allTools, tools.GetGraphQueryTool()) // P3.3: 代码图谱查询
 
 	allTools = append(allTools, tools.GetAllDataTools()...)
 
@@ -251,6 +298,7 @@ func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesT
 	allTools = append(allTools, tools.GetQueryBKDictTool())
 	allTools = append(allTools, tools.GetWebSearchTool())
 	allTools = append(allTools, tools.GetFetchWebPageTool())
+	allTools = append(allTools, tools.GetGraphQueryTool()) // P3.3: 代码图谱查询
 
 	allTools = append(allTools, tools.GetAllDataTools()...)
 
@@ -465,7 +513,8 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 	}
 
 	for i := range toolList {
-		toolList[i] = wrapMCPToolHandler(toolList[i], server.Name)
+		// P1.2: 用 V2 版本接入重试 / 熔断 / 错误分类；旧 wrapMCPToolHandler 仍存在作为 deprecated 兼容入口。
+		toolList[i] = wrapMCPToolHandlerV2(toolList[i], server.Name)
 	}
 	return toolList
 }
@@ -485,27 +534,11 @@ func getEnabledToolNames(serverID uint) map[string]bool {
 // wrapMCPToolHandler wraps an MCP tool's handler to return call errors as structured JSON
 // responses instead of propagating them as Go errors. This prevents a single bad MCP tool call
 // from killing the entire sub-agent (the LLM sees the error text and can retry or switch tools).
+//
+// Deprecated: P1.2 起应直接调用 wrapMCPToolHandlerV2，享受重试 / 熔断 / 错误分类 / 脱敏全特性。
+// 本函数保留仅为维持外部引用兼容，实现等价于 V2。
 func wrapMCPToolHandler(original bladesTools.Tool, serverName string) bladesTools.Tool {
-	return bladesTools.NewTool(
-		original.Name(),
-		original.Description(),
-		bladesTools.HandleFunc(func(ctx context.Context, input string) (string, error) {
-			result, err := original.Handle(ctx, input)
-			if err != nil {
-				errMsg := fmt.Sprintf("⚠️ MCP [%s] 工具调用失败: %v", serverName, err)
-				logger.SugaredLogger.Warnf("MCP工具错误 [%s/%s]: %v", serverName, original.Name(), err)
-				errResp, _ := json.Marshal(map[string]interface{}{
-					"error":   true,
-					"message": errMsg,
-					"tool":    original.Name(),
-				})
-				return string(errResp), nil
-			}
-			return result, nil
-		}),
-		bladesTools.WithInputSchema(original.InputSchema()),
-		bladesTools.WithOutputSchema(original.OutputSchema()),
-	)
+	return wrapMCPToolHandlerV2(original, serverName)
 }
 
 func parseMCPArgs(argsStr string) []string {
@@ -709,8 +742,8 @@ func isSkippableNoiseLine(s string) bool {
 	return allSep && strings.Contains(s, "-") && len(s) >= 8
 }
 
-func smartContentCompress(content string, maxBytes int) string {
-	if maxBytes <= 0 {
+func smartContentCompress(content string, maxTokens int) string {
+	if maxTokens <= 0 {
 		return content
 	}
 
@@ -727,7 +760,7 @@ func smartContentCompress(content string, maxBytes int) string {
 		normJoined.WriteString(ln)
 	}
 	nj := normJoined.String()
-	if len(nj) <= maxBytes {
+	if EncodeCount(nj) <= maxTokens {
 		return nj
 	}
 
@@ -749,11 +782,9 @@ func smartContentCompress(content string, maxBytes int) string {
 	used := 0
 	tryAdd := func(parts []string) bool {
 		for _, p := range parts {
-			need := len(p)
-			if used > 0 {
-				need++
-			}
-			if used+need > maxBytes {
+			// 每行额外 +1 token 算换行符（cl100k_base 下换行也是 1 token）
+			need := EncodeCount(p) + 1
+			if used+need > maxTokens {
 				return false
 			}
 			result = append(result, p)
@@ -762,16 +793,16 @@ func smartContentCompress(content string, maxBytes int) string {
 		return true
 	}
 
-	headerCap := maxBytes / 5
+	headerCap := maxTokens / 5
 	if headerCap > 1000 {
 		headerCap = 1000
 	}
 	if headerCap < 120 && len(headers) > 0 {
-		headerCap = min(maxBytes/3, 400)
+		headerCap = min(maxTokens/3, 400)
 	}
 	tryAdd(smartTruncateLines(headers, headerCap))
 
-	remaining := maxBytes - used
+	remaining := maxTokens - used
 	if remaining < 1 {
 		return strings.Join(result, "\n")
 	}
@@ -782,11 +813,11 @@ func smartContentCompress(content string, maxBytes int) string {
 	}
 	tryAdd(smartTruncateLinesFromEnd(summaryLines, summaryBudget))
 
-	remaining = maxBytes - used
+	remaining = maxTokens - used
 	if remaining < 1 {
 		out := strings.Join(result, "\n")
-		if len(out) > maxBytes {
-			return safeTruncateString(out, maxBytes)
+		if EncodeCount(out) > maxTokens {
+			return EncodeTrimToTokens(out, maxTokens)
 		}
 		return out
 	}
@@ -797,26 +828,28 @@ func smartContentCompress(content string, maxBytes int) string {
 	}
 	tryAdd(smartTruncateLinesFromEnd(dataLines, dataBudget))
 
-	remaining = maxBytes - used
+	remaining = maxTokens - used
 	if remaining > 48 {
 		tryAdd(smartTruncateLinesFromEnd(otherLines, remaining))
 	}
 
 	finalContent := strings.Join(result, "\n")
-	if len(finalContent) > maxBytes {
-		finalContent = safeTruncateString(finalContent, maxBytes)
+	if EncodeCount(finalContent) > maxTokens {
+		finalContent = EncodeTrimToTokens(finalContent, maxTokens)
 	}
 	return finalContent
 }
 
 func compressExecutedStepResult(result string, stepIndex, totalSteps int, forReplanner bool) string {
+	// P2.1: 预算单位从 byte 改为 token
+	// 旧的 byte 预算（execRecent=1400）≈ 350 token（中文为主时）。新 token 预算统一到合理量级。
 	const (
-		execRecent    = 1400
-		execOlder     = 750
-		replanRecent  = 800
-		replanOlder   = 480
-		minByteBudget = 400
-		recentTail    = 2
+		execRecent     = 800
+		execOlder      = 400
+		replanRecent   = 500
+		replanOlder    = 250
+		minTokenBudget = 200
+		recentTail     = 2
 	)
 	recent := totalSteps <= recentTail || stepIndex >= totalSteps-recentTail
 
@@ -834,8 +867,8 @@ func compressExecutedStepResult(result string, stepIndex, totalSteps int, forRep
 			budget = execOlder
 		}
 	}
-	if budget < minByteBudget {
-		budget = minByteBudget
+	if budget < minTokenBudget {
+		budget = minTokenBudget
 	}
 	return smartContentCompress(result, budget)
 }
@@ -900,40 +933,20 @@ func containsNumbers(line string) bool {
 	return false
 }
 
-func smartTruncateLines(lines []string, maxBytes int) []string {
-	var result []string
-	var currentSize int
-
-	for _, line := range lines {
-		if currentSize+len(line) > maxBytes {
-			break
-		}
-		result = append(result, line)
-		currentSize += len(line) + 1
-	}
-
-	return result
-}
-
-func smartTruncateLinesFromEnd(lines []string, maxBytes int) []string {
-	if maxBytes <= 0 || len(lines) == 0 {
+func smartTruncateLines(lines []string, maxTokens int) []string {
+	if maxTokens <= 0 {
 		return nil
 	}
-	var result []string
-	currentSize := 0
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := lines[i]
-		lineLen := len(line)
-		if len(result) > 0 {
-			lineLen++
-		}
-		if currentSize+lineLen > maxBytes {
-			break
-		}
-		result = append([]string{line}, result...)
-		currentSize += lineLen
+	kept, _ := EncodeLinesSplit(lines, maxTokens)
+	return kept
+}
+
+func smartTruncateLinesFromEnd(lines []string, maxTokens int) []string {
+	if maxTokens <= 0 || len(lines) == 0 {
+		return nil
 	}
-	return result
+	kept, _ := EncodeLinesKeepTail(lines, maxTokens)
+	return kept
 }
 
 func init() {

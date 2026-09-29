@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"blades-stock/backend/paths"
@@ -63,5 +64,26 @@ func Init(sqlitePath string) {
 	dbCon.SetMaxOpenConns(5)
 	dbCon.SetConnMaxLifetime(time.Hour)
 	Dao = openDb
+
+	// 启动期健康检查：DB 文件合法 + 关键表齐全才视为可启动。
+	// 失败一律 log.Fatal：与现有 log.Fatalf 风格一致，避免"启动成功但第一次查询才暴露"。
+	// 测试可通过 BLADES_STOCK_SKIP_DB_HEALTHCHECK=1 环境变量跳过（TestMain 创建临时空 DB 时使用）。
+	//
+	// sqlitePath 可能包含 DSN 后缀（?_busy_timeout=...），健康检查只关心物理文件路径，
+	// 所以先剥离 ? 及其后内容。
+	dbPathOnly := sqlitePath
+	if idx := strings.Index(dbPathOnly, "?"); idx >= 0 {
+		dbPathOnly = dbPathOnly[:idx]
+	}
+	if os.Getenv("BLADES_STOCK_SKIP_DB_HEALTHCHECK") == "1" {
+		log.Print("db: health check skipped (BLADES_STOCK_SKIP_DB_HEALTHCHECK=1)")
+	} else if status, err := StartOfUseHealthCheck(dbPathOnly); err != nil {
+		log.Fatalf("db 启动期健康检查失败: %v (path=%s, size=%d, quick_check=%q, missing_tables=%v)",
+			err, status.Path, status.FileSizeBytes, status.QuickCheck, status.MissingTables)
+	} else {
+		log.Printf("db: integrity_check ok (path=%s, size=%d, tables=%d, took=%s)",
+			status.Path, status.FileSizeBytes, len(RequiredTables), status.Duration)
+	}
+
 	AutoMigrate()
 }

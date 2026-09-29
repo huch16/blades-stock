@@ -408,14 +408,25 @@ func (m MarketNewsApi) GetSinaNews(crawlTimeOut uint) *[]models.Telegraph {
 }
 
 func (m MarketNewsApi) GlobalStockIndexes(crawlTimeOut uint) map[string]any {
-	response, _ := SharedHTTPClient.SetTimeout(time.Duration(crawlTimeOut)*time.Second).R().
+	response, err := SharedHTTPClient.SetTimeout(time.Duration(crawlTimeOut)*time.Second).R().
 		SetHeader("Referer", "https://stockapp.finance.qq.com/mstats").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36 Edg/117.0.2045.60").
 		Get("https://proxy.finance.qq.com/ifzqgtimg/appstock/app/rank/indexRankDetail2")
-	js := string(response.Body())
+	if err != nil {
+		logger.SugaredLogger.Warnf("GlobalStockIndexes 请求失败: %v", err)
+		return map[string]any{}
+	}
 	res := make(map[string]any)
-	json.Unmarshal([]byte(js), &res)
-	return res["data"].(map[string]any)
+	if err := json.Unmarshal(response.Body(), &res); err != nil {
+		logger.SugaredLogger.Warnf("GlobalStockIndexes 解析失败: %v", err)
+		return map[string]any{}
+	}
+	data, ok := res["data"].(map[string]any)
+	if !ok || data == nil {
+		logger.SugaredLogger.Warnf("GlobalStockIndexes 返回结构异常: data 缺失或类型不符")
+		return map[string]any{}
+	}
+	return data
 }
 
 // GlobalStockIndexesReadable 获取全球指数并转换为 AI 易读的 Markdown 文本。

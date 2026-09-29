@@ -26,8 +26,6 @@ export function AnalyzeSentimentWithFreqWeight(arg1:string):Promise<Record<strin
 
 export function BackupData(arg1:string):Promise<string>;
 
-export function RestoreData(arg1:string):Promise<string>;
-
 export function BatchDeleteAIResponseResult(arg1:Array<number>):Promise<string>;
 
 export function BatchDeleteAllStockInfo(arg1:Array<number>):Promise<string>;
@@ -38,7 +36,7 @@ export function CalculateNextRunTime(arg1:string):Promise<string>;
 
 export function CalculateNextRunTimes(arg1:string,arg2:number):Promise<Array<string>>;
 
-export function ChatWithAgent(arg1:string,arg2:number,arg3:any,arg4:boolean,arg5:number,arg6:boolean,arg7:string):Promise<void>;
+export function ChatWithAgent(arg1:string,arg2:number,arg3:any,arg4:boolean,arg5:number,arg6:boolean,arg7:string,arg8:string):Promise<void>;
 
 export function CheckDeviceBinding(arg1:string,arg2:string):Promise<Record<string, any>>;
 
@@ -91,8 +89,6 @@ export function ExportConfig():Promise<string>;
 export function FetchAiModelInfo(arg1:string,arg2:string,arg3:string):Promise<main.AiModelInfo>;
 
 export function FetchAiModels(arg1:string,arg2:string):Promise<Array<string>>;
-
-export function TestAiConnection(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function FetchAndSaveMarketStatistic():Promise<void>;
 
@@ -326,6 +322,8 @@ export function RemoveStockGroup(arg1:string,arg2:string,arg3:number):Promise<st
 
 export function RestartAsAdmin():Promise<void>;
 
+export function RestoreData(arg1:string):Promise<string>;
+
 export function RunVectorBacktest(arg1:string,arg2:string,arg3:Record<string, any>):Promise<Record<string, any>>;
 
 export function RunVectorGridSearch(arg1:string,arg2:string):Promise<Record<string, any>>;
@@ -375,6 +373,8 @@ export function StockNotice(arg1:string):Promise<Array<any>>;
 export function StockResearchReport(arg1:string):Promise<Array<any>>;
 
 export function SummaryStockNews(arg1:string,arg2:number,arg3:any,arg4:boolean,arg5:boolean,arg6:string,arg7:string):Promise<void>;
+
+export function TestAiConnection(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function TestMCPServer(arg1:number):Promise<string>;
 

@@ -4,8 +4,12 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime/debug"
 	"time"
 
+	"blades-stock/backend/agent"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	log "blades-stock/backend/logger"
@@ -13,9 +17,6 @@ import (
 	"blades-stock/backend/models"
 	"blades-stock/backend/paths"
 	"blades-stock/backend/quant"
-	"os"
-	"path/filepath"
-	"runtime/debug"
 
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/wailsapp/wails/v2"
@@ -92,6 +93,27 @@ func main() {
 	machineid.Init(BuildKey)
 	data.SetAppIcon(icon)
 	db.Init("")
+	// P3.2: Skill.ToolGroups 启动期校验。非法 ToolGroup typo 不会静默。
+	agent.ValidateSkillToolGroups()
+	// P1.1 路径指纹防护：警告但不中断启动，避免静默升级。
+	// 当仓库根 data/stock.db 与 build/bin/data/stock.db 同源时记录警告，
+	// 让"双库污染"问题在日志里可见。
+	if realDB, buildBinDB, fpResult, err := func() (string, string, paths.FingerprintResult, error) {
+		realDB := db.ResolveDBPath(paths.BaseDir())
+		exe, _ := os.Executable()
+		exeDir := filepath.Dir(exe)
+		buildBinDB := filepath.Join(exeDir, "data", "stock.db")
+		fp, err := paths.ResolveAndFingerprint(realDB, buildBinDB)
+		return realDB, buildBinDB, fp, err
+	}(); err != nil {
+		log.SugaredLogger.Warnf("db fingerprint 路径防护计算失败（非致命）: %v", err)
+	} else {
+		log.SugaredLogger.Infof("db fingerprint: real=%s fp=%s build_bin=%s fp=%s equal=%v",
+			realDB, fpResult.RealFingerprint, buildBinDB, fpResult.BuildBinFingerprint, fpResult.EqualToBuildBin)
+		if fpResult.EqualToBuildBin {
+			log.SugaredLogger.Warn("检测到自包含部署包与仓库根库同源，请检查是否误拷贝；本地运行应以仓库根库为准")
+		}
+	}
 	data.InitAnalyzeSentiment()
 	// 初始化交易日历（Baostock，含法定节假日）
 	data.InitTradingCalendar()

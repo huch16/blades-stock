@@ -179,11 +179,6 @@ async function testAiConfig(aiConfig, index) {
     message.warning('请先填写接口地址再测试')
     return
   }
-  const isLocalOllama = /localhost:11434|127\.0\.0\.1:11434/.test(aiConfig.baseUrl)
-  if (!aiConfig.apiKey && !isLocalOllama) {
-    message.warning('请先填写接口地址和 apiKey 再测试')
-    return
-  }
   if (!aiConfig.modelName) {
     const list = await fetchAiModels(aiConfig, index, { silent: true })
     if (!list.length) {
@@ -195,7 +190,7 @@ async function testAiConfig(aiConfig, index) {
   if (meta.testing) return
   meta.testing = true
   try {
-    const errMsg = await TestAiConnection(aiConfig.baseUrl, aiConfig.apiKey, aiConfig.modelName)
+    const errMsg = await TestAiConnection(aiConfig.baseUrl, aiConfig.apiKey || 'none', aiConfig.modelName)
     if (errMsg) {
       message.error('连接失败：' + errMsg)
     } else {
@@ -214,10 +209,9 @@ async function testAiConfig(aiConfig, index) {
 // 模型列表获取（带请求去重）(F-04)
 // ========================
 let fetchModelsId = 0
-async function fetchAiModels(aiConfig, index, opts = {}) {
-  const isLocalOllama = /localhost:11434|127\.0\.0\.1:11434/.test(aiConfig.baseUrl || '')
-  if (!aiConfig.baseUrl || (!aiConfig.apiKey && !isLocalOllama)) {
-    if (!opts.silent) message.warning('请先填写接口地址和 apiKey')
+async function fetchAiModels(aiConfig, index, opts: { silent?: boolean } = {}) {
+  if (!aiConfig.baseUrl) {
+    if (!opts.silent) message.warning('请先填写接口地址')
     return []
   }
   const meta = getMeta(index, aiConfig.ID)
@@ -225,7 +219,7 @@ async function fetchAiModels(aiConfig, index, opts = {}) {
   meta.loadingModels = true
   const reqId = ++fetchModelsId
   try {
-    const list = await FetchAiModels(aiConfig.baseUrl, aiConfig.apiKey || (isLocalOllama ? 'ollama' : ''))
+    const list = await FetchAiModels(aiConfig.baseUrl, aiConfig.apiKey || 'none')
     if (reqId !== fetchModelsId) return []
     const options = (list || []).map(id => ({ label: id, value: id }))
     meta.modelOptions = options
@@ -424,8 +418,8 @@ async function saveConfig() {
   // 数值范围校验 (F-09/F-16)
   for (const cfg of aiConfigs.value) {
     if (cfg.temperature < 0 || cfg.temperature > 2) { message.warning(`Temperature 应在 0-2 之间`); return }
-    if (cfg.maxTokens < 1 || cfg.maxTokens > 128000) { message.warning(`MaxTokens 应在 1-128000 之间`); return }
-    if (cfg.timeOut < 60 || cfg.timeOut > 600) { message.warning(`Timeout 应在 60-600 秒之间`); return }
+    if (cfg.maxTokens < 1 || cfg.maxTokens > 256000) { message.warning(`MaxTokens 应在 1-256000 之间`); return }
+    if (cfg.timeOut && (cfg.timeOut < 5 || cfg.timeOut > 3600)) { message.warning(`Timeout 应在 5-3600 秒之间`); return }
   }
 
   console.log('开始保存设置', formValue.value);

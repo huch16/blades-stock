@@ -2186,7 +2186,11 @@ func preFetchMarketSummaryData() string {
 }
 func (a *App) GetIndustryRank(sort string, cnt int) []any {
 	res := data.NewMarketNewsApi().GetIndustryRank(sort, cnt)
-	return res["data"].([]any)
+	data, ok := res["data"].([]any)
+	if !ok {
+		return []any{}
+	}
+	return data
 }
 func (a *App) GetIndustryMoneyRankSina(fenlei, sort string) []map[string]any {
 	res := data.NewMarketNewsApi().GetIndustryMoneyRankSina(fenlei, sort)
@@ -2335,8 +2339,11 @@ func (a *App) SaveAiAssistantSession(sessionId string, messages []models.AiAssis
 func (a *App) FetchAiModels(baseUrl, apiKey string) []string {
 	baseUrl = strutil.Trim(baseUrl)
 	apiKey = strutil.Trim(apiKey)
-	if baseUrl == "" || apiKey == "" {
+	if baseUrl == "" {
 		return []string{}
+	}
+	if apiKey == "" {
+		apiKey = "none"
 	}
 
 	type modelItem struct {
@@ -2391,9 +2398,8 @@ func (a *App) TestAiConnection(baseUrl, apiKey, modelName string) string {
 	if modelName == "" {
 		return "请先在「模型名」中选择或填写一个模型"
 	}
-	isLocalOllama := strings.Contains(baseUrl, "localhost:11434") || strings.Contains(baseUrl, "127.0.0.1:11434")
-	if apiKey == "" && !isLocalOllama {
-		return "请填写 ApiKey"
+	if apiKey == "" {
+		apiKey = "none"
 	}
 
 	client := resty.New()

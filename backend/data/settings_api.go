@@ -621,21 +621,30 @@ func validateAIConfig(cfg *AIConfig) string {
 	if strings.TrimSpace(cfg.BaseUrl) == "" {
 		return "AI 配置 Base URL 不能为空"
 	}
-	if strings.TrimSpace(cfg.ApiKey) == "" {
-		return "AI 配置 API Key 不能为空"
-	}
 	if strings.TrimSpace(cfg.ModelName) == "" {
 		return "AI 配置模型名称不能为空"
 	}
+
+	// 本地模型或特定网络端点允许 API Key 为空，远程 API 若为空自动填充默认占位符 "none" 避免报错
+	if strings.TrimSpace(cfg.ApiKey) == "" {
+		cfg.ApiKey = "none"
+	}
+
 	if cfg.Temperature < 0 || cfg.Temperature > 2 {
 		return "Temperature 必须在 0~2 之间"
 	}
-	if cfg.MaxTokens < 1 || cfg.MaxTokens > 128000 {
-		return "MaxTokens 必须在 1~128000 之间"
+	if cfg.MaxTokens <= 0 {
+		cfg.MaxTokens = 4096
+	} else if cfg.MaxTokens > 256000 {
+		return "MaxTokens 不能超过 256000"
 	}
-	if cfg.TimeOut < 60 {
-		return "TimeOut 不能小于 60 秒"
+
+	if cfg.TimeOut <= 0 {
+		cfg.TimeOut = 300
+	} else if cfg.TimeOut < 5 {
+		return "TimeOut 必须大于 5 秒"
 	}
+
 	if cfg.EmbeddingEnabled && strings.TrimSpace(cfg.EmbeddingModelName) == "" {
 		return "Embedding 已启用但未配置模型名称"
 	}
@@ -753,8 +762,9 @@ func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
 		if e != nil {
 			return
 		}
-		// ID<=0 一律视为新配置，走插入逻辑；否则根据是否已存在决定更新或新增
+		// ID<=0 或数据库中不存在该 ID，一律视为新配置，走插入逻辑（清除临时ID由数据库自增主键）
 		if item.ID <= 0 || !idMap[item.ID] {
+			item.ID = 0
 			addAiConfigs = append(addAiConfigs, item)
 		} else {
 			notDeleteIds = append(notDeleteIds, item.ID)

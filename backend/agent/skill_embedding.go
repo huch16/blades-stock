@@ -5,11 +5,15 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
+
+	lru "github.com/hashicorp/golang-lru/v2/expirable"
+	gorm_clause "gorm.io/gorm/clause"
 )
 
 type SkillEmbedding struct {
@@ -132,10 +136,9 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 	// Batch upsert to DB
 	s.embeddings = results
 
-	if err := db.Dao.Exec("DELETE FROM skill_embeddings").Error; err != nil {
-		logger.SugaredLogger.Warnf("清空skill_embeddings表失败: %v", err)
-	}
-
+	// P3.1: 原子 upsert 替代 DELETE+CreateInBatches。
+// 旧实现中途崩溃会导致 skill_embeddings 表被清空，下次启动重算全量 embedding。
+// 新实现用 clause.OnConflict(SkillID) DO UPDATE，单条 SQL 完成覆盖。
 	rows := make([]SkillEmbedding, 0, len(results))
 	for skillID, emb := range results {
 		rows = append(rows, SkillEmbedding{
@@ -143,7 +146,10 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 			Embedding: emb,
 		})
 	}
-	if err := db.Dao.CreateInBatches(rows, 100).Error; err != nil {
+	if err := db.Dao.Clauses(gorm_clause.OnConflict{
+		Columns:   []gorm_clause.Column{{Name: "skill_id"}},
+		DoUpdates: gorm_clause.AssignmentColumns([]string{"embedding"}),
+	}).CreateInBatches(rows, 100).Error; err != nil {
 		logger.SugaredLogger.Warnf("批量写入skill_embeddings失败: %v", err)
 	}
 
@@ -164,6 +170,10 @@ func skillEmbedText(sk models.Skill) string {
 	}
 	if strings.TrimSpace(sk.TriggerKeywords) != "" {
 		parts = append(parts, "触发关键词："+sk.TriggerKeywords)
+	}
+	// P4.2: synonyms 也拼进 embedding 文本，扩义语义匹配范围。
+	if strings.TrimSpace(sk.Synonyms) != "" {
+		parts = append(parts, "同义词："+sk.Synonyms)
 	}
 	text := strings.Join(parts, "\n")
 	const maxRunes = 2000
@@ -253,12 +263,14 @@ func truncateQuestion(q string) string {
 func (s *SkillEmbeddingService) keywordMatch(skills []models.Skill, question string, topK int) []models.Skill {
 	var matched, universal []models.Skill
 	for _, skill := range skills {
-		if skill.TriggerKeywords == "" {
+		hasKeywords := skill.TriggerKeywords != "" || skill.Synonyms != ""
+		if !hasKeywords {
 			universal = append(universal, skill)
 			continue
 		}
-		keywords := s.splitKeywords(skill.TriggerKeywords)
-		for _, kw := range keywords {
+		// P4.2: trigger_keywords ∪ synonyms 都参与匹配
+		allKeywords := append(s.splitKeywords(skill.TriggerKeywords), s.splitKeywords(skill.Synonyms)...)
+		for _, kw := range allKeywords {
 			if kw != "" && strings.Contains(question, kw) {
 				matched = append(matched, skill)
 				break
@@ -278,16 +290,14 @@ func (s *SkillEmbeddingService) keywordMatch(skills []models.Skill, question str
 // splitKeywords returns the trimmed, non-empty keywords for a comma-separated
 // trigger keyword string, caching results to avoid re-splitting the same
 // keyword set on every question (MatchSkills is called per chat request).
-var splitKwCache = struct {
-	sync.RWMutex
-	m map[string][]string
-}{m: make(map[string][]string)}
+//
+// P3.1: 用 hashicorp/golang-lru/v2/expirable.LRU 替代无上限 map：
+//   - 容量 1024（足够容纳数百个 Skill 的关键词集）
+//   - TTL 30 分钟（Skill 列表变化后自动失效，无需主动清缓存）
+var splitKwCache = lru.NewLRU[string, []string](1024, nil, 30*time.Minute)
 
 func (s *SkillEmbeddingService) splitKeywords(raw string) []string {
-	splitKwCache.RLock()
-	cached, ok := splitKwCache.m[raw]
-	splitKwCache.RUnlock()
-	if ok {
+	if cached, ok := splitKwCache.Get(raw); ok {
 		return cached
 	}
 
@@ -302,9 +312,7 @@ func (s *SkillEmbeddingService) splitKeywords(raw string) []string {
 		out = []string{}
 	}
 
-	splitKwCache.Lock()
-	splitKwCache.m[raw] = out
-	splitKwCache.Unlock()
+	splitKwCache.Add(raw, out)
 	return out
 }
 
