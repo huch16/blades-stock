@@ -3170,3 +3170,68 @@ export namespace models {
 
 }
 
+export namespace agent {
+	export class MarketLifecycleStatus {
+	    phase: string;
+	    phaseName: string;
+	    isTradingDay: boolean;
+	    isTradingTime: boolean;
+	    currentTime: string;
+	    marketStateDesc: string;
+	    nextEvent: string;
+	    nextEventTime: string;
+
+	    static createFrom(source: any = {}) {
+	        return new MarketLifecycleStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.phase = source["phase"];
+	        this.phaseName = source["phaseName"];
+	        this.isTradingDay = source["isTradingDay"];
+	        this.isTradingTime = source["isTradingTime"];
+	        this.currentTime = source["currentTime"];
+	        this.marketStateDesc = source["marketStateDesc"];
+	        this.nextEvent = source["nextEvent"];
+	        this.nextEventTime = source["nextEventTime"];
+	    }
+	}
+
+	export class MarketIntelligenceReport {
+	    type: string;
+	    title: string;
+	    summary: string;
+	    content: string;
+	    // Go type: time
+	    generatedAt: any;
+	    tradingDate: string;
+	    source: string;
+
+	    static createFrom(source: any = {}) {
+	        return new MarketIntelligenceReport(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.title = source["title"];
+	        this.summary = source["summary"];
+	        this.content = source["content"];
+	        this.generatedAt = this.convertValue(source["generatedAt"], null);
+	        this.tradingDate = source["tradingDate"];
+	        this.source = source["source"];
+	    }
+
+	    convertValue(a: any, type: any): any {
+	        if (a === null || a === undefined) return a;
+	        if ('string' === typeof a) {
+	            const isDate = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/.test(a);
+	            if (isDate && type !== 'string') return new Date(a);
+	            return a;
+	        }
+	        return a;
+	    }
+	}
+}
+

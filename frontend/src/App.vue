@@ -29,6 +29,7 @@ import {
 import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime, IsHKTradingTime, IsUSTradingTime} from "../wailsjs/go/main/App";
 import FloatingAiAssistant from "./components/FloatingAiAssistant.vue";
 import FloatingAgentAssistant from "./components/FloatingAgentAssistant.vue";
+import MarketIntelligenceDrawer from "./components/MarketIntelligenceDrawer.vue";
 import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
 import {ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
 import {LocalFireDepartmentRound} from "@vicons/material";
@@ -55,7 +56,18 @@ const telegraph = ref([])
 const groupList = ref([])
 const officialStatement= ref("")
 const marketStatus = ref('')
+const showMarketIntelligenceDrawer = ref(false)
+const marketIntelligenceType = ref('pre_market_briefing')
 let marketStatusTimer = null
+
+function onOpenMarketIntelligence(type) {
+  marketIntelligenceType.value = type || 'pre_market_briefing'
+  showMarketIntelligenceDrawer.value = true
+}
+
+EventsOn('show-market-intelligence', (type) => {
+  onOpenMarketIntelligence(type)
+})
 
 const investmentMottos = [
   "投资有风险，入市需谨慎",
@@ -979,6 +991,8 @@ onBeforeUnmount(() => {
   EventsOff("telegraph")
   EventsOff("newsPush")
   EventsOff("groupListChanged")
+  EventsOff("stockPriceAlertTriggered")
+  EventsOff("marketIntelligenceReport")
 })
 
 window.onerror = function (msg, source, lineno, colno, error) {
@@ -1084,6 +1098,39 @@ onMounted(() => {
         })
       }
     })
+
+    // 监听价格预警触发及 Agent 智能归因推送
+    EventsOn("stockPriceAlertTriggered", (data) => {
+      notification.warning({
+        title: `🚨 价格预警: ${data.name} (${data.code})`,
+        content: () => h('div', { style: { 'text-align': 'left', 'font-size': '13px' } }, [
+          h('div', { style: { 'font-weight': 'bold', 'margin-bottom': '6px', 'color': '#ff7d00' } }, data.reason),
+          h('div', { style: { 'white-space': 'pre-wrap', 'line-height': '1.5', 'background': 'rgba(0,0,0,0.05)', 'padding': '8px', 'border-radius': '4px', 'font-size': '12px' } }, 
+            data.aiAnalysis || 'Agent 正在进行归因分析...'
+          )
+        ]),
+        meta: () => h(NText, { depth: 3 }, { default: () => `${data.time} · AI 自动归因` }),
+        duration: 1000 * 60 * 3, // 保持 3 分钟
+      })
+    })
+
+    // 监听市场全流程智能研报推送（盘前/盘后）
+    EventsOn("marketIntelligenceReport", (data) => {
+      if (!data) return
+      const isBrief = data.type === 'pre_market_briefing'
+      notification.success({
+        title: isBrief ? `🌅 ${data.title}` : `🌆 ${data.title}`,
+        content: () => h('div', { style: { 'text-align': 'left', 'font-size': '13px' } }, [
+          h('div', { style: { 'font-weight': 'bold', 'margin-bottom': '6px', 'color': '#18a058' } }, data.summary),
+          h('div', { style: { 'white-space': 'pre-wrap', 'line-height': '1.5', 'background': 'rgba(0,0,0,0.05)', 'padding': '8px', 'border-radius': '4px', 'font-size': '12px', 'max-height': '260px', 'overflow-y': 'auto' } },
+            (data.content || '').slice(0, 500) + ((data.content || '').length > 500 ? '...' : '')
+          )
+        ]),
+        meta: () => h(NText, { depth: 3 }, { default: () => `${new Date(data.generatedAt).toLocaleString()} · ${data.source || 'Agent'}` }),
+        duration: 1000 * 60 * 5,
+      })
+      EventsEmit('show-market-intelligence', data.type)
+    })
   }).catch(err => {
     console.error("GetConfig(onMounted) error:", err)
   })
@@ -1108,7 +1155,7 @@ onMounted(() => {
                 :rotate="-15"
             >
 <!--              <FloatingAiAssistant />-->
-              <FloatingAgentAssistant />
+              <FloatingAgentAssistant @open-market-intelligence="onOpenMarketIntelligence" />
               <n-flex>
                 <n-grid x-gap="12" :cols="1">
                   <n-gi>
@@ -1145,6 +1192,10 @@ onMounted(() => {
         </n-modal-provider>
       </n-notification-provider>
     </n-message-provider>
+    <MarketIntelligenceDrawer
+      v-model:show="showMarketIntelligenceDrawer"
+      :report-type="marketIntelligenceType"
+    />
   </n-config-provider>
 </template>
 <style>

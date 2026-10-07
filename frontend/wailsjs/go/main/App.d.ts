@@ -399,3 +399,16 @@ export function UpdateSkill(arg1:models.Skill):Promise<string>;
 export function UpdateTradingRecord(arg1:data.TradingRecord):Promise<void>;
 
 export function ValidateCronExpr(arg1:string):Promise<string>;
+
+export function DiagnoseStock(arg1:string):Promise<any>;
+
+export function TriggerAIReportBacktest(arg1:number):Promise<any>;
+
+export function GeneratePostMarketReview(arg1:number):Promise<any>;
+
+export function GeneratePreMarketBriefing(arg1:number):Promise<any>;
+
+export function GetLatestMarketIntelligenceReport():Promise<any>;
+
+export function GetMarketLifecycleStatus():Promise<any>;
+

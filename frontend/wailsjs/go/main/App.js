@@ -789,3 +789,28 @@ export function UpdateTradingRecord(arg1) {
 export function ValidateCronExpr(arg1) {
   return window['go']['main']['App']['ValidateCronExpr'](arg1);
 }
+
+export function DiagnoseStock(arg1) {
+  return window['go']['main']['App']['DiagnoseStock'](arg1);
+}
+
+export function TriggerAIReportBacktest(arg1) {
+  return window['go']['main']['App']['TriggerAIReportBacktest'](arg1);
+}
+
+export function GeneratePostMarketReview(arg1) {
+  return window['go']['main']['App']['GeneratePostMarketReview'](arg1);
+}
+
+export function GeneratePreMarketBriefing(arg1) {
+  return window['go']['main']['App']['GeneratePreMarketBriefing'](arg1);
+}
+
+export function GetLatestMarketIntelligenceReport() {
+  return window['go']['main']['App']['GetLatestMarketIntelligenceReport']();
+}
+
+export function GetMarketLifecycleStatus() {
+  return window['go']['main']['App']['GetMarketLifecycleStatus']();
+}
+

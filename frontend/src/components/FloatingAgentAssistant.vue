@@ -251,6 +251,14 @@
                   />
                 </div>
               </div>
+              <div class="chat-quick-chips">
+                <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('三维量化诊断 ')">🎯 量化诊断</NTag>
+                <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('ETF动量轮动分析与配置建议')">📈 ETF动量</NTag>
+                <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('VectorBT 策略回测: ')">🧪 策略回测</NTag>
+                <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('主力资金博弈与筹码集中度分析: ')">💰 资金筹码</NTag>
+                <NTag size="small" round :bordered="false" type="info" class="quick-chip" @click="emit('open-market-intelligence', 'pre_market_briefing')">🌅 盘前前瞻</NTag>
+                <NTag size="small" round :bordered="false" type="warning" class="quick-chip" @click="emit('open-market-intelligence', 'post_market_review')">🌆 盘后复盘</NTag>
+              </div>
               <div class="chat-footer-input">
                 <NInput
                   v-model:value="inputValue"
@@ -288,7 +296,7 @@
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, onBeforeMount } from 'vue'
 import { useRoute } from 'vue-router'
-import { NButton, NCard, NIcon, NInput, NScrollbar, NSelect, NSpin, NSwitch, useMessage } from 'naive-ui'
+import { NButton, NCard, NIcon, NInput, NScrollbar, NSelect, NSpin, NSwitch, NTag, useMessage } from 'naive-ui'
 import {
   CloseOutline,
   SparklesOutline,
@@ -311,10 +319,12 @@ import {
   SaveAIResponseResult,
   SaveImage
 } from '../../wailsjs/go/main/App'
-import { EventsOff, EventsOn } from '../../wailsjs/runtime'
+import { EventsOff, EventsOn, EventsEmit } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 import html2canvas from 'html2canvas'
+
+const emit = defineEmits(['open-market-intelligence'])
 import { cleanFinalContent } from '../utils/cleanText'
 
 const STORAGE_KEY_MODEL_ID = 'blades-stock-agent-last-model-id'
@@ -770,6 +780,14 @@ function scrollToBottom() {
   })
 }
 
+function fillQuickPrompt(prefix) {
+  if (inputValue.value && !inputValue.value.startsWith(prefix)) {
+    inputValue.value = prefix + inputValue.value
+  } else if (!inputValue.value) {
+    inputValue.value = prefix
+  }
+}
+
 function sendMessage() {
   if (isStreamLoad.value) {
     abortStream(false)
@@ -820,7 +838,7 @@ function sendMessage() {
     }
     scrollToBottom()
   })
-  ChatWithAgent(text, configId, null, memoryMode.value, memoryCount.value, thinkingMode.value, agentMode.value === 'auto' ? '' : agentMode.value)
+  ChatWithAgent(text, configId, null, memoryMode.value, memoryCount.value, thinkingMode.value, agentMode.value === 'auto' ? '' : agentMode.value, sessionId.value || "")
 }
 
 function startNewChat() {
@@ -1082,7 +1100,16 @@ function onAgentMessage(msg) {
     nextTick(scrollToBottom)
     if (msg.content === 'agent-DONE' && last && last.role === 'assistant' && last.content) {
       const user = messages.value[messages.value.length - 2]
-      SaveAIResponseResult("agent","市场分析", last.content, sessionId.value,user.content, aiConfigId.value)
+      let stockCode = "agent"
+      let stockName = "市场分析"
+      if (user && user.content) {
+        const m = user.content.match(/(?:sh|sz|bj)?([0-9]{6})/i)
+        if (m) {
+          stockCode = m[1]
+          stockName = ""
+        }
+      }
+      SaveAIResponseResult(stockCode, stockName, last.content, sessionId.value, user?.content || "", aiConfigId.value)
     }
     return
   }
@@ -1132,6 +1159,12 @@ onBeforeMount(() => {
 
 onMounted(() => {
   EventsOn(AGENT_EVENT, onAgentMessage)
+  EventsOn('openFloatingAgentWithQuestion', (question) => {
+    panelVisible.value = true
+    if (question && typeof question === 'string') {
+      inputValue.value = question
+    }
+  })
   loadHistory()
   GetAiConfigs().then(res => {
     const list = Array.isArray(res) ? res : []
@@ -1165,6 +1198,7 @@ watch(aiConfigId, (newId) => {
 
 onBeforeUnmount(() => {
   EventsOff(AGENT_EVENT)
+  EventsOff('openFloatingAgentWithQuestion')
 })
 </script>
 
@@ -1787,6 +1821,22 @@ onBeforeUnmount(() => {
 }
 .chat-footer-memory-count .n-select {
   width: 100%;
+}
+.chat-quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 4px 6px 4px;
+}
+.quick-chip {
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 11px;
+  user-select: none;
+}
+.quick-chip:hover {
+  opacity: 0.85;
+  transform: translateY(-1px);
 }
 .chat-footer-input {
   display: flex;

@@ -393,6 +393,15 @@ func (a *App) domReady(ctx context.Context) {
 		})
 		// 进化闭环：每日从高质量轨迹提取技能草稿（7 天限频，仅记录供人工审阅）。
 		a.cron.AddFunc("30 2 * * *", agent.RunSkillExtractionPass)
+		// 历史回测与战绩复盘闭环：每个交易日收盘后自动回测 AI 报告的预测准确度与收益率
+		a.cron.AddFunc("30 15 * * 1-5", func() {
+			logger.SugaredLogger.Infof("盘后触发 AI 报告历史回测与胜率检验...")
+			mgr := quant.NewBacktestManager()
+			if res, err := mgr.RunAIReportBacktest(context.Background(), 100); err == nil && res.Processed > 0 {
+				logger.SugaredLogger.Infof("盘后 AI 报告回测完成: 处理 %d 份，准确 %d (%.1f%%)",
+					res.Processed, res.Accurate, res.AccuracyRate*100)
+			}
+		})
 	}()
 
 	//检查谷歌浏览器
@@ -1549,6 +1558,21 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 func (a *App) SaveAIResponseResult(stockCode, stockName, result, chatId, question string, aiConfigId int) {
 	data.NewDeepSeekOpenAi(a.ctx, aiConfigId).SaveAIResponseResult(stockCode, stockName, result, chatId, question)
 }
+
+// DiagnoseStock 提供结构化三维量化深度诊断（量化回测 + 资金筹码 + 技术形态）
+func (a *App) DiagnoseStock(stockCode string) (*quant.StockDiagnosisResult, error) {
+	return quant.DiagnoseStock(stockCode)
+}
+
+// TriggerAIReportBacktest 手动或自动触发 AI 报告历史回测与胜率检验
+func (a *App) TriggerAIReportBacktest(limit int) (*quant.AIReportBacktestResult, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	mgr := quant.NewBacktestManager()
+	return mgr.RunAIReportBacktest(context.Background(), limit)
+}
+
 func (a *App) GetAIResponseResult(stock string) *models.AIResponseResult {
 	return data.NewDeepSeekOpenAi(a.ctx, 0).GetAIResponseResult(stock)
 }
@@ -2085,7 +2109,11 @@ func (a *App) ReFleshTelegraphList(source string) *[]*models.Telegraph {
 }
 
 func (a *App) GlobalStockIndexes() map[string]any {
-	return data.NewMarketNewsApi().GlobalStockIndexes(30)
+	res := data.NewMarketNewsApi().GlobalStockIndexes(30)
+	if res == nil {
+		return map[string]any{}
+	}
+	return res
 }
 
 // GlobalStockIndexesReadable 将全球指数 JSON 转为 AI 易读 Markdown 文本。
@@ -2186,7 +2214,14 @@ func preFetchMarketSummaryData() string {
 }
 func (a *App) GetIndustryRank(sort string, cnt int) []any {
 	res := data.NewMarketNewsApi().GetIndustryRank(sort, cnt)
-	data, ok := res["data"].([]any)
+	if res == nil {
+		return []any{}
+	}
+	dataVal, ok := res["data"]
+	if !ok || dataVal == nil {
+		return []any{}
+	}
+	data, ok := dataVal.([]any)
 	if !ok {
 		return []any{}
 	}
@@ -2660,6 +2695,42 @@ func (a *App) InitCronTasks() {
 			logger.SugaredLogger.Info("已自动创建异动数据保存定时任务")
 		}
 	}
+
+	// 盘前智能前瞻晨报: 每个交易日 09:10 生成
+	if !cronApi.ExistsByTaskType("pre_market_briefing") {
+		task := &models.CronTask{
+			Name:        "盘前智能前瞻晨报",
+			CronExpr:    "0 10 9 * * 1-5",
+			TaskType:    "pre_market_briefing",
+			Enable:      true,
+			Status:      "active",
+			Description: "交易日 09:10 自动生成盘前智能前瞻晨报，含隔夜外盘、核心要闻与今日策略指引",
+		}
+		err := cronApi.Create(task)
+		if err != nil {
+			logger.SugaredLogger.Errorf("自动创建盘前晨报任务失败：%v", err)
+		} else {
+			logger.SugaredLogger.Info("已自动创建盘前智能前瞻晨报任务")
+		}
+	}
+
+	// 盘后收盘复盘: 每个交易日 15:05 自动触发
+	if !cronApi.ExistsByTaskType("post_market_review") {
+		task := &models.CronTask{
+			Name:        "盘后收盘深度复盘",
+			CronExpr:    "0 5 15 * * 1-5",
+			TaskType:    "post_market_review",
+			Enable:      true,
+			Status:      "active",
+			Description: "交易日 15:05 自动生成盘后收盘复盘报告，含资金筹码博弈、AI预测回测验证与次日推演",
+		}
+		err := cronApi.Create(task)
+		if err != nil {
+			logger.SugaredLogger.Errorf("自动创建收盘复盘任务失败：%v", err)
+		} else {
+			logger.SugaredLogger.Info("已自动创建盘后收盘深度复盘任务")
+		}
+	}
 	tasks := cronApi.GetAll()
 	if len(tasks) == 0 {
 		return
@@ -2860,6 +2931,52 @@ func (a *App) ValidateCronExpr(expr string) string {
 		return fmt.Sprintf("无效表达式：%v", err)
 	}
 	return "有效表达式"
+}
+
+// GetMarketLifecycleStatus
+//
+//	@Description: 获取市场生命周期状态（盘前/集合竞价/早盘/午休/下午盘/盘后/休市）
+//	@receiver a
+//	@return agent.MarketLifecycleStatus
+func (a *App) GetMarketLifecycleStatus() agent.MarketLifecycleStatus {
+	return agent.NewMarketLifecycleService(a.ctx).GetMarketLifecycleStatus()
+}
+
+// GeneratePreMarketBriefing
+//
+//	@Description: 生成盘前智能前瞻晨报（手动或定时触发）
+//	@receiver a
+//	@param aiConfigId AI 配置ID
+//	@return *agent.MarketIntelligenceReport 产出的智能晨报
+func (a *App) GeneratePreMarketBriefing(aiConfigId int) *agent.MarketIntelligenceReport {
+	report, err := agent.NewMarketLifecycleService(a.ctx).GeneratePreMarketBriefing(a.ctx, aiConfigId)
+	if err != nil {
+		logger.SugaredLogger.Errorf("生成盘前前瞻失败：%v", err)
+	}
+	return report
+}
+
+// GeneratePostMarketReview
+//
+//	@Description: 生成盘后收盘深度复盘（手动或定时触发）
+//	@receiver a
+//	@param aiConfigId AI 配置ID
+//	@return *agent.MarketIntelligenceReport 产出的智能复盘
+func (a *App) GeneratePostMarketReview(aiConfigId int) *agent.MarketIntelligenceReport {
+	report, err := agent.NewMarketLifecycleService(a.ctx).GeneratePostMarketReview(a.ctx, aiConfigId)
+	if err != nil {
+		logger.SugaredLogger.Errorf("生成收盘复盘失败：%v", err)
+	}
+	return report
+}
+
+// GetLatestMarketIntelligenceReport
+//
+//	@Description: 获取最近一次盘前/盘后智能研报（供前端抽屉加载历史使用）
+//	@receiver a
+//	@return *agent.MarketIntelligenceReport
+func (a *App) GetLatestMarketIntelligenceReport() *agent.MarketIntelligenceReport {
+	return agent.NewMarketLifecycleService(a.ctx).GetLatestReport()
 }
 
 // SearchCronTasks

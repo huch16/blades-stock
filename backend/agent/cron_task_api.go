@@ -133,6 +133,8 @@ func (a *CronTaskApi) GetTaskTypes() []lo.Tuple2[string, string] {
 	return []lo.Tuple2[string, string]{
 		{A: "stock_analysis", B: "股票分析"},
 		{A: "market_analysis", B: "市场分析"},
+		{A: "pre_market_briefing", B: "盘前智能前瞻晨报"},
+		{A: "post_market_review", B: "盘后收盘深度复盘"},
 		{A: "global_stock_index_cache", B: "全球指数缓存"},
 		{A: "stock_change_save", B: "异动数据保存"},
 	}
@@ -214,6 +216,10 @@ func (a *CronTaskApi) executeTaskByType(ctx context.Context, task *models.CronTa
 		return a.executeStockMonitor(ctx, task)
 	case "stock_change_save":
 		return a.executeStockChangeSave(ctx, task)
+	case "pre_market_briefing":
+		return a.executePreMarketBriefing(ctx, task)
+	case "post_market_review":
+		return a.executePostMarketReview(ctx, task)
 	case "custom":
 		return a.executeCustomTask(ctx, task)
 	default:
@@ -443,6 +449,32 @@ func (a *CronTaskApi) executeStockChangeSave(ctx context.Context, task *models.C
 	}
 
 	return nil
+}
+
+func (a *CronTaskApi) executePreMarketBriefing(ctx context.Context, task *models.CronTask) error {
+	logger.SugaredLogger.Infof("执行盘前智能前瞻晨报任务：%s", task.Name)
+	var params struct {
+		AiConfigId int `json:"aiConfigId"`
+	}
+	if task.Params != "" {
+		_ = json.Unmarshal([]byte(task.Params), &params)
+	}
+	service := NewMarketLifecycleService(ctx)
+	_, err := service.GeneratePreMarketBriefing(ctx, params.AiConfigId)
+	return err
+}
+
+func (a *CronTaskApi) executePostMarketReview(ctx context.Context, task *models.CronTask) error {
+	logger.SugaredLogger.Infof("执行盘后收盘深度复盘任务：%s", task.Name)
+	var params struct {
+		AiConfigId int `json:"aiConfigId"`
+	}
+	if task.Params != "" {
+		_ = json.Unmarshal([]byte(task.Params), &params)
+	}
+	service := NewMarketLifecycleService(ctx)
+	_, err := service.GeneratePostMarketReview(ctx, params.AiConfigId)
+	return err
 }
 
 func isTradingTime() bool {
