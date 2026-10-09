@@ -37,6 +37,7 @@ import {
   BatchGreet,
 } from '../../wailsjs/go/main/App'
 import StockCard from './StockCard.vue'
+import StockDiagnosisDrawer from './StockDiagnosisDrawer.vue'
 import { useAiConfigStore } from '../stores/aiConfig'
 import { cleanFinalContent } from '../utils/cleanText'
 import {
@@ -1632,9 +1633,9 @@ function toEastMoneyCode(code) {
   if (lower.startsWith('gb_')) return lower.slice(3).toUpperCase() + '.US'
   if (/^\d+$/.test(c)) {
     const d = c[0]
-    if (d === '6') return c + '.SH'
-    if (d === '0' || d === '3') return c + '.SZ'
-    if (d === '8' || d === '9') return c + '.BJ'
+    if (d === '6' || d === '5') return c + '.SH' // 6: 沪市A股/科创; 5: 沪市ETF/基金
+    if (d === '0' || d === '3' || d === '1') return c + '.SZ' // 0: 深市主板; 3: 创业板; 1: 深市ETF/LOF
+    if (d === '4' || d === '8' || d === '9') return c + '.BJ' // 北交所
     return c + '.SZ'
   }
   // 纯字母代码视为美股（如 AAPL → AAPL.US）
@@ -1652,6 +1653,72 @@ function fromEastMoneyCode(emCode) {
   if (c.endsWith('.HK')) return 'hk' + c.slice(0, -3).toLowerCase()
   if (c.endsWith('.US')) return 'us' + c.slice(0, -3).toLowerCase()
   return c.toLowerCase()
+}
+
+// AI 三维结构化量化诊断
+const showDiagnosis = ref(false)
+const diagnosisStockCode = ref('')
+const diagnosisStockName = ref('')
+
+function handleDiagnoseStock(code, name) {
+  diagnosisStockCode.value = toEastMoneyCode(code) || code
+  diagnosisStockName.value = name || ''
+  showDiagnosis.value = true
+}
+
+function triggerAiWatchlistScreening() {
+  const currentGroupObj = groupList.value.find(g => g.ID === currentGroupId.value)
+  const groupTitle = currentGroupId.value === 0 ? '全部自选股' : (currentGroupObj ? currentGroupObj.name : '当前分组')
+  const targetResults = currentGroupId.value === 0 ? sortedResults.value : groupResults.value
+  const targetList = Object.values(targetResults || {})
+
+  if (!targetList.length) {
+    message.warning('当前自选分组无标的，请先添加自选股')
+    return
+  }
+
+  const holdings = []
+  const watchlist = []
+
+  for (const item of targetList) {
+    const code = item['股票代码'] || ''
+    const name = item['股票名称'] || ''
+    const price = item['当前价格'] || item['上次当前价格'] || '-'
+    const change = item.changePercent !== undefined ? (item.changePercent >= 0 ? `+${item.changePercent}%` : `${item.changePercent}%`) : '-'
+    const cost = Number(item.costPrice || 0)
+    const volume = Number(item.costVolume || 0)
+    const profitRate = item.profitRate !== undefined ? Number(item.profitRate) : 0
+
+    if (volume > 0 && cost > 0) {
+      const profitStr = profitRate >= 0 ? `+${profitRate.toFixed(2)}%` : `${profitRate.toFixed(2)}%`
+      holdings.push(`${name}(${code}): 现价${price}元, 涨幅${change}, 持仓成本${cost.toFixed(2)}元(${profitStr})`)
+    } else {
+      watchlist.push(`${name}(${code}): 现价${price}元, 涨幅${change}`)
+    }
+  }
+
+  const summary = []
+  if (holdings.length > 0) {
+    summary.push(`【真实持仓 (${holdings.length}只)】:\n` + holdings.slice(0, 10).join(';\n'))
+  }
+  if (watchlist.length > 0) {
+    summary.push(`【自选观察池 (${watchlist.length}只)】:\n` + watchlist.slice(0, 15).join(';\n'))
+  }
+
+  const prompt = `【盘前自选股与持仓综合排雷诊断清单】
+自选分组：${groupTitle}（共 ${targetList.length} 只标的）
+标的与持仓详情：
+${summary.join('\n\n')}
+
+请以对冲基金职业投资经理与实盘操盘手视角，对上述自选与持仓标的进行盘前综合排雷诊断并给出今日实操策略（250字以内）：
+1. 【持仓与自选风险分级清单】：
+   - 🟢【重点关注/进攻】：具备多头趋势、主线共振、或持仓浮盈可格局的标的；
+   - 🟡【防守观望/冲高止盈】：已逼近上方重压力位、或缩量滞涨的标的；
+   - 🔴【破位预警/果断止损】：跌破关键均线支撑、浮亏扩大或存在解禁业绩雷区的标的；
+2. 【今日盘中盯盘主线与红线】：今日操作重点聚焦哪只标的？绝对禁止冲动追高哪只？`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success(`已发起 [${groupTitle}] 盘前综合排雷诊断！`)
 }
 
 async function showLightweightKline(code, name) {
@@ -2361,6 +2428,9 @@ watch(modalShow6, (newVal) => {
           :value="String(currentGroupId)" @add="addTab" @update:value="updateTab" placement="top" @close="(key)=>{delTab(key)}">
 
     <template #suffix>
+      <n-button size="small" type="warning" secondary @click="triggerAiWatchlistScreening" style="margin-left:4px;">
+        ⚡ 盘前自选股一键综合诊断 / 排雷
+      </n-button>
       <n-button v-if="currentGroupId>0" size="small" tertiary type="primary" @click="openRenameGroup" style="margin-left:4px;">
         <n-icon :component="CreateOutline"/>&nbsp;重命名
       </n-button>
@@ -2381,7 +2451,8 @@ watch(modalShow6, (newVal) => {
             @search-stock-report="searchStockReport"
             @add-stock-group="AddStockGroupInfo"
             @del-stock-group="delStockGroup"
-            @show-lightweight-kline="showLightweightKline" />
+            @show-lightweight-kline="showLightweightKline"
+            @diagnose-stock="handleDiagnoseStock" />
         </n-gi>
       </n-grid>
     </n-tab-pane>
@@ -2400,7 +2471,8 @@ watch(modalShow6, (newVal) => {
             @search-stock-report="searchStockReport"
             @add-stock-group="AddStockGroupInfo"
             @del-stock-group="delStockGroup"
-            @show-lightweight-kline="showLightweightKline" />
+            @show-lightweight-kline="showLightweightKline"
+            @diagnose-stock="handleDiagnoseStock" />
         </n-gi>
       </n-grid>
     </n-tab-pane>
@@ -2691,6 +2763,13 @@ watch(modalShow6, (newVal) => {
       @update:costPrice="handleCostPriceUpdate"
     />
   </n-modal>
+
+  <!-- AI 结构化三维量化深度诊断抽屉 -->
+  <StockDiagnosisDrawer
+    v-model:show="showDiagnosis"
+    :stock-code="diagnosisStockCode"
+    :stock-name="diagnosisStockName"
+  />
 </template>
 
 <style scoped>

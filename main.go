@@ -27,6 +27,25 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
+// crashOutputFile 持有崩溃转储文件句柄，避免被 GC 回收后关闭（运行时不会重新打开它）。
+var crashOutputFile *os.File
+
+// setupCrashOutput 把 Go 运行时致命错误（任意 goroutine 的 panic、并发 map 读写、栈溢出等）
+// 的完整堆栈转储写入 logs/crash.log，便于定位进程「静默消失」根因。
+// 这类错误默认只写 stderr，Wails GUI 程序无控制台时表现为「闪退」。
+func setupCrashOutput() {
+	dir := paths.LogDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "crash.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	crashOutputFile = f
+	_ = debug.SetCrashOutput(f, debug.CrashOptions{})
+}
+
 //go:embed frontend/dist
 var assets embed.FS
 
@@ -59,6 +78,10 @@ var OFFICIAL_STATEMENT string
 var BuildKey string
 
 func main() {
+	// 尽早把 Go 运行时致命错误（任意 goroutine 的 panic、并发 map 读写、栈溢出等）
+	// 的完整堆栈转储到 logs/crash.log，便于定位进程「静默消失」的根因。
+	setupCrashOutput()
+
 	defer func() {
 		if r := recover(); r != nil {
 			log.SugaredLogger.Error("panic: ", r)
@@ -89,7 +112,7 @@ func main() {
 	}
 	defer releaseSingleInstanceLock()
 
-	checkDir("data")
+	checkDir(paths.DataDir())
 	machineid.Init(BuildKey)
 	data.SetAppIcon(icon)
 	db.Init("")
@@ -115,8 +138,8 @@ func main() {
 		}
 	}
 	data.InitAnalyzeSentiment()
-	// 初始化交易日历（Baostock，含法定节假日）
-	data.InitTradingCalendar()
+	// 初始化交易日历改为后台异步执行，防止网络超时阻塞GUI启动
+	go data.InitTradingCalendar()
 	AutoMigrate()
 	// 后台启动分析报告回测
 	go func() {
@@ -252,7 +275,8 @@ func main() {
 			WindowIsTranslucent:  false,
 			DisableWindowIcon:    false,
 			// DisableFramelessWindowDecorations: false,
-			WebviewUserDataPath: "",
+			WebviewUserDataPath: filepath.Join(paths.BaseDir(), "data", "webview2_data"),
+			WebviewGpuIsDisabled: false,
 		},
 		// Mac platform specific options
 		Mac: &mac.Options{

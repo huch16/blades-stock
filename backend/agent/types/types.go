@@ -65,7 +65,10 @@ func paramToSchema(name string, p *ParamDef) *jsonschema.Schema {
 
 func BuildInputSchema(params map[string]*ParamDef) *jsonschema.Schema {
 	if len(params) == 0 {
-		return &jsonschema.Schema{Type: "object"}
+		return &jsonschema.Schema{
+			Type:       "object",
+			Properties: make(map[string]*jsonschema.Schema),
+		}
 	}
 	props := make(map[string]*jsonschema.Schema)
 	reqs := []string{}

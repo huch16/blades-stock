@@ -94,13 +94,18 @@ export function sortKey(dayStr) {
   return 0
 }
 
-export function toChartTime(dayStr) {
+export function toChartTime(dayStr, isDayOrHigher = false) {
   const s = String(dayStr || '').trim()
   if (!s) return null
-  // 始终尝试转为 Unix 秒（数字），避免日线返回字符串与分钟线数字混用导致 TradingView 报错
+  if (isDayOrHigher) {
+    const dm = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (dm) {
+      const ms = Date.parse(`${dm[1]}-${dm[2]}-${dm[3]}T12:00:00+08:00`)
+      if (Number.isFinite(ms)) return Math.floor(ms / 1000)
+    }
+  }
   const sec = eastMoneyKlineFieldToUnixSeconds(s)
   if (sec != null) return sec
-  // 兜底：纯日期格式无法解析时，手动计算
   const dm = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (dm) {
     const ms = Date.parse(`${dm[1]}-${dm[2]}-${dm[3]}T12:00:00+08:00`)

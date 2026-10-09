@@ -603,7 +603,7 @@ const inputEnter = function () {
 
   // (F-22) 确保占位已插入
   nextTick(() => {
-    ChatWithAgent(inputValue.value, configId, 0, false, 0, false, agentMode.value === 'auto' ? '' : agentMode.value)
+    ChatWithAgent(inputValue.value, configId, 0, false, 0, false, agentMode.value === 'auto' ? '' : agentMode.value, "")
       .catch((err: any) => {
         console.error('ChatWithAgent error', err)
         isStreaming.value = false

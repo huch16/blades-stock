@@ -195,11 +195,11 @@ func tdxMarketFromStockCode(stockCode string) (uint8, string) {
 	if len(code) >= 1 {
 		first := code[0:1]
 		switch first {
-		case "6":
+		case "6", "5":
 			return uint8(types.MarketSH), code
-		case "0", "3":
+		case "0", "3", "1":
 			return uint8(types.MarketSZ), code
-		case "8", "9":
+		case "4", "8", "9":
 			return uint8(types.MarketBJ), code
 		}
 	}
@@ -394,7 +394,7 @@ func (t *TdxKLineApi) GetKLineData(stockCode string, klt string, limit int) *[]K
 		return result
 	}
 
-	converted := convertTdxKLine(bars)
+	converted := convertTdxKLine(bars, actualKlt)
 
 	if aggN > 1 {
 		converted = *AggregateKLineEveryN(&converted, aggN)
@@ -531,7 +531,7 @@ func (t *TdxKLineApi) getMACMainKLineDataEx(stockCode string, klt string, limit 
 		return result
 	}
 
-	converted := convertMACSymbolBar(bars)
+	converted := convertMACSymbolBar(bars, actualKlt)
 
 	if aggN > 1 {
 		converted = *AggregateKLineEveryN(&converted, aggN)
@@ -580,7 +580,7 @@ func (t *TdxKLineApi) getMACMainKLineData(market uint8, code string, klt string,
 		return result
 	}
 
-	converted := convertMACSymbolBar(bars)
+	converted := convertMACSymbolBar(bars, actualKlt)
 	if aggN > 1 {
 		converted = *AggregateKLineEveryN(&converted, aggN)
 	}
@@ -650,7 +650,7 @@ func (t *TdxKLineApi) getMACExKLineData(market uint8, code string, klt string, l
 		return result
 	}
 
-	converted := convertExKLineItem(items)
+	converted := convertExKLineItem(items, actualKlt)
 
 	if aggN > 1 {
 		converted = *AggregateKLineEveryN(&converted, aggN)
@@ -659,10 +659,11 @@ func (t *TdxKLineApi) getMACExKLineData(market uint8, code string, klt string, l
 	return &converted
 }
 
-func convertMACSymbolBar(list []proto.MACSymbolBar) []KLineData {
+func convertMACSymbolBar(list []proto.MACSymbolBar, klt string) []KLineData {
 	result := make([]KLineData, 0, len(list))
+	isDayOrHigher := klt == "101" || klt == "102" || klt == "103" || klt == "104" || klt == "105"
 	for i, bar := range list {
-		day := formatMACDateTime(bar.DateTime)
+		day := formatMACDateTime(bar.DateTime, isDayOrHigher)
 		kd := KLineData{
 			Day:    day,
 			Open:   fmt.Sprintf("%.2f", bar.Open),
@@ -690,10 +691,11 @@ func convertMACSymbolBar(list []proto.MACSymbolBar) []KLineData {
 
 // convertExKLineItem 将扩展行情 ExKLine2 返回的 ExKLineItem 列表转为 KLineData
 // 用于港股（cat=31/48）和美股（cat=74）K 线
-func convertExKLineItem(list []proto.ExKLineItem) []KLineData {
+func convertExKLineItem(list []proto.ExKLineItem, klt string) []KLineData {
 	result := make([]KLineData, 0, len(list))
+	isDayOrHigher := klt == "101" || klt == "102" || klt == "103" || klt == "104" || klt == "105"
 	for i, item := range list {
-		day := formatMACDateTime(item.DateTime)
+		day := formatMACDateTime(item.DateTime, isDayOrHigher)
 		kd := KLineData{
 			Day:    day,
 			Open:   fmt.Sprintf("%.2f", item.Open),
@@ -720,9 +722,12 @@ func convertExKLineItem(list []proto.ExKLineItem) []KLineData {
 // MAC DateTime: "2006-01-02 15:04:05" 或 "2006-01-02 00:00:00"
 // 分钟线需要时间: "2006-01-02 15:04"
 // 日线及以上只需日期: "2006-01-02"
-func formatMACDateTime(dt string) string {
+func formatMACDateTime(dt string, isDayOrHigher bool) string {
 	if len(dt) <= 10 {
 		return dt
+	}
+	if isDayOrHigher {
+		return dt[:10]
 	}
 	// 有时间部分，判断是否为 00:00:00（日线及以上）
 	timePart := dt[11:]
@@ -736,11 +741,18 @@ func formatMACDateTime(dt string) string {
 	return dt[:10]
 }
 
-func convertTdxKLine(list []proto.SecurityBar) []KLineData {
+func convertTdxKLine(list []proto.SecurityBar, klt string) []KLineData {
 	result := make([]KLineData, 0, len(list))
+	isDayOrHigher := klt == "101" || klt == "102" || klt == "103" || klt == "104" || klt == "105"
 	for i, bar := range list {
+		var day string
+		if isDayOrHigher {
+			day = bar.DateTime.Format("2006-01-02")
+		} else {
+			day = bar.DateTime.Format("2006-01-02 15:04")
+		}
 		kd := KLineData{
-			Day:    bar.DateTime.Format("2006-01-02 15:04"),
+			Day:    day,
 			Open:   fmt.Sprintf("%.2f", bar.Open),
 			Close:  fmt.Sprintf("%.2f", bar.Close),
 			High:   fmt.Sprintf("%.2f", bar.High),

@@ -439,6 +439,21 @@ func (a *CronTaskApi) executeStockChangeSave(ctx context.Context, task *models.C
 
 	logger.SugaredLogger.Infof("成功保存 %d 条异动数据（去重后）", savedCount)
 
+	// 盘中异动与Serenity产业链共振检测：当发现特定股票或板块大单买入/涨停拉升时触发
+	for _, item := range result.Data {
+		// 8201: 大笔买入, 4: 封涨停板, 8213: 快速拉升
+		if item.ChangeType == 8201 || item.ChangeType == 4 || item.ChangeType == 8213 {
+			// 仅针对重点异动尝试唤醒 Serenity 产业链分析 (带有防刷保护)
+			if item.Name != "" && item.Code != "" {
+				go func(name, code, desc string) {
+					lifecycleSvc := NewMarketLifecycleService(ctx)
+					_, _ = lifecycleSvc.TriggerSectorAnomalySerenityAnalysis(context.Background(), name, code, desc, 0)
+				}(item.Name, item.Code, item.TypeName)
+				break // 每次异动巡检最多唤醒一个最高优先级，避免并发过载
+			}
+		}
+	}
+
 	if params.DeleteDays > 0 {
 		err = data.NewStockChangeHistoryService().DeleteOldData(params.DeleteDays)
 		if err != nil {

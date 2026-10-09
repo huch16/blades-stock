@@ -58,16 +58,33 @@ const officialStatement= ref("")
 const marketStatus = ref('')
 const showMarketIntelligenceDrawer = ref(false)
 const marketIntelligenceType = ref('pre_market_briefing')
+const marketIntelligenceSerenityTarget = ref('')
 let marketStatusTimer = null
 
-function onOpenMarketIntelligence(type) {
+function onOpenMarketIntelligence(type, target) {
   marketIntelligenceType.value = type || 'pre_market_briefing'
+  if (target) {
+    marketIntelligenceSerenityTarget.value = typeof target === 'string' ? target : (target?.name || '')
+  }
   showMarketIntelligenceDrawer.value = true
 }
 
 EventsOn('show-market-intelligence', (type) => {
   onOpenMarketIntelligence(type)
 })
+
+EventsOn('show-market-intelligence-serenity', (data) => {
+  onOpenMarketIntelligence('serenity_industry_analysis', data)
+})
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('show-market-intelligence', (e) => {
+    onOpenMarketIntelligence(e.detail)
+  })
+  window.addEventListener('show-market-intelligence-serenity', (e) => {
+    onOpenMarketIntelligence('serenity_industry_analysis', e.detail)
+  })
+}
 
 const investmentMottos = [
   "投资有风险，入市需谨慎",
@@ -1156,6 +1173,11 @@ onMounted(() => {
             >
 <!--              <FloatingAiAssistant />-->
               <FloatingAgentAssistant @open-market-intelligence="onOpenMarketIntelligence" />
+              <MarketIntelligenceDrawer
+                v-model:show="showMarketIntelligenceDrawer"
+                :report-type="marketIntelligenceType"
+                :initial-serenity-target="marketIntelligenceSerenityTarget"
+              />
               <n-flex>
                 <n-grid x-gap="12" :cols="1">
                   <n-gi>
@@ -1192,10 +1214,6 @@ onMounted(() => {
         </n-modal-provider>
       </n-notification-provider>
     </n-message-provider>
-    <MarketIntelligenceDrawer
-      v-model:show="showMarketIntelligenceDrawer"
-      :report-type="marketIntelligenceType"
-    />
   </n-config-provider>
 </template>
 <style>

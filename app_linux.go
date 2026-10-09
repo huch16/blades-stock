@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"blades-stock/backend/agent"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
@@ -54,6 +55,9 @@ func (a *App) startup(ctx context.Context) {
 	a.InitCronTasks()
 
 	preCacheTradingDays()
+
+	// 启动价格预警与 Agent 触发式分析联动监听器
+	agent.GetPriceAlertWatcher().Start(ctx)
 
 	// 监听设置更新事件
 	runtime.EventsOn(ctx, "updateSettings", func(optionalData ...interface{}) {

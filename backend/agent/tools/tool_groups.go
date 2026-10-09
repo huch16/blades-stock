@@ -116,6 +116,8 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetBacktestDetail":           GroupAIAnalysis,
 	"RunBacktest":                 GroupAIAnalysis,
 	"VectorBacktest":              GroupAIAnalysis,
+	"RunVectorizedBacktest":       GroupAIAnalysis,
+	"DiagnoseStock":               GroupAIAnalysis,
 	"VectorGridSearch":            GroupAIAnalysis,
 	"SetTradingPrice":             GroupOperations,
 	"SendDingDingMessage":         GroupOperations,
@@ -255,7 +257,7 @@ var groupKeywordsList = []groupKeywords{
 		"帮我查", "分析一下", "怎么样", "是什么", "解释一下", "总结一下",
 		"深度分析", "深度思考", "详细分析", "仔细想想",
 		"金融问答", "智能问答",
-		"回测", "准确率", "验证", "预测", "准不准",
+		"回测", "准确率", "验证", "预测", "准不准", "胜率", "夏普", "双均线", "均线交叉", "策略回测", "向量化回测", "vectorbt", "VectorBT", "诊断", "量化诊断", "三维诊断", "股票体检",
 		"历史回顾", "复盘", "历史预测", "历史判断",
 		"track record", "accuracy", "backtest",
 	}},
@@ -354,7 +356,7 @@ var coreToolByGroup = map[ToolGroup][]string{
 		"GetUplimitHotStocks", "GetUplimitHotPlates", "GetWallstreetcnLives",
 	},
 	GroupAIAnalysis: {
-		"FinancialQA", "AiRecommendStocks", "GetAIAnalysisHistory", "RunBacktest",
+		"FinancialQA", "AiRecommendStocks", "GetAIAnalysisHistory", "RunBacktest", "RunVectorizedBacktest", "DiagnoseStock", "VectorBacktest", "VectorGridSearch",
 	},
 	GroupOperations: {
 		"SetTradingPrice", "SendToDingDing", "GetFundInfo", "SearchFund",

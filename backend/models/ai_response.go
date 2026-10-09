@@ -74,6 +74,23 @@ var (
 //   - 1-6 位大写字母：美股代码
 //
 // 注意美股只认大写字母，避免把 "agent"、"market" 等伪代码误判为个股。
+func CleanStockCode(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	matches := reSixDigitStockCode.FindStringSubmatch(raw)
+	if len(matches) > 0 {
+		return matches[0]
+	}
+	// 尝试从包含名称或后缀的字符串提取6位数字
+	match := regexp.MustCompile(`([0-9]{6})`).FindStringSubmatch(raw)
+	if len(match) > 1 {
+		return match[1]
+	}
+	return raw
+}
+
 func IsStockReportCode(code string) bool {
 	code = strings.TrimSpace(code)
 	if code == "" {

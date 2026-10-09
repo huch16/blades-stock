@@ -1,8 +1,11 @@
 <script setup>
 import { GetStockList, GetConfig } from '../../wailsjs/go/main/App'
-import { EventsOn } from '../../wailsjs/runtime'
+import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
 import StockLightweightKlineChart from './StockLightweightKlineChart.vue'
-import { NAutoComplete, NButton, NFlex, NText, NInputGroup } from 'naive-ui'
+import StockDiagnosisDrawer from './StockDiagnosisDrawer.vue'
+import {
+  NAutoComplete, NButton, NFlex, NText, NInputGroup,
+} from 'naive-ui'
 import { useMessage } from 'naive-ui'
 import { onBeforeMount, onMounted, onBeforeUnmount, ref } from 'vue'
 
@@ -18,9 +21,28 @@ const recentStocks = ref([])
 const unsupportedCode = ref(false)
 let stockChangeHandler = null
 
+// AI 深度量化诊断状态
+const diagnosisDrawerVisible = ref(false)
+
+function handleDiagnose() {
+  if (!selectedCode.value) {
+    message.warning('请先选择股票')
+    return
+  }
+  diagnosisDrawerVisible.value = true
+}
+
+
 function toEastMoneyCode(code) {
   if (!code) return ''
-  const c = String(code).trim()
+  let c = String(code).trim()
+  // 兼容 "天目药业 - 600671.SH" 或 "天目药业 600671"
+  for (const sep of [' - ', '-', ' ']) {
+    if (c.includes(sep)) {
+      const parts = c.split(sep)
+      c = parts[parts.length - 1].trim()
+    }
+  }
   if (/\.(SH|SZ|BJ|HK|US|SS)$/i.test(c)) return c.toUpperCase()
   const lower = c.toLowerCase()
   if (lower.startsWith('sh')) return lower.slice(2) + '.SH'
@@ -31,9 +53,9 @@ function toEastMoneyCode(code) {
   if (lower.startsWith('gb_')) return lower.slice(3).toUpperCase() + '.US'
   if (/^\d+$/.test(c)) {
     const d = c[0]
-    if (d === '6') return c + '.SH'
-    if (d === '0' || d === '3') return c + '.SZ'
-    if (d === '8' || d === '9') return c + '.BJ'
+    if (d === '6' || d === '5') return c + '.SH' // 6: 沪市主板/科创板; 5: 沪市ETF/封闭式基金 (如510300, 588000)
+    if (d === '0' || d === '3' || d === '1') return c + '.SZ' // 0: 深市主板; 3: 创业板; 1: 深市ETF/LOF (如159915)
+    if (d === '4' || d === '8' || d === '9') return c + '.BJ' // 北交所 / 新三板
     return c + '.SZ'
   }
   // 纯字母代码视为美股（如 AAPL → AAPL.US）
@@ -135,14 +157,35 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateChartHeight)
+  if (stockChangeHandler) {
+    EventsOff('klineSelectStock', stockChangeHandler)
+  }
 })
 </script>
 
 <template>
   <div class="kline-analysis-page" :class="{ 'kline-analysis-page--dark': darkTheme }">
     <div class="kline-title-bar">
-      <NText :depth="darkTheme ? 1 : 3" style="font-size: 15px; font-weight: 700">{{ selectedName }}&nbsp;</NText>
-      <NText depth="3" style="font-size: 13px">{{ selectedCode }}</NText>
+      <NFlex justify="space-between" align="center">
+        <div>
+          <NText :depth="darkTheme ? 1 : 3" style="font-size: 16px; font-weight: 700">{{ selectedName }}&nbsp;</NText>
+          <NText depth="3" style="font-size: 13px">{{ selectedCode }}</NText>
+        </div>
+        <NFlex align="center" :size="8">
+          <NButton
+            type="primary"
+            secondary
+            size="small"
+            :loading="diagnosisLoading"
+            @click="handleDiagnose"
+          >
+            <template #icon>
+              <span>✨</span>
+            </template>
+            AI 量化三维诊断
+          </NButton>
+        </NFlex>
+      </NFlex>
     </div>
     <StockLightweightKlineChart
       :key="selectedCode"
@@ -184,6 +227,13 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <!-- AI 结构化三维量化深度诊断抽屉 -->
+    <StockDiagnosisDrawer
+      v-model:show="diagnosisDrawerVisible"
+      :stock-code="selectedCode"
+      :stock-name="selectedName"
+    />
+
   </div>
 </template>
 
@@ -200,7 +250,7 @@ onBeforeUnmount(() => {
   color: #e2e8f0;
 }
 .kline-title-bar {
-  padding: 2px 0 4px 0;
+  padding: 2px 4px 6px 4px;
 }
 .kline-search-bar {
   position: fixed;
@@ -215,5 +265,57 @@ onBeforeUnmount(() => {
   gap: 4px;
   margin-top: 4px;
   flex-wrap: wrap;
+}
+.diagnosis-container {
+  padding-bottom: 20px;
+}
+.score-card {
+  border-radius: 8px;
+}
+.score-label {
+  font-size: 12px;
+  color: #888;
+}
+.score-value {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.score-max {
+  font-size: 14px;
+  font-weight: 400;
+  color: #999;
+}
+.bull {
+  color: #18a058;
+}
+.bear {
+  color: #d03050;
+}
+.neutral {
+  color: #f0a020;
+}
+.mini-stat-label {
+  font-size: 11px;
+  color: #888;
+}
+.mini-stat-value {
+  font-size: 14px;
+  font-weight: 600;
+}
+.dim-card {
+  border-radius: 8px;
+}
+.dim-evaluation {
+  font-size: 12px;
+  color: #555;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 6px 8px;
+  border-radius: 4px;
+  line-height: 1.5;
+}
+.kline-analysis-page--dark .dim-evaluation {
+  background: rgba(255, 255, 255, 0.05);
+  color: #bbb;
 }
 </style>

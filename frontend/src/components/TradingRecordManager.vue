@@ -11,6 +11,7 @@ import {
   GetStockRealTimePrice,
   GetConfig
 } from '../../wailsjs/go/main/App'
+import { EventsEmit } from '../../wailsjs/runtime/runtime'
 import {
   NButton,
   NDataTable,
@@ -220,9 +221,9 @@ function toEastMoneyCode(code) {
   if (c.endsWith('.BJ')) return 'bj' + c.slice(0, -3).toLowerCase()
   if (c.endsWith('.HK')) return 'hk' + c.slice(0, -3).toLowerCase()
   // 不带后缀的代码，根据规则添加前缀
-  if (c.startsWith('6')) return 'sh' + c.toLowerCase()
-  if (c.startsWith('0') || c.startsWith('3')) return 'sz' + c.toLowerCase()
-  if (c.startsWith('8') || c.startsWith('9')) return 'bj' + c.toLowerCase()
+  if (c.startsWith('6') || c.startsWith('5')) return 'sh' + c.toLowerCase()
+  if (c.startsWith('0') || c.startsWith('3') || c.startsWith('1')) return 'sz' + c.toLowerCase()
+  if (c.startsWith('4') || c.startsWith('8') || c.startsWith('9')) return 'bj' + c.toLowerCase()
   return c.toLowerCase()
 }
 
@@ -233,6 +234,105 @@ function openKlineChart(row) {
   longStopLossPrice.value = row.StopLossPrice || 0
   longTakeProfitPrice.value = row.TakeProfitPrice || 0
   costPrice.value = row.Price || 0
+}
+
+function triggerAiTradeAudit(row) {
+  const code = row.StockCode || ''
+  const name = row.StockName || ''
+  const dir = row.Direction || '买入'
+  const price = Number(row.Price || 0).toFixed(2)
+  const closePrice = Number(row.closePrice || 0).toFixed(2)
+  const volume = row.Volume || 0
+  const amount = Number(row.Amount || 0).toFixed(2)
+  const profitAmount = Number(row.profitAmount || 0).toFixed(2)
+  const profitPercent = Number(row.profitPercent || 0).toFixed(2)
+  const stopLoss = row.StopLossPrice > 0 ? Number(row.StopLossPrice).toFixed(2) + ' 元' : '未设置'
+  const takeProfit = row.TakeProfitPrice > 0 ? Number(row.TakeProfitPrice).toFixed(2) + ' 元' : '未设置'
+  const timeStr = formatRowTradingTime(row)
+  const reason = (row.Reason || '').trim() || '未填写具体理由'
+  const mindset = (row.Mindset || '').trim() || '未填写心态/复盘'
+
+  const prompt = `【个人单笔交易纪律与知行合一体检】
+标的：${name} (${code})
+交易方向：${dir}
+交易时间：${timeStr}
+买入价格：${price} 元，成交数量：${volume}，成交金额：${amount} 元
+最新/收盘价：${closePrice} 元
+盈亏表现：${profitAmount >= 0 ? '+' : ''}${profitAmount} 元 (${profitPercent >= 0 ? '+' : ''}${profitPercent}%)
+预设风控：止损价 [${stopLoss}] | 止盈价 [${takeProfit}]
+入场初衷与理由：
+"${reason}"
+心态与复盘备注：
+"${mindset}"
+
+请以资深职业交易教练与对冲基金风控主管视角，对这笔交易进行严苛客观的纪律体检（150字以内）：
+1. 【纪律合规评分（0~100分）】：这笔交易属于模式内理性执行还是情绪化冲动交易？逻辑与止损止盈是否闭环？
+2. 【知行合一排查】：止损止盈设定是否合理？实盘中是否出现了扛单、恐慌割肉或过早卖飞等心态变形？
+3. 【进化指导】：下次遇到同类行情，如何优化入场时机与风控执行力？`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success(`已发起 [${name}] 单笔交易 AI 纪律体检！`)
+}
+
+function triggerAiPortfolioAudit() {
+  if (!dataRef.value || dataRef.value.length === 0) {
+    message.warning('当前暂无交易记录，无法进行体检')
+    return
+  }
+
+  const total = dataRef.value.length
+  let winCount = 0
+  let lossCount = 0
+  let totalWinAmount = 0
+  let totalLossAmount = 0
+  const sampleTrades = []
+
+  for (const row of dataRef.value) {
+    const profit = Number(row.profitAmount || 0)
+    if (profit > 0) {
+      winCount++
+      totalWinAmount += profit
+    } else if (profit < 0) {
+      lossCount++
+      totalLossAmount += Math.abs(profit)
+    }
+  }
+
+  const settledCount = winCount + lossCount
+  const winRate = settledCount > 0 ? ((winCount / settledCount) * 100).toFixed(1) : '0.0'
+  const avgWin = winCount > 0 ? (totalWinAmount / winCount).toFixed(2) : '0.00'
+  const avgLoss = lossCount > 0 ? (totalLossAmount / lossCount).toFixed(2) : '0.00'
+  const profitLossRatio = Number(avgLoss) > 0 ? (Number(avgWin) / Number(avgLoss)).toFixed(2) : '高'
+
+  const sorted = [...dataRef.value].sort((a, b) => Number(b.profitAmount || 0) - Number(a.profitAmount || 0))
+  if (sorted.length > 0) {
+    const best = sorted[0]
+    sampleTrades.push(`典型盈利：${best.StockName} (+${best.profitPercent?.toFixed(1)}%, 理由:${best.Reason || '无'})`)
+  }
+  if (sorted.length > 1 && Number(sorted[sorted.length - 1].profitAmount || 0) < 0) {
+    const worst = sorted[sorted.length - 1]
+    sampleTrades.push(`典型亏损：${worst.StockName} (${worst.profitPercent?.toFixed(1)}%, 理由:${worst.Reason || '无'})`)
+  }
+
+  const dateRangeStr = paginationReactive.range ? `${formatDate(paginationReactive.range[0])} 至 ${formatDate(paginationReactive.range[1])}` : '全期记录'
+
+  const prompt = `【个人交易系统胜率与账户纪律全面体检报告】
+统计周期：${dateRangeStr}
+样本笔数：共 ${total} 笔（已结算 ${settledCount} 笔）
+核心量化指标：
+- 真实胜率：${winRate}% (盈利 ${winCount} 笔，亏损 ${lossCount} 笔)
+- 平均盈利：${avgWin} 元 | 平均亏损：${avgLoss} 元
+- 盈亏比 (赔率)：${profitLossRatio}
+- 账户总收益：${statisticsRef.value?.totalProfit || 0} 元 (总收益率: ${statisticsRef.value?.profitRate || 0}%)
+- 典型标的复盘：${sampleTrades.join('； ') || '无'}
+
+请作为对冲基金风控总监，对该交易员的实盘交易系统进行深度诊断并给出改进报告（200字以内）：
+1. 【期望值与系统诊断】：当前交易模式是“高胜率低赔率”、“低胜率高赔率”还是“负期望值系统”？核心利润与亏损主要来自哪里？
+2. 【知行合一痛点排查】：是否存在“赚小钱就跑、亏大钱死扛”或“频繁交易磨损手续费”的散户通病？
+3. 【下阶段专属红线军规】：列出 3 条个人交易者必须严格执行的防爆仓军规纪律。`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success('已发起个人交易账户 AI 全面体检！')
 }
 
 
@@ -585,40 +685,50 @@ const columnsRef = ref([
   },
   {
     title: '操作',
-    width: 200,
+    width: 260,
+    fixed: 'right',
     render(row) {
-      return [
+      return h(NSpace, { size: 6, justify: 'start' }, () => [
         h(
-          NTag,
+          NButton,
           {
-            strong: true,
-            tertiary: true,
-            type: 'info',
-            onClick: () => openKlineChart(row)
+            size: 'tiny',
+            type: 'primary',
+            secondary: true,
+            onClick: () => triggerAiTradeAudit(row)
           },
-          { default: () => 'K线' }
+          { default: () => '🩺 AI体检' }
         ),
         h(
-          NTag,
+          NButton,
           {
-            strong: true,
-            tertiary: true,
+            size: 'tiny',
+            secondary: true,
+            onClick: () => openKlineChart(row)
+          },
+          { default: () => '📈 K线' }
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
             type: 'warning',
+            secondary: true,
             onClick: () => openEditModal(row)
           },
           { default: () => '编辑' }
         ),
         h(
-          NTag,
+          NButton,
           {
-            strong: true,
-            tertiary: true,
+            size: 'tiny',
             type: 'error',
+            secondary: true,
             onClick: () => deleteTradingRecord(row.ID)
           },
           { default: () => '删除' }
         )
-      ]
+      ])
     }
   }
 ])
@@ -668,18 +778,21 @@ onUnmounted(() => {
 
 <template>
   <n-input-group>
-    <n-date-picker v-model:value="paginationReactive.range" type="daterange" style="width: 40%" />
+    <n-date-picker v-model:value="paginationReactive.range" type="daterange" style="width: 32%" />
     <n-select
       v-model:value="paginationReactive.direction"
       :options="directionOptions"
       placeholder="交易方向"
-      style="width: 15%"
+      style="width: 14%"
       clearable
     />
     <n-input clearable placeholder="股票代码 / 名称" v-model:value="paginationReactive.keyword" />
     <n-button type="primary" ghost @click="handleSearch">搜索</n-button>
     <n-button @click="resetFilter">重置</n-button>
     <n-button type="primary" ghost @click="openAddModal">添加记录</n-button>
+    <n-button type="warning" secondary @click="triggerAiPortfolioAudit">
+      📋 AI 账户纪律体检
+    </n-button>
   </n-input-group>
 
   <n-grid :cols="6" :x-gap="12" style="margin-top: 12px; padding: 12px; border-radius: 4px">
@@ -907,9 +1020,14 @@ onUnmounted(() => {
       </n-grid>
     </n-form>
     <template #footer>
-      <n-space justify="end">
-        <n-button @click="showEditModal = false">取消</n-button>
-        <n-button type="primary" @click="handleUpdate">更新</n-button>
+      <n-space justify="space-between">
+        <n-button type="primary" secondary size="small" @click="triggerAiTradeAudit(formData)">
+          🩺 AI 诊断此笔交易
+        </n-button>
+        <n-space justify="end">
+          <n-button @click="showEditModal = false">取消</n-button>
+          <n-button type="primary" @click="handleUpdate">更新</n-button>
+        </n-space>
       </n-space>
     </template>
   </n-modal>

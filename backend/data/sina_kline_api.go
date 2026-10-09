@@ -152,11 +152,11 @@ func sinaSymbolFromStockCode(stockCode string) string {
 	if len(code) >= 1 {
 		first := code[0:1]
 		switch first {
-		case "6":
+		case "6", "5":
 			return "sh" + code
-		case "0", "3":
+		case "0", "3", "1":
 			return "sz" + code
-		case "8", "9":
+		case "4", "8", "9":
 			return "bj" + code
 		}
 	}
@@ -228,6 +228,11 @@ var jsonpArrayStartRe = regexp.MustCompile(`\[\s*\{`)
 func (s *SinaKLineApi) parseJSONPResponse(body string) []SinaKLineItem {
 	var items []SinaKLineItem
 	trimmed := strings.TrimSpace(body)
+
+	// 如果包含脚本重定向或注释（例如 /*<script>...</script>*/ ），先跳过
+	if idx := strings.Index(trimmed, "*/"); idx != -1 {
+		trimmed = strings.TrimSpace(trimmed[idx+2:])
+	}
 
 	startLoc := jsonpArrayStartRe.FindStringIndex(trimmed)
 	if len(startLoc) == 2 {
@@ -420,17 +425,43 @@ type TencentKLineApi struct {
 	config *SettingConfig
 }
 
+type TencentStockKLinePayload struct {
+	Day      [][]string `json:"day,omitempty"`
+	Week     [][]string `json:"week,omitempty"`
+	Month    [][]string `json:"month,omitempty"`
+	Qfqday   [][]string `json:"qfqday,omitempty"`
+	Qfqweek  [][]string `json:"qfqweek,omitempty"`
+	Qfqmonth [][]string `json:"qfqmonth,omitempty"`
+}
+
 type TencentKLineResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-	Data map[string]struct {
-		Day      [][]string `json:"day,omitempty"`
-		Week     [][]string `json:"week,omitempty"`
-		Month    [][]string `json:"month,omitempty"`
-		Qfqday   [][]string `json:"qfqday,omitempty"`
-		Qfqweek  [][]string `json:"qfqweek,omitempty"`
-		Qfqmonth [][]string `json:"qfqmonth,omitempty"`
-	} `json:"data"`
+	Code int                                   `json:"code"`
+	Msg  string                                `json:"msg"`
+	Data map[string]TencentStockKLinePayload   `json:"-"`
+}
+
+func (r *TencentKLineResponse) UnmarshalJSON(b []byte) error {
+	type rawResp struct {
+		Code int             `json:"code"`
+		Msg  string          `json:"msg"`
+		Data json.RawMessage `json:"data"`
+	}
+	var raw rawResp
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	r.Code = raw.Code
+	r.Msg = raw.Msg
+	trimmedData := strings.TrimSpace(string(raw.Data))
+	if strings.HasPrefix(trimmedData, "{") {
+		var m map[string]TencentStockKLinePayload
+		if err := json.Unmarshal(raw.Data, &m); err == nil {
+			r.Data = m
+		}
+	} else {
+		r.Data = make(map[string]TencentStockKLinePayload)
+	}
+	return nil
 }
 
 func NewTencentKLineApi(config *SettingConfig) *TencentKLineApi {
@@ -478,11 +509,11 @@ func tencentSymbolFromStockCode(stockCode string) string {
 	if len(code) >= 1 {
 		first := code[0:1]
 		switch first {
-		case "6":
+		case "6", "5":
 			return "sh" + code
-		case "0", "3":
+		case "0", "3", "1":
 			return "sz" + code
-		case "8", "9":
+		case "4", "8", "9":
 			return "bj" + code
 		}
 	}
@@ -631,9 +662,31 @@ type KLineSourceResult struct {
 	Source string       `json:"source"`
 }
 
+func cleanCodeOnly(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// 如果包含 - 或空格，例如 "天目药业 - 600671.SH" 或 "天目药业 600671"
+	for _, sep := range []string{"-", "—", " "} {
+		if strings.Contains(raw, sep) {
+			parts := strings.Split(raw, sep)
+			for i := len(parts) - 1; i >= 0; i-- {
+				p := strings.TrimSpace(parts[i])
+				if p != "" {
+					raw = p
+					break
+				}
+			}
+		}
+	}
+	return raw
+}
+
 // FetchKLineWithFallback 返回带短时缓存的 K 线降级链结果：同标的同周期在
 // 5 分钟内重复请求直接命中缓存，避免重复走完整的慢速降级链。
 func FetchKLineWithFallback(stockCode, stockName, klt string, limit int, end string) *KLineSourceResult {
+	stockCode = cleanCodeOnly(stockCode)
 	if cached := klineCacheGet(stockCode, klt, limit); cached != nil {
 		cached.Source = "cache:" + cached.Source
 		fillVolumeRatio(cached.Data)
@@ -664,16 +717,7 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 		return &KLineSourceResult{Data: &[]KLineData{}, Source: ""}
 	}
 
-	// A股：优先通达信本地数据源（最可靠），失败再逐级回退到远程源。
-	tdxResult := tryKLineSource("tdx", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
-		return fetchFromTdx(stockCode, klt, limit)
-	})
-	if tdxResult != nil {
-		tdxResult.Source = "tdx"
-		fillVolumeRatio(tdxResult.Data)
-		return tdxResult
-	}
-
+	// A股：优先通达信 MAC 行情源（响应最快、极速直连），失败再尝试通达信标准源及远程源。
 	macResult := tryKLineSource("tdx-mac", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
 		return fetchFromMAC(stockCode, klt, limit)
 	})
@@ -681,6 +725,15 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 		macResult.Source = "tdx-mac"
 		fillVolumeRatio(macResult.Data)
 		return macResult
+	}
+
+	tdxResult := tryKLineSource("tdx", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
+		return fetchFromTdx(stockCode, klt, limit)
+	})
+	if tdxResult != nil {
+		tdxResult.Source = "tdx"
+		fillVolumeRatio(tdxResult.Data)
+		return tdxResult
 	}
 
 	eastMoneyResult := tryKLineSource("eastmoney", 0, stockCode, klt, func() *KLineSourceResult {
@@ -771,6 +824,16 @@ func runKLineSourceWithTimeout(name string, timeout time.Duration, stockCode, kl
 	}
 	ch := make(chan result, 1)
 	go func() {
+		// 重要：某些第三方库（gotdx）可能在响应解析时 panic（如上游 issue: ParseResponse
+		// 返回的响应长度不足，仍访问 [:6]）。裸 panic 会沿着 goroutine 一路上溯，最终
+		// 冲跨 Wails 进程，表现为「打开 K 线分析闪退」。在这里捕获并返回 nil，让
+		// tryKLineSource 走断路器降级路径。
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("🛡️ %s 数据源 goroutine panic 已恢复: %v (code=%s klt=%s)", name, r, stockCode, klt)
+				ch <- result{rs: nil}
+			}
+		}()
 		ch <- result{rs: fn()}
 	}()
 

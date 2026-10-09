@@ -6,6 +6,7 @@ import {Environment} from "../../wailsjs/runtime"
 import {BookmarkOutline, TrashOutline, CreateOutline, AddOutline, FolderOpenOutline} from "@vicons/ionicons5";
 import {EventsEmit} from "../../wailsjs/runtime";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
+import StockDiagnosisDrawer from "./StockDiagnosisDrawer.vue";
 
 const message = useMessage()
 const search = ref('')
@@ -22,6 +23,66 @@ const klineModalShow = ref(false)
 const klineStockCode = ref('')
 const klineStockName = ref('')
 let klineAutoCloseTimer = null
+
+const showDiagnosisDrawer = ref(false)
+const diagnosisStockCode = ref('')
+const diagnosisStockName = ref('')
+
+function openDiagnosisDrawer(row: StockRow) {
+  const stockCode = row.SECURITY_CODE
+  const stockName = row.SECURITY_SHORT_NAME
+  const em = toEastMoneyCode(stockCode, row.MARKET_SHORT_NAME)
+  diagnosisStockCode.value = em
+  diagnosisStockName.value = stockName || ''
+  showDiagnosisDrawer.value = true
+}
+
+function triggerAiStockAnalysis(row: StockRow) {
+  const stockCode = row.SECURITY_CODE
+  const stockName = row.SECURITY_SHORT_NAME
+  const em = toEastMoneyCode(stockCode, row.MARKET_SHORT_NAME)
+  const currentStrategy = traceInfo.value || search.value || '技术指标选股'
+
+  const prompt = `【个股指标筛选 AI 信号推演与有效性诊断】
+标的：${stockName} (${em})
+匹配选股条件：${currentStrategy}
+
+请以资深量化操盘手与游资风控视角，结合当前A股市场情绪环境，对该标的技术信号进行实战推演（150字以内）：
+1. 【信号真实性辨析】：该标的的技术指标（如金叉、放量、突破等）是主力真实蓄势突破，还是拉高诱多脉冲？
+2. 【买卖点与盈亏比】：若次日入场，合理的低吸/确认买点在哪里？关键防守支撑与失效止损位设在何处？
+3. 【操作纪律锦囊】：给出 1 条针对该形态的核心避坑提醒。`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success(`已发起 [${stockName}] AI 信号推演！`)
+}
+
+function triggerAiStrategySummary() {
+  if (!dataList.value || dataList.value.length === 0) {
+    message.warning('当前暂无筛选结果，无法进行策略推演')
+    return
+  }
+
+  const currentStrategy = traceInfo.value || search.value || '自定义指标选股'
+  const total = dataList.value.length
+  const samples = dataList.value.slice(0, 12).map((item: any) => {
+    const code = item.SECURITY_CODE
+    const name = item.SECURITY_SHORT_NAME
+    return `${name}(${code})`
+  })
+
+  const prompt = `【AI 选股策略共振推演与实战指导报告】
+选股条件/策略：${currentStrategy}
+筛选命中数量：共 ${total} 只标的
+前列重点代表样本：${samples.join('、 ')}
+
+请以职业投资经理与对冲基金策略总监视角，对这批筛选出的股票池进行深度共振分析与实战推演（200字以内）：
+1. 【板块与资金共振度】：命中股票是否高度聚集在当前主线风口，还是较为散乱的弱势反弹？资金合力强度如何？
+2. 【指标胜率与主力陷阱防范】：在当前市场阶段，此类指标形态通常胜率如何？最容易遇到哪些主力骗线套路？
+3. 【精选标的与实操买卖纪律】：从该股票池中优选标的的标准是什么？给出严格的仓位管理与止损纪律。`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success('已发起选股策略 AI 共振推演！')
+}
 const saveForm = reactive({
   id: 0,
   name: '',
@@ -206,7 +267,7 @@ function Search() {
       columns.value.push({
         title: '操作',
         key: 'actions',
-        width: 170,
+        width: 270,
         fixed: 'right',
         render: (row) => {
           return h('div', {style: 'display:flex;gap:4px;align-items:center;'}, [
@@ -214,10 +275,30 @@ function Search() {
               NButton,
               {
                 size: 'tiny',
+                type: 'primary',
+                secondary: true,
+                onClick: () => triggerAiStockAnalysis(row)
+              },
+              {default: () => '⚡ 推演'}
+            ),
+            h(
+              NButton,
+              {
+                size: 'tiny',
                 type: 'info',
+                secondary: true,
+                onClick: () => openDiagnosisDrawer(row)
+              },
+              {default: () => '📊 诊断'}
+            ),
+            h(
+              NButton,
+              {
+                size: 'tiny',
+                secondary: true,
                 onClick: () => showStockKline(row)
               },
-              {default: () => 'K线'}
+              {default: () => '📈 K线'}
             ),
             h(
               NDropdown,
@@ -231,11 +312,9 @@ function Search() {
                 default: () => h(
                   NButton,
                   {
-                    strong: true,
                     tertiary: true,
-                    size: 'small',
-                    type: 'warning',
-                    style: 'font-size: 14px; padding: 0 10px;',
+                    size: 'tiny',
+                    type: 'success',
                   },
                   {
                     default: () => '关注',
@@ -467,6 +546,9 @@ function openCenteredWindow(url, width, height) {
         <n-input-group style="text-align: left">
           <n-input :rows="1" clearable v-model:value="search" placeholder="请输入选股指标或者要求" @keyup.enter="Search"/>
           <n-button type="primary" @click="Search">搜索A股</n-button>
+          <n-button type="warning" secondary @click="triggerAiStrategySummary" :disabled="!dataList || !dataList.length">
+            ⚡ AI 策略共振推演
+          </n-button>
           <n-button type="warning" @click="openSaveModal(false)" :disabled="!search">
             <template #icon><n-icon :component="BookmarkOutline" size="16"/></template>
             保存策略
@@ -563,6 +645,12 @@ function openCenteredWindow(url, width, height) {
       </n-form-item>
     </n-form>
   </n-modal>
+
+  <stock-diagnosis-drawer
+    v-model:show="showDiagnosisDrawer"
+    :stock-code="diagnosisStockCode"
+    :stock-name="diagnosisStockName"
+  />
 </template>
 
 <style scoped>

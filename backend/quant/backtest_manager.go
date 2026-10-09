@@ -87,15 +87,19 @@ func (m *BacktestManager) RunAIReportBacktest(ctx context.Context, limit int) (*
 
 // RunSingleReportBacktest 对单个 AI 报告回测
 func (m *BacktestManager) RunSingleReportBacktest(r models.AIResponseResult) (*models.BacktestResult, error) {
-	if !models.IsStockReportCode(r.StockCode) {
+	pureCode := models.CleanStockCode(r.StockCode)
+	if pureCode == "" {
+		pureCode = r.StockCode
+	}
+	if !models.IsStockReportCode(pureCode) {
 		return nil, fmt.Errorf("非个股报告，不可回测: id=%d code=%q", r.ID, r.StockCode)
 	}
 	pred := extractPredictionFromReport(r.Content)
 	analysisDate := r.CreatedAt.Format("2006-01-02")
 
-	close, high, low, _, _, dates, err := m.loader.LoadKLineData(r.StockCode, 365)
+	close, high, low, _, _, dates, err := m.loader.LoadKLineData(pureCode, 365)
 	if err != nil || len(close) == 0 {
-		return nil, fmt.Errorf("no price data for %s: %w", r.StockCode, err)
+		return nil, fmt.Errorf("no price data for %s: %w", pureCode, err)
 	}
 
 	idx := sort.Search(len(dates), func(i int) bool {

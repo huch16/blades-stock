@@ -59,9 +59,9 @@ func Init(sqlitePath string) {
 	if err != nil {
 		log.Fatalf("openDb.DB error is  %s", err.Error())
 	}
-	// SQLite 写入是串行锁模型：连接开太多会放大锁竞争导致 SQLITE_BUSY
+	// SQLite 写入是单写入者并发模型：设置 MaxOpenConns(1) 能彻底消除应用层不同连接争用锁造成的 SQLITE_BUSY
 	dbCon.SetMaxIdleConns(1)
-	dbCon.SetMaxOpenConns(5)
+	dbCon.SetMaxOpenConns(1)
 	dbCon.SetConnMaxLifetime(time.Hour)
 	Dao = openDb
 

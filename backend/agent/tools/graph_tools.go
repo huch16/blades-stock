@@ -15,7 +15,6 @@
 package tools
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,6 +26,7 @@ import (
 
 	"blades-stock/backend/logger"
 	"blades-stock/backend/paths"
+	"blades-stock/backend/agent/types"
 
 	bladesTools "github.com/go-kratos/blades/tools"
 )
@@ -282,15 +282,31 @@ func resetGraphCache() {
 // 输入：GraphQueryArgs JSON
 // 输出：markdown 格式的查询结果（限 50 行）
 func GetGraphQueryTool() bladesTools.Tool {
-	// 避免循环 import：定义本地类型别名
 	type localArgs struct {
 		Action   string `json:"action"`
 		Target   string `json:"target"`
 		MaxDepth int    `json:"max_depth"`
 	}
-	return bladesTools.NewTool("GraphQuery",
+	return types.NewTool(
+		"GraphQuery",
 		"查询本地代码图谱（.graph/graph.json）。支持 4 种 action：callers（谁引用 target）、callees（target 引用谁）、search（按标签搜索）、community（target 所在包的所有节点）。",
-		bladesTools.HandleFunc(func(ctx context.Context, input string) (string, error) {
+		map[string]*types.ParamDef{
+			"action": {
+				Type:     "string",
+				Desc:     "查询动作：callers|callees|search|community",
+				Required: true,
+			},
+			"target": {
+				Type:     "string",
+				Desc:     "目标函数名、结构体名或包名",
+				Required: true,
+			},
+			"max_depth": {
+				Type: "integer",
+				Desc: "引用链最大深度（默认1）",
+			},
+		},
+		func(input string) (string, error) {
 			var args localArgs
 			if err := json.Unmarshal([]byte(input), &args); err != nil {
 				return "", fmt.Errorf("参数解析失败: %w", err)
@@ -315,7 +331,7 @@ func GetGraphQueryTool() bladesTools.Tool {
 			default:
 				return "", fmt.Errorf("未知 action %q（应为 callers|callees|search|community）", args.Action)
 			}
-		}),
+		},
 	)
 }
 

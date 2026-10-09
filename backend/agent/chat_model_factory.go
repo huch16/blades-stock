@@ -1,18 +1,24 @@
 package agent
 
 import (
+	"bytes"
 	"context"
-	"blades-stock/backend/data"
-	"blades-stock/backend/logger"
+	"encoding/json"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"blades-stock/backend/data"
+	"blades-stock/backend/logger"
 
 	"github.com/duke-git/lancet/v2/strutil"
 	"github.com/go-kratos/blades"
 	"github.com/go-kratos/blades/contrib/anthropic"
 	"github.com/go-kratos/blades/contrib/gemini"
 	"github.com/go-kratos/blades/contrib/openai"
+	openaiOption "github.com/openai/openai-go/v3/option"
 	"google.golang.org/genai"
 )
 
@@ -166,12 +172,19 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 		if aiConfig.Thinking {
 			extraFields["reasoning_effort"] = "medium"
 		}
+		reqOpts := []openaiOption.RequestOption{
+			sanitizeToolsMiddleware(),
+		}
+		if timeout > 0 {
+			reqOpts = append(reqOpts, openaiOption.WithRequestTimeout(timeout))
+		}
 		cfg := openai.Config{
 			APIKey:          aiConfig.ApiKey,
 			BaseURL:         baseURL,
 			Temperature:     temperature,
 			MaxOutputTokens: int64(outputTok),
 			ExtraFields:     extraFields,
+			RequestOptions:  reqOpts,
 		}
 		provider = openai.NewModel(aiConfig.ModelName, cfg)
 	}
@@ -182,4 +195,60 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 
 	modelProviderCache.Store(key, cachedProvider{provider: provider})
 	return provider, nil
+}
+
+// sanitizeToolsMiddleware 解决部分严格模型服务商（如 MiniMax 报错 2013 invalid params, function parameters is empty）
+// 对 function call 的 parameters 字段结构要求必须包含有效 object 和 properties 的兼容性问题。
+func sanitizeToolsMiddleware() openaiOption.RequestOption {
+	return openaiOption.WithMiddleware(func(req *http.Request, nxt openaiOption.MiddlewareNext) (*http.Response, error) {
+		if req.Body == nil {
+			return nxt(req)
+		}
+		bodyBytes, err := io.ReadAll(req.Body)
+		if err != nil {
+			return nxt(req)
+		}
+		req.Body.Close()
+
+		var bodyMap map[string]any
+		if err := json.Unmarshal(bodyBytes, &bodyMap); err == nil {
+			modified := false
+			if rawTools, ok := bodyMap["tools"].([]any); ok && len(rawTools) > 0 {
+				for _, t := range rawTools {
+					toolMap, ok := t.(map[string]any)
+					if !ok {
+						continue
+					}
+					fnMap, ok := toolMap["function"].(map[string]any)
+					if !ok {
+						continue
+					}
+					params, hasParams := fnMap["parameters"]
+					if !hasParams || params == nil {
+						fnMap["parameters"] = map[string]any{
+							"type":       "object",
+							"properties": map[string]any{},
+						}
+						modified = true
+					} else if pMap, isMap := params.(map[string]any); isMap {
+						if len(pMap) == 0 {
+							pMap["type"] = "object"
+							pMap["properties"] = map[string]any{}
+							modified = true
+						} else if _, hasProps := pMap["properties"]; !hasProps && pMap["type"] == "object" {
+							pMap["properties"] = map[string]any{}
+							modified = true
+						}
+					}
+				}
+			}
+			if modified {
+				bodyBytes, _ = json.Marshal(bodyMap)
+			}
+		}
+
+		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		req.ContentLength = int64(len(bodyBytes))
+		return nxt(req)
+	})
 }

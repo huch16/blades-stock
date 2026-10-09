@@ -158,13 +158,35 @@ func (s *MarketLifecycleService) GetMarketLifecycleStatus() MarketLifecycleStatu
 	}
 }
 
-// GeneratePreMarketBriefing 生成盘前前瞻/晨报 (09:00前或手动触发)
-// 包含：隔夜外盘/中概股动态、宏观政策快讯、今日财经日历/申购、重点板块关注与策略指引
+func cleanAndAssembleReport(reasoning, content string) string {
+	reasoning = strings.TrimSpace(reasoning)
+	content = strings.TrimSpace(content)
+
+	var cleanReasoningLines []string
+	if reasoning != "" {
+		for _, line := range strings.Split(reasoning, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "[STATUS]") || strings.Contains(trimmed, "[STATUS]") {
+				continue
+			}
+			cleanReasoningLines = append(cleanReasoningLines, line)
+		}
+	}
+	cleanReasoning := strings.TrimSpace(strings.Join(cleanReasoningLines, "\n"))
+
+	if cleanReasoning != "" {
+		return fmt.Sprintf("<details style=\"margin-bottom:16px;padding:10px 14px;background:rgba(128,128,128,0.08);border-radius:8px;border-left:3px solid #18a058;\">\n<summary style=\"cursor:pointer;font-weight:600;color:inherit;opacity:0.85;\">💭 展开查看思考过程与推理链条</summary>\n\n%s\n</details>\n\n%s", cleanReasoning, content)
+	}
+	return content
+}
+
+// GeneratePreMarketBriefing 生成盘前前瞻/晨报 (09:10前或手动触发)
+// 包含：隔夜外盘/中概股动态、核心行业ETF动量排名与5视角加权打分、宏观要闻与开盘策略
 func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, aiConfigId int) (*MarketIntelligenceReport, error) {
-	logger.SugaredLogger.Info("【MarketLifecycle】开始生成智能盘前前瞻晨报...")
+	logger.SugaredLogger.Info("【MarketLifecycle】开始生成智能盘前前瞻与ETF轮动晨报...")
 	todayStr := time.Now().Format("2006-01-02")
 
-	// 1. 采集盘前核心数据：全球指数、财联社快讯、市场统计
+	// 1. 采集盘前核心数据：全球指数、财联社快讯、核心行业ETF行情
 	globalBrief := data.NewMarketNewsApi().GlobalStockIndexesReadable(30)
 	telegraphs := data.NewMarketNewsApi().TelegraphList(15)
 
@@ -178,33 +200,72 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 		}
 	}
 
-	// 2. 组装盘前前瞻 Prompt
+	// 采集主流行业与宽基 ETF 实时/日线行情
+	etfCodes := []string{"510300.SH", "159915.SZ", "512480.SH", "512660.SH", "512010.SH", "512800.SH", "510880.SH"}
+	var etfSummary strings.Builder
+	etfSummary.WriteString("核心关注ETF池（沪深300、创业板、半导体、军工、医药、证券、红利）：\n")
+	stockAPI := data.NewStockDataApi()
+	for _, code := range etfCodes {
+		quotes, err := stockAPI.GetStockCodeRealTimeData(code)
+		if err == nil && quotes != nil && len(*quotes) > 0 {
+			q := (*quotes)[0]
+			etfSummary.WriteString(fmt.Sprintf("- %s(%s): 现价 %v, 今日/昨日涨跌幅 %v%%\n", q.Name, code, q.Price, q.ChangePercent))
+		}
+	}
+
+	// 计算纯 Go 21日加权动量与硬风控指标（注入硬核数学，避免 LLM 幻觉)
+	momentumList, err := quant.BatchCalculateETFMomentum(etfCodes)
+	if err != nil {
+		logger.SugaredLogger.Warnf("计算ETF动量失败: %v", err)
+		momentumList = []*quant.ETFMomentumScoreResult{}
+	}
+	momentumTable := quant.FormatETFMomentumSummary(momentumList)
+
+	// 2. 组装盘前前瞻 + ETF轮动 Prompt (包含 Skill 7 范式)
 	prompt := fmt.Sprintf(`你现在是顶级券商首席策略分析师兼量化宏观专家“财智”。今天是 %s。
-请结合以下一手收集的盘前全球指数与要闻资讯，输出一份高水准、干货满满的【A股盘前智能前瞻与晨会内参】：
+请严格按照【ETF轮动多Agent分析】实战范式，结合以下一手收集的盘前全球指数、核心ETF动态与要闻资讯，输出一份高水准【A股盘前智能前瞻与ETF轮动内参】：
 
 【隔夜及全球主要指数行情】：
+%s
+
+【核心ETF池最新状态】：
+%s
+
+【核心ETF池纯数学动量矩阵（21日加权对数回归）】：
 %s
 
 【最新宏观与隔夜核心要闻】：
 %s
 
-请严格按以下四维框架输出 Markdown 格式的盘前内参：
+请按以下五维结构输出 Markdown 格式的盘前内参：
 ### 🌐 一、隔夜外盘与全球资产联动
 - 欧美股市、中概金龙指数表现及对A股开盘情绪的影响；
-- 汇率、大宗商品（黄金/原油）及主要风险偏好定调。
+- 国内宏观面：PMI、CPI、财政政策、汇率波动；
+- 商品市场：原油、黄金、有色金属、农产品关联性；
 
-### 🧭 二、今日宏观与核心主线研判
-- 核心要闻提炼（政策支持、产业新动向、重大突发事件）；
-- 潜在收益板块与可能受压制方向。
+### 📊 二、核心ETF池量化动态
+- 上表已给出纯数学动量排名（21日加权对数回归得分 = 年化收益率 × R²），请直接使用此矩阵进行后续分析；
+- 重点观察：动量排名变化、5日回撤情况、是否站上MA5、风控拦截状态；
 
-### 🎯 三、集合竞价与开盘观察指引
-- 关键指数点位防守区间；
-- 开盘关注的重点风向标（如半导体/算力/新能源/高股息等）。
+### 🔍 三、核心ETF池六路并发因子诊断（Skill 7 范式）
+- 技术面：60日均线系统、MACD、RSI、布林带位置、成交量能；
+- 主力资金流：大单净流入、北向资金、基金申购赎回、融资融券变动；
+- 消息舆情：利好利空新闻热度、互动易问答、机构调研频次；
+- 外围联动：美股ETF期货、原油铜价、汇率人民币中间价、VIX恐慌指数；
+- 宏观行业周期：PMI景气链、利率债收益率曲线、产业政策执行力度；
+- 溢价率分析：场内价格与净值差异、基金规模变化、份额持有结构；
 
-### 🛡️ 四、今日操作策略与风控纪律
-- 仓位管理与节奏建议（严控追高、高抛低吸还是分批建仓）；
-- 一句话点睛警示。`, todayStr, globalBrief, newsText.String())
+### 📋 四、投委会五视角加权评分表（趋势30%% 风控20%% 价值15%% 筹码20%% 情绪15%%）
+- 请基于上述六路因子诊断结果，对前3只动量排名靠前的ETF（或未被风控拦截的）逐项打分；
+- 最终输出一份详细的投委会打分矩阵与持仓建议；
 
+### 🎯 五、最终交易决策
+- 给出明确的仓位建议（买入/持有/观望/减仓），并制定防守止损位；
+- 如遇风控拦截（回撤冷却或盈亏比不足），则明确给出观望或等待回调的建议；
+
+全文请使用专业券商内参语气，数据引用请保持客观，避免过度解读。`, todayStr, globalBrief, etfSummary.String(), momentumTable, newsText.String())
+
+	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, "")
 	for msg := range ch {
@@ -212,18 +273,20 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 			continue
 		}
 		if msg.ReasoningContent != "" {
-			contentBuilder.WriteString(msg.ReasoningContent)
+			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
-		contentBuilder.WriteString(msg.Content)
+		if msg.Content != "" {
+			contentBuilder.WriteString(msg.Content)
+		}
 	}
 
-	finalReport := contentBuilder.String()
+	finalReport := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	if strings.TrimSpace(finalReport) == "" {
 		return nil, fmt.Errorf("AI 生成盘前晨报内容为空")
 	}
 
-	title := fmt.Sprintf("🌅 A股盘前智能前瞻与晨会内参 (%s)", todayStr)
-	summary := "隔夜全球资产联动分析、核心要闻发酵解读与今日开盘风向标策略指引。"
+	title := fmt.Sprintf("🌅 A股盘前智能前瞻与ETF轮动内参 (%s)", todayStr)
+	summary := "隔夜全球资产联动、核心ETF 5视角加权评分与今日开盘风向标策略指引。"
 
 	report := &MarketIntelligenceReport{
 		Type:        "pre_market_briefing",
@@ -232,17 +295,76 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 		Content:     finalReport,
 		GeneratedAt: time.Now(),
 		TradingDate: todayStr,
-		Source:      "Agent盘前引擎",
+		Source:      "Agent盘前与ETF轮动引擎",
 	}
 
-	// 持久化到 ai_response_result 以便用户在历史分析中随时查阅
-	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("盘前前瞻", "盘前内参", finalReport, "pre_market_"+todayStr, prompt)
+	// 持久化到 ai_response_result 归档，标明 code 为 ETF 组合
+	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动盘前内参", finalReport, "pre_market_etf_"+todayStr, prompt)
 
 	lifecycleReportCacheMu.Lock()
 	lifecycleLatestReport = report
 	lifecycleReportCacheMu.Unlock()
 
 	// 桌面事件与 Windows 通知提醒
+	if s.ctx != nil {
+		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
+	}
+
+	return report, nil
+}
+
+// TriggerSectorAnomalySerenityAnalysis 当盘中出现资金大额流入或异动突发时，自动触发 Serenity 产业链深度拆解
+func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx context.Context, sectorOrStockName string, code string, reason string, aiConfigId int) (*MarketIntelligenceReport, error) {
+	logger.SugaredLogger.Warnf("🔥 【Serenity异动拆解】检测到异动 %s(%s): %s，触发Serenity产业链分析", sectorOrStockName, code, reason)
+	todayStr := time.Now().Format("2006-01-02")
+
+	prompt := fmt.Sprintf(`你是专注于产业链瓶颈与卡脖子技术的研究专家“财智”。
+盘中检测到板块/标的【%s (%s)】出现强异动：%s。
+
+请严格遵守【Serenity式产业分析框架】（Skill 4）：
+1. 【产业链全景拆解】：梳理%s在产业链中的位置（上中下游与核心参与者）；
+2. 【稀缺层识别】：识别其中技术壁垒最高、国产替代率<30%%或CR5>60%%的绝对稀缺环节；
+3. 【优先级打分】：按稀缺性、可投资性、确定性三维度打分并排序；
+4. 【证据链验证】：列出营收增速、毛利率或重要客户支撑；
+5. 【证伪条件】：列出结论失效的触发条件。
+
+输出结构清晰的 Markdown 产业链深度拆解报告。`, sectorOrStockName, code, reason, sectorOrStockName)
+
+	reasoningBuilder := strings.Builder{}
+	contentBuilder := strings.Builder{}
+	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, "")
+	for msg := range ch {
+		if msg == nil {
+			continue
+		}
+		if msg.ReasoningContent != "" {
+			reasoningBuilder.WriteString(msg.ReasoningContent)
+		}
+		if msg.Content != "" {
+			contentBuilder.WriteString(msg.Content)
+		}
+	}
+
+	finalReport := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
+	if strings.TrimSpace(finalReport) == "" {
+		return nil, fmt.Errorf("Serenity 产业链拆解生成失败")
+	}
+
+	title := fmt.Sprintf("🔍 Serenity产业链深度拆解 — %s (%s)", sectorOrStockName, todayStr)
+	summary := fmt.Sprintf("盘中异动触发 (%s)，上中下游稀缺卡口与证伪条件分析。", reason)
+
+	report := &MarketIntelligenceReport{
+		Type:        "serenity_industry_analysis",
+		Title:       title,
+		Summary:     summary,
+		Content:     finalReport,
+		GeneratedAt: time.Now(),
+		TradingDate: todayStr,
+		Source:      "Serenity产业链引擎",
+	}
+
+	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult(code, "Serenity产业链分析", finalReport, "serenity_"+code, prompt)
+
 	if s.ctx != nil {
 		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
 	}
@@ -310,6 +432,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 - 明日开盘剧本推演（高开冲高/低开探底/平开震荡）；
 - 应对方案与持仓风控金句。`, todayStr, statSummary.String(), uplimitJSON, btSummary)
 
+	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, "")
 	for msg := range ch {
@@ -317,12 +440,14 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 			continue
 		}
 		if msg.ReasoningContent != "" {
-			contentBuilder.WriteString(msg.ReasoningContent)
+			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
-		contentBuilder.WriteString(msg.Content)
+		if msg.Content != "" {
+			contentBuilder.WriteString(msg.Content)
+		}
 	}
 
-	finalReport := contentBuilder.String()
+	finalReport := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	if strings.TrimSpace(finalReport) == "" {
 		return nil, fmt.Errorf("AI 生成收盘复盘内容为空")
 	}
@@ -353,6 +478,85 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	}
 
 	return report, nil
+}
+
+// GenerateETFRotationReport 手动或一键触发ETF轮动量化多Agent分析
+func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, aiConfigId int) (*MarketIntelligenceReport, error) {
+	logger.SugaredLogger.Info("【MarketLifecycle】手动一键触发【ETF轮动多Agent量化决策分析】...")
+	todayStr := time.Now().Format("2006-01-02")
+
+	etfCodes := []string{"510300.SH", "159915.SZ", "512480.SH", "512660.SH", "512010.SH", "512800.SH", "510880.SH", "159949.SZ"}
+	var etfSummary strings.Builder
+	etfSummary.WriteString("【全市场核心ETF池实时监测】（沪深300、创业板、半导体、军工、医药、证券、红利、创业板50）：\n")
+	stockAPI := data.NewStockDataApi()
+	for _, code := range etfCodes {
+		quotes, err := stockAPI.GetStockCodeRealTimeData(code)
+		if err == nil && quotes != nil && len(*quotes) > 0 {
+			q := (*quotes)[0]
+			etfSummary.WriteString(fmt.Sprintf("- %s(%s): 现价 %v, 涨跌幅 %v%%\n", q.Name, code, q.Price, q.ChangePercent))
+		}
+	}
+
+	prompt := fmt.Sprintf(`你是专注于量化对冲与ETF配置的首席基金经理“财智”。今天是 %s。
+请严格执行【ETF轮动多Agent分析】（Skill 7）全套决策流程：
+
+%s
+
+### 请输出完整的ETF轮动量化决策报告：
+1. 【动量池概览与筛选】：基于21日加权动量对上述ETF进行排序，并剔除近期回撤过深或盈亏比不佳的弱势标的；
+2. 【6路因子并发分析】：对前4只优选ETF，从技术面、主力资金流、消息舆情、外围联动、宏观行业周期、溢价率多维度进行诊断；
+3. 【投委会5视角加权评分表】：制作投委会打分矩阵（趋势30%%、风控20%%、价值15%%、筹码20%%、情绪15%%）；
+4. 【最终交易决策】：给出明确的仓位建议（买入/持有/观望/减仓），并制定防守止损位。`, todayStr, etfSummary.String())
+
+	reasoningBuilder := strings.Builder{}
+	contentBuilder := strings.Builder{}
+	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, "")
+	for msg := range ch {
+		if msg == nil {
+			continue
+		}
+		if msg.ReasoningContent != "" {
+			reasoningBuilder.WriteString(msg.ReasoningContent)
+		}
+		if msg.Content != "" {
+			contentBuilder.WriteString(msg.Content)
+		}
+	}
+
+	finalReport := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
+	if strings.TrimSpace(finalReport) == "" {
+		return nil, fmt.Errorf("生成ETF轮动分析报告失败")
+	}
+
+	title := fmt.Sprintf("📈 ETF轮动多Agent决策与投委会打分表 (%s)", todayStr)
+	summary := "核心ETF池21日加权动量、6路因子并发扫描与投委会5视角加权评分表。"
+
+	report := &MarketIntelligenceReport{
+		Type:        "etf_rotation_decision",
+		Title:       title,
+		Summary:     summary,
+		Content:     finalReport,
+		GeneratedAt: time.Now(),
+		TradingDate: todayStr,
+		Source:      "ETF轮动决策引擎",
+	}
+
+	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动量化决策", finalReport, "etf_rotation_"+todayStr, prompt)
+
+	lifecycleReportCacheMu.Lock()
+	lifecycleLatestReport = report
+	lifecycleReportCacheMu.Unlock()
+
+	if s.ctx != nil {
+		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
+	}
+
+	return report, nil
+}
+
+// GenerateSerenityResearchReport 手动一键触发任意板块/股票的 Serenity 产业链深度拆解
+func (s *MarketLifecycleService) GenerateSerenityResearchReport(ctx context.Context, targetName string, code string, aiConfigId int) (*MarketIntelligenceReport, error) {
+	return s.TriggerSectorAnomalySerenityAnalysis(ctx, targetName, code, "用户主动发起的Serenity深度产业链调研", aiConfigId)
 }
 
 // GetLatestReport 获取最新生成的智能研报（盘前或盘后）

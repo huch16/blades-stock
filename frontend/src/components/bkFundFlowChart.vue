@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {onBeforeUnmount, onMounted, ref, watch, computed} from "vue";
 import {GetBKFundFlowListByDate, GetBKFundFlowTopListByDate, GetAllBKCodes} from "../../wailsjs/go/main/App";
+import {EventsEmit} from "../../wailsjs/runtime/runtime";
 import * as echarts from "../utils/echarts";
 
 const props = defineProps({
@@ -512,6 +513,15 @@ function removeExtraSector(code: string) {
   loadAllData()
 }
 
+function analyzeSector(item: FlowItem) {
+  try {
+    EventsEmit('show-market-intelligence-serenity', { name: item.name, code: item.code })
+  } catch (e) {}
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('show-market-intelligence-serenity', { detail: { name: item.name, code: item.code } }))
+  }
+}
+
 function onDateChange() {
   loadAllData()
 }
@@ -624,7 +634,12 @@ watch(() => props.chartHeight, () => {
             <n-tr v-for="(item, idx) in inflowList" :key="item.code">
               <n-td>{{ idx + 1 }}</n-td>
               <n-td>
-                <n-tag :bordered="false" type="error" size="small">{{ item.name }}</n-tag>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <n-tag :bordered="false" type="error" size="small">{{ item.name }}</n-tag>
+                  <n-button size="tiny" quaternary type="primary" title="产业链全景拆解" @click="analyzeSector(item)">
+                    🔬 拆解
+                  </n-button>
+                </div>
               </n-td>
               <n-td>
                 <n-text type="error">+{{ (item.netInflow / 100000000).toFixed(2) }}</n-text>
@@ -651,7 +666,12 @@ watch(() => props.chartHeight, () => {
             <n-tr v-for="(item, idx) in outflowList" :key="item.code">
               <n-td>{{ idx + 1 }}</n-td>
               <n-td>
-                <n-tag :bordered="false" type="success" size="small">{{ item.name }}</n-tag>
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <n-tag :bordered="false" type="success" size="small">{{ item.name }}</n-tag>
+                  <n-button size="tiny" quaternary type="primary" title="产业链全景拆解" @click="analyzeSector(item)">
+                    🔬 拆解
+                  </n-button>
+                </div>
               </n-td>
               <n-td>
                 <n-text type="success">{{ (item.netInflow / 100000000).toFixed(2) }}</n-text>

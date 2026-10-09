@@ -18,7 +18,7 @@ import {
   SummaryStockNews,
   GetAiConfigs,
 } from "../../wailsjs/go/main/App";
-import {EventsOff, EventsOn} from "../../wailsjs/runtime";
+import {EventsOff, EventsOn, EventsEmit} from "../../wailsjs/runtime";
 import NewsList from "./newsList.vue";
 import { cleanFinalContent } from "../utils/cleanText";
 import KLineChart from "./KLineChart.vue";
@@ -447,11 +447,37 @@ function ReFlesh(source) {
     }
   })
 }
+function openMarketIntelligence(type) {
+  try {
+    EventsEmit('show-market-intelligence', type)
+  } catch (e) {
+    console.error('EventsEmit error:', e)
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('show-market-intelligence', { detail: type }))
+  }
+}
 </script>
 
 <template>
   <n-card>
     <n-tabs type="line" animated @update-value="updateTab" :value="nowTab" style="--wails-draggable:no-drag">
+      <template #suffix>
+        <n-space align="center" :size="8" style="margin-right: 12px;">
+          <n-button size="tiny" round type="info" tertiary style="font-weight: 500;" @click="openMarketIntelligence('pre_market_briefing')">
+            🌅 盘前前瞻
+          </n-button>
+          <n-button size="tiny" round type="warning" tertiary style="font-weight: 500;" @click="openMarketIntelligence('post_market_review')">
+            🌆 盘后复盘
+          </n-button>
+          <n-button size="tiny" round type="success" tertiary style="font-weight: 500;" @click="openMarketIntelligence('etf_rotation_decision')">
+            📈 ETF轮动
+          </n-button>
+          <n-button size="tiny" round type="error" tertiary style="font-weight: 500;" @click="openMarketIntelligence('serenity_industry_analysis')">
+            🔍 产业拆解
+          </n-button>
+        </n-space>
+      </template>
       <n-tab-pane name="市场快讯" tab="市场快讯">
         <n-grid :cols="1" :y-gap="0">
           <n-gi>

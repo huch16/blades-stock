@@ -104,6 +104,11 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		return nil
 	}
 
+	// 注入 Multi-LLM 容灾 Fallback 能力（若配置了多个可用模型）
+	if fallbacks, fbNames := BuildFallbackProvidersFromDB(ctx, aiConfig); len(fallbacks) > 0 {
+		modelProvider = NewFallbackModelProvider(modelProvider, aiConfig.ModelName, fallbacks, fbNames)
+	}
+
 	allTools := getToolsByQuestion(question, matchedSkills)
 	allTools = append(allTools, extraTools...)
 
@@ -280,6 +285,8 @@ func GetAllTools() []bladesTools.Tool {
 	allTools = append(allTools, tools.GetBacktestDetailTool())
 	allTools = append(allTools, tools.GetRunBacktestTool())
 	allTools = append(allTools, tools.GetVectorBacktestTool())
+	allTools = append(allTools, tools.GetRunVectorizedBacktestTool())
+	allTools = append(allTools, tools.GetDiagnoseStockTool())
 	allTools = append(allTools, tools.GetVectorGridSearchTool())
 
 	mcpTools := getMCPTools()
@@ -311,6 +318,8 @@ func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesT
 	allTools = append(allTools, tools.GetBacktestDetailTool())
 	allTools = append(allTools, tools.GetRunBacktestTool())
 	allTools = append(allTools, tools.GetVectorBacktestTool())
+	allTools = append(allTools, tools.GetRunVectorizedBacktestTool())
+	allTools = append(allTools, tools.GetDiagnoseStockTool())
 	allTools = append(allTools, tools.GetVectorGridSearchTool())
 
 	mcpTools := getMCPTools()

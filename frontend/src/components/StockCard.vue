@@ -21,7 +21,8 @@ const emit = defineEmits([
   'search-stock-report',
   'add-stock-group',
   'del-stock-group',
-  'show-lightweight-kline'
+  'show-lightweight-kline',
+  'diagnose-stock'
 ])
 </script>
 
@@ -155,10 +156,14 @@ const emit = defineEmits([
             }}
           </n-tag>
         </n-flex>
-        <n-flex justify="center">
+        <n-flex justify="center" :size="6">
           <n-button size="tiny" type="primary" secondary
                     @click="emit('show-lightweight-kline', result['股票代码'], result['股票名称'])">
             多周期K线
+          </n-button>
+          <n-button size="tiny" type="warning" secondary
+                    @click="emit('diagnose-stock', result['股票代码'], result['股票名称'])">
+            ✨ 量化诊断
           </n-button>
         </n-flex>
       </n-flex>

@@ -408,6 +408,10 @@ export function GeneratePostMarketReview(arg1:number):Promise<any>;
 
 export function GeneratePreMarketBriefing(arg1:number):Promise<any>;
 
+export function GenerateETFRotationReport(arg1:number):Promise<any>;
+
+export function GenerateSerenityResearchReport(arg1:string,arg2:string,arg3:number):Promise<any>;
+
 export function GetLatestMarketIntelligenceReport():Promise<any>;
 
 export function GetMarketLifecycleStatus():Promise<any>;

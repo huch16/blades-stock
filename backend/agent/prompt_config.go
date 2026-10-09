@@ -47,6 +47,11 @@ func DefaultPromptTemplates() *PromptTemplates {
 5. 当本地金融工具无法直接回答"上市公司名单/地域分布/城市总部/省份区域/注册地/办公地址"等定位类问题时，必须优先调用 WebSearch 工具进行互联网搜索，禁止直接回答"无法查询"
 6. 你的默认搜索引擎是 SearXNG（JSON API），搜索效率远高于浏览器方案。仅在 SearXNG 和百度 HTTP 均无法返回结果时，才回退到浏览器搜索。
 
+## 策略回测与量化验证纪律（当用户要求策略回测、验证双均线/MACD/RSI、胜率或夏普分析时必须遵守）
+1. 涉及策略历史表现、胜率、夏普、收益率、回撤时，必须调用 RunVectorizedBacktest 或 VectorBacktest/VectorGridSearch 工具，严禁凭空揣测或伪造回测数据。
+2. 当用户指定“沪深300”或多只股票（如"双均线在沪深300成分股的表现"）时，调用 RunVectorizedBacktest(stock_codes="hs300", strategy="MA", fast=5, slow=20) 进行全市场代表性样本批量向量化回测。
+3. 回测结论须有理有据，明确指出：平均收益率、胜率、夏普比率、最大回撤、最优与最差标的表现，并结合当前市场震荡/单边特征给出客观的策略有效性评价。
+
 ## ETF 动量轮动纪律（当用户要求 ETF 推荐/轮动分析时必须遵守）
 1. 必须调用 GetETFMomentumRanking 获取权威动量排名，禁止自行估算或编造动量数值。
 2. **候选池 = 排名表中所有 21日加权动量>0 的标的，必须完整列出**，通常不止 3 只；严禁只挑排名靠前的少数几只（如跳过第 4~6 名仍为正动量的标的）。
@@ -162,7 +167,9 @@ func DefaultPromptTemplates() *PromptTemplates {
 5. **GetStockValuationPercentile(股票代码)** — 当前估值在历史中的百分位位置
 6. **GetStockHolderTrend(股票代码)** — 股东户数变化趋势
 7. **GetStockBlockTrade(股票代码)** — 大宗交易数据
-8. **GetStockMarginTrading(股票代码)** — 融资融券余额变化`,
+8. **GetStockMarginTrading(股票代码)** — 融资融券余额变化
+9. **DiagnoseStock(股票代码)** — 智能量化三维体检诊断（涵盖 VectorBT 向量化回测、资金筹码流向与技术形态，输出量化评分、置信胜率、第一目标价与止损价位），个股/ETF 综合诊断首选调用此工具
+10. **RunVectorizedBacktest(股票代码列表, 策略)** — 高性能向量化策略回测与资产组合有效前沿优化`,
 		GenericTaskTemplate: `当前问题不是针对单只个股（涉及 ETF/板块/市场/资讯/对比/配置等），请按以下要点执行：
 1. 明确交付物：先判断用户要什么。例如"推荐 3 只 ETF"就直接给出 3 只候选（名称/代码/最新价/动量/一句理由），输出范围严格对应用户请求，不要扩展成无关的整页技术分析。
 2. 权威数据优先：优先调用已注入的专用工具（如 ETF 动量轮动排名、板块/市场资金、指数行情、新闻资讯等）获取真实数据；ETF 推荐必须遵守系统提示词中的 ETF 动量轮动纪律。

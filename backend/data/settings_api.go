@@ -808,7 +808,12 @@ func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
 }
 
 func GetSettingConfig() *SettingConfig {
-	db.Dao.AutoMigrate(&AIConfig{})
+	if db.Dao == nil {
+		return &SettingConfig{
+			Settings:  &Settings{},
+			AiConfigs: []*AIConfig{},
+		}
+	}
 
 	settingConfig := &SettingConfig{}
 	settings := &Settings{}

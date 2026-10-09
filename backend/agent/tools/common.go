@@ -1,8 +1,10 @@
 package tools
 
 import (
-	"github.com/duke-git/lancet/v2/strutil"
+	"blades-stock/backend/models"
 	"strings"
+
+	"github.com/duke-git/lancet/v2/strutil"
 )
 
 // @Author spark
@@ -10,10 +12,26 @@ import (
 // @Desc
 //-----------------------------------------------------------------------------------
 
+func CleanStockCode(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	return models.CleanStockCode(raw)
+}
+
 func GetStockCode(dcCode string) string {
+	dcCode = strings.TrimSpace(dcCode)
+	if dcCode == "" {
+		return ""
+	}
 	if strutil.ContainsAny(dcCode, []string{"."}) {
 		sp := strings.Split(dcCode, ".")
 		return strings.ToLower(sp[1] + sp[0])
+	}
+	pure := CleanStockCode(dcCode)
+	if len(pure) == 6 {
+		dcCode = pure
 	}
 
 	//北京证券交易所	8（83、87、88 等）	创新型中小企业（专精特新为主）
@@ -33,3 +51,4 @@ func GetStockCode(dcCode string) string {
 	}
 	return dcCode
 }
+

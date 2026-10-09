@@ -24,6 +24,7 @@ func GetStockKLineTool() bladesTools.Tool {
 			code := gjson.Get(args, "code").String()
 			kType := gjson.Get(args, "type").String()
 			countStr := gjson.Get(args, "count").String()
+			code = CleanStockCode(code)
 			code = GetStockCode(code)
 			count, err := strconv.ParseInt(countStr, 10, 64)
 			if err != nil {
@@ -53,6 +54,7 @@ func GetStockEastMoneyKLineTool() bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			code := gjson.Get(args, "code").String()
+			code = CleanStockCode(code)
 			klineTy := gjson.Get(args, "kline_ty").String()
 			limit := int(gjson.Get(args, "limit").Int())
 			if limit <= 0 {
@@ -85,6 +87,7 @@ func GetEastMoneyKLineWithMATool() bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			code := gjson.Get(args, "code").String()
+			code = CleanStockCode(code)
 			klineTy := gjson.Get(args, "kline_ty").String()
 			limit := int(gjson.Get(args, "limit").Int())
 			if limit <= 0 {
@@ -123,6 +126,7 @@ func GetStockMinuteDataTool() bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			code := gjson.Get(args, "code").String()
+			code = CleanStockCode(code)
 			code = GetStockCode(code)
 			result, desc := data.NewStockDataApi().GetStockMinutePriceData(code)
 			if result == nil {

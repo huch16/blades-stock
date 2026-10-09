@@ -253,11 +253,12 @@
               </div>
               <div class="chat-quick-chips">
                 <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('三维量化诊断 ')">🎯 量化诊断</NTag>
-                <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('ETF动量轮动分析与配置建议')">📈 ETF动量</NTag>
                 <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('VectorBT 策略回测: ')">🧪 策略回测</NTag>
                 <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('主力资金博弈与筹码集中度分析: ')">💰 资金筹码</NTag>
-                <NTag size="small" round :bordered="false" type="info" class="quick-chip" @click="emit('open-market-intelligence', 'pre_market_briefing')">🌅 盘前前瞻</NTag>
-                <NTag size="small" round :bordered="false" type="warning" class="quick-chip" @click="emit('open-market-intelligence', 'post_market_review')">🌆 盘后复盘</NTag>
+                <NTag size="small" round :bordered="false" type="info" class="quick-chip" @click="triggerMarketIntelligence('pre_market_briefing')">🌅 盘前前瞻</NTag>
+                <NTag size="small" round :bordered="false" type="warning" class="quick-chip" @click="triggerMarketIntelligence('post_market_review')">🌆 盘后复盘</NTag>
+                <NTag size="small" round :bordered="false" type="success" class="quick-chip" @click="triggerMarketIntelligence('etf_rotation_decision')">📈 ETF轮动</NTag>
+                <NTag size="small" round :bordered="false" type="error" class="quick-chip" @click="triggerMarketIntelligence('serenity_industry_analysis')">🔍 产业链拆解</NTag>
               </div>
               <div class="chat-footer-input">
                 <NInput
@@ -325,6 +326,16 @@ import 'md-editor-v3/lib/preview.css'
 import html2canvas from 'html2canvas'
 
 const emit = defineEmits(['open-market-intelligence'])
+
+function triggerMarketIntelligence(type) {
+  emit('open-market-intelligence', type)
+  try {
+    EventsEmit('show-market-intelligence', type)
+  } catch (e) {}
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('show-market-intelligence', { detail: type }))
+  }
+}
 import { cleanFinalContent } from '../utils/cleanText'
 
 const STORAGE_KEY_MODEL_ID = 'blades-stock-agent-last-model-id'
@@ -1159,10 +1170,16 @@ onBeforeMount(() => {
 
 onMounted(() => {
   EventsOn(AGENT_EVENT, onAgentMessage)
-  EventsOn('openFloatingAgentWithQuestion', (question) => {
+  EventsOn('openFloatingAgentWithQuestion', (payload) => {
     panelVisible.value = true
-    if (question && typeof question === 'string') {
-      inputValue.value = question
+    const text = typeof payload === 'string' ? payload : (payload?.question || '')
+    if (text) {
+      inputValue.value = text
+      setTimeout(() => {
+        if (!isStreamLoad.value && inputValue.value.trim()) {
+          sendMessage()
+        }
+      }, 150)
     }
   })
   loadHistory()

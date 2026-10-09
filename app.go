@@ -3317,3 +3317,15 @@ func (a *App) RunVectorGridSearch(stockCode, strategyType string) map[string]any
 		"duration":          resp.Duration,
 	}
 }
+
+// GenerateETFRotationReport 手动或一键触发全市场ETF轮动多Agent决策分析
+func (a *App) GenerateETFRotationReport(aiConfigId int) (*agent.MarketIntelligenceReport, error) {
+	service := agent.NewMarketLifecycleService(a.ctx)
+	return service.GenerateETFRotationReport(context.Background(), aiConfigId)
+}
+
+// GenerateSerenityResearchReport 手动或一键触发Serenity产业深度拆解
+func (a *App) GenerateSerenityResearchReport(targetName string, code string, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
+	service := agent.NewMarketLifecycleService(a.ctx)
+	return service.GenerateSerenityResearchReport(context.Background(), targetName, code, aiConfigId)
+}

@@ -806,6 +806,14 @@ export function GeneratePreMarketBriefing(arg1) {
   return window['go']['main']['App']['GeneratePreMarketBriefing'](arg1);
 }
 
+export function GenerateETFRotationReport(arg1) {
+  return window['go']['main']['App']['GenerateETFRotationReport'](arg1);
+}
+
+export function GenerateSerenityResearchReport(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GenerateSerenityResearchReport'](arg1, arg2, arg3);
+}
+
 export function GetLatestMarketIntelligenceReport() {
   return window['go']['main']['App']['GetLatestMarketIntelligenceReport']();
 }

@@ -190,6 +190,106 @@ func GetVectorBacktestTool() bladesTools.Tool {
 	)
 }
 
+// GetRunVectorizedBacktestTool 高级向量化回测工具（支持单标的/多标的/指数成份股）
+func GetRunVectorizedBacktestTool() bladesTools.Tool {
+	return NewDataToolWrapper(
+		"RunVectorizedBacktest",
+		"【VectorBT高级向量化回测】运行极速向量化策略回测。支持单只股票或多只股票（逗号分隔，或沪深300代表性成分股hs300），支持MA（双均线）、MACD、RSI、BOLL（布林带）等策略，输出胜率、夏普比率、最大回撤、交易统计及收益率走势。",
+		map[string]*types.ParamDef{
+			"stock_codes": {Type: "string", Desc: "股票代码，可为单只（如 600519）、逗号分隔的多只（如 600519,000858,000333）、或输入 hs300/沪深300 自动选取代表性权重股", Required: true},
+			"strategy":    {Type: "string", Desc: "策略类型：MA（双均线交叉）、MACD、RSI、BOLL（布林带），默认 MA", Required: false},
+			"fast":        {Type: "number", Desc: "快线周期（MA/MACD用，如 5）", Required: false},
+			"slow":        {Type: "number", Desc: "慢线周期（MA/MACD用，如 20）", Required: false},
+			"signal":      {Type: "number", Desc: "信号周期（MACD用，如 9）", Required: false},
+			"window":      {Type: "number", Desc: "窗口周期（RSI/BOLL用，如 14 或 20）", Required: false},
+			"days":        {Type: "integer", Desc: "回测历史天数，默认 365（过去一年）", Required: false},
+		},
+		func(args string) (string, error) {
+			rawCodes := gjson.Get(args, "stock_codes").String()
+			if rawCodes == "" {
+				rawCodes = gjson.Get(args, "stock_code").String()
+			}
+			if rawCodes == "" {
+				return "错误：请提供 stock_codes 参数", nil
+			}
+
+			// 解析股票列表
+			var stockList []string
+			lowerCodes := strings.ToLower(rawCodes)
+			if strings.Contains(lowerCodes, "hs300") || strings.Contains(lowerCodes, "300") || strings.Contains(rawCodes, "沪深300") {
+				// 选取沪深300各主要行业龙头与代表性权重股
+				stockList = []string{
+					"600519", "300750", "601318", "600036", "000858",
+					"000333", "601899", "601012", "002594", "600900",
+				}
+			} else {
+				parts := strings.Split(rawCodes, ",")
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						stockList = append(stockList, p)
+					}
+				}
+			}
+
+			if len(stockList) == 0 {
+				return "错误：未解析到有效的股票代码", nil
+			}
+
+			strategyType := gjson.Get(args, "strategy").String()
+			if strategyType == "" {
+				strategyType = "MA"
+			}
+
+			params := make(map[string]any)
+			if gjson.Get(args, "fast").Exists() {
+				params["fast"] = gjson.Get(args, "fast").Float()
+			}
+			if gjson.Get(args, "slow").Exists() {
+				params["slow"] = gjson.Get(args, "slow").Float()
+			}
+			if gjson.Get(args, "signal").Exists() {
+				params["signal"] = gjson.Get(args, "signal").Float()
+			}
+			if gjson.Get(args, "window").Exists() {
+				params["window"] = gjson.Get(args, "window").Float()
+			}
+
+			days := int(gjson.Get(args, "days").Int())
+			if days <= 0 {
+				days = 365
+			}
+
+			multiRes, err := quant.RunVectorizedBacktestMulti(stockList, strategyType, params, days)
+			if err != nil {
+				return fmt.Sprintf("向量化回测失败: %v", err), nil
+			}
+
+			var b strings.Builder
+			b.WriteString(multiRes.SummaryReport)
+
+			// 如果是单只标的，并且有净值序列，输出收益走势概览
+			if len(multiRes.Items) == 1 && len(multiRes.Items[0].EquityCurve) > 0 {
+				curve := multiRes.Items[0].EquityCurve
+				b.WriteString(fmt.Sprintf("\n#### 📈 资产净值走势（初始资金 100,000）：\n"))
+				b.WriteString(fmt.Sprintf("- 期初资金: ¥%.2f\n", curve[0]))
+				b.WriteString(fmt.Sprintf("- 期末资金: ¥%.2f\n", curve[len(curve)-1]))
+				// 采样 5 个关键时点生成简要净值对比
+				step := len(curve) / 4
+				if step > 0 && len(multiRes.Items[0].Dates) == len(curve) {
+					b.WriteString("- 关键净值节点: ")
+					for i := 0; i < len(curve); i += step {
+						b.WriteString(fmt.Sprintf("[%s: ¥%.0f] ", multiRes.Items[0].Dates[i], curve[i]))
+					}
+					b.WriteString("\n")
+				}
+			}
+
+			return b.String(), nil
+		},
+	)
+}
+
 // GetVectorGridSearchTool 参数网格扫描工具
 func GetVectorGridSearchTool() bladesTools.Tool {
 	return NewDataToolWrapper(
@@ -232,6 +332,70 @@ func GetVectorGridSearchTool() bladesTools.Tool {
 				b.WriteString(fmt.Sprintf("- 盈亏比: %.2f\n", s.ProfitFactor))
 				b.WriteString(fmt.Sprintf("- 交易次数: %d\n", s.TotalTrades))
 			}
+
+			return b.String(), nil
+		},
+	)
+}
+
+// GetDiagnoseStockTool 对指定股票或ETF执行三维量化深度诊断（VectorBT矩阵回测+资金筹码流向+技术形态+点位测算）
+func GetDiagnoseStockTool() bladesTools.Tool {
+	return NewDataToolWrapper(
+		"DiagnoseStock",
+		"【三维量化深度诊断】全面融合 VectorBT 向量化回测、资金筹码流向与技术形态，输出量化评分、操作建议、目标价/止损价与置信胜率。输入股票或ETF代码（如 600671, 510300, 159915）即可一键生成全方位诊断报告。",
+		map[string]*types.ParamDef{
+			"stock_code": {Type: "string", Desc: "股票或ETF代码，如 600671、510300、159915、000001", Required: true},
+		},
+		func(args string) (string, error) {
+			rawCode := gjson.Get(args, "stock_code").String()
+			if strings.TrimSpace(rawCode) == "" {
+				return "请提供股票或ETF代码", nil
+			}
+			diag, err := quant.DiagnoseStock(rawCode)
+			if err != nil {
+				return fmt.Sprintf("三维量化诊断执行失败: %v", err), nil
+			}
+			if diag == nil {
+				return "三维量化诊断返回空数据", nil
+			}
+
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("## 🎯 【%s (%s)】三维量化深度诊断报告\n\n", diag.StockName, diag.StockCode))
+			b.WriteString(fmt.Sprintf("- **综合量化评分**: `%d / 100`\n", diag.OverallScore))
+			b.WriteString(fmt.Sprintf("- **行动建议**: **%s**\n", diag.Suggestion))
+			b.WriteString(fmt.Sprintf("- **策略置信胜率**: `%.1f%%`\n\n", diag.Confidence))
+
+			b.WriteString("### 📌 关键点位测算\n\n")
+			b.WriteString(fmt.Sprintf("- **当前最新价**: ¥%.2f\n", diag.CurrentPrice))
+			if diag.CurrentPrice > 0 {
+				b.WriteString(fmt.Sprintf("- **第一目标价**: ¥%.2f (预期空间: +%.1f%%)\n", diag.TargetPrice, ((diag.TargetPrice-diag.CurrentPrice)/diag.CurrentPrice)*100))
+				b.WriteString(fmt.Sprintf("- **建议止损价**: ¥%.2f (防守空间: %.1f%%)\n", diag.StopLossPrice, ((diag.StopLossPrice-diag.CurrentPrice)/diag.CurrentPrice)*100))
+			} else {
+				b.WriteString(fmt.Sprintf("- **第一目标价**: ¥%.2f\n", diag.TargetPrice))
+				b.WriteString(fmt.Sprintf("- **建议止损价**: ¥%.2f\n", diag.StopLossPrice))
+			}
+			b.WriteString(fmt.Sprintf("- **理论盈亏比**: `%.2f : 1`\n\n", diag.RiskRewardRatio))
+
+			b.WriteString("### 📊 三维量化拆解\n\n")
+			b.WriteString(fmt.Sprintf("1. **量化回测维度** (`%d/100`): 策略 **%s**，胜率 `%.1f%%`，总收益率 `%.1f%%`，夏普 `%.2f`，最大回撤 `%.1f%%`（%s）。\n",
+				diag.QuantDim.Score, diag.QuantDim.StrategyName, diag.QuantDim.WinRatePct, diag.QuantDim.TotalReturnPct, diag.QuantDim.SharpeRatio, diag.QuantDim.MaxDrawdownPct, diag.QuantDim.Evaluation))
+			b.WriteString(fmt.Sprintf("2. **资金筹码维度** (`%d/100`): 近5日主力净流入 **%.2f 万元**（超大单占比 `%.1f%%`，态势: %s）。评价: %s\n",
+				diag.MoneyDim.Score, diag.MoneyDim.MainNetInflow5D, diag.MoneyDim.SuperLargeNetPct, diag.MoneyDim.RecentInflowTrend, diag.MoneyDim.Evaluation))
+			b.WriteString(fmt.Sprintf("3. **技术形态维度** (`%d/100`): 趋势 **%s**，MA20=¥%.2f，ATR(14)=%.2f。评价: %s\n\n",
+				diag.TechnicalDim.Score, diag.TechnicalDim.Trend, diag.TechnicalDim.MA20, diag.TechnicalDim.ATR, diag.TechnicalDim.Evaluation))
+
+			if diag.Summary != "" {
+				b.WriteString("### 📈 核心诊断摘要\n\n")
+				b.WriteString(diag.Summary + "\n\n")
+			}
+			if len(diag.Risks) > 0 {
+				b.WriteString("### ⚠️ 潜在风险警示\n\n")
+				for _, rk := range diag.Risks {
+					b.WriteString(fmt.Sprintf("- %s\n", rk))
+				}
+				b.WriteString("\n")
+			}
+			b.WriteString(fmt.Sprintf("*历史闭环检验: %s*\n", diag.HistoryTrackRecord))
 
 			return b.String(), nil
 		},

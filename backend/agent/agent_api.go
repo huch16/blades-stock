@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"blades-stock/backend/data"
+	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
@@ -564,6 +565,25 @@ func postProcessResponse(sessionID, question, response string, toolNames []strin
 		}
 	}()
 
+	// 4. 自动持久化个股分析报告（接入自反思与历史回测闭环）
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer recoverLog("ai_report_persistence")
+		stockCode, stockName := extractStockInfo(question)
+		cleanCode := models.CleanStockCode(stockCode)
+		if cleanCode != "" && models.IsStockReportCode(cleanCode) && len(response) > 50 {
+			if stockName == "" {
+				var basic data.StockBasic
+				if err := db.Dao.Where("ts_code LIKE ?", "%"+cleanCode+"%").First(&basic).Error; err == nil {
+					stockName = basic.Name
+				}
+			}
+			// 调用 SaveAIResponseResult 进行去重与落库
+			data.NewDeepSeekOpenAi(context.Background(), 0).SaveAIResponseResult(cleanCode, stockName, response, sessionID, question)
+		}
+	}()
+
 	wg.Wait()
 	logger.SugaredLogger.Debugf("postProcessResponse completed for session %s", sessionID)
 }
@@ -598,16 +618,31 @@ var (
 	stockNameRe = regexp.MustCompile(`([\p{Han}]{2,4})(?:股票|股价|行情|走势|代码)`)
 )
 
-// extractStockInfo 从用户问题中提取股票代码/名称（简单启发式匹配）
+// extractStockInfo 从用户问题中提取股票代码/名称（增强启发式 + 数据库对照匹配）
 func extractStockInfo(question string) (stockCode, stockName string) {
 	// 匹配股票代码: 6 位数字（A股），或 sh/SH/sz/SZ 前缀
 	if m := stockCodeRe.FindString(question); m != "" {
 		stockCode = m
 	}
-	// 匹配常见股票名称关键词（中文 2-4 字，出现在特定语境）
+	// 匹配常见股票名称关键词（中文 2-4 字）
 	if m := stockNameRe.FindStringSubmatch(question); len(m) > 1 {
 		stockName = m[1]
 	}
+
+	// 互补数据库查询
+	if stockCode != "" && stockName == "" && db.Dao != nil {
+		clean := models.CleanStockCode(stockCode)
+		var sb data.StockBasic
+		if err := db.Dao.Where("ts_code LIKE ?", "%"+clean+"%").First(&sb).Error; err == nil && sb.Name != "" {
+			stockName = sb.Name
+		}
+	} else if stockCode == "" && stockName != "" && db.Dao != nil {
+		var sb data.StockBasic
+		if err := db.Dao.Where("name = ?", stockName).First(&sb).Error; err == nil && sb.TsCode != "" {
+			stockCode = sb.TsCode
+		}
+	}
+
 	return
 }
 

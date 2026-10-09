@@ -129,7 +129,12 @@ const columnsRef = ref([
     key: 'name',
     width: 100,
     render(row) {
-      return row.stockName || row.StockName || row.name
+      const name = row.stockName || row.StockName || row.name || '-'
+      return h(NText, {
+        strong: true,
+        style: 'cursor: pointer; color: #2080f0; text-decoration: underline;',
+        onClick: () => openKlineModal(row)
+      }, () => name)
     }
   },
   {
@@ -220,6 +225,33 @@ const columnsRef = ref([
       return h('div', {style: 'white-space: normal; line-height: 1.4;'}, text)
     }
   },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 200,
+    fixed: 'right',
+    render(row) {
+      return h(NSpace, { size: 6, justify: 'start' }, () => [
+        h(NButton, {
+          size: 'tiny',
+          type: 'primary',
+          secondary: true,
+          onClick: () => triggerAiAnomalyAnalysis(row)
+        }, () => '⚡ 排雷'),
+        h(NButton, {
+          size: 'tiny',
+          secondary: true,
+          onClick: () => openKlineModal(row)
+        }, () => '📈 K线'),
+        h(NButton, {
+          size: 'tiny',
+          type: 'info',
+          secondary: true,
+          onClick: () => openDiagnosisDrawer(row)
+        }, () => '📊 诊断')
+      ])
+    }
+  },
 ])
 
 function formatVolume(vol) {
@@ -247,6 +279,114 @@ function copyCode(code) {
   navigator.clipboard.writeText(code).then(() => {
     message.success('已复制: ' + code)
   })
+}
+
+function toEastMoneyCode(code) {
+  if (!code) return ''
+  const c = String(code).trim()
+  if (c.startsWith('6') || c.startsWith('9')) return c + '.SH'
+  if (c.startsWith('0') || c.startsWith('3')) return c + '.SZ'
+  if (c.startsWith('4') || c.startsWith('8')) return c + '.BJ'
+  if (/^[a-zA-Z]+$/.test(c)) return c.toUpperCase() + '.US'
+  return c
+}
+
+function openKlineModal(row) {
+  const code = row.stockCode || row.StockCode || row.code || ''
+  const name = row.stockName || row.StockName || row.name || ''
+  const em = toEastMoneyCode(code)
+  if (!em) {
+    message.warning('无效的股票代码')
+    return
+  }
+  klineCode.value = em
+  klineName.value = name
+  showKlineModal.value = true
+}
+
+function openDiagnosisDrawer(row) {
+  const code = row.stockCode || row.StockCode || row.code || ''
+  const name = row.stockName || row.StockName || row.name || ''
+  diagnosisStockCode.value = code
+  diagnosisStockName.value = name
+  showDiagnosisDrawer.value = true
+}
+
+function triggerAiAnomalyAnalysis(row) {
+  const code = row.stockCode || row.StockCode || row.code || ''
+  const name = row.stockName || row.StockName || row.name || ''
+  const typeName = row.typeName || row.TypeName || '异动'
+  const date = row.changeDate || row.ChangeDate || ''
+  const time = row.changeTime || row.ChangeTime || row.time || ''
+  const timeStr = date ? `${date} ${time}` : time
+  const price = row.price || row.Price || 0
+  const changeRate = row.changeRate || row.ChangeRate || 0
+  const amount = row.amount || row.Amount || 0
+  const amountStr = amount > 0 ? formatAmount(amount) : '-'
+  const industry = row.industry || row.Industry || '未知行业'
+  const concept = row.concept || row.Concept || '无'
+
+  const prompt = `【股票盘中异动归因与排雷排查】
+标的：${name} (${code})
+异动时间：${timeStr}
+异动信号：${typeName}
+盘面数据：现价 ${price > 0 ? price.toFixed(2) + '元' : '-'}，日内涨幅 ${changeRate >= 0 ? '+' : ''}${changeRate.toFixed(2)}%，异动金额 ${amountStr}
+所属行业：${industry}
+核心概念：${concept}
+
+请以 A 股短线实战游资与量化风控专家视角，用 3 点通俗干练的分析（150字以内）给出排雷指导：
+1. 【异动归因】：本次异动大概率属于主线合力真突破、板块脉冲跟风，还是主力拉高诱多/恐慌砸盘？
+2. 【排雷风险排查】：近期是否存在解禁减持、业绩预亏、高位筹码松动或重大黑天鹅风险？
+3. 【实战防套锦囊】：个人散户此刻应当追高、观望等待回调，还是果断止损防飞刀？给出明确防套点位与纪律。`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success(`已发起 [${name}] 异动 AI 归因排雷推演！`)
+}
+
+function triggerAiMarketAnomalySummary() {
+  if (!dataRef.value || dataRef.value.length === 0) {
+    message.warning('当前暂无异动数据，无法生成全景透视')
+    return
+  }
+  const bullishList = []
+  const bearishList = []
+  const industryCount = {}
+
+  for (const item of dataRef.value.slice(0, 50)) {
+    const name = item.stockName || item.StockName || item.name || ''
+    const typeName = item.typeName || item.TypeName || ''
+    const ind = item.industry || item.Industry || ''
+    if (ind) {
+      industryCount[ind] = (industryCount[ind] || 0) + 1
+    }
+    const isBull = ['火箭发射', '快速反弹', '大笔买入', '封涨停板', '60日新高'].includes(typeName)
+    if (isBull && bullishList.length < 5) {
+      bullishList.push(`${name}(${typeName})`)
+    } else if (!isBull && bearishList.length < 5) {
+      bearishList.push(`${name}(${typeName})`)
+    }
+  }
+
+  const hotIndustries = Object.entries(industryCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k, v]) => `${k}(${v}次)`)
+    .join('、') || '暂无集中行业'
+
+  const prompt = `【日内异动大盘资金全景透视】
+当前监控模式：${viewMode.value === 'realtime' ? '盘中实时' : '历史回溯'}
+异动记录总数：${paginationReactive.itemCount} 条
+异动高频聚焦行业：${hotIndustries}
+典型异动进攻代表：${bullishList.join('、') || '无'}
+典型异动承压代表：${bearishList.join('、') || '无'}
+
+请根据当前大面积盘中异动结构，用通俗干练的 3 点回答（150字以内）：
+1. 【主力资金动向】：日内主力大单是在快速建仓哪个赛道，还是借利好拉高出货？
+2. 【虚实辨析】：当前异动进攻的持续性如何？哪些容易是脉冲式一日游？
+3. 【散户避坑提醒】：当前盘面切忌什么样的追涨杀跌行为？给出实操风控忠告。`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success('已发起异动大盘全景 AI 透视！')
 }
 
 function checkTradingTime() {
@@ -511,7 +651,8 @@ async function fetchAllCurrentData() {
 
 onBeforeMount(() => {
   GetConfig().then(result => {
-    if (result.darkTheme) {
+    if (result && result.darkTheme) {
+      darkTheme.value = true
       document.documentElement.classList.add('dark')
     }
   })
@@ -566,6 +707,16 @@ onBeforeUnmount(() => {
             
             <n-button @click="fetchData" :loading="loadingRef" type="primary" size="small">
               刷新
+            </n-button>
+
+            <n-button
+              type="warning"
+              secondary
+              size="small"
+              @click="triggerAiMarketAnomalySummary"
+              :disabled="loadingRef || !dataRef.length"
+            >
+              ⚡ AI 异动大盘全景透视
             </n-button>
             
             <n-button v-if="viewMode === 'realtime'" @click="saveCurrentData" size="small">
@@ -693,12 +844,35 @@ onBeforeUnmount(() => {
         :pagination="viewMode === 'history' ? paginationReactive : false"
         :bordered="false"
         :max-height="500"
-        :scroll-x="1300"
+        :scroll-x="1460"
         striped
         size="small"
         @update:page="handlePageChange"
     />
   </n-card>
+
+  <n-modal
+    v-model:show="showKlineModal"
+    preset="card"
+    :title="(klineName || '') + ' (' + klineCode + ') — 多周期K线'"
+    style="width: 95vw; max-width: 1200px;"
+    :bordered="true"
+  >
+    <stock-lightweight-kline-chart
+      v-if="showKlineModal"
+      :dark-theme="darkTheme"
+      :key="'kline-' + klineCode"
+      :code="klineCode"
+      :stock-name="klineName"
+      :chart-height="500"
+    />
+  </n-modal>
+
+  <stock-diagnosis-drawer
+    v-model:show="showDiagnosisDrawer"
+    :stock-code="diagnosisStockCode"
+    :stock-name="diagnosisStockName"
+  />
 </template>
 
 <style scoped>

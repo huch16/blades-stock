@@ -448,10 +448,12 @@ function tearDownAllSubPanes() {
   ind.signalRatioBullish = removeSeriesSafe(ind.signalRatioBullish)
   ind.signalRatioBearish = removeSeriesSafe(ind.signalRatioBearish)
   ind.signalRatioNet = removeSeriesSafe(ind.signalRatioNet)
-  while (chart.panes().length > 1) {
-    chart.removePane(chart.panes().length - 1)
+  if (chart && typeof chart.panes === 'function') {
+    while (chart.panes().length > 1) {
+      chart.removePane(chart.panes().length - 1)
+    }
+    chart.panes()[0]?.setStretchFactor(1)
   }
-  chart.panes()[0]?.setStretchFactor(1)
 }
 
 const subLineOpts = {
@@ -496,7 +498,9 @@ function syncSubPaneIndicators(times, closes, highs, lows, vols) {
   if (showSignalRatio.value) subs.push('signalRatio')
   if (subs.length === 0) return
 
-  chart.panes()[0]?.setStretchFactor(3)
+  if (chart && typeof chart.panes === 'function') {
+    chart.panes()[0]?.setStretchFactor(3)
+  }
 
   let paneIdx = 1
   for (const key of subs) {
@@ -1343,8 +1347,10 @@ function syncSubPaneIndicators(times, closes, highs, lows, vols) {
     paneIdx++
   }
 
-  for (let i = 1; i < chart.panes().length; i++) {
-    chart.panes()[i].setStretchFactor(1)
+  if (chart && typeof chart.panes === 'function') {
+    for (let i = 1; i < chart.panes().length; i++) {
+      chart.panes()[i]?.setStretchFactor(1)
+    }
   }
 }
 
@@ -2832,7 +2838,11 @@ function syncLongPositionPriceLines() {
 
 function getLongDragPaneElement() {
   if (!chart) return chartContainerRef.value
-  return chart.panes()[0]?.getHTMLElement() ?? chartContainerRef.value
+  try {
+    return chart.panes?.()?.[0]?.getHTMLElement() ?? chartContainerRef.value
+  } catch {
+    return chartContainerRef.value
+  }
 }
 
 function longPaneLocalYFromClient(clientY) {
@@ -3199,9 +3209,10 @@ function toSeriesData(rows) {
   const candles = []
   const volumes = []
   if (!rows?.length) return { candles, volumes }
+  const isDayOrHigher = ['101', '102', '103', '104', '105'].includes(String(activeKlt.value))
   const sorted = [...rows].sort((a, b) => sortKey(a.day) - sortKey(b.day))
   for (const r of sorted) {
-    const t = toChartTime(r.day)
+    const t = toChartTime(r.day, isDayOrHigher)
     if (t === null) continue
     const o = Number(r.open)
     const h = Number(r.high)
@@ -3209,6 +3220,21 @@ function toSeriesData(rows) {
     const c = Number(r.close)
     const v = Number(r.volume)
     if (![o, h, l, c].every(Number.isFinite)) continue
+
+    const lastIdx = candles.length - 1
+    if (lastIdx >= 0 && candles[lastIdx].time === t) {
+      candles[lastIdx] = { time: t, open: o, high: h, low: l, close: c }
+      const up = c >= o
+      volumes[lastIdx] = {
+        time: t,
+        value: Number.isFinite(v) ? v : 0,
+        color: up ? 'rgba(239, 83, 80, 0.45)' : 'rgba(38, 166, 154, 0.45)',
+      }
+      continue
+    } else if (lastIdx >= 0 && t < candles[lastIdx].time) {
+      continue
+    }
+
     candles.push({ time: t, open: o, high: h, low: l, close: c })
     const up = c >= o
     volumes.push({
@@ -3268,7 +3294,7 @@ function disposeChart() {
   defaultLatestRawRow.value = null
   if (chart) {
     try {
-      const pe = chart.panes()[0]?.getHTMLElement()
+      const pe = chart.panes?.()?.[0]?.getHTMLElement()
       if (pe?.style) pe.style.cursor = ''
     } catch {
       /* ignore */
@@ -3568,19 +3594,22 @@ async function loadData() {
   }
   loading.value = true
   errorText.value = ''
+  const codeSnap = props.code
+  const kltSnap = activeKlt.value
   mergedRawRows = []
   mergedRawRowsVersion.value++
   syncDefaultLatestPanelRow()
   hasMoreOlder.value = true
   lastOlderHistoryEndTried = ''
   try {
-    const meta = INTERVALS.find((x) => x.klt === activeKlt.value) || INTERVALS[0]
+    const meta = INTERVALS.find((x) => x.klt === kltSnap) || INTERVALS[0]
     const result = await GetStockKLineWithFallback(
-      props.code,
+      codeSnap,
       props.stockName || '',
       meta.klt,
       meta.limit,
     )
+    if (codeSnap !== props.code || kltSnap !== activeKlt.value) return
     const src = result?.source || ''
     activeDataSource.value = src
     const raw = result?.data
@@ -3798,9 +3827,14 @@ watch(longCostStr, (v) => {
 
 onMounted(() => {
   nextTick(() => {
-    ensureChart()
-    loadData()
-    setupPoll()
+    try {
+      ensureChart()
+      loadData()
+      setupPoll()
+    } catch (e) {
+      errorText.value = `初始化失败: ${e?.message || e}`
+      console.error('StockLightweightKlineChart onMounted error:', e)
+    }
   })
 })
 
@@ -3812,16 +3846,24 @@ watch(
   () => props.code,
   () => {
     hoverRawRow.value = null
-    loadData()
-    setupPoll()
+    try {
+      loadData()
+      setupPoll()
+    } catch (e) {
+      console.error('StockLightweightKlineChart watch(props.code) error:', e)
+    }
   },
 )
 
 watch(activeKlt, () => {
   hoverRawRow.value = null
   chart?.applyOptions(chartThemeOptions(props.darkTheme))
-  loadData()
-  setupPoll()
+  try {
+    loadData()
+    setupPoll()
+  } catch (e) {
+    console.error('StockLightweightKlineChart watch(activeKlt) error:', e)
+  }
 })
 
 watch(

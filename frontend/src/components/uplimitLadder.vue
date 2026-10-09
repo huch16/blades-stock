@@ -1,6 +1,7 @@
 <script setup>
 import {onBeforeMount, onBeforeUnmount, ref, computed, h} from 'vue'
 import {GetConfig, GetUplimitHot, IsTradingTime, IsTradingDay, GetLatestTradingDay} from "../../wailsjs/go/main/App";
+import {EventsEmit} from "../../wailsjs/runtime";
 import {NButton, NText, NTag, NTooltip, NProgress, useMessage} from "naive-ui";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 
@@ -298,6 +299,96 @@ const relayPlates = computed(() => {
   })
 })
 
+const explodedCount = computed(() => explodedStocks.value.length)
+
+const brokenRate = computed(() => {
+  const zt = totalZtCount.value
+  const zb = explodedCount.value
+  if (zt + zb === 0) return 0
+  return Number(((zb / (zt + zb)) * 100).toFixed(1))
+})
+
+// 情绪红绿灯综合模型 (适合个人超短与波段防守)
+const sentimentLight = computed(() => {
+  const zt = totalZtCount.value
+  const max = maxCount.value
+  const zb = explodedCount.value
+  const rate = brokenRate.value
+
+  if (zt === 0 && zb === 0) {
+    return {
+      status: 'gray',
+      levelText: '⚪ 盘面待同步',
+      tagType: 'default',
+      shortDesc: '等待开盘或选择历史交易日查看',
+      actionAdvice: '当前暂无有效连板数据，可选择历史日期查看复盘。',
+      color: '#888',
+      lightBg: 'rgba(128, 128, 128, 0.08)'
+    }
+  }
+
+  // 1. 🔴 红灯（退潮期 / 风险警报）
+  if (rate >= 35 || (max <= 2 && rate >= 25 && zb >= 5) || (zt < 20 && rate >= 30)) {
+    return {
+      status: 'red',
+      levelText: '🔴 情绪退潮期 · 严防接飞刀',
+      tagType: 'error',
+      shortDesc: `炸板率高达 ${rate}%，高位亏钱效应加剧`,
+      actionAdvice: '【强纪律提示】：严禁盲目追高与接力后排中位板！多看少动，坚决空仓或轻仓防守。',
+      color: '#e03030',
+      lightBg: 'rgba(224, 48, 48, 0.08)'
+    }
+  }
+
+  // 2. 🟢 绿灯（主升期 / 活跃 / 可适度进攻）
+  if (max >= 4 && rate <= 22 && zt >= 28) {
+    return {
+      status: 'green',
+      levelText: '🟢 情绪主升活跃 · 赚钱效应良好',
+      tagType: 'success',
+      shortDesc: `高度打开至 ${max} 连板，炸板率仅 ${rate}%，核心龙头辨识度高`,
+      actionAdvice: '【进攻策略】：可顺势关注核心主线换手 1 进 2，或高标强分歧时的低吸机会，严设止损。',
+      color: '#18a058',
+      lightBg: 'rgba(24, 160, 88, 0.08)'
+    }
+  }
+
+  // 3. 🟡 黄灯（分歧期 / 淘汰赛 / 须谨慎甄别）
+  return {
+    status: 'yellow',
+    levelText: '🟡 情绪分歧淘汰 · 谨慎甄别',
+    tagType: 'warning',
+    shortDesc: `最高 ${max} 板，炸板率 ${rate}%，中位股分歧加大`,
+    actionAdvice: '【谨慎策略】：后排跟风容易吃面，不接缩量一字板，仅聚焦爆量换手企稳的低位核心或防守。',
+    color: '#f0a020',
+    lightBg: 'rgba(240, 160, 32, 0.08)'
+  }
+})
+
+function triggerAiRelayAnalysis() {
+  const topList = (ladderData.value[maxCount.value] || []).map(s => s.stock_name).join('、') || '暂无高标'
+  const relayPlatesStr = relayPlates.value.slice(0, 3).map(p => `${p.name}(${p.count}只)`).join('、') || '无明显主线'
+  const banLadderStr = banInfo.value.map(b => `${b.level}板:${b.count}只`).join(' | ') || '无'
+
+  const prompt = `【涨停梯队与连板短线实战推演】
+交易日期：${selectedDate.value}
+当前短线盘面关键数据：
+- 涨停总数：${totalZtCount.value} 只
+- 炸板总数：${explodedCount.value} 只（实际炸板率：${brokenRate.value}%）
+- 最高连板：${maxCount.value} 连板（高标龙头：${topList}）
+- 梯队分布：${banLadderStr}
+- 主线聚焦板块：${relayPlatesStr}
+- 系统短线情绪红绿灯：${sentimentLight.value.levelText}
+
+请以 10 年 A 股游资短线操盘手视角，用简洁通俗的三段话为个人交易者提供实战指引：
+1. 【今日情绪周期定性】：当前情绪处于什么阶段（启动/主升/分歧/退潮）？日内赚钱与亏钱效应在哪里？
+2. 【梯队结构与龙头健康度】：高标是加速还是分歧？炸板标的有什么共性特征？
+3. 【次日个人实战操作锦囊】：明天个人散户应该进攻还是管住手？如果出手，重点看几板（如 1 进 2 还是首板补涨）？给出严格的止损防套纪律。`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success('已将短线连板梯队数据送入 AI 助手推演！')
+}
+
 function getTypeColor(type) {
   if (!type) return 'default'
   if (type === '一') return '#e03030'
@@ -362,9 +453,9 @@ function toEastMoneyCode(code) {
   if (lower.startsWith('gb_')) return lower.slice(3).toUpperCase() + '.US'
   if (/^\d+$/.test(c)) {
     const d = c[0]
-    if (d === '6') return c + '.SH'
-    if (d === '0' || d === '3') return c + '.SZ'
-    if (d === '8' || d === '9') return c + '.BJ'
+    if (d === '6' || d === '5') return c + '.SH' // 6: 沪市A股/科创; 5: 沪市ETF/基金
+    if (d === '0' || d === '3' || d === '1') return c + '.SZ' // 0: 深市主板; 3: 创业板; 1: 深市ETF/LOF
+    if (d === '4' || d === '8' || d === '9') return c + '.BJ' // 北交所
     return c + '.SZ'
   }
   // 纯字母代码视为美股（如 AAPL → AAPL.US）
@@ -410,6 +501,52 @@ function showKline(code, name) {
               <n-button :type="activeView==='exploded'?'primary':'default'" size="small" @click="activeView='exploded'">炸板股</n-button>
             </n-space>
           </n-space>
+        </n-card>
+
+        <!-- 个人爱好者专属：短线连板情绪红绿灯与 AI 接力推演卡片 -->
+        <n-card
+          size="small"
+          :bordered="true"
+          class="sentiment-card"
+          :style="{ borderLeft: '4px solid ' + sentimentLight.color, background: sentimentLight.lightBg }"
+        >
+          <div class="sentiment-card-inner">
+            <div class="sentiment-left">
+              <div
+                class="traffic-light-dot"
+                :style="{ backgroundColor: sentimentLight.color, boxShadow: '0 0 10px ' + sentimentLight.color }"
+              />
+              <div class="sentiment-info">
+                <div class="sentiment-title-row">
+                  <span class="sentiment-status-title" :style="{ color: sentimentLight.color }">
+                    {{ sentimentLight.levelText }}
+                  </span>
+                  <n-tag size="tiny" round :type="brokenRate >= 30 ? 'error' : brokenRate >= 20 ? 'warning' : 'success'">
+                    炸板率 {{ brokenRate }}% ({{ explodedCount }}只炸板)
+                  </n-tag>
+                  <n-tag size="tiny" round type="info">
+                    最高 {{ maxCount }} 连板
+                  </n-tag>
+                  <n-tag size="tiny" round :bordered="false" style="opacity: 0.85;">
+                    {{ sentimentLight.shortDesc }}
+                  </n-tag>
+                </div>
+                <div class="sentiment-advice-text">
+                  {{ sentimentLight.actionAdvice }}
+                </div>
+              </div>
+            </div>
+            <div class="sentiment-right">
+              <n-button
+                type="primary"
+                size="small"
+                secondary
+                @click="triggerAiRelayAnalysis"
+              >
+                ⚡ 唤起 AI 梯队接力推演
+              </n-button>
+            </div>
+          </div>
         </n-card>
 
         <template v-if="activeView==='ladder'">
@@ -634,5 +771,56 @@ function showKline(code, name) {
 }
 :deep(.n-tag) {
   font-size: 12px;
+}
+.sentiment-card {
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+.sentiment-card-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.sentiment-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 280px;
+}
+.traffic-light-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+.sentiment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sentiment-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sentiment-status-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.sentiment-advice-text {
+  font-size: 12px;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+.sentiment-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 </style>

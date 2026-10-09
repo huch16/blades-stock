@@ -4,8 +4,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$env:PATH = "G:\stock\Go\bin;C:\Users\huch\go\bin;C:\Users\huch\AppData\Roaming\npm;C:\Windows\System32;C:\Windows;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Program Files\nodejs"
-$Root = "G:\stock\blades-stock"
+$env:PATH = "C:\Users\huch\go\go\bin;C:\Users\huch\go\bin;C:\Users\huch\AppData\Roaming\npm;C:\Windows\System32;C:\Windows;C:\Windows\System32\WindowsPowerShell\v1.0;C:\Program Files\nodejs"
+$Root = $PSScriptRoot
 $FrontendDir = "$Root\frontend"
 
 function Build-Frontend {
@@ -29,7 +29,7 @@ function Build-Go {
     try {
         # P3.4: build-time 自动重建 graph manifest
         Rebuild-Graph
-        go build -ldflags "-s -w -H=windowsgui" -o build/bin/blades-stock.exe .
+        go build -tags "desktop,production" -ldflags "-s -w -H=windowsgui" -o build/bin/blades-stock.exe .
         if ($LASTEXITCODE -ne 0) { throw "go build failed" }
         Write-Host "Go build OK: build/bin/blades-stock.exe" -ForegroundColor Green
     } finally {
@@ -82,7 +82,7 @@ function Build-Wails {
     Push-Location $Root
     try {
         $env:GOTOOLCHAIN = "go1.26.4"
-        wails build -skipbindings -skipembedcreate
+        wails build -skipbindings -skipembedcreate -tags "desktop,production"
         if ($LASTEXITCODE -ne 0) { throw "wails build failed" }
         Copy-DataDir
         Write-Host "Wails build OK" -ForegroundColor Green

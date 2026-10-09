@@ -10,16 +10,19 @@ import (
 func main() {
 	db.Init("data/stock.db")
 	logger.InitLogger()
-	fmt.Println("=== Testing FetchKLineWithFallback for sh600671 ===")
-	result := data.FetchKLineWithFallback("sh600671", "天目药业", "101", 30, "")
-	if result == nil || result.Data == nil || len(*result.Data) == 0 {
-		fmt.Println("Result: EMPTY")
-	} else {
-		fmt.Printf("Result: %d records, source=%s\n", len(*result.Data), result.Source)
-		for i, k := range *result.Data {
-			if i < 3 {
-				fmt.Printf("  %s: open=%s close=%s high=%s low=%s\n", k.Day, k.Open, k.Close, k.High, k.Low)
-			}
+
+	for _, pair := range [][2]string{
+		{"600671", "天目药业"},
+		{"510300", "沪深300ETF"},
+		{"159915", "创业板ETF"},
+	} {
+		code, name := pair[0], pair[1]
+		res := data.FetchKLineWithFallback(code, name, "101", 30, "")
+		if res != nil && res.Data != nil && len(*res.Data) > 0 {
+			last := (*res.Data)[len(*res.Data)-1]
+			fmt.Printf("✓ %s (%s): %d bars, src=%s, last=%s open=%s close=%s\n", code, name, len(*res.Data), res.Source, last.Day, last.Open, last.Close)
+		} else {
+			fmt.Printf("✗ %s (%s): FAILED\n", code, name)
 		}
 	}
 }

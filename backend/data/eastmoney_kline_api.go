@@ -44,7 +44,11 @@ func setEastMoneyKlineBrowserHeaders(r *resty.Request, referer string) {
 // fetchKLineJSONBytesByHTTP 每次调用均发起真实 GET，不缓存 K 线响应；cookieHeader 仅来自 chromedp 缓存或当次刷新。
 // 由于 Transport 设置了 DisableCompression=true，需要手动处理 gzip 解压。
 func (receiver *EastMoneyKLineApi) fetchKLineJSONBytesByHTTP(reqURL string) ([]byte, error) {
-	req := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut) * time.Second).R()
+	timeout := 10 * time.Second
+	if receiver.config != nil && receiver.config.CrawlTimeOut > 0 {
+		timeout = time.Duration(receiver.config.CrawlTimeOut) * time.Second
+	}
+	req := receiver.client.SetTimeout(timeout).R()
 	setEastMoneyKlineBrowserHeaders(req, "https://quote.eastmoney.com")
 	// 使用缓存的 Cookie，pageURL 参数传空字符串由函数内部使用默认值
 	//cookieHeader, err := FetchEastMoneyCookiesViaChromedp("", time.Second*5, reqURL)
@@ -337,6 +341,7 @@ func (receiver *EastMoneyKLineApi) GetAdjustedKLine(stockCode, adjustType string
 // 输入：000001 或 sz000001 或 000001.SZ
 // 输出：0.000001 或 1.600000
 func (receiver *EastMoneyKLineApi) convertStockCode(stockCode string) string {
+	stockCode = cleanCodeOnly(stockCode)
 	stockCode = strings.ToUpper(strings.TrimSpace(stockCode))
 
 	// 如果已经包含点号，说明是标准格式
@@ -385,19 +390,19 @@ func (receiver *EastMoneyKLineApi) convertStockCode(stockCode string) string {
 		}
 	}
 
-	// 纯数字代码，根据代码规则判断市场
-	if len(stockCode) >= 1 && validator.IsNumber(stockCode) {
+	// 纯数字代码，根据代码规则判断市场（支持股票与ETF基金）
+	if len(stockCode) >= 1 && validator.IsNumberStr(stockCode) {
 		firstChar := stockCode[0:1]
 		switch firstChar {
-		case "6": // 沪市主板
+		case "6", "5": // 6: 沪市主板/科创板; 5: 沪市ETF/封闭式基金 (如510300, 588000)
 			return "1." + stockCode
-		case "8", "9": // 北交所
+		case "0", "3", "1": // 0: 深市主板; 3: 创业板; 1: 深市ETF/LOF/基金 (如159915, 161725)
 			return "0." + stockCode
-		case "0", "3": // 深市
+		case "4", "8", "9": // 北交所 / 新三板
 			return "0." + stockCode
 		default:
 			// 其他情况默认按深市处理
-			return stockCode
+			return "0." + stockCode
 		}
 	}
 

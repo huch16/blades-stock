@@ -10,6 +10,8 @@ import sparkLine from "./stockSparkLine.vue"
 import klineChart from "./KLineChart.vue"
 import KLineChart from "./KLineChart.vue";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
+import StockDiagnosisDrawer from "./StockDiagnosisDrawer.vue";
+import {EventsEmit} from "../../wailsjs/runtime";
 import {FolderOpenOutline, AddOutline} from "@vicons/ionicons5";
 import {format} from "date-fns";
 
@@ -40,6 +42,67 @@ const loadingRef = ref(false)
 const multiKlineModalShow = ref(false)
 const multiKlineCode = ref('')
 const multiKlineName = ref('')
+
+const showDiagnosisDrawer = ref(false)
+const diagnosisStockCode = ref('')
+const diagnosisStockName = ref('')
+
+function openDiagnosisDrawer(row) {
+  const em = toEastMoneyCodeFromSecucode(row.SECUCODE)
+  diagnosisStockCode.value = em
+  diagnosisStockName.value = row.SECURITY_NAME_ABBR || ''
+  showDiagnosisDrawer.value = true
+}
+
+function triggerAiShapeAnalysis(row) {
+  const code = row.SECUCODE || ''
+  const name = row.SECURITY_NAME_ABBR || ''
+  const price = row.NEW_PRICE || '-'
+  const changeRate = row.CHANGE_RATE ? `${row.CHANGE_RATE}%` : '-'
+  const industry = row.INDUSTRY || '未分类'
+  const concept = typeof row.CONCEPT === 'string' ? row.CONCEPT : (Array.isArray(row.CONCEPT) ? row.CONCEPT.join(', ') : '无')
+  const volumeRatio = row.VOLUME_RATIO || '-'
+  const turnover = row.TURNOVERRATE ? `${row.TURNOVERRATE}%` : '-'
+
+  const prompt = `【个股量价形态 AI 实战推演】
+标的：${name} (${code})
+所属行业：${industry} | 核心概念：${concept}
+最新价：${price} 元 | 涨跌幅：${changeRate}
+换手率：${turnover} | 量比：${volumeRatio}
+
+请以游资操盘手与量化技术分析师视角，对该股票当前量价形态进行 150 字深度推演：
+1. 【量价结构辨析】：当前量价结构（如放量蓄势、缩量回踩、均线粘合突破等）是否扎实？是真合力还是主力做图诱多？
+2. 【买卖点与止损】：次日进场博弈的关键低吸/确认买点在哪里？关键防守支撑与失效止损底线在哪里？
+3. 【纪律锦囊】：给出 1 条针对该股的核心实盘防坑建议。`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success(`已发起 [${name}] 形态 AI 推演！`)
+}
+
+function triggerAiShapeListSummary() {
+  if (!dataRef.value || dataRef.value.length === 0) {
+    message.warning('当前列表无数据，无法进行推演')
+    return
+  }
+
+  const total = paginationReactive.itemCount || dataRef.value.length
+  const samples = dataRef.value.slice(0, 10).map(item => {
+    const rate = item.CHANGE_RATE ? `${item.CHANGE_RATE}%` : '0%'
+    return `${item.SECURITY_NAME_ABBR}(${rate}, ${item.INDUSTRY || '无'})`
+  })
+
+  const prompt = `【AI 形态选股列表共振推演与操盘计划】
+当前形态/筛选池标的数：共 ${total} 只
+前列重点代表样本：${samples.join('； ')}
+
+请以资深投资经理与短线交易教练视角，对当前形态列表进行共振研判（200字以内）：
+1. 【板块共振效应】：这批形态走强的个股，是否高度集中在某些特定主线行业（形成板块协同攻势），还是各板块孤立异动？
+2. 【形态虚实辨析】：在大盘当前市场环境下，该形态（如连续放量、连涨突破等）的实际胜率与炸板风险如何？
+3. 【实战选强与仓位】：如何从这批标的中选出最强的排头兵？给出严格的仓位管理与买入防线。`
+
+  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  message.success('已发起形态列表 AI 共振推演！')
+}
 
 async function showMultiKline(row) {
   const em = toEastMoneyCodeFromSecucode(row.SECUCODE)
@@ -313,13 +376,35 @@ const columnsRef = ref([
   // },
   {
     title: '操作',
+    width: 260,
+    fixed: 'right',
     render(row, index) {
       return [h(
           NButton,
           {
             secondary: true,
-            size: 'small',
-            type: 'warning', // 橙色按钮
+            size: 'tiny',
+            type: 'primary',
+            onClick: () => triggerAiShapeAnalysis(row)
+          },
+          { default: () => '⚡ 推演' }
+      ), h(
+          NButton,
+          {
+            secondary: true,
+            size: 'tiny',
+            type: 'info',
+            style: 'margin-left: 4px;',
+            onClick: () => openDiagnosisDrawer(row)
+          },
+          { default: () => '📊 诊断' }
+      ), h(
+          NButton,
+          {
+            secondary: true,
+            size: 'tiny',
+            type: 'warning',
+            style: 'margin-left: 4px;',
             onClick: () => showKline(row)
           },
           { default: () => '日K' }
@@ -327,8 +412,8 @@ const columnsRef = ref([
           NButton,
           {
             secondary: true,
-            size: 'small',
-            type: 'primary',
+            size: 'tiny',
+            type: 'default',
             style: 'margin-left: 4px;',
             onClick: () => showMultiKline(row)
           },
@@ -346,7 +431,7 @@ const columnsRef = ref([
                 NButton,
                 {
                   tertiary: true,
-                  size: 'small',
+                  size: 'tiny',
                   type: 'success',
                   style: 'margin-left: 4px;',
                 },
@@ -707,6 +792,14 @@ const toNumber = (value, defaultValue = 0) => {
       搜索
     </n-button>
       <n-button @click="handleReset">重置</n-button>
+      <n-button
+        type="warning"
+        secondary
+        @click="triggerAiShapeListSummary"
+        :disabled="loadingRef || !dataRef.length"
+      >
+        ⚡ AI 形态共振推演
+      </n-button>
 
     </n-input-group>
     <!-- 数据表格 -->
@@ -775,6 +868,12 @@ const toNumber = (value, defaultValue = 0) => {
       </n-form-item>
     </n-form>
   </n-modal>
+
+  <stock-diagnosis-drawer
+    v-model:show="showDiagnosisDrawer"
+    :stock-code="diagnosisStockCode"
+    :stock-name="diagnosisStockName"
+  />
 </template>
 
 <style scoped>

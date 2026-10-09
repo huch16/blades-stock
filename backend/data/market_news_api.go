@@ -674,13 +674,19 @@ func (m MarketNewsApi) GetCachedGlobalStockIndexesReadable(region string) string
 func (m MarketNewsApi) GetIndustryRank(sort string, cnt int) map[string]any {
 
 	url := fmt.Sprintf("https://proxy.finance.qq.com/ifzqgtimg/appstock/app/mktHs/rank?l=%d&p=1&t=01/averatio&ordertype=&o=%s", cnt, sort)
-	response, _ := SharedHTTPClient.SetTimeout(time.Duration(5)*time.Second).R().
+	response, err := SharedHTTPClient.SetTimeout(time.Duration(5)*time.Second).R().
 		SetHeader("Referer", "https://stockapp.finance.qq.com/").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36 Edg/117.0.2045.60").
 		Get(url)
-	js := string(response.Body())
+	if err != nil {
+		logger.SugaredLogger.Warnf("GetIndustryRank 请求失败: %v", err)
+		return map[string]any{}
+	}
 	res := make(map[string]any)
-	json.Unmarshal([]byte(js), &res)
+	if err := json.Unmarshal(response.Body(), &res); err != nil {
+		logger.SugaredLogger.Warnf("GetIndustryRank 解析失败: %v", err)
+		return map[string]any{}
+	}
 	return res
 }
 

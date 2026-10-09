@@ -34,7 +34,15 @@ main.go / app.go // 应用入口与平台适配
 
 ## 架构：各组件如何协同
 
-### Agent 管道
+### Agent 管道与量化智能功能矩阵
+
+本项目已全面升级为具备**多模型容灾、全生命周期交易流、双核心量化技能、3D 诊股与向量化回测**的桌面量化智能中枢：
+1. **智能中枢与生命周期推演**：盘前前瞻、盘中实时盯盘、盘后复盘、ETF 动量轮动与 Serenity 产业链拆解；
+2. **多模型容灾与透明修复**：支持主备 LLM 自动切换与工具参数自愈中间件；
+3. **3D 量化个股智能诊断**：技术面动量、资金面博弈与基本面估值三维打分，配合闭环预测跟踪；
+4. **纯 Go VectorBT 回测引擎**：无缝调用内存级矩阵回测与多指标策略模拟。
+
+> 详见完整系统架构文档：[`docs/intelligent_capabilities_architecture.md`](docs/intelligent_capabilities_architecture.md)
 
 后端以 `GetStockAiAgent()` 为入口（`backend/agent/agent.go`），创建 `blades.Agent` 并注入 model provider、工具集与中间件。工具集合既有本地实现也可通过 MCP（remote tool servers）动态加载。
 
