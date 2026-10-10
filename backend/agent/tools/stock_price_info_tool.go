@@ -15,12 +15,19 @@ func GetQueryStockPriceInfoTool() bladesTools.Tool {
 			"stockCodes": {Type: "string", Desc: "股票代码,多个,隔开,股票代码必须转化为sh或者sz或者hk开头的形式,例如：sz399001,sh600859", Required: true},
 		},
 		func(args string) (string, error) {
+			if strings.TrimSpace(args) == "" {
+				args = "{}"
+			}
 			parms := map[string]any{}
 			err := json.Unmarshal([]byte(args), &parms)
 			if err != nil {
-				return "", err
+				return "参数解析失败", nil
 			}
-			stockCodes := strings.Split(parms["stockCodes"].(string), ",")
+			rawCodes, ok := parms["stockCodes"].(string)
+			if !ok || strings.TrimSpace(rawCodes) == "" {
+				return "请提供有效的股票代码列表", nil
+			}
+			stockCodes := strings.Split(rawCodes, ",")
 			var codes []string
 			for _, code := range stockCodes {
 				codes = append(codes, GetStockCode(code))

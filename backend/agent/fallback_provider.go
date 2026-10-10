@@ -75,22 +75,51 @@ func (f *FallbackModelProvider) Generate(ctx context.Context, req *blades.ModelR
 	return nil, fmt.Errorf("所有模型均调用失败 (包含 %d 个降级模型), 最后错误: %w", len(f.fallbacks), lastErr)
 }
 
-// NewStreaming 实现流式输出（如果主模型失败，则尝试备用模型的流）
+// NewStreaming 实现流式输出（具备故障自动转移到备用模型的能力）
 func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.ModelRequest) blades.Generator[*blades.ModelResponse, error] {
-	// 尝试主模型流式
-	gen := f.primary.NewStreaming(ctx, req)
-	if gen != nil {
-		return gen
-	}
+	return func(yield func(*blades.ModelResponse, error) bool) {
+		allProviders := append([]blades.ModelProvider{f.primary}, f.fallbacks...)
+		names := f.names
 
-	for _, fallback := range f.fallbacks {
-		fbGen := fallback.NewStreaming(ctx, req)
-		if fbGen != nil {
-			return fbGen
+		for idx, prov := range allProviders {
+			gen := prov.NewStreaming(ctx, req)
+			if gen == nil {
+				continue
+			}
+
+			yieldedAny := false
+			failed := false
+
+			gen(func(resp *blades.ModelResponse, err error) bool {
+				if err != nil {
+					// 如果第一个 chunk 就报错（且还有备用模型），标记失败由外层切换
+					if !yieldedAny && idx+1 < len(allProviders) {
+						failed = true
+						curName := "unknown"
+						if idx < len(names) {
+							curName = names[idx]
+						}
+						nextName := "unknown"
+						if idx+1 < len(names) {
+							nextName = names[idx+1]
+						}
+						logger.SugaredLogger.Warnf("⚠️ [FallbackModelProvider] 模型 [%s] 流式调用首包失败: %v, 自动降级切换至 [%s]...", curName, err, nextName)
+						return false // 停止当前 generator
+					}
+					// 已经吐过内容或无备选模型，正常将错误 yield 出去
+					return yield(resp, err)
+				}
+
+				yieldedAny = true
+				return yield(resp, nil)
+			})
+
+			// 如果没失败（正常结束），或者已经输出了内容，则结束整个 fallback 流程
+			if !failed {
+				return
+			}
 		}
 	}
-
-	return nil
 }
 
 // BuildFallbackProvidersFromDB 从数据库或全局配置中获取备用的 AIConfig 并实例化 Provider

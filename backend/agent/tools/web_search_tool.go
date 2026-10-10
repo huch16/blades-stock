@@ -2,6 +2,7 @@ package tools
 
 import (
 	"encoding/json"
+	"strings"
 	"blades-stock/backend/agent/types"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
@@ -18,10 +19,13 @@ func GetWebSearchTool() bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			logger.SugaredLogger.Infof("WebSearch called with args: %s", args)
+			if strings.TrimSpace(args) == "" {
+				args = "{}"
+			}
 			parms := map[string]any{}
 			if err := json.Unmarshal([]byte(args), &parms); err != nil {
 				logger.SugaredLogger.Errorf("WebSearch unmarshal error: %v", err)
-				return "", err
+				return "搜索参数解析失败，请输入有效的查询关键词", nil
 			}
 			query, ok := parms["query"].(string)
 			if !ok || query == "" {

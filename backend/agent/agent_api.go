@@ -467,14 +467,17 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			logger.SugaredLogger.Errorf("agent run error: %v", agentErr)
 
 			errMsg := fmt.Sprintf("❌ Agent 调用失败：%v", agentErr)
+			lowerErr := strings.ToLower(agentErr.Error())
 			if _, ok := agentErr.(data.DegenerateOutputError); ok {
 				errMsg = "❌ 模型输出异常：检测到乱码(<unk>)流，已自动重试仍失败。\n\n**建议**：请重试一次；若反复出现，请切换 AI 配置中的模型。"
-			} else if strings.Contains(agentErr.Error(), "exceeds max iterations") {
+			} else if strings.Contains(lowerErr, "unexpected end of json input") || lowerErr == "eof" || strings.Contains(lowerErr, "unexpected eof") {
+				errMsg = "❌ 模型服务响应中断：模型服务端返回了空响应或流式传输被意外切断 (unexpected end of JSON input)。\n\n**可能原因**：\n1. 当前大模型服务商（如 MiniMax/DeepSeek）瞬时过载、限流或网络握手重置\n2. 上下文或搜索内容较长触发了网关传输截断\n\n**解决方案**：\n1. 系统已尝试自动重试，请直接重新点击发送或换一个问题重试\n2. 建议在「AI配置」中配置备用模型，或开启 Fallback 多模型自动降级机制"
+			} else if strings.Contains(lowerErr, "exceeds max iterations") {
 				errMsg += "\n\n**可能原因**：模型在执行过程中进行了过多轮工具调用仍无法收敛，可能陷入了循环。\n\n**解决方案**：\n1. 尝试更精确地描述你的问题，减少模糊性\n2. 切换到支持更长上下文或更强推理能力的模型\n3. 简化查询条件"
-			} else if strings.Contains(agentErr.Error(), "reasoning") || strings.Contains(agentErr.Error(), "thinking") {
+			} else if strings.Contains(lowerErr, "reasoning") || strings.Contains(lowerErr, "thinking") {
 				errMsg += "\n\n**可能原因**：当前模型开启了 thinking/reasoning 模式，但该模式与 Agent 工具调用不兼容。\n\n**解决方案**：请在 AI 配置中关闭 thinking 模式，或切换到支持工具调用的模型（如 deepseek-chat、gpt-4o 等）。"
 			} else if isTransientModelError(agentErr) {
-				errMsg += "\n\n**提示**：模型服务端暂时繁忙（限流/过载），已自动重试仍失败，请稍后再试或切换其他 AI 配置。"
+				errMsg += "\n\n**提示**：模型服务端暂时繁忙（限流/过载/网络中断），已自动重试仍失败，请稍后再试或切换其他 AI 配置。"
 			}
 
 			ch <- &StreamMessage{
@@ -617,6 +620,15 @@ func isTransientModelError(err error) bool {
 		"overloaded", "too many requests", "request limit reached",
 		"temporarily unavailable", "try again later", "server busy", "service busy",
 		"over capacity",
+		"unexpected end of json input",
+		"unexpected eof",
+		"eof",
+		"connection reset by peer",
+		"broken pipe",
+		"wsarecv",
+		"timeout awaiting response headers",
+		"context deadline exceeded",
+		"client.timeout exceeded",
 	}
 	for _, m := range markers {
 		if strings.Contains(lower, m) {
