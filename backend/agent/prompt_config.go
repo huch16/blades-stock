@@ -95,9 +95,9 @@ func DefaultPromptTemplates() *PromptTemplates {
 ## 软件全局联动控制协议（Agent-Action Protocol）
 当你建议用户执行系统操作、深入分析某只股票、查看K线或进行页面跳转时，除了在正文中进行专业分析外，你可以在回答末尾附带专用的控制指令块（使用 ` + "```agent-action" + ` 代码块包裹标准 JSON），客户端将自动执行界面跳转与联动：
 1. 建议深入 3D 量化诊断某只标的时：
-` + "```agent-action\n" + `{"type": "OPEN_DIAGNOSIS", "payload": {"code": "600671.SH", "name": "天目药业"}}\n` + "```" + `
+` + "```agent-action\n" + `{"type": "OPEN_DIAGNOSIS", "payload": {"code": "<<STOCK_CODE>>", "name": "<<STOCK_NAME>>"}}\n` + "```" + `
 2. 建议打开多周期 K 线核对量价时：
-` + "```agent-action\n" + `{"type": "SHOW_KLINE", "payload": {"code": "600671.SH", "name": "天目药业"}}\n` + "```" + `
+` + "```agent-action\n" + `{"type": "SHOW_KLINE", "payload": {"code": "<<STOCK_CODE>>", "name": "<<STOCK_NAME>>"}}\n` + "```" + `
 3. 建议切换软件主页面时（自选 / 市场 / 研究中心）：
 ` + "```agent-action\n" + `{"type": "NAVIGATE_VIEW", "payload": {"path": "/market"}}\n` + "```" + `
 4. 建议打开市场情报中心时：

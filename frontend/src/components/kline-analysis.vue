@@ -7,12 +7,12 @@ import {
   NAutoComplete, NButton, NFlex, NText, NInputGroup,
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
-import { onBeforeMount, onMounted, onBeforeUnmount, ref } from 'vue'
+import { onBeforeMount, onMounted, onBeforeUnmount, ref, computed } from 'vue'
 
 const message = useMessage()
 const searchQuery = ref('')
-const selectedCode = ref('000001.SH')
-const selectedName = ref('上证指数')
+const selectedCode = ref('')
+const selectedName = ref('')
 const stockList = ref([])
 const options = ref([])
 const darkTheme = ref(false)
@@ -23,10 +23,14 @@ let stockChangeHandler = null
 
 // AI 深度量化诊断状态
 const diagnosisDrawerVisible = ref(false)
+const diagnosisLoading = ref(false)
+
+// 只有在已选择具体股票时才允许三维诊断
+const canDiagnose = computed(() => !!selectedCode.value)
 
 function handleDiagnose() {
-  if (!selectedCode.value) {
-    message.warning('请先选择股票')
+  if (!canDiagnose.value) {
+    message.warning('请先在上方搜索或选择一只具体股票后再发起三维诊断')
     return
   }
   diagnosisDrawerVisible.value = true
@@ -177,6 +181,7 @@ onBeforeUnmount(() => {
             secondary
             size="small"
             :loading="diagnosisLoading"
+            :disabled="!canDiagnose"
             @click="handleDiagnose"
           >
             <template #icon>
@@ -188,6 +193,7 @@ onBeforeUnmount(() => {
       </NFlex>
     </div>
     <StockLightweightKlineChart
+      v-if="selectedCode"
       :key="selectedCode"
       :code="selectedCode"
       :stockName="selectedName"
@@ -195,6 +201,11 @@ onBeforeUnmount(() => {
       :chartHeight="chartHeight"
       :realtimeIntervalMs="60000"
     />
+    <div v-else class="kline-empty-placeholder">
+      <NText depth="3" style="font-size: 14px">
+        🔍 请在上方搜索框输入股票名称或代码以加载 K 线与三维诊断
+      </NText>
+    </div>
 
     <div class="kline-search-bar">
       <n-input-group>
@@ -317,5 +328,19 @@ onBeforeUnmount(() => {
 .kline-analysis-page--dark .dim-evaluation {
   background: rgba(255, 255, 255, 0.05);
   color: #bbb;
+}
+.kline-empty-placeholder {
+  width: 100%;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--n-border-color, #ccc);
+  border-radius: 6px;
+  margin: 12px 0;
+  background: rgba(0, 0, 0, 0.02);
+}
+.kline-analysis-page--dark .kline-empty-placeholder {
+  background: rgba(255, 255, 255, 0.05);
 }
 </style>
