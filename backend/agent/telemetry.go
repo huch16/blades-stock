@@ -25,16 +25,29 @@ var (
 	mcpConnectDuration metric.Float64Histogram
 )
 
-func init() {
-	// If METRICS_EXPORTER=prometheus, create a Prometheus exporter (placeholder).
+// StartMetricsExporter creates and initializes the metrics exporter according to
+// the METRICS_EXPORTER environment variable. This was previously done in a
+// package init() and is now exposed so the application can control lifecycle
+// (when to start/stop exporters and HTTP servers).
+//
+// Current behavior:
+// - if METRICS_EXPORTER=prometheus, call otelpromexp.New() to create a
+//   Prometheus exporter. This does NOT start an HTTP server; the caller should
+//   start an HTTP handler to expose /metrics if desired.
+func StartMetricsExporter(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if exporter := os.Getenv("METRICS_EXPORTER"); exporter == "prometheus" {
 		_, err := otelpromexp.New()
 		if err != nil {
 			logger.SugaredLogger.Errorf("Failed to create prometheus exporter: %v", err)
-		} else {
-			logger.SugaredLogger.Infof("Prometheus exporter created (HTTP server not implemented).")
+			return err
 		}
+		logger.SugaredLogger.Infof("Prometheus exporter created (HTTP server not implemented).")
 	}
+	return nil
 }
 
 func initMetrics() {
@@ -53,7 +66,7 @@ func initMetrics() {
 
 		llmFirstChunkDelay, err = meter.Float64Histogram(
 			"agent_llm_first_chunk_latency_ms",
-			metric.WithDescription("Agent LLM 首包响应延迟(毫秒)"),
+			metric.WithDescription("Agent LLM 首包���应延迟(毫秒)"),
 			metric.WithUnit("ms"),
 		)
 		if err != nil {
