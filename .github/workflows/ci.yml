@@ -46,5 +46,14 @@ jobs:
         run: go build -tags "desktop,production" ./...
       - name: Vet
         run: go vet -tags "desktop,production" ./...
-      - name: Test
-        run: go test -tags "desktop,production" -run "^Test" -skip "integration" ./...
+      - name: Test with coverage
+        run: |
+          go test -tags "desktop,production" -run "^Test" -skip "integration" -coverprofile=cover.out ./...
+          # Show coverage per function
+          go tool cover -func=cover.out
+          # Calculate total coverage
+          TOTAL=$(go tool cover -func=cover.out | grep ^total: | awk '{print $3}' | sed 's/%//')
+          if (( $(echo "$TOTAL < 60.0" | bc -l) )); then
+            echo "Coverage below 60%"
+            exit 1
+          fi

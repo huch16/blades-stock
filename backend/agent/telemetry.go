@@ -2,12 +2,14 @@ package agent
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
 	"blades-stock/backend/logger"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	otelpromexp "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -22,6 +24,18 @@ var (
 	retryCounter       metric.Int64Counter
 	mcpConnectDuration metric.Float64Histogram
 )
+
+func init() {
+	// If METRICS_EXPORTER=prometheus, create a Prometheus exporter (placeholder).
+	if exporter := os.Getenv("METRICS_EXPORTER"); exporter == "prometheus" {
+		_, err := otelpromexp.New()
+		if err != nil {
+			logger.SugaredLogger.Errorf("Failed to create prometheus exporter: %v", err)
+		} else {
+			logger.SugaredLogger.Infof("Prometheus exporter created (HTTP server not implemented).")
+		}
+	}
+}
 
 func initMetrics() {
 	meterInitOnce.Do(func() {
