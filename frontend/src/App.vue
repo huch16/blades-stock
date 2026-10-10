@@ -30,6 +30,9 @@ import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime
 import FloatingAiAssistant from "./components/FloatingAiAssistant.vue";
 import FloatingAgentAssistant from "./components/FloatingAgentAssistant.vue";
 import MarketIntelligenceDrawer from "./components/MarketIntelligenceDrawer.vue";
+import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
+import StockLightweightKlineChart from "./components/StockLightweightKlineChart.vue";
+import { initAgentControlBus, registerAgentActionHandler } from "./utils/agentControlBus";
 import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
 import {ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
 import {LocalFireDepartmentRound} from "@vicons/material";
@@ -60,6 +63,58 @@ const showMarketIntelligenceDrawer = ref(false)
 const marketIntelligenceType = ref('pre_market_briefing')
 const marketIntelligenceSerenityTarget = ref('')
 let marketStatusTimer = null
+
+// Agent 全局控制总线状态
+const { dialog: globalDialog, message: globalMessage } = createDiscreteApi(['dialog', 'message'])
+const showAgentDiagnosisDrawer = ref(false)
+const agentDiagnosisStockCode = ref('')
+const agentDiagnosisStockName = ref('')
+const showAgentKlineModal = ref(false)
+const agentKlineCode = ref('')
+const agentKlineName = ref('')
+
+initAgentControlBus()
+registerAgentActionHandler((action) => {
+  if (!action || !action.type) return
+  console.log('[AgentControlBus] Received action:', action)
+  switch (action.type) {
+    case 'NAVIGATE_VIEW':
+      if (action.payload?.path) {
+        router.push(action.payload.path)
+        const key = action.payload.path.replace('/', '') || 'stock'
+        activeKey.value = key
+        globalMessage.info(`🤖 Agent 已为您导航至页面：${action.payload.path}`)
+      }
+      break
+    case 'OPEN_DIAGNOSIS':
+      if (action.payload?.code) {
+        agentDiagnosisStockCode.value = action.payload.code
+        agentDiagnosisStockName.value = action.payload.name || ''
+        showAgentDiagnosisDrawer.value = true
+        globalMessage.info(`🤖 Agent 已为您调起 3D 量化诊断抽屉：${agentDiagnosisStockName.value || agentDiagnosisStockCode.value}`)
+      }
+      break
+    case 'OPEN_MARKET_INTELLIGENCE':
+      onOpenMarketIntelligence(action.payload?.tab || 'pre_market_briefing', action.payload?.target)
+      globalMessage.info('🤖 Agent 已为您打开市场情报中心')
+      break
+    case 'SHOW_KLINE':
+      if (action.payload?.code) {
+        agentKlineCode.value = action.payload.code
+        agentKlineName.value = action.payload.name || ''
+        showAgentKlineModal.value = true
+        globalMessage.info(`🤖 Agent 已为您调起 K 线图：${agentKlineName.value || agentKlineCode.value}`)
+      }
+      break
+    case 'DISCIPLINE_ALERT':
+      globalDialog.warning({
+        title: action.payload?.title || '⚠️ 操盘纪律强风控预警',
+        content: action.payload?.message || '当前大盘处于高风险期，请严格遵守既定止损纪律，拒绝冲动操作！',
+        positiveText: '严格遵守风控纪律',
+      })
+      break
+  }
+})
 
 function onOpenMarketIntelligence(type, target) {
   marketIntelligenceType.value = type || 'pre_market_briefing'
@@ -1178,6 +1233,33 @@ onMounted(() => {
                 :report-type="marketIntelligenceType"
                 :initial-serenity-target="marketIntelligenceSerenityTarget"
               />
+              <!-- 全局 Agent 控制抽屉与模态框 -->
+              <StockDiagnosisDrawer
+                v-model:show="showAgentDiagnosisDrawer"
+                :stock-code="agentDiagnosisStockCode"
+                :stock-name="agentDiagnosisStockName"
+              />
+              <n-modal
+                v-model:show="showAgentKlineModal"
+                :title="`[AI 联动] ${agentKlineName} (${agentKlineCode}) K线图`"
+                preset="card"
+                style="width: min(1100px, 96vw); max-width: 96vw; box-sizing: border-box"
+                :content-style="{
+                  maxHeight: 'min(85vh, 820px)',
+                  overflowY: 'auto',
+                  overflowX: 'hidden',
+                  minWidth: 0,
+                  boxSizing: 'border-box',
+                }"
+              >
+                <StockLightweightKlineChart
+                  v-if="showAgentKlineModal && agentKlineCode"
+                  :key="'agent-kline-' + agentKlineCode"
+                  :code="agentKlineCode"
+                  :stock-name="agentKlineName"
+                  :chart-height="500"
+                />
+              </n-modal>
               <n-flex>
                 <n-grid x-gap="12" :cols="1">
                   <n-gi>

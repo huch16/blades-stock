@@ -201,6 +201,9 @@ func (a *App) ChatWithAgent(question string, aiConfigId int, sysPromptId *int, m
 	ch := agent.NewStockAiAgentApi().ChatWithContext(ctx, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, sessionId)
 	for msg := range ch {
 		runtime.EventsEmit(a.ctx, "agent-message", agentMessageToFrontendMap(msg))
+		if len(msg.Actions) > 0 {
+			runtime.EventsEmit(a.ctx, "agent:action", msg.Actions)
+		}
 	}
 	// agent-DONE is already emitted inside ChatWithContext before closing the channel
 }

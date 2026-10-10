@@ -150,7 +150,12 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 }
 
 func personalityPrompt() string {
-	return GetPromptTemplates().Personality
+	base := GetPromptTemplates().Personality
+	sensor := GetGlobalMarketSensor()
+	if snapshot := sensor.GetSnapshot(); snapshot != nil && snapshot.SummaryPrompt != "" {
+		base += "\n\n" + snapshot.SummaryPrompt
+	}
+	return base
 }
 
 func ReasoningMiddleware(next blades.Handler) blades.Handler {

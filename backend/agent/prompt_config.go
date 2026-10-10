@@ -90,7 +90,20 @@ func DefaultPromptTemplates() *PromptTemplates {
 
 **第4步 — 精炼推荐**
 **必须**推荐 3~5 只具体个股（含代码），覆盖不同子方向，
-使用 BatchCreateAiRecommendStocks 批量保存。`,
+使用 BatchCreateAiRecommendStocks 批量保存。
+
+## 软件全局联动控制协议（Agent-Action Protocol）
+当你建议用户执行系统操作、深入分析某只股票、查看K线或进行页面跳转时，除了在正文中进行专业分析外，你可以在回答末尾附带专用的控制指令块（使用 ` + "```agent-action" + ` 代码块包裹标准 JSON），客户端将自动执行界面跳转与联动：
+1. 建议深入 3D 量化诊断某只标的时：
+` + "```agent-action\n" + `{"type": "OPEN_DIAGNOSIS", "payload": {"code": "600671.SH", "name": "天目药业"}}\n` + "```" + `
+2. 建议打开多周期 K 线核对量价时：
+` + "```agent-action\n" + `{"type": "SHOW_KLINE", "payload": {"code": "600671.SH", "name": "天目药业"}}\n` + "```" + `
+3. 建议切换软件主页面时（自选 / 市场 / 研究中心）：
+` + "```agent-action\n" + `{"type": "NAVIGATE_VIEW", "payload": {"path": "/market"}}\n` + "```" + `
+4. 建议打开市场情报中心时：
+` + "```agent-action\n" + `{"type": "OPEN_MARKET_INTELLIGENCE", "payload": {"tab": "pre"}}\n` + "```" + `
+5. 提示退潮期严重风控警示时：
+` + "```agent-action\n" + `{"type": "DISCIPLINE_ALERT", "payload": {"title": "风控预警", "message": "当前处于红色退潮期，严禁盲目追高开仓"}}\n` + "```",
 		ReactThinking: `请直接调用相关工具获取最新数据后回答。如果问题不明确，主动反问用户。`,
 		PlanExecuteThinking: `请严格遵循以下思考框架回答问题：
 

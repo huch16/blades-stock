@@ -9,6 +9,7 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
+	"blades-stock/backend/agent/types"
 	"regexp"
 	"strings"
 	"sync"
@@ -20,9 +21,10 @@ import (
 )
 
 type StreamMessage struct {
-	Role             string `json:"role"`
-	Content          string `json:"content"`
-	ReasoningContent string `json:"reasoning_content"`
+	Role             string              `json:"role"`
+	Content          string              `json:"content"`
+	ReasoningContent string              `json:"reasoning_content"`
+	Actions          []types.AgentAction `json:"actions,omitempty"`
 }
 
 type StockAiAgent struct {
@@ -505,6 +507,18 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		// fire-and-forget post-processing: memory, evaluation, tool ranking
 		if fullResponse.Len() > 0 && stockAiAgent != nil && stockAiAgent.sessionID != "" {
 			go postProcessResponse(stockAiAgent.sessionID, question, fullResponse.String(), toolNames, toolSuccess)
+		}
+
+		// 解析并在结束前下发伴随的全局控制动作指令
+		if fullResponse.Len() > 0 {
+			_, actions := types.ParseAndExtractActions(fullResponse.String())
+			if len(actions) > 0 {
+				ch <- &StreamMessage{
+					Role:    "assistant",
+					Content: "",
+					Actions: actions,
+				}
+			}
 		}
 
 		ch <- &StreamMessage{

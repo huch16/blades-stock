@@ -1559,6 +1559,11 @@ func (a *App) SaveAIResponseResult(stockCode, stockName, result, chatId, questio
 	data.NewDeepSeekOpenAi(a.ctx, aiConfigId).SaveAIResponseResult(stockCode, stockName, result, chatId, question)
 }
 
+// GetSystemStateSnapshot 获取当前系统的全局态势感知快照（时钟节律、情绪红绿灯、全市场涨跌比、实盘持仓风险预警）
+func (a *App) GetSystemStateSnapshot() *agent.SystemStateSnapshot {
+	return agent.GetGlobalMarketSensor().GetSnapshot()
+}
+
 // DiagnoseStock 提供结构化三维量化深度诊断（量化回测 + 资金筹码 + 技术形态）
 func (a *App) DiagnoseStock(stockCode string) (*quant.StockDiagnosisResult, error) {
 	return quant.DiagnoseStock(stockCode)

@@ -46,6 +46,25 @@
           </template>
 
             <div class="chat-body">
+            <!-- 全局态势感知仪表条 -->
+            <div v-if="perceptionSnapshot" class="perception-banner" @click="askMacroPerception" title="点击呼叫 Agent 深度解读当前宏观节律与持仓策略">
+              <div class="perception-left">
+                <span class="phase-tag">{{ perceptionSnapshot.Phase }}</span>
+                <span class="traffic-dot" :style="{ backgroundColor: getTrafficColor(perceptionSnapshot.TrafficLight) }"></span>
+                <span class="traffic-text" :style="{ color: getTrafficColor(perceptionSnapshot.TrafficLight) }">
+                  {{ getTrafficText(perceptionSnapshot.TrafficLight) }}
+                </span>
+                <span v-if="perceptionSnapshot.MarketBreadth" class="breadth-text">
+                  <span style="color:#d03050">涨{{ perceptionSnapshot.MarketBreadth.UpCount }}</span> / <span style="color:#18a058">跌{{ perceptionSnapshot.MarketBreadth.DownCount }}</span>
+                </span>
+              </div>
+              <div class="perception-right">
+                <NTag v-if="perceptionSnapshot.PortfolioRisk && perceptionSnapshot.PortfolioRisk.RiskLevel !== 'SAFE'" size="tiny" type="error" round>
+                  ⚠️ {{ perceptionSnapshot.PortfolioRisk.RiskLevel === 'DANGER' ? '高危持仓' : '持仓警示' }}
+                </NTag>
+                <span class="ask-hint">态势推演 ➔</span>
+              </div>
+            </div>
             <Transition name="hint-fade">
               <div v-if="hintVisible" class="hint-bar">{{ hintText }}</div>
             </Transition>
@@ -154,6 +173,18 @@
                             class="msg-markdown"
                             @onHtmlChanged="onMdHtmlChanged"
                           />
+                          <!-- 伴随全局联动控制动作卡片 -->
+                          <div v-if="group.assistantMsg.actions && group.assistantMsg.actions.length > 0" class="agent-action-cards">
+                            <div v-for="(act, actIdx) in group.assistantMsg.actions" :key="actIdx" class="agent-action-card">
+                              <div class="action-card-info">
+                                <span class="action-icon">⚡</span>
+                                <span class="action-title">{{ getActionDesc(act) }}</span>
+                              </div>
+                              <NButton size="tiny" type="primary" secondary @click="executeAction(act)">
+                                立即联动
+                              </NButton>
+                            </div>
+                          </div>
                           <div v-if="isStreamLoad && groupIndex === messageGroups.length - 1 && !group.assistantMsg.content" class="msg-loading">
                             <NSpin size="small" />
                             <span>思考中...</span>
@@ -337,6 +368,7 @@ function triggerMarketIntelligence(type) {
   }
 }
 import { cleanFinalContent } from '../utils/cleanText'
+import { dispatchAgentAction } from '../utils/agentControlBus'
 
 const STORAGE_KEY_MODEL_ID = 'blades-stock-agent-last-model-id'
 
@@ -354,6 +386,66 @@ let formatTimer = null
 const sessionId = ref('')
 const aiConfigOptions = ref([])
 const aiConfigId = ref(null)
+const perceptionSnapshot = ref(null)
+
+async function refreshPerceptionSnapshot() {
+  try {
+    const api = window.go?.main?.App?.GetSystemStateSnapshot
+    if (api) {
+      const snap = await api()
+      if (snap) {
+        perceptionSnapshot.value = snap
+      }
+    }
+  } catch (e) {
+    console.warn('refreshPerceptionSnapshot failed:', e)
+  }
+}
+
+function askMacroPerception() {
+  if (!perceptionSnapshot.value) return
+  const phase = perceptionSnapshot.value.Phase || ''
+  const traffic = perceptionSnapshot.value.TrafficLight || ''
+  inputValue.value = `请结合当前市场【${phase}】节律与情绪【${traffic}】状态，对全天大局观、主线机会和实盘持仓风控进行综合推演。`
+  sendMessage()
+}
+
+function getTrafficColor(light) {
+  if (light === 'GREEN') return '#18a058'
+  if (light === 'YELLOW') return '#f0a020'
+  if (light === 'RED') return '#d03050'
+  return '#909399'
+}
+
+function getTrafficText(light) {
+  if (light === 'GREEN') return '主升进攻'
+  if (light === 'YELLOW') return '震荡混沌'
+  if (light === 'RED') return '退潮防守'
+  return '中性'
+}
+
+function getActionDesc(act) {
+  if (!act) return '系统联动'
+  switch (act.type) {
+    case 'OPEN_DIAGNOSIS':
+      return `调起 3D 量化诊断：${act.payload?.name || act.payload?.code}`
+    case 'SHOW_KLINE':
+      return `查看 K 线走势：${act.payload?.name || act.payload?.code}`
+    case 'NAVIGATE_VIEW':
+      return `页面跳转：${act.payload?.path}`
+    case 'OPEN_MARKET_INTELLIGENCE':
+      return '打开市场情报中心'
+    case 'DISCIPLINE_ALERT':
+      return `风控警示：${act.payload?.title || ''}`
+    default:
+      return act.type
+  }
+}
+
+function executeAction(act) {
+  dispatchAgentAction(act)
+  message.success('已触发系统联动！')
+}
 
 function modelLabelForConfig(configId) {
   const opts = aiConfigOptions.value
@@ -753,6 +845,7 @@ function saveHistory() {
 
 function openPanel() {
   panelVisible.value = true
+  refreshPerceptionSnapshot()
   if (!sessionId.value) {
     sessionId.value = Date.now().toString()
   }
@@ -870,6 +963,9 @@ function startFormatTimer() {
         const fmt = formatMarkdown(last.rawContent)
         last.content = fmt.content
         if (fmt.jsonMarkdown) last.jsonMarkdown = fmt.jsonMarkdown
+        if (fmt.actions && fmt.actions.length > 0) {
+          last.actions = fmt.actions
+        }
       }
       if (last.rawReasoning) {
         const fmt = formatMarkdown(last.rawReasoning)
@@ -886,10 +982,27 @@ function stopFormatTimer() {
   }
 }
 
-function formatMarkdown(content) {
-  if (!content) return { content: '', jsonMarkdown: '' }
+function extractAgentActions(content) {
+  if (!content) return { content: '', actions: [] }
+  const actions = []
+  const regex = /```agent-action\s*([\s\S]*?)```/g
+  const cleaned = content.replace(regex, (_, jsonStr) => {
+    try {
+      const obj = JSON.parse(jsonStr.trim())
+      if (obj && obj.type) {
+        actions.push(obj)
+      }
+    } catch (e) {}
+    return ''
+  })
+  return { content: cleaned.trim(), actions }
+}
 
-  const { content: cleaned, jsonMarkdown } = extractJsonMarkdown(content)
+function formatMarkdown(content) {
+  if (!content) return { content: '', jsonMarkdown: '', actions: [] }
+
+  const { content: actionCleaned, actions } = extractAgentActions(content)
+  const { content: cleaned, jsonMarkdown } = extractJsonMarkdown(actionCleaned)
 
   let inCodeBlock = false
   const lines = cleaned.split('\n')
@@ -930,7 +1043,8 @@ function formatMarkdown(content) {
 
   return {
     content: result.join('\n'),
-    jsonMarkdown
+    jsonMarkdown,
+    actions
   }
 }
 
@@ -1101,6 +1215,9 @@ function onAgentMessage(msg) {
         const fmt = formatMarkdown(last.rawContent)
         last.content = fmt.content
         if (fmt.jsonMarkdown) last.jsonMarkdown = fmt.jsonMarkdown
+        if (fmt.actions && fmt.actions.length > 0) {
+          last.actions = fmt.actions
+        }
       }
       if (last.rawReasoning) {
         const fmt = formatMarkdown(last.rawReasoning)
@@ -1906,6 +2023,90 @@ onBeforeUnmount(() => {
 .drawer-slide-enter-to .drawer-panel,
 .drawer-slide-leave-from .drawer-panel {
   transform: translateX(0);
+}
+
+/* 全局态势感知仪表条 */
+.perception-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin: 6px 12px;
+  background: var(--n-color-embedded, rgba(128, 128, 128, 0.08));
+  border: 1px solid var(--n-border-color, rgba(128, 128, 128, 0.2));
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+}
+.perception-banner:hover {
+  background: var(--n-color-hover, rgba(128, 128, 128, 0.15));
+  border-color: #18a058;
+}
+.perception-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.phase-tag {
+  font-weight: 600;
+  color: var(--n-text-color, #333);
+}
+.traffic-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 6px currentColor;
+}
+.traffic-text {
+  font-weight: 600;
+}
+.breadth-text {
+  font-size: 11px;
+  margin-left: 4px;
+}
+.perception-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ask-hint {
+  font-size: 11px;
+  color: #18a058;
+  font-weight: 500;
+}
+
+/* 伴随控制动作卡片 */
+.agent-action-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--n-border-color, rgba(128, 128, 128, 0.2));
+}
+.agent-action-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(24, 160, 88, 0.08);
+  border: 1px solid rgba(24, 160, 88, 0.25);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.action-card-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.action-icon {
+  font-size: 13px;
+}
+.action-title {
+  color: var(--n-text-color, #333);
+  font-weight: 500;
 }
 </style>
 
