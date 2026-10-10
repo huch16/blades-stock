@@ -64,6 +64,12 @@ func (s *EmbeddingService) Embed(text string) ([]float32, error) {
 		return nil, fmt.Errorf("embedding service not configured")
 	}
 
+	// 1. 本地持久化缓存命中检查 (LRU + SQLite)
+	if cachedVec, ok := GetCachedEmbedding(s.modelName, text); ok && len(cachedVec) > 0 {
+		logger.SugaredLogger.Debugf("[EmbeddingCache Hit] model=%s, textLen=%d", s.modelName, len(text))
+		return cachedVec, nil
+	}
+
 	body := embeddingRequest{
 		Model: s.modelName,
 		Input: text,
@@ -107,7 +113,10 @@ func (s *EmbeddingService) Embed(text string) ([]float32, error) {
 	}
 
 	logger.SugaredLogger.Debugf("embedding %d tokens for %d chars", result.Usage.TotalTokens, len(text))
-	return result.Data[0].Embedding, nil
+	vec := result.Data[0].Embedding
+	// 异步持久化写入缓存
+	SaveCachedEmbedding(s.modelName, text, vec)
+	return vec, nil
 }
 
 func CosineSimilarity(a, b []float32) float32 {

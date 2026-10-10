@@ -17,9 +17,10 @@ import (
 )
 
 type SkillEmbedding struct {
-	ID        uint `gorm:"primaryKey"`
-	SkillID   uint `gorm:"uniqueIndex;not null"`
-	Embedding []float32 `gorm:"serializer:json"`
+	ID          uint      `gorm:"primaryKey"`
+	SkillID     uint      `gorm:"uniqueIndex;not null"`
+	ContentHash string    `gorm:"size:64"`
+	Embedding   []float32 `gorm:"serializer:json"`
 }
 
 func (SkillEmbedding) TableName() string { return "skill_embeddings" }
@@ -30,6 +31,8 @@ type SkillEmbeddingService struct {
 	mu      sync.RWMutex
 	// skillID → embedding vector
 	embeddings map[uint][]float32
+	// skillID → content hash
+	contentHashes map[uint]string
 }
 
 var (
@@ -48,18 +51,22 @@ func GetSkillEmbeddingService(es *EmbeddingService) *SkillEmbeddingService {
 	}
 
 	skillEmbedSvc = &SkillEmbeddingService{
-		es:         es,
-		embeddings: make(map[uint][]float32),
+		es:            es,
+		embeddings:    make(map[uint][]float32),
+		contentHashes: make(map[uint]string),
 	}
 	skillEmbedSvc.enabled = enabled
 	if enabled {
 		logger.SugaredLogger.Info("SkillEmbeddingService 已启用（语义匹配）")
 		if err := skillEmbedSvc.loadFromDB(); err != nil {
-			logger.SugaredLogger.Warnf("从DB加载skill embedding失败: %v，将重新计算", err)
-			_ = skillEmbedSvc.RefreshEmbeddings()
+			logger.SugaredLogger.Warnf("从DB加载skill embedding失败: %v，将异步重新计算", err)
+			go func() { _ = skillEmbedSvc.RefreshEmbeddings() }()
 		} else if skillEmbedSvc.embeddingCount() == 0 {
-			logger.SugaredLogger.Info("skill_embeddings 为空，重新计算")
-			_ = skillEmbedSvc.RefreshEmbeddings()
+			logger.SugaredLogger.Info("skill_embeddings 为空，后台异步初始化计算")
+			go func() { _ = skillEmbedSvc.RefreshEmbeddings() }()
+		} else {
+			// 本地DB已存在向量，极速启动！后台增量对比刷新
+			go func() { _ = skillEmbedSvc.RefreshEmbeddings() }()
 		}
 	} else {
 		logger.SugaredLogger.Warn("EmbeddingService 未配置，SkillEmbeddingService 降级为关键词匹配")
@@ -91,6 +98,7 @@ func (s *SkillEmbeddingService) loadFromDB() error {
 	}
 	for _, row := range rows {
 		s.embeddings[row.SkillID] = row.Embedding
+		s.contentHashes[row.SkillID] = row.ContentHash
 	}
 	logger.SugaredLogger.Infof("从DB加载了 %d 个skill embedding", len(rows))
 	return nil
@@ -111,20 +119,37 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	results := make(map[uint][]float32)
+	hashes := make(map[uint]string)
+	var dirtyRows []SkillEmbedding
 
 	for _, skill := range skills {
+		txt := skillEmbedText(skill)
+		hash := computeEmbeddingHash(s.es.modelName, txt)
+		hashes[skill.ID] = hash
+
+		// 增量检查：如果当前技能内容哈希与DB加载的哈希一致且向量存在，直接复用
+		if s.contentHashes[skill.ID] == hash && len(s.embeddings[skill.ID]) > 0 {
+			results[skill.ID] = s.embeddings[skill.ID]
+			continue
+		}
+
 		wg.Add(1)
-		go func(sk models.Skill) {
+		go func(sk models.Skill, contentHash, text string) {
 			defer wg.Done()
-			vec, err := s.es.Embed(skillEmbedText(sk))
+			vec, err := s.es.Embed(text)
 			if err != nil {
 				logger.SugaredLogger.Warnf("skill %s embedding失败: %v", sk.Name, err)
 				return
 			}
 			mu.Lock()
 			results[sk.ID] = vec
+			dirtyRows = append(dirtyRows, SkillEmbedding{
+				SkillID:     sk.ID,
+				ContentHash: contentHash,
+				Embedding:   vec,
+			})
 			mu.Unlock()
-		}(skill)
+		}(skill, hash, txt)
 	}
 	wg.Wait()
 
@@ -133,27 +158,21 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 		return nil
 	}
 
-	// Batch upsert to DB
 	s.embeddings = results
+	s.contentHashes = hashes
 
-	// P3.1: 原子 upsert 替代 DELETE+CreateInBatches。
-// 旧实现中途崩溃会导致 skill_embeddings 表被清空，下次启动重算全量 embedding。
-// 新实现用 clause.OnConflict(SkillID) DO UPDATE，单条 SQL 完成覆盖。
-	rows := make([]SkillEmbedding, 0, len(results))
-	for skillID, emb := range results {
-		rows = append(rows, SkillEmbedding{
-			SkillID:   skillID,
-			Embedding: emb,
-		})
+	// 仅批量更新变动或新增的 rows
+	if len(dirtyRows) > 0 && db.Dao != nil {
+		if err := db.Dao.Clauses(gorm_clause.OnConflict{
+			Columns:   []gorm_clause.Column{{Name: "skill_id"}},
+			DoUpdates: gorm_clause.AssignmentColumns([]string{"content_hash", "embedding"}),
+		}).CreateInBatches(dirtyRows, 100).Error; err != nil {
+			logger.SugaredLogger.Warnf("批量写入变动skill_embeddings失败: %v", err)
+		}
+		logger.SugaredLogger.Infof("SkillEmbeddingService 增量更新完成: 变动 %d 个, 总计 %d 个", len(dirtyRows), len(results))
+	} else {
+		logger.SugaredLogger.Debugf("SkillEmbeddingService 全部命中缓存，无需更新 (总计 %d 个)", len(results))
 	}
-	if err := db.Dao.Clauses(gorm_clause.OnConflict{
-		Columns:   []gorm_clause.Column{{Name: "skill_id"}},
-		DoUpdates: gorm_clause.AssignmentColumns([]string{"embedding"}),
-	}).CreateInBatches(rows, 100).Error; err != nil {
-		logger.SugaredLogger.Warnf("批量写入skill_embeddings失败: %v", err)
-	}
-
-	logger.SugaredLogger.Infof("已刷新 %d 个skill embedding", len(results))
 	return nil
 }
 
