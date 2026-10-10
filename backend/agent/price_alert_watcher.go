@@ -11,6 +11,7 @@ import (
 
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/agent/types"
 	"github.com/go-kratos/blades"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -197,6 +198,12 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 	}
 	aiAnalysisText := md.String()
 
+	// 解析告警分析中是否包含行动建议 (Agent-Action)
+	cleanedAnalysis, actions := types.ParseAndExtractActions(aiAnalysisText)
+	if len(actions) > 0 && w.wailsCtx != nil {
+		runtime.EventsEmit(w.wailsCtx, "agent:action", actions)
+	}
+
 	// 将告警事件以及 Agent 推理结果广播给前端 UI
 	if w.wailsCtx != nil {
 		runtime.EventsEmit(w.wailsCtx, "stockPriceAlertTriggered", map[string]any{
@@ -206,7 +213,8 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 			"price":         price,
 			"changePercent": changePercent,
 			"time":          time.Now().Format("15:04:05"),
-			"aiAnalysis":    aiAnalysisText,
+			"aiAnalysis":    cleanedAnalysis,
+			"actions":       actions,
 		})
 	}
 }

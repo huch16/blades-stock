@@ -12,6 +12,7 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
+	"blades-stock/backend/agent/types"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -45,8 +46,9 @@ type MarketIntelligenceReport struct {
 	Type        string    `json:"type"`        // "pre_market_briefing" 或 "post_market_review"
 	Title       string    `json:"title"`       // 标题
 	Summary     string    `json:"summary"`     // 核心要点
-	Content     string    `json:"content"`     // 完整Markdown内容
-	GeneratedAt time.Time `json:"generatedAt"` // 生成时间
+	Content     string              `json:"content"`     // 完整Markdown内容
+	Actions     []types.AgentAction `json:"actions,omitempty"` // 报告伴随行动项指令
+	GeneratedAt time.Time           `json:"generatedAt"` // 生成时间
 	TradingDate string    `json:"tradingDate"` // 归属交易日
 	Source      string    `json:"source"`      // 模型来源
 }
@@ -158,9 +160,11 @@ func (s *MarketLifecycleService) GetMarketLifecycleStatus() MarketLifecycleStatu
 	}
 }
 
-func cleanAndAssembleReport(reasoning, content string) string {
+func cleanAndAssembleReport(reasoning, content string) (string, []types.AgentAction) {
 	reasoning = strings.TrimSpace(reasoning)
 	content = strings.TrimSpace(content)
+
+	cleanedContent, actions := types.ParseAndExtractActions(content)
 
 	var cleanReasoningLines []string
 	if reasoning != "" {
@@ -175,9 +179,9 @@ func cleanAndAssembleReport(reasoning, content string) string {
 	cleanReasoning := strings.TrimSpace(strings.Join(cleanReasoningLines, "\n"))
 
 	if cleanReasoning != "" {
-		return fmt.Sprintf("<details style=\"margin-bottom:16px;padding:10px 14px;background:rgba(128,128,128,0.08);border-radius:8px;border-left:3px solid #18a058;\">\n<summary style=\"cursor:pointer;font-weight:600;color:inherit;opacity:0.85;\">💭 展开查看思考过程与推理链条</summary>\n\n%s\n</details>\n\n%s", cleanReasoning, content)
+		return fmt.Sprintf("<details style=\"margin-bottom:16px;padding:10px 14px;background:rgba(128,128,128,0.08);border-radius:8px;border-left:3px solid #18a058;\">\n<summary style=\"cursor:pointer;font-weight:600;color:inherit;opacity:0.85;\">💭 展开查看思考过程与推理链条</summary>\n\n%s\n</details>\n\n%s", cleanReasoning, cleanedContent), actions
 	}
-	return content
+	return cleanedContent, actions
 }
 
 // GeneratePreMarketBriefing 生成盘前前瞻/晨报 (09:10前或手动触发)
@@ -280,7 +284,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 		}
 	}
 
-	finalReport := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
+	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	if strings.TrimSpace(finalReport) == "" {
 		return nil, fmt.Errorf("AI 生成盘前晨报内容为空")
 	}
@@ -293,6 +297,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 		Title:       title,
 		Summary:     summary,
 		Content:     finalReport,
+		Actions:     actions,
 		GeneratedAt: time.Now(),
 		TradingDate: todayStr,
 		Source:      "Agent盘前与ETF轮动引擎",
@@ -345,7 +350,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 		}
 	}
 
-	finalReport := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
+	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	if strings.TrimSpace(finalReport) == "" {
 		return nil, fmt.Errorf("Serenity 产业链拆解生成失败")
 	}
@@ -358,6 +363,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 		Title:       title,
 		Summary:     summary,
 		Content:     finalReport,
+		Actions:     actions,
 		GeneratedAt: time.Now(),
 		TradingDate: todayStr,
 		Source:      "Serenity产业链引擎",
@@ -447,7 +453,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 		}
 	}
 
-	finalReport := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
+	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	if strings.TrimSpace(finalReport) == "" {
 		return nil, fmt.Errorf("AI 生成收盘复盘内容为空")
 	}
@@ -460,6 +466,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 		Title:       title,
 		Summary:     summary,
 		Content:     finalReport,
+		Actions:     actions,
 		GeneratedAt: time.Now(),
 		TradingDate: todayStr,
 		Source:      "Agent复盘引擎",
@@ -523,7 +530,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		}
 	}
 
-	finalReport := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
+	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	if strings.TrimSpace(finalReport) == "" {
 		return nil, fmt.Errorf("生成ETF轮动分析报告失败")
 	}
@@ -536,6 +543,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		Title:       title,
 		Summary:     summary,
 		Content:     finalReport,
+		Actions:     actions,
 		GeneratedAt: time.Now(),
 		TradingDate: todayStr,
 		Source:      "ETF轮动决策引擎",

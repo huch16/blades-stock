@@ -30,6 +30,7 @@ import {
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
+import { dispatchAgentAction } from '../utils/agentControlBus'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -98,6 +99,33 @@ const navTabs = [
 const currentReport = computed(() => {
   return reports.value[currentTab.value] || null
 })
+
+const reportActions = computed(() => {
+  return currentReport.value?.actions || []
+})
+
+function getActionDesc(act) {
+  if (!act) return '系统联动'
+  switch (act.type) {
+    case 'OPEN_DIAGNOSIS':
+      return `🎯 3D量化诊断: ${act.payload?.name || act.payload?.code}`
+    case 'SHOW_KLINE':
+      return `📈 查看K线: ${act.payload?.name || act.payload?.code}`
+    case 'NAVIGATE_VIEW':
+      return `🧭 页面跳转: ${act.payload?.path}`
+    case 'OPEN_MARKET_INTELLIGENCE':
+      return '📑 切换研报'
+    case 'DISCIPLINE_ALERT':
+      return `⚠️ 风控警示: ${act.payload?.title || ''}`
+    default:
+      return act.type
+  }
+}
+
+function handleExecuteAction(act) {
+  dispatchAgentAction(act)
+  message.success('已触发系统联动！')
+}
 
 // 清理旧缓存或流式残留中的 [STATUS] 杂质
 const displayContent = computed(() => {
@@ -504,6 +532,23 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <!-- 研报伴随系统联动动作项 (Agent-Action) -->
+        <div v-if="reportActions && reportActions.length > 0" class="report-actions-container">
+          <div class="report-actions-title">⚡ 研报建议系统联动：</div>
+          <div class="report-actions-list">
+            <NButton
+              v-for="(act, idx) in reportActions"
+              :key="idx"
+              size="small"
+              type="primary"
+              secondary
+              @click="handleExecuteAction(act)"
+            >
+              {{ getActionDesc(act) }}
+            </NButton>
+          </div>
+        </div>
+
         <!-- 6. 研报正文展示容器 (支持主题自适应) -->
         <NSpin :show="loading">
           <div v-if="!currentReport || !displayContent" class="empty-report-view">
@@ -787,6 +832,29 @@ onBeforeUnmount(() => {
   line-height: 1.6;
   font-weight: 500;
   color: var(--n-text-color, #2d3748);
+}
+
+/* 伴随联动操作 */
+.report-actions-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(128, 128, 128, 0.06);
+  border: 1px dashed var(--n-border-color, rgba(128, 128, 128, 0.2));
+  border-radius: 6px;
+}
+
+.report-actions-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--n-text-color, #4a5568);
+}
+
+.report-actions-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* Markdown 预览区 */
