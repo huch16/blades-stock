@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -26,18 +27,25 @@ var (
 	mcpConnectDuration metric.Float64Histogram
 )
 
-// StartMetricsExporter 根据环境变量启动相应的 exporter。
+// httpHandlerProvider is an interface that matches the otel prometheus exporter's
+// HTTPHandler method if it exists.
+type httpHandlerProvider interface {
+	HTTPHandler() http.Handler
+}
+
+// StartMetricsExporter 根据环境变量启动相应的 exporter 并（可选）启动一个 HTTP server 暴露 /metrics。
 // - 如果 METRICS_EXPORTER != "prometheus"，不执行任何操作，返回 (nil, nil)。
-// - 如果使用 prometheus 导出器，会创建 otel prometheus exporter 和一个 MeterProvider，
-//   并将其设置为全局 MeterProvider。
-// 返回值：shutdownFunc, error。shutdownFunc 用于在应用退出时关闭 MeterProvider。
+// - 如果使用 prometheus 导出器，会创建 otel prometheus exporter，
+//   使用该 exporter 创建 MeterProvider 并设置为全局，并在 METRICS_PROMETHEUS_ADDR（默认 ":9464"）
+//   启动 HTTP 服务暴露 /metrics（使用 exporter.HTTPHandler() 如果可用）。
+// 返回值：shutdownFunc, error。shutdownFunc 用于在应用退出时关闭 HTTP server。
 func StartMetricsExporter(ctx context.Context) (func(context.Context) error, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
 	if os.Getenv("METRICS_EXPORTER") != "prometheus" {
-		// 没有启用 prometheus 导出器，保持默认的无op provider
+		// 没有启用 prometheus 导出器
 		return nil, nil
 	}
 
@@ -55,14 +63,49 @@ func StartMetricsExporter(ctx context.Context) (func(context.Context) error, err
 	otel.SetMeterProvider(provider)
 	logger.SugaredLogger.Infof("Prometheus exporter attached to global meter provider.")
 
-	shutdownFunc := func(ctx context.Context) error {
-		if ctx == nil {
-			ctx = context.Background()
+	// 尝试使用 exporter 的 HTTPHandler 方法来启动 HTTP server。
+	addr := os.Getenv("METRICS_PROMETHEUS_ADDR")
+	if addr == "" {
+		addr = ":9464"
+	}
+	mux := http.NewServeMux()
+	var handler http.Handler
+	if p, ok := interface{}(exp).(httpHandlerProvider); ok {
+		handler = p.HTTPHandler()
+		logger.SugaredLogger.Infof("Using exporter.HTTPHandler() for /metrics")
+	} else {
+		// 如果没有 HTTPHandler 方法，则不启动 HTTP server，仅记录警告。
+		logger.SugaredLogger.Warnf("Prometheus exporter does not provide HTTPHandler; metrics will not be exposed via /metrics. Consider using an OTel collector to scrape metrics.")
+		handler = nil
+	}
+	if handler != nil {
+		mux.Handle("/metrics", handler)
+		srv := &http.Server{
+			Addr:    addr,
+			Handler: mux,
 		}
-		return provider.Shutdown(ctx)
+
+		// 启动 server（后台 goroutine）
+		go func() {
+			logger.SugaredLogger.Infof("Metrics HTTP server listening on %s", addr)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.SugaredLogger.Errorf("Metrics HTTP server error: %v", err)
+			}
+			logger.SugaredLogger.Infof("Metrics HTTP server stopped")
+		}()
+
+		shutdown := func(shutdownCtx context.Context) error {
+			if shutdownCtx == nil {
+				shutdownCtx = context.Background()
+			}
+			logger.SugaredLogger.Infof("Shutting down metrics HTTP server")
+			return srv.Shutdown(shutdownCtx)
+		}
+		return shutdown, nil
 	}
 
-	return shutdownFunc, nil
+	// 没有 HTTP server 可启动，返回 nil shutdown。
+	return nil, nil
 }
 
 func initMetrics() {
