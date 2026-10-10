@@ -476,6 +476,8 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 		return nil
 	}
 
+	// 默认超时从 5s 弹性扩展到 8s，给外部进程启动预留足够时间
+	clientTimeout := 8 * time.Second
 	mcpClient, err := bladesmc.NewClient(bladesmc.ClientConfig{
 		Name:      server.Name,
 		Transport: transport,
@@ -484,26 +486,49 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 		Args:      args,
 		Env:       env,
 		Headers:   headers,
-		Timeout:   5 * time.Second,
+		Timeout:   clientTimeout,
 	})
 	if err != nil {
 		logger.SugaredLogger.Errorf("创建MCP客户端失败 [%s]: %v", server.Name, err)
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	err = mcpClient.Connect(ctx)
-	cancel()
-	if err != nil {
-		logger.SugaredLogger.Errorf("MCP连接失败 [%s]: %v", server.Name, err)
+	// Connect 增加 2 次轻量重试保护，应对外部进程偶发冷启动抖动
+	var connectErr error
+	for connAttempt := 1; connAttempt <= 2; connAttempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
+		connectErr = mcpClient.Connect(ctx)
+		cancel()
+		if connectErr == nil {
+			break
+		}
+		if connAttempt < 2 {
+			logger.SugaredLogger.Warnf("MCP服务 [%s] 首次连接失败: %v, 500ms后进行重试...", server.Name, connectErr)
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	if connectErr != nil {
+		logger.SugaredLogger.Errorf("MCP连接最终失败 [%s]: %v", server.Name, connectErr)
 		return nil
 	}
 
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-	toolList, err := mcpClient.Resolve(ctx)
-	cancel()
-	if err != nil {
-		logger.SugaredLogger.Errorf("获取MCP工具列表失败 [%s]: %v", server.Name, err)
+	// Resolve 工具列表
+	var toolList []bladesTools.Tool
+	var resolveErr error
+	for resolveAttempt := 1; resolveAttempt <= 2; resolveAttempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
+		toolList, resolveErr = mcpClient.Resolve(ctx)
+		cancel()
+		if resolveErr == nil {
+			break
+		}
+		if resolveAttempt < 2 {
+			logger.SugaredLogger.Warnf("MCP服务 [%s] 获取工具列表首次失败: %v, 500ms后重试...", server.Name, resolveErr)
+			time.Sleep(500 * time.Millisecond)
+		}
+	}
+	if resolveErr != nil {
+		logger.SugaredLogger.Errorf("获取MCP工具列表最终失败 [%s]: %v", server.Name, resolveErr)
 		return nil
 	}
 

@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
 	"os"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
@@ -19,6 +21,15 @@ import (
 	bladesTools "github.com/go-kratos/blades/tools"
 	"github.com/samber/lo"
 )
+
+// AgentRunMetrics 记录单次 Agent 执行的可观测性指标
+type AgentRunMetrics struct {
+	TotalDuration     time.Duration `json:"total_duration"`
+	FirstChunkLatency time.Duration `json:"first_chunk_latency"`
+	ToolCallCount     int           `json:"tool_call_count"`
+	RetryCount        int           `json:"retry_count"`
+	FinalStatus       string        `json:"final_status"` // success, retry_success, failed
+}
 
 type StreamMessage struct {
 	Role             string              `json:"role"`
@@ -325,6 +336,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		var toolSuccess []bool
 		var agentErr error
 
+		runStartTime := time.Now()
+		var firstChunkTime time.Time
+		var retryCount int
+
 		// runOnce executes one full agent pass (react loop + tool calls) and streams
 		// to ch. A fresh invocation is built per attempt so a failed pass never
 		// carries resume/session state into the retry.
@@ -351,6 +366,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 				if msg == nil {
 					continue
+				}
+
+				if firstChunkTime.IsZero() {
+					firstChunkTime = time.Now()
 				}
 
 				if msg.Role == blades.RoleAssistant {
@@ -436,7 +455,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		}
 
 		// Retry the whole pass only for transient server-side failures (rate limit /
-		// overload / 5xx) or degenerate <unk> streams, that happen before any answer
+		// overload / 5xx / stream cuts) or degenerate <unk> streams, that happen before any answer
 		// text was streamed — a partial answer cannot be un-sent to the frontend,
 		// so those surface as errors.
 		const maxAttempts = 3
@@ -452,16 +471,55 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if (!isTransientModelError(agentErr) && !isDegenerate) || fullResponse.Len() > 0 {
 				break
 			}
-			logger.SugaredLogger.Infof("transient model error (attempt %d/%d), retrying: %v", attempt, maxAttempts, agentErr)
+			retryCount++
+
+			// 指数退避 (Exponential Backoff) + 随机抖动 (Jitter)
+			baseSec := 1.0
+			lowerErrStr := strings.ToLower(agentErr.Error())
+			if strings.Contains(lowerErrStr, "429") || strings.Contains(lowerErrStr, "rate") {
+				baseSec = 2.0 // 限流错误给予更大窗口冷却
+			}
+			backoffMs := baseSec * math.Pow(2, float64(attempt-1)) * 1000.0
+			jitterMs := float64(rand.Intn(400) + 100) // 100ms ~ 500ms jitter
+			sleepDur := time.Duration(backoffMs+jitterMs) * time.Millisecond
+
+			logger.SugaredLogger.Warnf("⚠️ [Agent Retry] 瞬时故障 (尝试 %d/%d): %v, 退避等待 %v 后重试...", attempt, maxAttempts, agentErr, sleepDur)
 			select {
 			case <-ctx.Done():
 				agentErr = ctx.Err()
-			case <-time.After(time.Duration(attempt) * 2 * time.Second):
+			case <-time.After(sleepDur):
 			}
 			if ctx.Err() != nil {
 				break
 			}
 		}
+
+		// 结构化指标记录 (Observability Metrics)
+		totalDur := time.Since(runStartTime)
+		firstChunkLat := time.Duration(0)
+		if !firstChunkTime.IsZero() {
+			firstChunkLat = firstChunkTime.Sub(runStartTime)
+		}
+		finalStatus := "success"
+		if agentErr != nil {
+			finalStatus = "failed"
+		} else if retryCount > 0 {
+			finalStatus = "retry_success"
+		}
+		metrics := AgentRunMetrics{
+			TotalDuration:     totalDur,
+			FirstChunkLatency: firstChunkLat,
+			ToolCallCount:     len(toolNames),
+			RetryCount:        retryCount,
+			FinalStatus:       finalStatus,
+		}
+		logger.SugaredLogger.Infof("📊 [Agent Metrics] 总耗时: %v | 首包延迟: %v | 工具调用: %d次 | 重试: %d次 | 状态: %s",
+			metrics.TotalDuration.Round(time.Millisecond),
+			metrics.FirstChunkLatency.Round(time.Millisecond),
+			metrics.ToolCallCount,
+			metrics.RetryCount,
+			metrics.FinalStatus,
+		)
 
 		if agentErr != nil {
 			logger.SugaredLogger.Errorf("agent run error: %v", agentErr)
