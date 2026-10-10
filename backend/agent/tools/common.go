@@ -2,10 +2,31 @@ package tools
 
 import (
 	"blades-stock/backend/models"
+	"regexp"
 	"strings"
 
 	"github.com/duke-git/lancet/v2/strutil"
 )
+
+var (
+	// 正则匹配常见 API Key: sk-xxxx
+	reOpenAIKey = regexp.MustCompile(`(?i)\b(sk-[a-zA-Z0-9_\-]{16,})\b`)
+	// 正则匹配 Bearer Token
+	reBearerToken = regexp.MustCompile(`(?i)\b(bearer\s+)([a-zA-Z0-9_\-\.]{16,})\b`)
+	// 正则匹配 URL 或请求参数中的敏感 key-value
+	reParamSecret = regexp.MustCompile(`(?i)\b((?:api[_-]?key|secret|token|password|auth|authorization)=)([^&\s"'<>]{6,})`)
+)
+
+// SanitizeSensitiveInfo 脱敏输入输出中的敏感密钥、令牌与凭据
+func SanitizeSensitiveInfo(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	out := reOpenAIKey.ReplaceAllString(raw, "sk-***REDACTED***")
+	out = reBearerToken.ReplaceAllString(out, "${1}***REDACTED***")
+	out = reParamSecret.ReplaceAllString(out, "${1}***REDACTED***")
+	return out
+}
 
 // @Author spark
 // @Date 2025/8/5 17:20

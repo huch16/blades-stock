@@ -185,6 +185,13 @@
                               </NButton>
                             </div>
                           </div>
+                          <!-- 性能与可观测性监控胶囊 -->
+                          <div v-if="group.assistantMsg.metrics" class="agent-metrics-capsule">
+                            <span class="metrics-tag" title="端到端总耗时">⏱️ {{ formatDuration(group.assistantMsg.metrics.total_duration) }}</span>
+                            <span v-if="group.assistantMsg.metrics.first_chunk_latency" class="metrics-tag" title="模型首包响应延迟">⚡ 首包: {{ formatDuration(group.assistantMsg.metrics.first_chunk_latency) }}</span>
+                            <span v-if="group.assistantMsg.metrics.tool_call_count > 0" class="metrics-tag" title="执行工具调用次数">🔧 {{ group.assistantMsg.metrics.tool_call_count }}次工具</span>
+                            <span v-if="group.assistantMsg.metrics.retry_count > 0" class="metrics-tag metrics-warning" title="遭遇瞬时网络/限流故障后自动恢复">🔁 重试{{ group.assistantMsg.metrics.retry_count }}次成功</span>
+                          </div>
                           <div v-if="isStreamLoad && groupIndex === messageGroups.length - 1 && !group.assistantMsg.content" class="msg-loading">
                             <NSpin size="small" />
                             <span>思考中...</span>
@@ -1211,6 +1218,9 @@ function onAgentMessage(msg) {
     stopFormatTimer()
     const last = messages.value[messages.value.length - 1]
     if (last && last.role === 'assistant') {
+      if (msg.metrics) {
+        last.metrics = msg.metrics
+      }
       if (last.rawContent) {
         const fmt = formatMarkdown(last.rawContent)
         last.content = fmt.content
@@ -1284,6 +1294,13 @@ onBeforeMount(() => {
     darkTheme.value = result.darkTheme
   })
 })
+
+function formatDuration(ns) {
+  if (!ns && ns !== 0) return ''
+  const ms = ns / 1000000
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
 
 onMounted(() => {
   EventsOn(AGENT_EVENT, onAgentMessage)
@@ -2164,6 +2181,33 @@ body > div:has(.n-select-menu) {
   padding: 6px 10px;
   margin-bottom: 6px;
   font-size: 13px;
+}
+
+.agent-metrics-capsule {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 4px 0;
+  padding: 3px 8px;
+  background: rgba(140, 140, 140, 0.08);
+  border: 1px solid rgba(140, 140, 140, 0.15);
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--n-text-color-3);
+  user-select: none;
+}
+
+.agent-metrics-capsule .metrics-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 500;
+}
+
+.agent-metrics-capsule .metrics-warning {
+  color: #f59e0b;
+  font-weight: 600;
 }
 .steps-expanded,
 .reasoning-expanded {

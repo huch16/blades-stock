@@ -37,6 +37,13 @@
           </div>
         </div>
         <t-chat-content v-if="item.content.length > 0" :content="item.content" />
+        <!-- 性能与可观测性监控胶囊 -->
+        <div v-if="item.metrics" class="agent-metrics-capsule">
+          <span class="metrics-tag" title="端到端总耗时">⏱️ {{ formatDuration(item.metrics.total_duration) }}</span>
+          <span v-if="item.metrics.first_chunk_latency" class="metrics-tag" title="模型首包响应延迟">⚡ 首包: {{ formatDuration(item.metrics.first_chunk_latency) }}</span>
+          <span v-if="item.metrics.tool_call_count > 0" class="metrics-tag" title="执行工具调用次数">🔧 {{ item.metrics.tool_call_count }}次工具</span>
+          <span v-if="item.metrics.retry_count > 0" class="metrics-tag metrics-warning" title="遭遇瞬时网络/限流故障后自动恢复">🔁 重试{{ item.metrics.retry_count }}次成功</span>
+        </div>
       </template>
       <template #actions="{ item, index }">
         <t-chat-action
@@ -407,7 +414,9 @@ const handleAgentMessage = (data: any) => {
     }
     if (data['content']){
       if (data['content'] === 'agent-DONE') {
-        // terminal signal, not displayable content
+        if (data.metrics) {
+          lastItem.metrics = data.metrics
+        }
       } else {
         lastItem.rawContent = (lastItem.rawContent || '') + data['content']
         lastItem.content = lastItem.rawContent
@@ -511,6 +520,14 @@ interface ChatMessage {
   role: 'assistant' | 'user'
   duration?: number
   steps?: string[]
+  metrics?: any
+}
+
+function formatDuration(ns: any): string {
+  if (!ns && ns !== 0) return ''
+  const ms = Number(ns) / 1000000
+  if (ms < 1000) return `${Math.round(ms)}ms`
+  return `${(ms / 1000).toFixed(1)}s`
 }
 
 const chatList = ref<ChatMessage[]>([
@@ -950,6 +967,33 @@ const inputEnter = function () {
 .agent-status-text {
   font-size: 13px;
   color: var(--td-brand-color, #0052d9);
+}
+
+.agent-metrics-capsule {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 3px 10px;
+  background: var(--td-bg-color-secondarycontainer, rgba(140, 140, 140, 0.08));
+  border: 1px solid var(--td-border-level-1-color, rgba(140, 140, 140, 0.15));
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--td-text-color-secondary);
+  user-select: none;
+}
+
+.agent-metrics-capsule .metrics-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 500;
+}
+
+.agent-metrics-capsule .metrics-warning {
+  color: #f59e0b;
+  font-weight: 600;
 }
 @keyframes agent-status-spin {
   to { transform: rotate(360deg); }

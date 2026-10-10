@@ -36,6 +36,7 @@ type StreamMessage struct {
 	Content          string              `json:"content"`
 	ReasoningContent string              `json:"reasoning_content"`
 	Actions          []types.AgentAction `json:"actions,omitempty"`
+	Metrics          *AgentRunMetrics    `json:"metrics,omitempty"`
 }
 
 type StockAiAgent struct {
@@ -585,6 +586,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		ch <- &StreamMessage{
 			Role:    "assistant",
 			Content: "agent-DONE",
+			Metrics: &metrics,
 		}
 		close(ch)
 	}()
