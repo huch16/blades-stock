@@ -822,3 +822,11 @@ export function GetMarketLifecycleStatus() {
   return window['go']['main']['App']['GetMarketLifecycleStatus']();
 }
 
+export function GetSystemStateSnapshot() {
+  return window['go']['main']['App']['GetSystemStateSnapshot']();
+}
+
+export function SyncRecommendStocksFromIntelligence() {
+  return window['go']['main']['App']['SyncRecommendStocksFromIntelligence']();
+}
+

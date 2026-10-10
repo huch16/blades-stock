@@ -305,6 +305,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 
 	// 持久化到 ai_response_result 归档，标明 code 为 ETF 组合
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动盘前内参", finalReport, "pre_market_etf_"+todayStr, prompt)
+	go ExtractAndSaveRecommendationsFromReport(report)
 
 	lifecycleReportCacheMu.Lock()
 	lifecycleLatestReport = report
@@ -370,6 +371,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	}
 
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult(code, "Serenity产业链分析", finalReport, "serenity_"+code, prompt)
+	go ExtractAndSaveRecommendationsFromReport(report)
 
 	if s.ctx != nil {
 		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
@@ -474,6 +476,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 
 	// 持久化到 ai_response_result
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("收盘复盘", "盘后复盘", finalReport, "post_market_"+todayStr, prompt)
+	go ExtractAndSaveRecommendationsFromReport(report)
 
 	lifecycleReportCacheMu.Lock()
 	lifecycleLatestReport = report
@@ -550,6 +553,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	}
 
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动量化决策", finalReport, "etf_rotation_"+todayStr, prompt)
+	go ExtractAndSaveRecommendationsFromReport(report)
 
 	lifecycleReportCacheMu.Lock()
 	lifecycleLatestReport = report

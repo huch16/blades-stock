@@ -5,12 +5,14 @@ import {
   GetConfig,
   DeleteAiRecommendStocks,
   UpdateAiRecommendStocksAlert,
-  ShareAnalysis
+  ShareAnalysis,
+  SyncRecommendStocksFromIntelligence
 } from "../../wailsjs/go/main/App";
-import {NAvatar, NButton, NEllipsis, NSwitch, NTag, NText, useMessage, useNotification} from "naive-ui";
+import {NAvatar, NButton, NEllipsis, NSwitch, NTag, NText, useMessage, useNotification, NSpace, NEmpty} from "naive-ui";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import sparkLine from "./stockSparkLine.vue"
 import {format} from "date-fns";
+import { dispatchAgentAction } from "../utils/agentControlBus";
 
 const notify = useNotification()
 
@@ -39,6 +41,33 @@ onMounted(() => {
   })
 })
 const message = useMessage()
+const syncingRef = ref(false)
+
+async function handleSyncFromIntelligence() {
+  syncingRef.value = true
+  try {
+    message.info('正在从最新智能研报、ETF动量池及历史分析中汇聚精选标的...')
+    const addedCount = await SyncRecommendStocksFromIntelligence()
+    if (addedCount > 0) {
+      message.success(`成功汇聚 ${addedCount} 只智能推荐标的！`)
+    } else {
+      message.info('当前研报标的已同步，或今日已有对应记录')
+    }
+    await handleSearch()
+  } catch (err) {
+    message.error('汇聚推荐失败: ' + (err?.message || err))
+  } finally {
+    syncingRef.value = false
+  }
+}
+
+function handleTriggerAgentRecommendation() {
+  window.dispatchEvent(
+    new CustomEvent('openFloatingAgentWithQuestion', {
+      detail: '请结合当前市场情绪红绿灯与板块资金流向，为我推荐 3 只具有高盈亏比的优质潜力标的，并给出明确的买入区间与止损点，调用 BatchCreateAiRecommendStocks 保存到推荐库。'
+    })
+  )
+}
 const mdPreviewRef = ref(null)
 const mdEditorRef = ref(null)
 const editorDataRef = reactive({
@@ -240,19 +269,60 @@ const columnsRef = ref([
   },
   {
     title: '操作',
+    width: 170,
     render(row, index) {
-      return [h(
-          NTag,
-          {
-            strong: true,
-            tertiary: true,
-            //size: 'small',
-            type: 'warning', // 橙色按钮
-            onClick: () => showDetail(row)
-          },
-          { default: () => '查看' }
-      ),h(NTag, { strong: true,
-        tertiary: true, type: 'error',  onClick: () => deleteAiRecommendStocks(row.ID) }, { default: () => '删除' })]
+      return h(NSpace, { size: 'small' }, {
+        default: () => [
+          h(
+            NTag,
+            {
+              strong: true,
+              tertiary: true,
+              type: 'info',
+              style: 'cursor: pointer;',
+              onClick: (e) => {
+                e.stopPropagation()
+                dispatchAgentAction({
+                  type: 'OPEN_DIAGNOSIS',
+                  payload: {
+                    code: row.stockCode,
+                    name: row.stockName
+                  }
+                })
+              }
+            },
+            { default: () => '🎯 3D诊断' }
+          ),
+          h(
+            NTag,
+            {
+              strong: true,
+              tertiary: true,
+              type: 'warning',
+              style: 'cursor: pointer;',
+              onClick: (e) => {
+                e.stopPropagation()
+                showDetail(row)
+              }
+            },
+            { default: () => '查看' }
+          ),
+          h(
+            NTag,
+            {
+              strong: true,
+              tertiary: true,
+              type: 'error',
+              style: 'cursor: pointer;',
+              onClick: (e) => {
+                e.stopPropagation()
+                deleteAiRecommendStocks(row.ID)
+              }
+            },
+            { default: () => '删除' }
+          )
+        ]
+      })
     }
   },
 ])
@@ -439,26 +509,62 @@ function toggleAlert(row, newEnableAlert) {
 </script>
 
 <template>
-  <n-input-group>
-    <n-date-picker  v-model:value="paginationReactive.range" type="daterange"   style="width: 40%"/>
-    <n-select v-model:value="paginationReactive.enableAlert" :options="enableAlertOptions" placeholder="预警状态" style="width: 15%" clearable />
-    <n-input clearable placeholder="输入关键词搜索" v-model:value="paginationReactive.keyword"/>
-    <n-button type="primary" ghost @click="handleSearch"  @input="handleSearch">
-      搜索
-    </n-button>
-  </n-input-group>
-        <n-data-table
-            remote
-            size="small"
-            :columns="columnsRef"
-            :data="dataRef"
-            :loading="loadingRef"
-            :pagination="paginationReactive"
-            :row-key="(rowData)=>rowData.ID"
-            @update:page="handlePageChange"
-            flex-height
-            style="height: calc(100vh - 210px);margin-top: 10px"
-        />
+  <div style="display: flex; flex-direction: column; gap: 10px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+      <n-input-group style="max-width: 720px;">
+        <n-date-picker v-model:value="paginationReactive.range" type="daterange" style="width: 38%"/>
+        <n-select v-model:value="paginationReactive.enableAlert" :options="enableAlertOptions" placeholder="预警状态" style="width: 22%" clearable />
+        <n-input clearable placeholder="输入股票/模型搜索" v-model:value="paginationReactive.keyword"/>
+        <n-button type="primary" ghost @click="handleSearch">
+          搜索
+        </n-button>
+      </n-input-group>
+
+      <n-space>
+        <n-button type="primary" :loading="syncingRef" @click="handleSyncFromIntelligence">
+          ⚡ 汇聚智能研报/ETF推荐
+        </n-button>
+        <n-button type="warning" secondary @click="handleTriggerAgentRecommendation">
+          🤖 唤醒Agent态势推演
+        </n-button>
+      </n-space>
+    </div>
+
+    <n-data-table
+      remote
+      size="small"
+      :columns="columnsRef"
+      :data="dataRef"
+      :loading="loadingRef"
+      :pagination="paginationReactive"
+      :row-key="(rowData)=>rowData.ID"
+      @update:page="handlePageChange"
+      flex-height
+      style="height: calc(100vh - 210px);"
+    >
+      <template #empty>
+        <div style="padding: 48px 0; text-align: center;">
+          <n-empty description="当前暂无推荐股票记录">
+            <template #extra>
+              <div style="margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
+                <n-text depth="3" style="font-size: 13px;">
+                  系统已沉淀全生命周期智能研报、ETF动量轮动池与全市场态势感知结果：
+                </n-text>
+                <n-space justify="center">
+                  <n-button type="primary" size="medium" :loading="syncingRef" @click="handleSyncFromIntelligence">
+                    ⚡ 一键从最新智能研报 & ETF动量池提炼推荐
+                  </n-button>
+                  <n-button type="warning" secondary size="medium" @click="handleTriggerAgentRecommendation">
+                    🧭 调起 Agent 结合当前态势推演金股
+                  </n-button>
+                </n-space>
+              </div>
+            </template>
+          </n-empty>
+        </div>
+      </template>
+    </n-data-table>
+  </div>
 
   <n-modal v-model:show="modalDataRef.visible" :title="modalDataRef.title" preset="card" style="max-width: 1400px;">
     <n-gradient-text :size="16" type="warning">{{modalDataRef.remarks}}</n-gradient-text>

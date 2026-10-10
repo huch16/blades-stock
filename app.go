@@ -1564,6 +1564,11 @@ func (a *App) GetSystemStateSnapshot() *agent.SystemStateSnapshot {
 	return agent.GetGlobalMarketSensor().GetSnapshot()
 }
 
+// SyncRecommendStocksFromIntelligence 从最新研报、ETF动量池及历史深度分析中一键提炼推荐股票
+func (a *App) SyncRecommendStocksFromIntelligence() (int, error) {
+	return agent.SyncRecommendStocksFromAllIntelligence(a.ctx)
+}
+
 // DiagnoseStock 提供结构化三维量化深度诊断（量化回测 + 资金筹码 + 技术形态）
 func (a *App) DiagnoseStock(stockCode string) (*quant.StockDiagnosisResult, error) {
 	return quant.DiagnoseStock(stockCode)

@@ -416,3 +416,7 @@ export function GetLatestMarketIntelligenceReport():Promise<any>;
 
 export function GetMarketLifecycleStatus():Promise<any>;
 
+export function GetSystemStateSnapshot():Promise<any>;
+
+export function SyncRecommendStocksFromIntelligence():Promise<number>;
+
