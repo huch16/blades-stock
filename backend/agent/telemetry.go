@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	otelpromexp "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
 var (
@@ -25,16 +26,43 @@ var (
 	mcpConnectDuration metric.Float64Histogram
 )
 
-func init() {
-	// If METRICS_EXPORTER=prometheus, create a Prometheus exporter (placeholder).
-	if exporter := os.Getenv("METRICS_EXPORTER"); exporter == "prometheus" {
-		_, err := otelpromexp.New()
-		if err != nil {
-			logger.SugaredLogger.Errorf("Failed to create prometheus exporter: %v", err)
-		} else {
-			logger.SugaredLogger.Infof("Prometheus exporter created (HTTP server not implemented).")
-		}
+// StartMetricsExporter 根据环境变量启动相应的 exporter。
+// - 如果 METRICS_EXPORTER != "prometheus"，不执行任何操作，返回 (nil, nil)。
+// - 如果使用 prometheus 导出器，会创建 otel prometheus exporter 和一个 MeterProvider，
+//   并将其设置为全局 MeterProvider。
+// 返回值：shutdownFunc, error。shutdownFunc 用于在应用退出时关闭 MeterProvider。
+func StartMetricsExporter(ctx context.Context) (func(context.Context) error, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
+
+	if os.Getenv("METRICS_EXPORTER") != "prometheus" {
+		// 没有启用 prometheus 导出器，保持默认的无op provider
+		return nil, nil
+	}
+
+	exp, err := otelpromexp.New()
+	if err != nil {
+		logger.SugaredLogger.Errorf("Failed to create prometheus exporter: %v", err)
+		return nil, err
+	}
+	logger.SugaredLogger.Infof("Prometheus exporter created.")
+
+	// 创建使用该 exporter 的 MeterProvider 并设置为全局。
+	provider := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(exp),
+	)
+	otel.SetMeterProvider(provider)
+	logger.SugaredLogger.Infof("Prometheus exporter attached to global meter provider.")
+
+	shutdownFunc := func(ctx context.Context) error {
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		return provider.Shutdown(ctx)
+	}
+
+	return shutdownFunc, nil
 }
 
 func initMetrics() {

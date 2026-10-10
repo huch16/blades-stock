@@ -238,6 +238,15 @@ func main() {
 	log.SugaredLogger.Info("screen resolution: " + convertor.ToString(width) + "x" + convertor.ToString(height))
 	log.SugaredLogger.Info("window size: " + convertor.ToString(appWidth) + "x" + convertor.ToString(appHeight))
 
+	// Start metrics exporter if enabled
+	shutdownMetrics, err := agent.StartMetricsExporter(context.Background())
+	if err != nil {
+		log.SugaredLogger.Warnf("Failed to start metrics exporter: %v", err)
+	}
+	if shutdownMetrics != nil {
+		defer shutdownMetrics(context.Background())
+	}
+
 	// Create application with options
 	err = wails.Run(&options.App{
 		Title: "Blades Stock：AI赋能股票分析✨ " + OFFICIAL_STATEMENT,
