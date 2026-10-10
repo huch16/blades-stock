@@ -476,8 +476,8 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 		return nil
 	}
 
-	// 默认超时从 5s 弹性扩展到 8s，给外部进程启动预留足够时间
-	clientTimeout := 8 * time.Second
+	// 超时驱动：优先环境变量 MCP_TIMEOUT_SECONDS，再读取 SettingConfig.McpTimeout，兜底 8s
+	clientTimeout := data.GetSettingConfig().GetMcpTimeout()
 	mcpClient, err := bladesmc.NewClient(bladesmc.ClientConfig{
 		Name:      server.Name,
 		Transport: transport,
@@ -494,6 +494,7 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 	}
 
 	// Connect 增加 2 次轻量重试保护，应对外部进程偶发冷启动抖动
+	connStart := time.Now()
 	var connectErr error
 	for connAttempt := 1; connAttempt <= 2; connAttempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
@@ -507,6 +508,7 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 			time.Sleep(500 * time.Millisecond)
 		}
 	}
+	RecordMCPConnect(context.Background(), server.Name, connectErr == nil, time.Since(connStart))
 	if connectErr != nil {
 		logger.SugaredLogger.Errorf("MCP连接最终失败 [%s]: %v", server.Name, connectErr)
 		return nil

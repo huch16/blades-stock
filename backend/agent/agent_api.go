@@ -11,6 +11,7 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
+	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/agent/types"
 	"regexp"
 	"strings"
@@ -425,20 +426,24 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				for _, part := range msg.Parts {
 					if tp, ok := part.(*blades.ToolPart); ok {
 						toolNames = append(toolNames, tp.Name)
-						toolSuccess = append(toolSuccess, toolCallSucceeded(tp.Response))
-						logger.SugaredLogger.Infof("[ToolCall] %s(%s)", tp.Name, tp.Request)
+						succeeded := toolCallSucceeded(tp.Response)
+						toolSuccess = append(toolSuccess, succeeded)
+						RecordToolCall(ctx, tp.Name, succeeded, 0)
+						safeReq := tools.SanitizeSensitiveInfo(tp.Request)
+						safeResp := tools.SanitizeSensitiveInfo(tp.Response)
+						logger.SugaredLogger.Infof("[ToolCall] %s(%s)", tp.Name, safeReq)
 						ch <- &StreamMessage{
 							Role:             "assistant",
 							Content:          "",
-							ReasoningContent: fmt.Sprintf("[STEP]🔧 调用工具：%s(%s)\n", tp.Name, tp.Request),
+							ReasoningContent: fmt.Sprintf("[STEP]🔧 调用工具：%s(%s)\n", tp.Name, safeReq),
 						}
-						if tp.Response != "" {
-							resultLen := len(tp.Response)
+						if safeResp != "" {
+							resultLen := len(safeResp)
 							status := "✅"
-							if resultLen == 0 || strings.Contains(tp.Response, "error") || strings.Contains(tp.Response, "失败") {
+							if resultLen == 0 || strings.Contains(strings.ToLower(safeResp), "error") || strings.Contains(safeResp, "失败") {
 								status = "⚠️"
 							}
-							summary := tp.Response
+							summary := safeResp
 							if len(summary) > 80 {
 								summary = summary[:80] + "..."
 							}
@@ -521,6 +526,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			metrics.RetryCount,
 			metrics.FinalStatus,
 		)
+		// 记录业务级 OpenTelemetry 指标
+		RecordLLMRun(ctx, totalDur, firstChunkLat, finalStatus, retryCount)
 
 		if agentErr != nil {
 			logger.SugaredLogger.Errorf("agent run error: %v", agentErr)

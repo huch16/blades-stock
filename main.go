@@ -141,6 +141,9 @@ func main() {
 	// 初始化交易日历改为后台异步执行，防止网络超时阻塞GUI启动
 	go data.InitTradingCalendar()
 	AutoMigrate()
+	if err := db.RunVersionedMigrations(db.Dao); err != nil {
+		log.SugaredLogger.Fatalf("版本化数据库迁移失败: %v", err)
+	}
 	// 后台启动分析报告回测
 	go func() {
 		time.Sleep(10 * time.Second) // 等数据库和数据服务就绪

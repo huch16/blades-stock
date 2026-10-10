@@ -11,6 +11,7 @@ import (
 	"blades-stock/backend/paths"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,6 +62,7 @@ type Settings struct {
 	EmbeddingModelName        string  `json:"embeddingModelName" gorm:"column:embedding_model_name"`
 	EmbeddingBaseUrl          string  `json:"embeddingBaseUrl" gorm:"column:embedding_base_url"`
 	EmbeddingApiKey           string  `json:"embeddingApiKey" gorm:"column:embedding_api_key"`
+	McpTimeout                int64   `json:"mcpTimeout" gorm:"column:mcp_timeout;default:8"`
 }
 
 func (receiver Settings) TableName() string {
@@ -126,6 +128,19 @@ func (c *SettingConfig) GetAIConfigThinking(aiConfigId int) bool {
 		}
 	}
 	return false
+}
+
+// GetMcpTimeout 获取 MCP 客户端超时时间，优先读取环境变量 MCP_TIMEOUT_SECONDS，次选 Settings.McpTimeout，兜底 8s
+func (c *SettingConfig) GetMcpTimeout() time.Duration {
+	if env := os.Getenv("MCP_TIMEOUT_SECONDS"); env != "" {
+		if s, err := strconv.Atoi(env); err == nil && s > 0 {
+			return time.Duration(s) * time.Second
+		}
+	}
+	if c != nil && c.Settings != nil && c.McpTimeout > 0 {
+		return time.Duration(c.McpTimeout) * time.Second
+	}
+	return 8 * time.Second
 }
 
 type SettingsApi struct {
