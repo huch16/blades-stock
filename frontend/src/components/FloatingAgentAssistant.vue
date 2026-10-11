@@ -117,50 +117,6 @@
                 <span class="ask-hint">态势推演 ➔</span>
               </div>
             </div>
-
-            <!-- 当前聚焦个股智能感知与一键直达条 -->
-            <div
-              v-if="currentStock && currentStock.code"
-              class="context-stock-banner"
-            >
-              <div class="context-stock-left">
-                <span class="context-stock-pin">📌 当前关注:</span>
-                <span class="context-stock-name">{{ currentStock.name || currentStock.code }}</span>
-                <span class="context-stock-code">({{ currentStock.code }})</span>
-              </div>
-              <div class="context-stock-actions">
-                <NButton
-                  size="tiny"
-                  secondary
-                  type="primary"
-                  round
-                  :disabled="diagnosing"
-                  @click="triggerDiagnosis(currentStock.code, currentStock.name, 'full')"
-                >
-                  🎯 三维体检
-                </NButton>
-                <NButton
-                  size="tiny"
-                  secondary
-                  type="info"
-                  round
-                  :disabled="diagnosing"
-                  @click="triggerDiagnosis(currentStock.code, currentStock.name, 'money')"
-                >
-                  💰 资金筹码
-                </NButton>
-                <NButton
-                  size="tiny"
-                  secondary
-                  type="warning"
-                  round
-                  :disabled="diagnosing"
-                  @click="triggerDiagnosis(currentStock.code, currentStock.name, 'vectorbt')"
-                >
-                  🧪 策略回测
-                </NButton>
-              </div>
-            </div>
             <Transition name="hint-fade">
               <div
                 v-if="hintVisible"
@@ -2421,42 +2377,6 @@ onBeforeUnmount(() => {
 }
 
 /* 当前聚焦个股智能感知条 */
-.context-stock-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 12px;
-  margin: 0 12px 6px 12px;
-  background: linear-gradient(135deg, rgba(64, 152, 252, 0.08) 0%, rgba(24, 160, 88, 0.08) 100%);
-  border: 1px solid rgba(64, 152, 252, 0.25);
-  border-radius: 8px;
-  font-size: 12px;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.context-stock-left {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.context-stock-pin {
-  color: #888;
-  font-size: 11px;
-}
-.context-stock-name {
-  font-weight: 700;
-  color: var(--n-text-color, #333);
-}
-.context-stock-code {
-  font-size: 11px;
-  color: #4098fc;
-}
-.context-stock-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 /* 伴随控制动作卡片 */
 .agent-action-cards {
   display: flex;
