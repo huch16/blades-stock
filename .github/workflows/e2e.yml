@@ -1,12 +1,11 @@
-name: E2E & Chaos Tests
+name: End-to-End Tests
 
 on:
   push:
     branches: [dev, main]
   pull_request:
     branches: [dev, main]
-  schedule:
-    - cron: '0 2 * * *'  # Daily at 2 AM
+  workflow_dispatch:
 
 env:
   NODE_OPTIONS: "--max-old-space-size=4096"
@@ -62,56 +61,3 @@ jobs:
           name: playwright-report
           path: tests/e2e/playwright-report/
           retention-days: 7
-
-  chaos:
-    name: Chaos Engineering
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.26"
-      
-      - name: Build Chaos Tool
-        run: |
-          cd tests/chaos
-          go build -o chaos-tool chaos.go
-      
-      - name: Run Latency Experiment
-        run: |
-          cd tests/chaos
-          timeout 60s ./chaos-tool -mode=latency -latency=200 -duration=30s &
-          sleep 5
-          # Verify app still responds (would need running instance)
-          echo "Latency experiment completed"
-      
-      - name: Run Error Injection Experiment
-        run: |
-          cd tests/chaos
-          timeout 60s ./chaos-tool -mode=error -error-rate=0.1 -duration=30s &
-          sleep 5
-          echo "Error injection experiment completed"
-      
-      - name: Run CPU Stress Experiment
-        run: |
-          cd tests/chaos
-          timeout 60s ./chaos-tool -mode=cpu -duration=30s &
-          sleep 5
-          echo "CPU stress experiment completed"
-      
-      - name: Run Memory Pressure Experiment
-        run:
-          cd tests/chaos
-          timeout 60s ./chaos-tool -mode=mem -duration=30s &
-          sleep 5
-          echo "Memory pressure experiment completed"
-      
-      - name: Network Chaos (requires root)
-        if: false  # Disabled by default, enable for manual runs
-        run: |
-          echo "Network chaos requires root, skipping in CI"
-          # sudo ./tests/chaos/network-chaos.sh eth0 "" 10
