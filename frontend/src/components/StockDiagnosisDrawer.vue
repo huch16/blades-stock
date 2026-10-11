@@ -35,6 +35,10 @@ const activeCode = ref(props.stockCode)
 const activeName = ref(props.stockName)
 const recentStocks = ref([])
 
+// 幂等防抖：同一股票 30 秒内不重复请求
+const diagnosing = ref(false)
+const lastDiagnosisTime = new Map()
+
 function loadRecentStocks() {
   try {
     const raw = localStorage.getItem('kline-recent-stocks')
@@ -82,6 +86,21 @@ async function switchStock(code, name) {
 async function fetchDiagnosis(targetCode) {
   const code = targetCode || activeCode.value || props.stockCode
   if (!code) return
+
+  // 前端幂等：30 秒内同一股票不重复请求
+  const now = Date.now()
+  const last = lastDiagnosisTime.get(code) || 0
+  if (now - last < 30000) {
+    console.log('[Diagnosis] 跳过重复请求:', code, '距上次', (now - last) / 1000, '秒')
+    return
+  }
+  if (diagnosing.value) {
+    console.log('[Diagnosis] 正在诊断中，跳过:', code)
+    return
+  }
+
+  lastDiagnosisTime.set(code, now)
+  diagnosing.value = true
   loading.value = true
   try {
     const res = await DiagnoseStock(code)
@@ -96,6 +115,7 @@ async function fetchDiagnosis(targetCode) {
     message.error('量化诊断执行失败: ' + (err?.message || err))
   } finally {
     loading.value = false
+    diagnosing.value = false
   }
 }
 

@@ -134,7 +134,8 @@
                   secondary
                   type="primary"
                   round
-                  @click="sendDirectPrompt(`对 ${currentStock.name || currentStock.code} (${currentStock.code}) 进行量化三维深度诊断，包括胜率、目标价与量化评分`)"
+                  :disabled="diagnosing"
+                  @click="triggerDiagnosis(currentStock.code, currentStock.name, 'full')"
                 >
                   🎯 三维体检
                 </NButton>
@@ -143,7 +144,8 @@
                   secondary
                   type="info"
                   round
-                  @click="sendDirectPrompt(`详细分析 ${currentStock.name || currentStock.code} (${currentStock.code}) 的主力资金流向、游资龙虎榜席位与筹码集中度博弈`)"
+                  :disabled="diagnosing"
+                  @click="triggerDiagnosis(currentStock.code, currentStock.name, 'money')"
                 >
                   💰 资金筹码
                 </NButton>
@@ -152,7 +154,8 @@
                   secondary
                   type="warning"
                   round
-                  @click="sendDirectPrompt(`运行 VectorBT 向量化回测分析 ${currentStock.name || currentStock.code} (${currentStock.code}) 的双均线策略表现与夏普比率`)"
+                  :disabled="diagnosing"
+                  @click="triggerDiagnosis(currentStock.code, currentStock.name, 'vectorbt')"
                 >
                   🧪 策略回测
                 </NButton>

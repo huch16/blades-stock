@@ -1582,8 +1582,52 @@ func (a *App) SyncRecommendStocksFromIntelligence() (int, error) {
 }
 
 // DiagnoseStock 提供结构化三维量化深度诊断（量化回测 + 资金筹码 + 技术形态）
+// 幂等锁：同一股票代码 30 秒内仅允许执行一次，防止前端重复触发导致重复日志/计费
+var (
+	diagnoseMu   sync.Mutex
+	diagnoseDone = make(map[string]time.Time) // stockCode -> 完成时间
+)
+
 func (a *App) DiagnoseStock(stockCode string) (*quant.StockDiagnosisResult, error) {
-	return quant.DiagnoseStock(stockCode)
+	clean := models.CleanStockCode(stockCode)
+	if clean == "" {
+		return nil, fmt.Errorf("无效股票代码: %s", stockCode)
+	}
+
+	// 快速检查：是否刚完成过（无锁读取）
+	if t, ok := diagnoseDone[clean]; ok && time.Since(t) < 30*time.Second {
+		return nil, fmt.Errorf("诊断刚完成，请稍后重试（幂等保护）")
+	}
+
+	// 加锁执行
+	diagnoseMu.Lock()
+	// 双重检查
+	if t, ok := diagnoseDone[clean]; ok && time.Since(t) < 30*time.Second {
+		diagnoseMu.Unlock()
+		return nil, fmt.Errorf("诊断进行中，请勿重复提交")
+	}
+	diagnoseMu.Unlock()
+
+	res, err := quant.DiagnoseStock(clean)
+
+	// 记录完成时间（无论成功失败，防止错误重试风暴）
+	diagnoseMu.Lock()
+	diagnoseDone[clean] = time.Now()
+	diagnoseMu.Unlock()
+
+	// 定期清理过期键（简单策略：每 100 次调用清理一次）
+	if len(diagnoseDone)%100 == 0 {
+		cutoff := time.Now().Add(-5 * time.Minute)
+		diagnoseMu.Lock()
+		for k, v := range diagnoseDone {
+			if v.Before(cutoff) {
+				delete(diagnoseDone, k)
+			}
+		}
+		diagnoseMu.Unlock()
+	}
+
+	return res, err
 }
 
 // TriggerAIReportBacktest 手动或自动触发 AI 报告历史回测与胜率检验

@@ -1,0 +1,41 @@
+name: 放量突破
+alias:
+  - volume_breakout
+  - 突破新高
+  - 平台突破
+category: breakout
+judgment_criteria: 价格突破近 N 日新高且量能显著放大，确认突破有效性后追涨。
+description: 突破策略：放量突破前高是趋势启动的强信号，需量价配合验证突破真实性。
+base_score: 50
+bonuses:
+  - when: "breakout_high(20)"
+    score: 25
+    desc: "收盘价突破 20 日新高"
+  - when: "volume_ratio_gt(2)"
+    score: 20
+    desc: "量比大于 2，放量突破"
+  - when: "above_ma(20)"
+    score: 10
+    desc: "收盘价站上 20 日均线"
+  - when: "change_pct_gt(3)"
+    score: 5
+    desc: "当日涨幅超过 3%"
+  - when: "macd_golden_cross()"
+    score: 10
+    desc: "MACD 同步金叉"
+penalties:
+  - when: "breakdown_low(20)"
+    score: 25
+    desc: "收盘价跌破 20 日新低"
+  - when: "volume_ratio_lt(0.5)"
+    score: 15
+    desc: "量比小于 0.5，明显缩量"
+  - when: "below_ma(20)"
+    score: 15
+    desc: "收盘价跌破 20 日均线"
+required_indicators:
+  - ma20
+  - volume_ratio
+  - high20
+risk_level: 高风险
+hold_period: 1-5 个交易日
