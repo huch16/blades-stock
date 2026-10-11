@@ -13,6 +13,7 @@ import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import sparkLine from "./stockSparkLine.vue"
 import {format} from "date-fns";
 import { dispatchAgentAction } from "../utils/agentControlBus";
+import { setCurrentStock } from "../utils/stockContextBus";
 
 const notify = useNotification()
 
@@ -472,6 +473,7 @@ function recommendRangeToSinglePrice(p) {
 }
 
 function showDetail(row) {
+  setCurrentStock({ code: row.stockCode, name: row.stockName })
   modalDataRef.title = row.stockName
   modalDataRef.content = row.recommendReason
   modalDataRef.riskRemarks = row.riskRemarks

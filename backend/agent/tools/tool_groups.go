@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/go-kratos/blades/tools"
@@ -278,6 +279,8 @@ var groupKeywordsList = []groupKeywords{
 	}},
 }
 
+var reStockPattern = regexp.MustCompile(`(?i)(?:\b|\D)\d{6}(?:\b|\D)|(?:sh|sz|bj)\d{6}|\d{6}\.(?:sh|sz|bj)`)
+
 func ClassifyQuestion(question string) map[ToolGroup]bool {
 	applyToolGroupConfig()
 	matched := map[ToolGroup]bool{
@@ -292,6 +295,13 @@ func ClassifyQuestion(question string) map[ToolGroup]bool {
 			}
 		}
 	}
+
+	// 智能证券代码检测：如果问题包含 6 位股票代码或证券前后缀，秒级自动激活个股量化与 AI 深度诊断工具组
+	if reStockPattern.MatchString(question) {
+		matched[GroupStockAnalysis] = true
+		matched[GroupAIAnalysis] = true
+	}
+
 	if len(matched) <= 1 {
 		for _, g := range []ToolGroup{
 			GroupStockAnalysis, GroupMarket, GroupNewsResearch,

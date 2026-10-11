@@ -1,5 +1,6 @@
 <script setup>
 import StockSparkLine from "./stockSparkLine.vue"
+import { setCurrentStock } from "../utils/stockContextBus"
 
 const props = defineProps({
   result: { type: Object, required: true },
@@ -8,6 +9,15 @@ const props = defineProps({
   openAiEnable: { type: Boolean, default: false },
   groupList: { type: Array, default: () => [] }
 })
+
+function focusStock() {
+  if (props.result && props.result['股票代码']) {
+    setCurrentStock({
+      code: props.result['股票代码'],
+      name: props.result['股票名称']
+    })
+  }
+}
 
 const emit = defineEmits([
   'remove-monitor',
@@ -29,6 +39,7 @@ const emit = defineEmits([
 <template>
   <n-card :data-sort="result.sort" :id="result['股票代码']" :data-code="result['股票代码']" :bordered="true"
           :title="result['股票名称']" :closable="false"
+          @click="focusStock"
           @close="emit('remove-monitor', result['股票代码'], result['股票名称'], result.key)">
     <n-grid v-if="!showSparkLine" :cols="1" :y-gap="6">
       <n-gi>

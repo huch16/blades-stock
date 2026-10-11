@@ -65,6 +65,26 @@
                 <span class="ask-hint">态势推演 ➔</span>
               </div>
             </div>
+
+            <!-- 当前聚焦个股智能感知与一键直达条 -->
+            <div v-if="currentStock && currentStock.code" class="context-stock-banner">
+              <div class="context-stock-left">
+                <span class="context-stock-pin">📌 当前关注:</span>
+                <span class="context-stock-name">{{ currentStock.name || currentStock.code }}</span>
+                <span class="context-stock-code">({{ currentStock.code }})</span>
+              </div>
+              <div class="context-stock-actions">
+                <NButton size="tiny" secondary type="primary" round @click="sendDirectPrompt(`对 ${currentStock.name || currentStock.code} (${currentStock.code}) 进行量化三维深度诊断，包括胜率、目标价与量化评分`)">
+                  🎯 三维体检
+                </NButton>
+                <NButton size="tiny" secondary type="info" round @click="sendDirectPrompt(`详细分析 ${currentStock.name || currentStock.code} (${currentStock.code}) 的主力资金流向、游资龙虎榜席位与筹码集中度博弈`)">
+                  💰 资金筹码
+                </NButton>
+                <NButton size="tiny" secondary type="warning" round @click="sendDirectPrompt(`运行 VectorBT 向量化回测分析 ${currentStock.name || currentStock.code} (${currentStock.code}) 的双均线策略表现与夏普比率`)">
+                  🧪 策略回测
+                </NButton>
+              </div>
+            </div>
             <Transition name="hint-fade">
               <div v-if="hintVisible" class="hint-bar">{{ hintText }}</div>
             </Transition>
@@ -290,9 +310,9 @@
                 </div>
               </div>
               <div class="chat-quick-chips">
-                <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('三维量化诊断 ')">🎯 量化诊断</NTag>
-                <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('VectorBT 策略回测: ')">🧪 策略回测</NTag>
-                <NTag size="small" round :bordered="false" class="quick-chip" @click="fillQuickPrompt('主力资金博弈与筹码集中度分析: ')">💰 资金筹码</NTag>
+                <NTag size="small" round :bordered="false" class="quick-chip" @click="handleQuickChip('三维量化诊断')">🎯 量化诊断</NTag>
+                <NTag size="small" round :bordered="false" class="quick-chip" @click="handleQuickChip('VectorBT 策略回测: ')">🧪 策略回测</NTag>
+                <NTag size="small" round :bordered="false" class="quick-chip" @click="handleQuickChip('主力资金博弈与筹码集中度分析: ')">💰 资金筹码</NTag>
                 <NTag size="small" round :bordered="false" type="info" class="quick-chip" @click="triggerMarketIntelligence('pre_market_briefing')">🌅 盘前前瞻</NTag>
                 <NTag size="small" round :bordered="false" type="warning" class="quick-chip" @click="triggerMarketIntelligence('post_market_review')">🌆 盘后复盘</NTag>
                 <NTag size="small" round :bordered="false" type="success" class="quick-chip" @click="triggerMarketIntelligence('etf_rotation_decision')">📈 ETF轮动</NTag>
@@ -376,6 +396,7 @@ function triggerMarketIntelligence(type) {
 }
 import { cleanFinalContent } from '../utils/cleanText'
 import { dispatchAgentAction } from '../utils/agentControlBus'
+import { currentStock } from '../utils/stockContextBus'
 
 const STORAGE_KEY_MODEL_ID = 'blades-stock-agent-last-model-id'
 
@@ -896,6 +917,24 @@ function fillQuickPrompt(prefix) {
     inputValue.value = prefix + inputValue.value
   } else if (!inputValue.value) {
     inputValue.value = prefix
+  }
+}
+
+function sendDirectPrompt(promptText) {
+  if (isStreamLoad.value) {
+    message.warning('Agent 正在思考分析中，请稍候...')
+    return
+  }
+  inputValue.value = promptText
+  sendMessage()
+}
+
+function handleQuickChip(prefix) {
+  if (currentStock.value?.code) {
+    const stockName = currentStock.value.name ? `${currentStock.value.name} (${currentStock.value.code})` : currentStock.value.code
+    sendDirectPrompt(`${prefix} ${stockName}`)
+  } else {
+    fillQuickPrompt(prefix)
   }
 }
 
@@ -2092,6 +2131,43 @@ onBeforeUnmount(() => {
   font-size: 11px;
   color: #18a058;
   font-weight: 500;
+}
+
+/* 当前聚焦个股智能感知条 */
+.context-stock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  margin: 0 12px 6px 12px;
+  background: linear-gradient(135deg, rgba(64, 152, 252, 0.08) 0%, rgba(24, 160, 88, 0.08) 100%);
+  border: 1px solid rgba(64, 152, 252, 0.25);
+  border-radius: 8px;
+  font-size: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.context-stock-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.context-stock-pin {
+  color: #888;
+  font-size: 11px;
+}
+.context-stock-name {
+  font-weight: 700;
+  color: var(--n-text-color, #333);
+}
+.context-stock-code {
+  font-size: 11px;
+  color: #4098fc;
+}
+.context-stock-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* 伴随控制动作卡片 */

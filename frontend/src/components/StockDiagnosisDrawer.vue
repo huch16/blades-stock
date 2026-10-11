@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import {
   NDrawer,
   NDrawerContent,
@@ -18,6 +18,7 @@ import {
 } from 'naive-ui'
 import { DiagnoseStock } from '../../wailsjs/go/main/App'
 import { EventsEmit } from '../../wailsjs/runtime/runtime'
+import { setCurrentStock } from '../utils/stockContextBus'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -30,23 +31,63 @@ const emit = defineEmits(['update:show'])
 const message = useMessage()
 const loading = ref(false)
 const diagnosisData = ref(null)
+const activeCode = ref(props.stockCode)
+const activeName = ref(props.stockName)
+const recentStocks = ref([])
+
+function loadRecentStocks() {
+  try {
+    const raw = localStorage.getItem('kline-recent-stocks')
+    if (raw) {
+      recentStocks.value = JSON.parse(raw).slice(0, 5)
+    }
+  } catch {}
+}
 
 watch(
-  () => props.show,
-  async (visible) => {
-    if (visible && props.stockCode) {
-      await fetchDiagnosis()
+  () => props.stockCode,
+  (newCode) => {
+    if (newCode) {
+      activeCode.value = newCode
+      activeName.value = props.stockName
     }
   }
 )
 
-async function fetchDiagnosis() {
-  if (!props.stockCode) return
+watch(
+  () => props.show,
+  async (visible) => {
+    if (visible) {
+      loadRecentStocks()
+      if (props.stockCode) {
+        activeCode.value = props.stockCode
+        activeName.value = props.stockName
+      }
+      if (activeCode.value) {
+        setCurrentStock({ code: activeCode.value, name: activeName.value })
+        await fetchDiagnosis(activeCode.value)
+      }
+    }
+  }
+)
+
+async function switchStock(code, name) {
+  if (!code || code === activeCode.value) return
+  activeCode.value = code
+  activeName.value = name || ''
+  setCurrentStock({ code, name })
+  await fetchDiagnosis(code)
+}
+
+async function fetchDiagnosis(targetCode) {
+  const code = targetCode || activeCode.value || props.stockCode
+  if (!code) return
   loading.value = true
   try {
-    const res = await DiagnoseStock(props.stockCode)
+    const res = await DiagnoseStock(code)
     if (res) {
       diagnosisData.value = res
+      if (res.stockName) activeName.value = res.stockName
     } else {
       message.error('量化诊断返回空数据')
     }
@@ -64,8 +105,8 @@ function handleClose() {
 
 function askAgentAssistant() {
   handleClose()
-  const targetName = diagnosisData.value?.stockName || props.stockName || ''
-  const targetCode = diagnosisData.value?.stockCode || props.stockCode || ''
+  const targetName = diagnosisData.value?.stockName || activeName.value || props.stockName || ''
+  const targetCode = diagnosisData.value?.stockCode || activeCode.value || props.stockCode || ''
   const score = diagnosisData.value?.overallScore || ''
   const suggestion = diagnosisData.value?.suggestion || ''
   const q = `请针对 ${targetName} (${targetCode}) 结合当前三维量化诊断（综合评分 ${score}分，建议 ${suggestion}），详细分析近期走势、买卖关键点位以及操作建议。`
@@ -82,9 +123,24 @@ function askAgentAssistant() {
     :trap-focus="false"
   >
     <NDrawerContent
-      :title="`✨ ${diagnosisData?.stockName || stockName} (${diagnosisData?.stockCode || stockCode}) 量化三维诊断`"
+      :title="`✨ ${diagnosisData?.stockName || activeName || stockName} (${diagnosisData?.stockCode || activeCode || stockCode}) 量化三维诊断`"
       closable
     >
+      <!-- 快速历史对比切换条 -->
+      <div v-if="recentStocks.length > 1" style="margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+        <span style="font-size: 11px; color: #888;">快速切换标的:</span>
+        <NButton
+          v-for="s in recentStocks"
+          :key="s.code"
+          size="tiny"
+          quaternary
+          :type="s.code === activeCode ? 'primary' : 'default'"
+          @click="switchStock(s.code, s.name)"
+        >
+          {{ s.name || s.code }}
+        </NButton>
+      </div>
+
       <div v-if="loading" style="display: flex; justify-content: center; align-items: center; height: 300px;">
         <NSpin size="large" description="正在调取 VectorBT 回测引擎、资金筹码及技术形态..." />
       </div>

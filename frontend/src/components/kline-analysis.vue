@@ -9,6 +9,7 @@ import {
 import { useMessage } from 'naive-ui'
 import { onBeforeMount, onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { setCurrentStock } from '../utils/stockContextBus'
 
 const route = useRoute()
 const message = useMessage()
@@ -96,6 +97,7 @@ function handleSearch(value) {
   const found = stockList.value.find(item => item.ts_code === value || toEastMoneyCode(item.ts_code) === emCode)
   selectedName.value = found ? found.name : (selectedName.value || '')
   addToRecent(emCode, selectedName.value)
+  setCurrentStock({ code: emCode, name: selectedName.value })
 }
 
 function addToRecent(code, name) {
@@ -126,6 +128,7 @@ function selectRecent(code, name) {
   selectedCode.value = emCode
   selectedName.value = name || ''
   addToRecent(emCode, name)
+  setCurrentStock({ code: emCode, name: selectedName.value })
 }
 
 function updateChartHeight() {
