@@ -12,7 +12,7 @@ import {
   BackupData,
   RestoreData
 } from "../../wailsjs/go/main/App";
-import {NTag, NTooltip, NIcon, useMessage, useDialog} from "naive-ui";
+import {NTag, NTooltip, NIcon, NCollapse, NCollapseItem, useMessage, useDialog} from "naive-ui";
 import {data, models} from "../../wailsjs/go/models";
 import type { AIConfig } from "../../wailsjs/go/models";
 import {EventsEmit} from "../../wailsjs/runtime";
@@ -24,6 +24,74 @@ const dialog = useDialog()
 const aiConfigStore = useAiConfigStore()
 
 const formRef = ref(null)
+const basicExpanded = ref(['basic', 'datasource', 'notify', 'ai'])
+
+// ========================
+// 表单状态追踪 (F-01: 未保存提示/恢复默认/取消修改)
+// ========================
+const originalFormValue = ref({})
+const isFormDirty = computed(() => {
+  return JSON.stringify(formValue.value) !== JSON.stringify(originalFormValue.value)
+})
+function markClean() {
+  originalFormValue.value = JSON.parse(JSON.stringify(formValue.value))
+}
+function cancelChanges() {
+  if (!isFormDirty.value) return
+  dialog.warning({
+    title: '放弃未保存的修改？',
+    content: '当前有未保存的修改，确定要放弃并恢复到最后保存的状态吗？',
+    positiveText: '确定放弃',
+    negativeText: '继续编辑',
+    onPositiveAction: () => {
+      formValue.value = JSON.parse(JSON.stringify(originalFormValue.value))
+      message.info('已恢复到最后保存的状态')
+    }
+  })
+}
+function resetToDefaults() {
+  dialog.warning({
+    title: '确认恢复默认值？',
+    content: '这将把所有设置重置为出厂默认值，当前未保存的修改将丢失。',
+    positiveText: '确认重置',
+    negativeText: '取消',
+    onPositiveAction: () => {
+      GetConfig().then(res => {
+        formValue.value = {
+          ID: res.ID,
+          tushareToken: res.tushareToken,
+          emApiKey: res.emApiKey || '',
+          tickFlowAPIKey: res.tickFlowAPIKey || '',
+          dingPush: { enable: res.dingPushEnable, dingRobot: res.dingRobot },
+          localPush: { enable: res.localPushEnable },
+          updateBasicInfoOnStart: res.updateBasicInfoOnStart,
+          refreshInterval: res.refreshInterval,
+          enableDanmu: res.enableDanmu,
+          browserPath: res.browserPath,
+          enableNews: res.enableNews,
+          darkTheme: res.darkTheme,
+          enableFund: res.enableFund,
+          enablePushNews: res.enablePushNews,
+          enableOnlyPushRedNews: res.enableOnlyPushRedNews,
+          httpProxy: res.httpProxy,
+          httpProxyEnabled: res.httpProxyEnabled,
+          disableBrowserSearch: res.disableBrowserSearch ?? false,
+          enableAgent: res.enableAgent,
+          qgqpBId: res.qgqpBId,
+          akshareServiceUrl: res.akshareServiceUrl || 'http://115.190.72.22:8089',
+          aDataServiceUrl: res.aDataServiceUrl || 'http://115.190.72.22:8000',
+          defaultDataSource: res.defaultDataSource || 'adata',
+          embeddingEnabled: !!res.embeddingEnabled,
+          embeddingModelName: res.embeddingModelName || '',
+          embeddingBaseUrl: res.embeddingBaseUrl || '',
+          embeddingApiKey: res.embeddingApiKey || '',
+        }
+        markClean()
+        message.success('已恢复默认值，请点击「保存设置」生效')
+      }).catch(err => message.error('重置失败: ' + (err?.message || err)))
+    }
+  })
+}
 
 // ========================
 // AI 配置元数据（非业务字段，不入库）
@@ -396,6 +464,7 @@ onMounted(() => {
     formValue.value.embeddingModelName = res.embeddingModelName || '';
     formValue.value.embeddingBaseUrl = res.embeddingBaseUrl || '';
     formValue.value.embeddingApiKey = res.embeddingApiKey || '';
+    markClean()
   }).catch(err => {
     message.error('加载配置失败: ' + (err?.message || err))
   })
@@ -465,6 +534,7 @@ async function saveConfig() {
     const res = await UpdateConfig(config)
     if (res === '保存成功！') {
       message.success(res)
+      markClean()
       // 保存成功后刷新 Store (F-08/F-32)
       await aiConfigStore.loadConfigs()
     } else {
@@ -681,28 +751,52 @@ function importConfig() {
 <template>
   <n-flex justify="left" style="text-align: left; --wails-draggable:no-drag">
     <n-form ref="formRef" :rules="formRules" :label-placement="'left'" :label-align="'left'">
-      <n-space vertical size="large">
-        <n-card :title="() => h(NTag, { type: 'primary', bordered: false }, () => '基础设置')" size="small">
+      <n-collapse v-model:expanded-names="basicExpanded" accordion>
+        <n-collapse-item name="basic">
+          <template #header>
+            <n-flex justify="space-between" align="center">
+              <n-text><NTag type="primary" bordered="false">基础设置</NTag></n-text>
+              <n-text depth="3" style="font-size: 12px;">Tushare Token、主题、刷新间隔、浏览器路径、指数基金、东财标识</n-text>
+            </n-flex>
+          </template>
           <n-grid :cols="24" :x-gap="24" style="text-align: left">
             <n-form-item-gi :span="10" label="Tushare Token：" path="tushareToken">
-              <n-input type="text" placeholder="Tushare api token" v-model:value="formValue.tushareToken" clearable/>
+              <n-input type="text" placeholder="Tushare api token (如: your_tushare_pro_token)" v-model:value="formValue.tushareToken" clearable/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>Tushare Pro 官网申请的 API Token，用于获取基础行情数据，示例: your_tushare_pro_token</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="4" label="启动时更新基础信息：" path="updateBasicInfoOnStart">
               <n-switch v-model:value="formValue.updateBasicInfoOnStart"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>启动时自动更新股票基本信息（代码、名称、行业等）</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="4" label="数据刷新间隔：" path="refreshInterval">
-              <n-input-number v-model:value="formValue.refreshInterval" placeholder="请输入数据刷新间隔(秒)" :min="1" :max="3600">
+              <n-input-number v-model:value="formValue.refreshInterval" placeholder="请输入数据刷新间隔(秒), 如 5" :min="1" :max="3600">
                 <template #suffix>秒</template>
               </n-input-number>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>自动刷新行情数据的间隔，建议 1-60 秒，示例: 5</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="6" label="暗黑主题：" path="darkTheme">
               <n-switch v-model:value="formValue.darkTheme"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>跟随系统或手动切换深色/浅色模式</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="10" label="浏览器安装路径：" path="browserPath">
-              <n-input type="text" placeholder="浏览器安装路径" v-model:value="formValue.browserPath" clearable/>
+              <n-input type="text" placeholder="浏览器安装路径, 如 C:\Program Files\Google\Chrome\Application\chrome.exe" v-model:value="formValue.browserPath" clearable/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>本地浏览器可执行文件路径，用于爬虫/搜索功能</template></n-tooltip>
+              </template>
             </n-form-item-gi>
            <n-form-item-gi :span="3" label="指数基金：" path="enableFund">
               <n-switch v-model:value="formValue.enableFund"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>启用基金相关功能（基金列表、净值、排行等）</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="11" label="东财唯一标识：" path="qgqpBId">
               <n-input type="text" placeholder="东财唯一标识" v-model:value="formValue.qgqpBId" clearable/>
@@ -767,15 +861,27 @@ function importConfig() {
             </n-form-item-gi>
 
           </n-grid>
-        </n-card>
+        </n-collapse-item>
 
-        <n-card :title="() => h(NTag, { type: 'primary', bordered: false }, () => '数据源设置')" size="small">
+        <n-collapse-item name="datasource">
+          <template #header>
+            <n-flex justify="space-between" align="center">
+              <n-text><NTag type="primary" bordered="false">数据源设置</NTag></n-text>
+              <n-text depth="3" style="font-size: 12px;">AKShare/AData 代理地址、默认数据源优先级</n-text>
+            </n-flex>
+          </template>
           <n-grid :cols="24" :x-gap="24" style="text-align: left">
             <n-form-item-gi :span="8" label="AKShare 服务地址：" path="akshareServiceUrl">
-              <n-input type="text" placeholder="AKShare 代理地址" v-model:value="formValue.akshareServiceUrl" clearable/>
+              <n-input type="text" placeholder="AKShare 代理地址 (如: http://your-vps:8089)" v-model:value="formValue.akshareServiceUrl" clearable/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>AKShare 代理服务地址，提供基础行情/财务/资金流数据，示例: http://your-vps:8089</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="8" label="AData 服务地址：" path="aDataServiceUrl">
-              <n-input type="text" placeholder="AData 服务地址" v-model:value="formValue.aDataServiceUrl" clearable/>
+              <n-input type="text" placeholder="AData 服务地址 (如: http://your-vps:8000)" v-model:value="formValue.aDataServiceUrl" clearable/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>AData 服务地址，提供高性能行情/财务/资金流数据，示例: http://your-vps:8000</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="6" label="默认数据源：" path="defaultDataSource">
               <n-select v-model:value="formValue.defaultDataSource" :options="[
@@ -783,29 +889,56 @@ function importConfig() {
                 { label: 'AKShare（VPS :8089）', value: 'akshare' },
                 { label: '自动（MAC→东财→新浪→腾讯→通达信）', value: 'auto' },
               ]"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>默认优先使用的数据源，auto 会按优先级自动降级</template></n-tooltip>
+              </template>
             </n-form-item-gi>
           </n-grid>
-        </n-card>
+        </n-collapse-item>
 
-        <n-card :title="() => h(NTag, { type: 'primary', bordered: false }, () => '通知设置')" size="small">
+        <n-collapse-item name="notify">
+          <template #header>
+            <n-flex justify="space-between" align="center">
+              <n-text><NTag type="primary" bordered="false">通知设置</NTag></n-text>
+              <n-text depth="3" style="font-size: 12px;">钉钉/本地推送、弹幕、快讯、仅红字提醒</n-text>
+            </n-flex>
+          </template>
           <n-grid :cols="24" :x-gap="24" style="text-align: left">
             <n-form-item-gi :span="3" label="钉钉推送：" path="dingPush.enable">
               <n-switch v-model:value="formValue.dingPush.enable"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>启用后通过钉钉机器人推送重要通知</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="3" label="本地推送：" path="localPush.enable">
               <n-switch v-model:value="formValue.localPush.enable"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>启用系统原生通知，无需钉钉也能收到提醒</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="3" label="弹幕功能：" path="enableDanmu">
               <n-switch v-model:value="formValue.enableDanmu"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>在 K 线图上显示弹幕式实时资讯/异动提示</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="3" label="显示滚动快讯：" path="enableNews">
               <n-switch v-model:value="formValue.enableNews"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>启用市场资讯/快讯采集与滚动展示</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi :span="3" label="市场资讯提醒：" path="enablePushNews">
               <n-switch v-model:value="formValue.enablePushNews"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>开启后收到市场快讯/资讯推送</template></n-tooltip>
+              </template>
             </n-form-item-gi>
             <n-form-item-gi v-if="formValue.enablePushNews" :span="4" label="只提醒红字或关注个股的新闻：" path="enableOnlyPushRedNews">
               <n-switch v-model:value="formValue.enableOnlyPushRedNews"/>
+              <template #feedback>
+                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>仅推送涨幅>0%或关注个股的新闻，减少干扰</template></n-tooltip>
+              </template>
             </n-form-item-gi>
 
             <n-form-item-gi :span="22" v-if="formValue.dingPush.enable" label="钉钉机器人接口地址："
@@ -815,9 +948,15 @@ function importConfig() {
             </n-form-item-gi>
 
           </n-grid>
-        </n-card>
+        </n-collapse-item>
 
-        <n-card :title="() => h(NTag, { type: 'primary', bordered: false }, () => 'AI设置')" size="small">
+        <n-collapse-item name="ai">
+          <template #header>
+            <n-flex justify="space-between" align="center">
+              <n-text><NTag type="primary" bordered="false">AI设置</NTag></n-text>
+              <n-text depth="3" style="font-size: 12px;">AI诊股、模型配置、向量模型、回测、提示词、AI配置管理</n-text>
+            </n-flex>
+          </template>
           <n-grid :cols="24" :x-gap="24" style="text-align: left;">
             <n-form-item-gi :span="24" label="AI诊股：" path="openAI.enable">
               <n-switch v-model:value="openAiEnable"/>
@@ -1230,16 +1369,22 @@ function importConfig() {
             <n-gi :span="24">
               <n-space vertical>
                 <n-space justify="center">
-                  <n-button type="primary" strong @click="saveConfig">保存设置</n-button>
+                  <n-button type="primary" strong @click="saveConfig" :disabled="!isFormDirty">保存设置</n-button>
+                  <n-button type="default" @click="cancelChanges" :disabled="!isFormDirty">取消修改</n-button>
+                  <n-button type="warning" @click="resetToDefaults">恢复默认值</n-button>
+                  <n-divider vertical style="margin: 0 16px;"/>
                   <n-button type="info" @click="exportConfig">导出配置</n-button>
                   <n-button type="error" @click="importConfig">导入配置</n-button>
                 </n-space>
+                <n-text depth="3" style="font-size: 12px; text-align: center; display: block;">
+                  {{ isFormDirty ? '⚠ 有未保存的修改，请点击保存设置' : '✓ 配置已是最新状态' }}
+                </n-text>
               </n-space>
             </n-gi>
 
           </n-grid>
-        </n-card>
-      </n-space>
+        </n-collapse-item>
+      </n-collapse>
     </n-form>
   </n-flex>
 </template>

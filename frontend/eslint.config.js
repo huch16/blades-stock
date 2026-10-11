@@ -1,30 +1,39 @@
-module.exports = {
-  root: true,
-  env: {
-    node: true,
-    browser: true,
-    es2021: true,
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import vuePlugin from 'eslint-plugin-vue';
+import globals from 'globals';
+
+export default [
+  {
+    ignores: ['dist/**', 'node_modules/**', '*.config.*', '*.d.ts'],
   },
-  extends: [
-    'eslint:recommended',
-    '@typescript-eslint/recommended',
-    'plugin:vue/vue3-recommended',
-    '@typescript-eslint/eslint-recommended'
-  ],
-  parserOptions: {
-    ecmaVersion: 2021,
-    sourceType: 'module',
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  ...vuePlugin.configs['flat/recommended'],
+  {
+    files: ['**/*.{js,ts,vue}'],
+    languageOptions: {
+      ecmaVersion: 2021,
+      sourceType: 'module',
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...globals.es2021,
+      },
+      parserOptions: {
+        ecmaVersion: 2021,
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      vue: vuePlugin,
+    },
+    rules: {
+      'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
+      'no-debugger': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
+      '@typescript-eslint/explicit-module-boundary-types': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      'vue/multi-word-component-names': 'off',
+    },
   },
-  plugins: [
-    '@typescript-eslint',
-    'vue'
-  ],
-  rules: {
-    // Override or add rules here
-    'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
-    'no-debugger': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
-    '@typescript-eslint/explicit-module-boundary-types': 'off',
-    '@typescript-eslint/no-explicit-any': 'warn',
-    'vue/multi-word-component-names': 'off',
-  },
-};
+];

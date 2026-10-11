@@ -120,6 +120,7 @@ var migrationRegistry = []MigrationStep{
 			}
 			return nil
 		},
+	},
 	{
 		Version:     20260401006,
 		Description: "create skill_versions table",

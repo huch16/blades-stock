@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"blades-stock/backend/data"
-	"blades-stock/backend/agent/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"github.com/go-kratos/blades"
@@ -63,25 +62,25 @@ func estimateLLMCost(config *data.AIConfig, req *blades.ModelRequest) float64 {
 
 // recordLLMQotaMetrics records LLM quota metrics for observability
 func recordLLMQotaMetrics(ctx context.Context, dailyQuota int64, dailyCostUSD float64, requestQuota int64, costQuota float64) {
-	telemetry.initMetrics()
+	initMetrics()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
 	attrs := []attribute.KeyValue{}
 
-	if telemetry.toolQuotaLimitGauge != nil {
+	if toolQuotaLimitGauge != nil {
 		if requestQuota > 0 {
-			telemetry.toolQuotaLimitGauge.Record(ctx, float64(requestQuota), metric.WithAttributes(append(attrs, attribute.String("type", "llm_request_quota"))...))
+			toolQuotaLimitGauge.Record(ctx, requestQuota, metric.WithAttributes(append(attrs, attribute.String("type", "llm_request_quota"))...))
 		}
 		if costQuota > 0 {
-			telemetry.toolQuotaLimitGauge.Record(ctx, float64(costQuota), metric.WithAttributes(append(attrs, attribute.String("type", "llm_cost_quota"))...))
+			toolQuotaLimitGauge.Record(ctx, int64(costQuota), metric.WithAttributes(append(attrs, attribute.String("type", "llm_cost_quota"))...))
 		}
 	}
 
-	if telemetry.toolQuotaUsedGauge != nil {
-		telemetry.toolQuotaUsedGauge.Record(ctx, float64(dailyQuota), metric.WithAttributes(append(attrs, attribute.String("type", "llm_request_used"))...))
-		telemetry.toolQuotaUsedGauge.Record(ctx, float64(dailyCostUSD), metric.WithAttributes(append(attrs, attribute.String("type", "llm_cost_used"))...))
+	if toolQuotaUsedGauge != nil {
+		toolQuotaUsedGauge.Record(ctx, dailyQuota, metric.WithAttributes(append(attrs, attribute.String("type", "llm_request_used"))...))
+		toolQuotaUsedGauge.Record(ctx, int64(dailyCostUSD*1000), metric.WithAttributes(append(attrs, attribute.String("type", "llm_cost_used_milli_usd"))...))
 	}
 }
 

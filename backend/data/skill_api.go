@@ -271,7 +271,7 @@ func (s *SkillAPI) GetSkillVersions(query *models.SkillVersionQuery) (*models.Sk
 	if query == nil {
 		query = &models.SkillVersionQuery{}
 	}
-	var result models.SkillVersionPageResp
+	var total int64
 	db := s.dao.Model(&models.SkillVersion{})
 	if query.SkillID != 0 {
 		db = db.Where("skill_id = ?", query.SkillID)
@@ -280,9 +280,9 @@ func (s *SkillAPI) GetSkillVersions(query *models.SkillVersionQuery) (*models.Sk
 		db = db.Where("is_active = ?", *query.Active)
 	}
 	// Count total
-	if err := db.Count(&result.Total).Error; err != nil {
+	if err := db.Count(&total).Error; err != nil {
 		logger.SugaredLogger.Errorf("GetSkillVersions count failed: %v", err)
-		return &result
+		return nil, err
 	}
 	// Pagination
 	page := query.Page
@@ -298,10 +298,19 @@ func (s *SkillAPI) GetSkillVersions(query *models.SkillVersionQuery) (*models.Sk
 	var versions []models.SkillVersion
 	if err := db.Offset(offset).Limit(pageSize).Find(&versions).Error; err != nil {
 		logger.SugaredLogger.Errorf("GetSkillVersions find failed: %v", err)
-		return &result
+		return nil, err
 	}
-	result.Data = versions
-	return &result, nil
+	result := &models.SkillVersionPageResp{
+		Code:    200,
+		Message: "success",
+		Data: models.SkillVersionPageData{
+			List:     versions,
+			Total:    total,
+			Page:     page,
+			PageSize: pageSize,
+		},
+	}
+	return result, nil
 }
 
 // GetActiveSkillVersion returns the active version for a skill.
@@ -320,9 +329,6 @@ func (s *SkillAPI) ActivateSkillVersion(versionID uint) error {
 	err := s.dao.First(&ver, versionID).Error
 	if err != nil {
 		return err
-	}
-	if ver == nil {
-		return fmt.Errorf("skill version %d not found", versionID)
 	}
 	// Deactivate all versions of this skill
 	if err := s.dao.Model(&models.SkillVersion{}).Where("skill_id = ?", ver.SkillID).Update("is_active", false).Error; err != nil {

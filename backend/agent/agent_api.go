@@ -547,11 +547,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		// Audit log for LLM run
 		llmAuditEntry := models.AuditLog{
 			ToolName:    "LLM_RUN",
-			Success:     finalStatus == nil || *finalStatus == "",
+			Success:     finalStatus == "",
 			DurationMs:  int64(totalDur.Milliseconds()),
 		}
-		if finalStatus != nil && *finalStatus != "" {
-			llmAuditEntry.ErrorMsg = *finalStatus
+		if finalStatus != "" {
+			llmAuditEntry.ErrorMsg = finalStatus
 		}
 		go RecordAuditLog(llmAuditEntry)
 
@@ -612,7 +612,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if len(actions) > 0 {
 				for _, action := range actions {
 					actionAuditEntry := models.AuditLog{
-						ToolName:    "AGENT_ACTION_" + action.Type,
+						ToolName:    "AGENT_ACTION_" + string(action.Type),
 						Success:     true,  // Actions are parsed from successful LLM responses
 					}
 					// Serialize action details as JSON for the request/response fields

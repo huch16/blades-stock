@@ -33,6 +33,8 @@ var (
 	toolQuotaUsedGauge       metric.Int64Gauge
 	toolQuotaExceededCounter metric.Int64Counter
 	toolCostCounter          metric.Float64Counter
+	modelCostCounter         metric.Float64Counter
+	backtestAccuracyGauge    metric.Float64Gauge
 
 	serverStartTime = time.Now()
 )
@@ -382,20 +384,20 @@ func RecordQuotaLimits(ctx context.Context, runBudget, dailyBudget int64, dailyC
 		toolQuotaLimitGauge.Record(ctx, runBudget, metric.WithAttributes(attribute.String("type", "run_budget")))
 		toolQuotaLimitGauge.Record(ctx, dailyBudget, metric.WithAttributes(attribute.String("type", "daily_budget")))
 	}
+}
 
-	// SetBacktestAccuracy 设置回测准备率指标
-	func SetBacktestAccuracy(ctx context.Context, skillID uint, accuracy float64) {
-		initMetrics()
-		if ctx == nil {
-			ctx = context.Background()
-		}
+// SetBacktestAccuracy 设置回测准备率指标
+func SetBacktestAccuracy(ctx context.Context, skillID uint, accuracy float64) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-		attrs := []attribute.KeyValue{
-			attribute.String("skill_id", strconv.FormatUint(uint64(skillID), 10)),
-		}
+	attrs := []attribute.KeyValue{
+		attribute.String("skill_id", strconv.FormatUint(uint64(skillID), 10)),
+	}
 
-		if backtestAccuracyGauge != nil {
-			backtestAccuracyGauge.Record(ctx, accuracy, metric.WithAttributes(attrs...))
-		}
+	if backtestAccuracyGauge != nil {
+		backtestAccuracyGauge.Record(ctx, accuracy, metric.WithAttributes(attrs...))
 	}
 }

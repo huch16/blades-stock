@@ -10,7 +10,6 @@ import (
 
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
-	"blades-stock/backend/agent/telemetry"
 	bladesTools "github.com/go-kratos/blades/tools"
 )
 
