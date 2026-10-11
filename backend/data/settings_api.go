@@ -92,6 +92,11 @@ type AIConfig struct {
 	EmbeddingBaseUrl   string  `json:"embeddingBaseUrl"`
 	LLMConcurrencyLimit int    `json:"llmConcurrencyLimit"` // 并发限制，默认 2
 	SubAgentTimeout    int     `json:"subAgentTimeout"`    // 子Agent超时秒，默认 20
+	// Rate limiting and quota management
+	RateLimitPerSecond float64 `json:"rateLimitPerSecond"` // 每秒最大请求数，0 表示不限制
+	Burst              int     `json:"burst"`              // 令牌桶突发大小，0 表示使用默认值
+	DailyRequestQuota  int     `json:"dailyRequestQuota"`  // 每日最大请求数，0 表示不限制
+	DailyCostQuota     float64 `json:"dailyCostQuota"`     // 每日最大成本（USD），0 表示不限制
 }
 
 func (AIConfig) TableName() string {
@@ -113,6 +118,19 @@ func (c *AIConfig) SetDefaults() {
 	}
 	if c.SubAgentTimeout <= 0 {
 		c.SubAgentTimeout = 20
+	}
+	// Rate limiting and quota defaults: 0 means unlimited
+	if c.RateLimitPerSecond < 0 {
+		c.RateLimitPerSecond = 0
+	}
+	if c.Burst < 0 {
+		c.Burst = 0
+	}
+	if c.DailyRequestQuota < 0 {
+		c.DailyRequestQuota = 0
+	}
+	if c.DailyCostQuota < 0 {
+		c.DailyCostQuota = 0
 	}
 }
 

@@ -12,6 +12,7 @@ const cronTaskManager = () => import("../components/cron-task-manager.vue")
 const mcpServerManager = () => import("../components/mcp-server-manager.vue")
 const klineAnalysis = () => import("../components/kline-analysis.vue")
 const vectorBTPanel = () => import("../components/VectorBTPanel.vue")
+const auditView = () => import('../views/admin/Audit.vue')
 
 const routes = [
     { path: '/', component: stockView, name: 'stock' },
@@ -24,6 +25,7 @@ const routes = [
     { path: '/mcp-servers', component: mcpServerManager, name: 'mcpServers' },
     { path: '/kline-analysis', component: klineAnalysis, name: 'klineAnalysis' },
     { path: '/vectorbt', component: vectorBTPanel, name: 'vectorbt' },
+    { path: '/audit', component: auditView, name: 'audit' },
 ]
 
 const router = createRouter({

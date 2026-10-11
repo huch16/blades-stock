@@ -244,8 +244,15 @@ func (s *AIReportBacktest) BacktestAIReports(ctx context.Context, limit int) (*A
 
 	if len(reports) == 0 {
 		return &AIReportBacktestResult{
-			Total:   0,
-			Duration: time.Since(start),
+			Total:      0,
+			Processed:  0,
+			Skipped:    0,
+			Accurate:   0,
+			AccuracyRate: 0,
+			DirectionStats: make(map[string]*DirStats3),
+			Duration:   time.Since(start),
+			ModelName:  "",
+			SkillUsed:  "",
 		}, nil
 	}
 
@@ -316,6 +323,21 @@ func (s *AIReportBacktest) BacktestAIReports(ctx context.Context, limit int) (*A
 	}
 
 	stats := s.computeStats(backtestResults)
+
+	// Collect unique model names from reports
+	modelNames := make(map[string]bool)
+	for _, r := range reports {
+		if r.ModelName != "" {
+			modelNames[r.ModelName] = true
+		}
+	}
+	modelList := make([]string, 0, len(modelNames))
+	for m := range modelNames {
+		modelList = append(modelList, m)
+	}
+	// SkillUsed is not directly available; leave empty for now
+	skillUsed := ""
+
 	return &AIReportBacktestResult{
 		Total:          len(reports),
 		Processed:      len(reports) - countSkipped2(backtestResults),
@@ -324,6 +346,8 @@ func (s *AIReportBacktest) BacktestAIReports(ctx context.Context, limit int) (*A
 		AccuracyRate:   stats.AccuracyRate,
 		DirectionStats: stats.DirectionStats,
 		Duration:       time.Since(start),
+		ModelName:      strings.Join(modelList, ", "),
+		SkillUsed:      skillUsed,
 	}, nil
 }
 
@@ -407,6 +431,8 @@ type AIReportBacktestResult struct {
 	AccuracyRate   float64
 	DirectionStats map[string]*DirStats3
 	Duration       time.Duration
+	ModelName      string
+	SkillUsed      string
 }
 
 // ============================================================================

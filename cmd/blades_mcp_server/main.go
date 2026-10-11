@@ -26,6 +26,7 @@ import (
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 
 	bladesTools "github.com/go-kratos/blades/tools"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -132,7 +133,9 @@ func convertTools(all []bladesTools.Tool) []server.ServerTool {
 }
 
 // callBladeTool 将 MCP 调用参数转为 blades 工具的 JSON 参数串，并返回文本结果。
+// 在调用前进行 JSON Schema 校验，并在调用前后写入审计日志。
 func callBladeTool(ctx context.Context, bt bladesTools.Tool, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	start := time.Now()
 	argsJSON := "{}"
 	switch v := req.GetRawArguments().(type) {
 	case json.RawMessage:
@@ -150,7 +153,73 @@ func callBladeTool(ctx context.Context, bt bladesTools.Tool, req mcp.CallToolReq
 		// keep "{}"
 	}
 
+	// Schema validation
+	if schema := bt.InputSchema(); schema != nil {
+		var data map[string]interface{}
+		if err := json.Unmarshal([]byte(argsJSON), &data); err != nil {
+			// invalid JSON
+			entry := models.AuditLog{
+				ToolName:     bt.Name(),
+				ServerName:   "mcp",
+				RequestBody:  argsJSON,
+				Success:      false,
+				ErrorMsg:     fmt.Sprintf("invalid JSON: %v", err),
+				DurationMs:   0,
+			}
+			agent.RecordAuditLogSync(entry)
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{textContent(fmt.Sprintf("工具参数非法JSON: %v", err))},
+				IsError: true,
+			}, nil
+		}
+		resolved, err := schema.Resolve(nil)
+		if err != nil {
+			entry := models.AuditLog{
+				ToolName:     bt.Name(),
+				ServerName:   "mcp",
+				RequestBody:  argsJSON,
+				Success:      false,
+				ErrorMsg:     err.Error(),
+				DurationMs:   0,
+			}
+			agent.RecordAuditLogSync(entry)
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{textContent(fmt.Sprintf("工具参数解析失败: %v", err))},
+				IsError: true,
+			}, nil
+		}
+		if err := resolved.Validate(data); err != nil {
+			entry := models.AuditLog{
+				ToolName:     bt.Name(),
+				ServerName:   "mcp",
+				RequestBody:  argsJSON,
+				Success:      false,
+				ErrorMsg:     err.Error(),
+				DurationMs:   0,
+			}
+			agent.RecordAuditLogSync(entry)
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{textContent(fmt.Sprintf("工具参数校验失败: %v", err))},
+				IsError: true,
+			}, nil
+		}
+	}
+
 	out, err := bt.Handle(ctx, argsJSON)
+	duration := time.Since(start).Milliseconds()
+
+	// Audit log for success or failure
+	entry := models.AuditLog{
+		ToolName:     bt.Name(),
+		ServerName:   "mcp",
+		RequestBody:  argsJSON,
+		Response:     out,
+		Success:      err == nil,
+		ErrorMsg:     func() string { if err != nil { return err.Error() }; return "" }(),
+		DurationMs:   duration,
+	}
+	agent.RecordAuditLog(entry) // async
+
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{textContent(fmt.Sprintf("工具调用失败: %v", err))},

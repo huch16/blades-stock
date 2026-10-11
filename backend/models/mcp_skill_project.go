@@ -92,7 +92,7 @@ type SkillQuery struct {
 }
 
 type SkillPageResp struct {
-	Total int     `json:"total"`
+	Total int64   `json:"total"`
 	Data  []Skill `json:"data"`
 }
 

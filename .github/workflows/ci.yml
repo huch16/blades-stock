@@ -57,3 +57,16 @@ jobs:
             echo "Coverage below 60%"
             exit 1
           fi
+
+  smoke-backtest:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Run smoke backtest
+        run: |
+          go test -tags "desktop,production" -run TestRunAIReportBacktest ./backend/quant/...

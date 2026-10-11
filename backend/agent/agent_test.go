@@ -1,9 +1,13 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
+
+	blades "github.com/go-kratos/blades"
+	bladesTools "github.com/go-kratos/blades/tools"
 )
 
 // Pure unit tests for the agent's content-compression and classification
@@ -108,5 +112,64 @@ func TestClassifyComplexity(t *testing.T) {
 			status = "✗"
 		}
 		t.Logf("%s question=%q expected=%s got=%s", status, tt.question, tt.expected, result)
+	}
+}
+
+// TestAgentWithMockProvider tests that the agent can be created and run with a mock model provider.
+func TestAgentWithMockProvider(t *testing.T) {
+	// Create a mock model provider that returns a fixed response.
+	mockResp := "This is a mock response from the model."
+	mockProvider := NewMockModelProvider("mock-provider", mockResp)
+
+	// Create a simple tool (optional, but we can pass an empty slice).
+	var tools []bladesTools.Tool
+
+	// Create a blades agent with the mock provider.
+	agent, err := blades.NewAgent("test-agent",
+		blades.WithModel(mockProvider),
+		blades.WithTools(tools...),
+		blades.WithInstruction("You are a helpful assistant."),
+	)
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	// Create an invocation with a simple user message.
+	userMsg := &blades.Message{
+		Role: blades.RoleUser,
+		Parts: []blades.Part{
+			blades.TextPart{Text: "Hello, how are you?"},
+		},
+	}
+	invocation := &blades.Invocation{
+		ID:      "test-invocation",
+		Message: userMsg,
+		// We don't need to set other fields for this test.
+		Streamable: false,
+	}
+
+	// Run the agent and collect the response.
+	ctx := context.Background()
+	msgs := make([]*blades.Message, 0)
+	var runErr error
+	for msg, e := range agent.Run(ctx, invocation) {
+		if e != nil {
+			runErr = e
+			break
+		}
+		if msg != nil {
+			msgs = append(msgs, msg)
+		}
+	}
+	if runErr != nil {
+		t.Fatalf("agent run returned an error: %v", runErr)
+	}
+	if len(msgs) == 0 {
+		t.Fatalf("agent did not return any messages")
+	}
+	// Check that the last message contains the mock response.
+	lastMsg := msgs[len(msgs)-1]
+	if !strings.Contains(lastMsg.Text(), mockResp) {
+		t.Fatalf("expected mock response '%s' in agent response, got: %s", mockResp, lastMsg.Text())
 	}
 }

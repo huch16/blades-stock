@@ -193,8 +193,9 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 		return nil, err
 	}
 
-	modelProviderCache.Store(key, cachedProvider{provider: provider})
-	return provider, nil
+	wrapped := NewModelProviderWrapper(provider, &aiConfig)
+	modelProviderCache.Store(key, cachedProvider{provider: wrapped})
+	return wrapped, nil
 }
 
 // sanitizeToolsMiddleware 解决部分严格模型服务商（如 MiniMax 报错 2013 invalid params, function parameters is empty）

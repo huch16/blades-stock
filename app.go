@@ -16,6 +16,7 @@ import (
 	"blades-stock/backend/quant"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1594,8 +1595,149 @@ func (a *App) TriggerAIReportBacktest(limit int) (*quant.AIReportBacktestResult,
 	return mgr.RunAIReportBacktest(context.Background(), limit)
 }
 
-func (a *App) GetAIResponseResult(stock string) *models.AIResponseResult {
-	return data.NewDeepSeekOpenAi(a.ctx, 0).GetAIResponseResult(stock)
+// GetAuditLogList 分页获取审计日志
+func (a *App) GetAuditLogList(query models.AuditLogQuery) (*models.AuditLogPageResp, error) {
+	if query.Page <= 0 {
+		query.Page = 1
+	}
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
+	offset := (query.Page - 1) * query.PageSize
+
+	var list []models.AuditLog
+	var total int64
+
+	q := db.Dao.Model(&models.AuditLog{})
+
+	// 构建查询条件
+	if query.UserID != "" {
+		q.Where("user_id = ?", query.UserID)
+	}
+	if query.AgentID != "" {
+		q.Where("agent_id = ?", query.AgentID)
+	}
+	if query.SkillID != 0 {
+		q.Where("skill_id = ?", query.SkillID)
+	}
+	if query.ToolName != "" {
+		q.Where("tool_name LIKE ?", "%"+query.ToolName+"%")
+	}
+	if query.ServerName != "" {
+		q.Where("server_name LIKE ?", "%"+query.ServerName+"%")
+	}
+	if query.Success != nil {
+		q.Where("success = ?", *query.Success)
+	}
+	if query.StartDate != "" {
+		q.Where("DATE(created_at) >= ?", query.StartDate)
+	}
+	if query.EndDate != "" {
+		q.Where("DATE(created_at) <= ?", query.EndDate)
+	}
+	if query.Keyword != "" {
+		keyword := "%" + query.Keyword + "%"
+		q.Where("request_body LIKE ? OR response LIKE ?", keyword, keyword)
+	}
+
+	// 计算总数
+	if err := q.Count(&total).Error; err != nil {
+		return nil, err
+	}
+	// 查询数据
+	if err := q.Order("created_at desc").Offset(offset).Limit(query.PageSize).Find(&list).Error; err != nil {
+		return nil, err
+	}
+
+	resp := &models.AuditLogPageResp{
+		Code:    0,
+		Message: "success",
+		Data: models.AuditLogPageData{
+			List:      list,
+			Total:     total,
+			Page:      query.Page,
+			PageSize:  query.PageSize,
+		},
+	}
+	return resp, nil
+}
+
+// ExportAuditLogCSV 导出审计日志为 CSV 字符串
+func (a *App) ExportAuditLogCSV(query models.AuditLogQuery) (string, error) {
+	// 不分页，导出所有符合条件的记录
+	var list []models.AuditLog
+	q := db.Dao.Model(&models.AuditLog{})
+
+	// 同样的过滤条件（复用逻辑）
+	if query.UserID != "" {
+		q.Where("user_id = ?", query.UserID)
+	}
+	if query.AgentID != "" {
+		q.Where("agent_id = ?", query.AgentID)
+	}
+	if query.SkillID != 0 {
+		q.Where("skill_id = ?", query.SkillID)
+	}
+	if query.ToolName != "" {
+		q.Where("tool_name LIKE ?", "%"+query.ToolName+"%")
+	}
+	if query.ServerName != "" {
+		q.Where("server_name LIKE ?", "%"+query.ServerName+"%")
+	}
+	if query.Success != nil {
+		q.Where("success = ?", *query.Success)
+	}
+	if query.StartDate != "" {
+		q.Where("DATE(created_at) >= ?", query.StartDate)
+	}
+	if query.EndDate != "" {
+		q.Where("DATE(created_at) <= ?", query.EndDate)
+	}
+	if query.Keyword != "" {
+		keyword := "%" + query.Keyword + "%"
+		q.Where("request_body LIKE ? OR response LIKE ?", keyword, keyword)
+	}
+
+	if err := q.Order("created_at desc").Find(&list).Error; err != nil {
+		return "", err
+	}
+
+	// 生成 CSV
+	var lines []string
+	// 表头
+	header := []string{
+		"ID", "CreatedAt", "UserID", "AgentID", "SkillID", "ToolName",
+		"ServerName", "RequestBody", "Response", "Success", "ErrorMsg", "DurationMs",
+	}
+	lines = append(lines, strings.Join(header, ","))
+
+	for _, entry := range list {
+		// 转义字段中的双引号和换行
+		escape := func(s string) string {
+			s = strings.ReplaceAll(s, `"`, `""`)
+			if strings.ContainsAny(s, `",\n`) {
+				return `"` + s + `"`
+			}
+			return s
+		}
+		createdAt := entry.CreatedAt.Format("2006-01-02 15:04:05")
+		record := []string{
+			strconv.Itoa(int(entry.ID)),
+			escape(createdAt),
+			escape(entry.UserID),
+			escape(entry.AgentID),
+			strconv.Itoa(int(entry.SkillID)),
+			escape(entry.ToolName),
+			escape(entry.ServerName),
+			escape(entry.RequestBody),
+			escape(entry.Response),
+			strconv.FormatBool(entry.Success),
+			escape(entry.ErrorMsg),
+			strconv.FormatInt(entry.DurationMs, 10),
+		}
+		lines = append(lines, strings.Join(record, ","))
+	}
+	return strings.Join(lines, "\n"), nil
 }
 
 func (a *App) GetVersionInfo() *models.VersionInfo {
@@ -3349,4 +3491,9 @@ func (a *App) GenerateETFRotationReport(aiConfigId int) (*agent.MarketIntelligen
 func (a *App) GenerateSerenityResearchReport(targetName string, code string, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
 	service := agent.NewMarketLifecycleService(a.ctx)
 	return service.GenerateSerenityResearchReport(context.Background(), targetName, code, aiConfigId)
+}
+
+// ReloadSkills 热重载技能定义，无需重启应用
+func (a *App) ReloadSkills() error {
+	return data.NewSkillApi().ReloadSkills()
 }

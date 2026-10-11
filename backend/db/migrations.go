@@ -69,6 +69,58 @@ var migrationRegistry = []MigrationStep{
 			return nil
 		},
 	},
+	{
+		Version:     20260401004,
+		Description: "ensure audit_logs table and performance indexes",
+		Migrate: func(tx *gorm.DB) error {
+			if !tx.Migrator().HasTable("audit_logs") {
+				if err := tx.Exec(`
+					CREATE TABLE IF NOT EXISTS audit_logs (
+						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						created_at DATETIME,
+						user_id TEXT,
+						agent_id TEXT,
+						skill_id INTEGER,
+						tool_name TEXT,
+						server_name TEXT,
+						request_body TEXT,
+						response TEXT,
+						success BOOLEAN,
+						error_msg TEXT,
+						duration_ms INTEGER
+					);
+				`).Error; err != nil {
+					return err
+				}
+			}
+			_ = tx.Exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)").Error
+			_ = tx.Exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_tool_name ON audit_logs(tool_name)").Error
+			_ = tx.Exec("CREATE INDEX IF NOT EXISTS idx_audit_logs_success ON audit_logs(success)").Error
+			return nil
+		},
+	},
+	{
+		Version:     20260401005,
+		Description: "create skill_change_requests table",
+		Migrate: func(tx *gorm.DB) error {
+			if !tx.Migrator().HasTable("skill_change_requests") {
+				return tx.Exec(`
+					CREATE TABLE IF NOT EXISTS skill_change_requests (
+						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						created_at DATETIME,
+						skill_id INTEGER,
+						change_type TEXT,
+						new_skill TEXT,
+						old_skill TEXT,
+						status TEXT,
+						reviewer_id TEXT,
+						reviewed_at DATETIME
+					);
+				`).Error
+			}
+			return nil
+		},
+	},
 }
 
 // RunVersionedMigrations 依次执行未应用的版本化迁移

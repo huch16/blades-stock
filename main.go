@@ -359,6 +359,7 @@ func AutoMigrate() {
 		db.Dao.AutoMigrate(&models.ProjectAnalysis{})
 		db.Dao.AutoMigrate(&models.CodeChunk{})
 		db.Dao.AutoMigrate(&models.BacktestResult{})
+		db.Dao.AutoMigrate(&models.AuditLog{})
 		migrateDone <- struct{}{}
 	}()
 	select {

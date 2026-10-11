@@ -74,6 +74,20 @@ func (m *BacktestManager) RunAIReportBacktest(ctx context.Context, limit int) (*
 	logger.SugaredLogger.Infof("AI report backtest: total=%d, processed=%d, saved=%d, accurate=%d (%.1f%%), duration=%v",
 		len(reports), len(reports)-countSkippedResults(results), saved, stats.Accurate, stats.AccuracyRate*100, time.Since(start))
 
+	// Collect unique model names from reports
+	modelNames := make(map[string]bool)
+	for _, r := range reports {
+		if r.ModelName != "" {
+			modelNames[r.ModelName] = true
+		}
+	}
+	modelList := make([]string, 0, len(modelNames))
+	for m := range modelNames {
+		modelList = append(modelList, m)
+	}
+	// SkillUsed is not directly available; leave empty for now
+	skillUsed := ""
+
 	return &AIReportBacktestResult{
 		Total:          len(reports),
 		Processed:      len(reports) - countSkippedResults(results),
@@ -82,6 +96,8 @@ func (m *BacktestManager) RunAIReportBacktest(ctx context.Context, limit int) (*
 		AccuracyRate:   stats.AccuracyRate,
 		DirectionStats: stats.DirectionStats,
 		Duration:       time.Since(start),
+		ModelName:      strings.Join(modelList, ", "),
+		SkillUsed:      skillUsed,
 	}, nil
 }
 

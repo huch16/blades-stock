@@ -1,164 +1,219 @@
 package data
 
 import (
-	"fmt"
-	"blades-stock/backend/db"
-	"blades-stock/backend/logger"
-	"blades-stock/backend/models"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
+
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
+
+	"gorm.io/gorm"
 )
 
-type SkillApi struct{}
-
-func NewSkillApi() *SkillApi {
-	return &SkillApi{}
-}
-
-// enabledSkillsCache caches GetEnabledSkills() for a short TTL. Skills are
-// loaded on every chat request (buildSkillPrompt + skill matching), which
-// turns a trivial query into avoidable per-request DB round-trips. The cache
-// is invalidated by any write path (Create/Update/Delete/EnableSkill) so
-// runtime edits stay consistent.
+// Cache for skills to reduce DB hits and support hot reloading.
 var (
-	enabledSkillsCache      []models.Skill
-	enabledSkillsCacheTime  time.Time
-	enabledSkillsCacheMu    sync.Mutex
-	enabledSkillsCacheTTL   = 10 * time.Second
+	enabledSkillsCache []models.Skill
+	allSkillsCache     []models.Skill
+	cacheMu            sync.RWMutex
 )
 
-func invalidateEnabledSkillsCache() {
-	enabledSkillsCacheMu.Lock()
+// loadEnabledSkillsCache loads enabled skills from DB.
+// Returns nil on error.
+func loadEnabledSkillsCache() []models.Skill {
+	var skills []models.Skill
+	if err := db.Dao.Where("enable = ?", true).Find(&skills).Error; err != nil {
+		logger.SugaredLogger.Errorf("Failed to load enabled skills cache: %v", err)
+		return nil
+	}
+	return skills
+}
+
+// loadAllSkillsCache loads all skills from DB.
+// Returns nil on error.
+func loadAllSkillsCache() []models.Skill {
+	var skills []models.Skill
+	if err := db.Dao.Find(&skills).Error; err != nil {
+		logger.SugaredLogger.Errorf("Failed to load all skills cache: %v", err)
+		return nil
+	}
+	return skills
+}
+
+// invalidateSkillsCache invalidates the skill caches.
+// Next get will reload from DB.
+func invalidateSkillsCache() {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
 	enabledSkillsCache = nil
-	enabledSkillsCacheTime = time.Time{}
-	enabledSkillsCacheMu.Unlock()
+	allSkillsCache = nil
 }
 
-func (a *SkillApi) Create(skill *models.Skill) error {
-	if err := db.Dao.Create(skill).Error; err != nil {
-		return err
-	}
-	invalidateEnabledSkillsCache()
-	return nil
+// SkillAPI provides operations for managing skills.
+type SkillAPI struct {
+	dao *gorm.DB
 }
 
-func (a *SkillApi) Update(skill *models.Skill) error {
-	if skill == nil || skill.ID == 0 {
-		return fmt.Errorf("无效的技能ID")
-	}
-
-	updates := map[string]any{
-		"name":             skill.Name,
-		"description":      skill.Description,
-		"category":         skill.Category,
-		"system_prompt":    skill.SystemPrompt,
-		"directive":        skill.Directive,
-		"examples":         skill.Examples,
-		"trigger_keywords": skill.TriggerKeywords,
-		"tool_groups":      skill.ToolGroups,
-		"mcp_server_ids":   skill.MCPServerIDs,
-		"enable":           skill.Enable,
-		"sort_order":       skill.SortOrder,
-	}
-
-	if err := db.Dao.Model(&models.Skill{}).Where("id = ?", skill.ID).Updates(updates).Error; err != nil {
-		return err
-	}
-	invalidateEnabledSkillsCache()
-	return nil
+// NewSkillApi returns a new SkillAPI instance.
+func NewSkillApi() *SkillAPI {
+	return &SkillAPI{dao: db.Dao}
 }
 
-func (a *SkillApi) Delete(id uint) error {
-	err := db.Dao.Delete(&models.Skill{}, id).Error
-	invalidateEnabledSkillsCache()
+// Create saves a new skill to the database.
+func (s *SkillAPI) Create(skill *models.Skill) error {
+	if skill == nil {
+		return errors.New("skill cannot be nil")
+	}
+	err := s.dao.Create(skill).Error
+	if err == nil {
+		invalidateSkillsCache()
+	}
 	return err
 }
 
-func (a *SkillApi) GetByID(id uint) (*models.Skill, error) {
+// List returns skills matching the given query.
+func (s *SkillAPI) List(query *models.SkillQuery) *models.SkillPageResp {
+	if query == nil {
+		query = &models.SkillQuery{}
+	}
+	var result models.SkillPageResp
+	db := s.dao.Model(&models.Skill{})
+	if query.Name != "" {
+		db = db.Where("name LIKE ?", "%"+query.Name+"%")
+	}
+	if query.Category != "" {
+		db = db.Where("category = ?", query.Category)
+	}
+	if query.Enable != nil {
+		db = db.Where("enable = ?", *query.Enable)
+	}
+	// Count total
+	if err := db.Count(&result.Total).Error; err != nil {
+		logger.SugaredLogger.Errorf("GetEnabledSkills query failed: %s", err.Error())
+		return &result
+	}
+	// Pagination
+	page := query.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := query.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	offset := (page - 1) * pageSize
+	// Get data
+	var skills []models.Skill
+	if err := db.Offset(offset).Limit(pageSize).Find(&skills).Error; err != nil {
+		logger.SugaredLogger.Errorf("GetEnabledSkills query failed: %s", err.Error())
+		return &result
+	}
+	result.Data = skills
+	return &result
+}
+
+// GetByID returns a skill by its ID.
+func (s *SkillAPI) GetByID(id uint) (*models.Skill, error) {
 	var skill models.Skill
-	err := db.Dao.First(&skill, id).Error
-	if err != nil {
+	if err := s.dao.First(&skill, id).Error; err != nil {
 		return nil, err
 	}
 	return &skill, nil
 }
 
-func (a *SkillApi) List(query *models.SkillQuery) *models.SkillPageResp {
-	var skills []models.Skill
-	var total int64
-
-	q := db.Dao.Model(&models.Skill{})
-
-	if query.Name != "" {
-		q = q.Where("name LIKE ?", "%"+query.Name+"%")
+// Update updates an existing skill in the database.
+func (s *SkillAPI) Update(skill *models.Skill) error {
+	if skill == nil || skill.ID == 0 {
+		return errors.New("skill or skill ID cannot be zero")
 	}
-	if query.Category != "" {
-		q = q.Where("category = ?", query.Category)
+	err := s.dao.Save(skill).Error
+	if err == nil {
+		invalidateSkillsCache()
 	}
-	if query.Enable != nil {
-		q = q.Where("enable = ?", *query.Enable)
-	}
-
-	q.Count(&total)
-
-	offset := (query.Page - 1) * query.PageSize
-	q.Order("sort_order ASC, created_at DESC").Offset(offset).Limit(query.PageSize).Find(&skills)
-
-	return &models.SkillPageResp{
-		Total: int(total),
-		Data:  skills,
-	}
-}
-
-func (a *SkillApi) GetAll() []models.Skill {
-	var skills []models.Skill
-	db.Dao.Where("enable = ?", true).Order("sort_order ASC, created_at DESC").Find(&skills)
-	return skills
-}
-
-func (a *SkillApi) EnableSkill(id uint, enable bool) error {
-	err := db.Dao.Model(&models.Skill{}).Where("id = ?", id).Update("enable", enable).Error
-	invalidateEnabledSkillsCache()
 	return err
 }
 
-func (a *SkillApi) GetEnabledSkills() []models.Skill {
-	enabledSkillsCacheMu.Lock()
-	defer enabledSkillsCacheMu.Unlock()
-	if enabledSkillsCache != nil && time.Since(enabledSkillsCacheTime) < enabledSkillsCacheTTL {
+// Delete deletes a skill by its ID.
+func (s *SkillAPI) Delete(id uint) error {
+	err := s.dao.Delete(&models.Skill{}, id).Error
+	if err == nil {
+		invalidateSkillsCache()
+	}
+	return err
+}
+
+// EnableSkill enables or disables a skill by setting its enable flag.
+func (s *SkillAPI) EnableSkill(id uint, enable bool) error {
+	err := s.dao.Model(&models.Skill{}).Where("id = ?", id).Update("enable", enable).Error
+	if err == nil {
+		invalidateSkillsCache()
+	}
+	return err
+}
+
+// GetEnabledSkills returns all skills that are enabled (active = true) from the database.
+// Uses cache to reduce DB hits.
+func (s *SkillAPI) GetEnabledSkills() []models.Skill {
+	cacheMu.RLock()
+	if enabledSkillsCache != nil {
+		defer cacheMu.RUnlock()
 		return enabledSkillsCache
 	}
-	var skills []models.Skill
-	if err := db.Dao.Where("enable = ?", true).Order("sort_order ASC, created_at DESC").Find(&skills).Error; err != nil {
-		logger.SugaredLogger.Warnf("GetEnabledSkills query failed: %v", err)
-		if enabledSkillsCache != nil {
-			return enabledSkillsCache
-		}
-		return nil
+	cacheMu.RUnlock()
+
+	// Load from DB
+	skills := loadEnabledSkillsCache()
+	if skills == nil {
+		return []models.Skill{}
 	}
+	cacheMu.Lock()
 	enabledSkillsCache = skills
-	enabledSkillsCacheTime = time.Now()
+	cacheMu.Unlock()
 	return skills
 }
 
-func (a *SkillApi) GetMCPServerIDs(skill *models.Skill) []uint {
-	if skill.MCPServerIDs == "" {
-		return nil
+// ReloadSkills reloads skills from the database and returns any error.
+// This function can be called to hot-reload skill definitions without restarting the application.
+// It invalidates the skill caches so that the next GetEnabledSkills or GetAll will reload from DB.
+func (s *SkillAPI) ReloadSkills() error {
+	invalidateSkillsCache()
+	return nil
+}
+
+// GetAll returns all skills from the database.
+// Uses cache to reduce DB hits.
+func (s *SkillAPI) GetAll() []models.Skill {
+	cacheMu.RLock()
+	if allSkillsCache != nil {
+		defer cacheMu.RUnlock()
+		return allSkillsCache
+	}
+	cacheMu.RUnlock()
+
+	// Load from DB
+	skills := loadAllSkillsCache()
+	if skills == nil {
+		return []models.Skill{}
+	}
+	cacheMu.Lock()
+	allSkillsCache = skills
+	cacheMu.Unlock()
+	return skills
+}
+
+// GetMCPServerIDs parses the MCPServerIDs field of a skill and returns a slice of uint.
+func (s *SkillAPI) GetMCPServerIDs(skill *models.Skill) []uint {
+	if skill == nil || skill.MCPServerIDs == "" {
+		return []uint{}
 	}
 	parts := strings.Split(skill.MCPServerIDs, ",")
-	var ids []uint
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
+	ids := make([]uint, 0, len(parts))
+	for _, part := range parts {
+		if id, err := strconv.Atoi(strings.TrimSpace(part)); err == nil {
+			ids = append(ids, uint(id))
 		}
-		id, err := strconv.ParseUint(p, 10, 64)
-		if err != nil {
-			continue
-		}
-		ids = append(ids, uint(id))
 	}
 	return ids
 }
