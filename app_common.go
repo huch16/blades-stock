@@ -201,9 +201,8 @@ func (a *App) ChatWithAgent(question string, aiConfigId int, sysPromptId *int, m
 	ch := agent.NewStockAiAgentApi().ChatWithContext(ctx, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, sessionId)
 	for msg := range ch {
 		runtime.EventsEmit(a.ctx, "agent-message", agentMessageToFrontendMap(msg))
-		if len(msg.Actions) > 0 {
-			runtime.EventsEmit(a.ctx, "agent:action", msg.Actions)
-		}
+		// ⚠️ Actions 已经随 msg.Actions 传递给前端供消息气泡渲染交互卡片，
+		// 必须等待用户明确点击【立即联动】后再派发，避免对话推流过程中无故自动弹窗
 	}
 	// agent-DONE is already emitted inside ChatWithContext before closing the channel
 }

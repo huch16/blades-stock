@@ -4,11 +4,13 @@ import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
 import StockLightweightKlineChart from './StockLightweightKlineChart.vue'
 import StockDiagnosisDrawer from './StockDiagnosisDrawer.vue'
 import {
-  NAutoComplete, NButton, NFlex, NText, NInputGroup,
+  NAutoComplete, NButton, NFlex, NText, NInputGroup, NTag,
 } from 'naive-ui'
 import { useMessage } from 'naive-ui'
-import { onBeforeMount, onMounted, onBeforeUnmount, ref, computed } from 'vue'
+import { onBeforeMount, onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
+const route = useRoute()
 const message = useMessage()
 const searchQuery = ref('')
 const selectedCode = ref('')
@@ -16,7 +18,7 @@ const selectedName = ref('')
 const stockList = ref([])
 const options = ref([])
 const darkTheme = ref(false)
-const chartHeight = ref(window.innerHeight - 230)
+const chartHeight = ref(Math.max(450, window.innerHeight - 150))
 const recentStocks = ref([])
 const unsupportedCode = ref(false)
 let stockChangeHandler = null
@@ -35,7 +37,6 @@ function handleDiagnose() {
   }
   diagnosisDrawerVisible.value = true
 }
-
 
 function toEastMoneyCode(code) {
   if (!code) return ''
@@ -74,8 +75,8 @@ function findStockList(val) {
   }
   const q = val.trim().toLowerCase()
   const filtered = stockList.value.filter(item =>
-    item.name.toLowerCase().includes(q) ||
-    item.ts_code.toLowerCase().includes(q)
+    (item.name && item.name.toLowerCase().includes(q)) ||
+    (item.ts_code && item.ts_code.toLowerCase().includes(q))
   ).slice(0, 30)
   options.value = filtered.map(item => ({
     label: item.name + ' - ' + item.ts_code,
@@ -84,6 +85,7 @@ function findStockList(val) {
 }
 
 function handleSearch(value) {
+  if (!value) return
   const emCode = toEastMoneyCode(value)
   if (!emCode) {
     unsupportedCode.value = true
@@ -91,14 +93,15 @@ function handleSearch(value) {
   }
   unsupportedCode.value = false
   selectedCode.value = emCode
-  const found = stockList.value.find(item => item.ts_code === value)
-  selectedName.value = found ? found.name : ''
-  addToRecent(value, selectedName.value)
+  const found = stockList.value.find(item => item.ts_code === value || toEastMoneyCode(item.ts_code) === emCode)
+  selectedName.value = found ? found.name : (selectedName.value || '')
+  addToRecent(emCode, selectedName.value)
 }
 
 function addToRecent(code, name) {
+  if (!code) return
   const list = recentStocks.value.filter(s => s.code !== code)
-  list.unshift({ code, name })
+  list.unshift({ code, name: name || code })
   if (list.length > 10) list.length = 10
   recentStocks.value = list
   try {
@@ -121,17 +124,40 @@ function selectRecent(code, name) {
   }
   unsupportedCode.value = false
   selectedCode.value = emCode
-  selectedName.value = name
-  addToRecent(code, name)
+  selectedName.value = name || ''
+  addToRecent(emCode, name)
 }
 
 function updateChartHeight() {
-  chartHeight.value = Math.max(400, window.innerHeight - 230)
+  chartHeight.value = Math.max(450, window.innerHeight - 150)
 }
+
+function applyStockFromRoute() {
+  const queryCode = route.query.code || route.query.ts_code
+  const queryName = route.query.name || route.query.stockName
+  if (queryCode) {
+    if (queryName) selectedName.value = String(queryName)
+    handleSearch(String(queryCode))
+    return true
+  }
+  return false
+}
+
+// 监听路由参数变化（例如从其它页面跨组件点击跳转）
+watch(() => route.query.code, (newCode) => {
+  if (newCode) {
+    applyStockFromRoute()
+  }
+})
 
 onBeforeMount(() => {
   GetStockList('').then(result => {
     stockList.value = result || []
+    // 股票列表加载完成后再次确认当前选中股票的名称
+    if (selectedCode.value && !selectedName.value) {
+      const found = stockList.value.find(item => toEastMoneyCode(item.ts_code) === selectedCode.value)
+      if (found) selectedName.value = found.name
+    }
   }).catch(err => { console.error('GetStockList error:', err) })
   GetConfig().then(result => {
     darkTheme.value = !!result.darkTheme
@@ -143,6 +169,16 @@ onMounted(async () => {
   updateChartHeight()
   window.addEventListener('resize', updateChartHeight)
 
+  // 1. 优先尝试从 URL 路由参数加载
+  const fromRoute = applyStockFromRoute()
+
+  // 2. 若未从路由指定，自动加载最近浏览的第一只股票，避免进入页面时空白
+  if (!fromRoute && recentStocks.value.length > 0) {
+    const firstRecent = recentStocks.value[0]
+    selectRecent(firstRecent.code, firstRecent.name)
+  }
+
+  // 3. 监听全局选股事件
   stockChangeHandler = (data) => {
     if (data && data.ts_code) {
       const emCode = toEastMoneyCode(data.ts_code)
@@ -153,7 +189,7 @@ onMounted(async () => {
       unsupportedCode.value = false
       selectedCode.value = emCode
       selectedName.value = data.name || ''
-      addToRecent(data.ts_code, data.name || '')
+      addToRecent(emCode, data.name || '')
     }
   }
   EventsOn('klineSelectStock', stockChangeHandler)
@@ -169,13 +205,52 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="kline-analysis-page" :class="{ 'kline-analysis-page--dark': darkTheme }">
+    <!-- 顶部综合控制台：股票名称/代码 + 最近浏览 + 搜索框 + 三维诊断 -->
     <div class="kline-title-bar">
-      <NFlex justify="space-between" align="center">
-        <div>
-          <NText :depth="darkTheme ? 1 : 3" style="font-size: 16px; font-weight: 700">{{ selectedName }}&nbsp;</NText>
-          <NText depth="3" style="font-size: 13px">{{ selectedCode }}</NText>
-        </div>
+      <NFlex justify="space-between" align="center" :wrap="false">
+        <!-- 左侧：选中国股票与快速历史切换标签 -->
+        <NFlex align="center" :size="12">
+          <div v-if="selectedCode" class="kline-stock-badge">
+            <NText :depth="darkTheme ? 1 : 3" class="kline-stock-name">{{ selectedName || selectedCode }}&nbsp;</NText>
+            <NTag size="small" :bordered="false" type="info">{{ selectedCode }}</NTag>
+          </div>
+          <div v-else class="kline-stock-badge">
+            <NText depth="3" style="font-size: 15px; font-weight: 600">未选择个股</NText>
+          </div>
+
+          <!-- 最近浏览快捷标签 -->
+          <div v-if="recentStocks.length" class="recent-stocks">
+            <NText depth="3" style="font-size: 11px; white-space: nowrap">历史:</NText>
+            <NButton
+              v-for="s in recentStocks.slice(0, 6)"
+              :key="s.code"
+              size="tiny"
+              quaternary
+              :type="s.code === selectedCode ? 'primary' : 'default'"
+              @click="selectRecent(s.code, s.name)"
+            >
+              {{ s.name || s.code }}
+            </NButton>
+          </div>
+        </NFlex>
+
+        <!-- 右侧：搜索栏与 AI 三维量化诊断 -->
         <NFlex align="center" :size="8">
+          <n-input-group style="width: 250px;">
+            <n-auto-complete
+              v-model:value="searchQuery"
+              :options="options"
+              placeholder="搜索股票/代码/拼音..."
+              clearable
+              size="small"
+              :on-select="handleSearch"
+              @update:value="findStockList"
+            />
+            <n-button size="small" type="primary" secondary @click="handleSearch(searchQuery)">
+              🔍
+            </n-button>
+          </n-input-group>
+
           <NButton
             type="primary"
             secondary
@@ -191,7 +266,13 @@ onBeforeUnmount(() => {
           </NButton>
         </NFlex>
       </NFlex>
+
+      <NFlex v-if="unsupportedCode" align="center" :size="6" style="margin-top: 4px">
+        <NText type="warning" style="font-size: 12px">⚠️ 该股票代码格式暂不支持绘制 K 线图，请尝试规范的 6 位 A 股代码</NText>
+      </NFlex>
     </div>
+
+    <!-- 主 K 线图渲染区 -->
     <StockLightweightKlineChart
       v-if="selectedCode"
       :key="selectedCode"
@@ -203,39 +284,8 @@ onBeforeUnmount(() => {
     />
     <div v-else class="kline-empty-placeholder">
       <NText depth="3" style="font-size: 14px">
-        🔍 请在上方搜索框输入股票名称或代码以加载 K 线与三维诊断
+        🔍 请在上方搜索框输入股票名称或代码以加载 K 线图与三维诊断
       </NText>
-    </div>
-
-    <div class="kline-search-bar">
-      <n-input-group>
-        <n-auto-complete
-          v-model:value="searchQuery"
-          :options="options"
-          placeholder="股票名称/代码搜索..."
-          clearable
-          :on-select="handleSearch"
-          @update:value="findStockList"
-        />
-        <n-button type="primary">
-          🔍
-        </n-button>
-      </n-input-group>
-      <NFlex v-if="unsupportedCode" align="center" :size="6" style="margin-top: 4px">
-        <NText type="warning" style="font-size: 12px">该股票暂不支持K线图</NText>
-      </NFlex>
-      <div v-if="recentStocks.length && !selectedCode" class="recent-stocks">
-        <NText depth="3" style="font-size: 11px; white-space: nowrap">最近:</NText>
-        <n-button
-          v-for="s in recentStocks.slice(0, 6)"
-          :key="s.code"
-          size="tiny"
-          secondary
-          @click="selectRecent(s.code, s.name)"
-        >
-          {{ s.name }}
-        </n-button>
-      </div>
     </div>
 
     <!-- AI 结构化三维量化深度诊断抽屉 -->
@@ -244,7 +294,6 @@ onBeforeUnmount(() => {
       :stock-code="selectedCode"
       :stock-name="selectedName"
     />
-
   </div>
 </template>
 
@@ -261,77 +310,28 @@ onBeforeUnmount(() => {
   color: #e2e8f0;
 }
 .kline-title-bar {
-  padding: 2px 4px 6px 4px;
+  padding: 4px 6px 8px 6px;
+  border-bottom: 1px solid var(--n-border-color, rgba(0, 0, 0, 0.06));
+  margin-bottom: 6px;
 }
-.kline-search-bar {
-  position: fixed;
-  bottom: 18px;
-  right: 12px;
-  z-index: 10;
-  width: 320px;
+.kline-stock-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.kline-stock-name {
+  font-size: 16px;
+  font-weight: 700;
 }
 .recent-stocks {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 4px;
   flex-wrap: wrap;
-}
-.diagnosis-container {
-  padding-bottom: 20px;
-}
-.score-card {
-  border-radius: 8px;
-}
-.score-label {
-  font-size: 12px;
-  color: #888;
-}
-.score-value {
-  font-size: 32px;
-  font-weight: 800;
-  line-height: 1.1;
-}
-.score-max {
-  font-size: 14px;
-  font-weight: 400;
-  color: #999;
-}
-.bull {
-  color: #18a058;
-}
-.bear {
-  color: #d03050;
-}
-.neutral {
-  color: #f0a020;
-}
-.mini-stat-label {
-  font-size: 11px;
-  color: #888;
-}
-.mini-stat-value {
-  font-size: 14px;
-  font-weight: 600;
-}
-.dim-card {
-  border-radius: 8px;
-}
-.dim-evaluation {
-  font-size: 12px;
-  color: #555;
-  background: rgba(0, 0, 0, 0.03);
-  padding: 6px 8px;
-  border-radius: 4px;
-  line-height: 1.5;
-}
-.kline-analysis-page--dark .dim-evaluation {
-  background: rgba(255, 255, 255, 0.05);
-  color: #bbb;
 }
 .kline-empty-placeholder {
   width: 100%;
-  height: 200px;
+  height: 380px;
   display: flex;
   align-items: center;
   justify-content: center;

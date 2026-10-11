@@ -69,9 +69,6 @@ const { dialog: globalDialog, message: globalMessage } = createDiscreteApi(['dia
 const showAgentDiagnosisDrawer = ref(false)
 const agentDiagnosisStockCode = ref('')
 const agentDiagnosisStockName = ref('')
-const showAgentKlineModal = ref(false)
-const agentKlineCode = ref('')
-const agentKlineName = ref('')
 
 initAgentControlBus()
 registerAgentActionHandler((action) => {
@@ -100,10 +97,17 @@ registerAgentActionHandler((action) => {
       break
     case 'SHOW_KLINE':
       if (action.payload?.code) {
-        agentKlineCode.value = action.payload.code
-        agentKlineName.value = action.payload.name || ''
-        showAgentKlineModal.value = true
-        globalMessage.info(`🤖 Agent 已为您调起 K 线图：${agentKlineName.value || agentKlineCode.value}`)
+        const targetCode = action.payload.code
+        const targetName = action.payload.name || ''
+        router.push({
+          name: 'klineAnalysis',
+          query: {
+            code: targetCode,
+            name: targetName,
+          },
+        })
+        activeKey.value = 'klineAnalysis'
+        globalMessage.info(`🤖 已为您平滑切换至【${targetName || targetCode}】K线分析视图`)
       }
       break
     case 'DISCIPLINE_ALERT':
@@ -1233,33 +1237,12 @@ onMounted(() => {
                 :report-type="marketIntelligenceType"
                 :initial-serenity-target="marketIntelligenceSerenityTarget"
               />
-              <!-- 全局 Agent 控制抽屉与模态框 -->
+              <!-- 全局 Agent 控制抽屉 -->
               <StockDiagnosisDrawer
                 v-model:show="showAgentDiagnosisDrawer"
                 :stock-code="agentDiagnosisStockCode"
                 :stock-name="agentDiagnosisStockName"
               />
-              <n-modal
-                v-model:show="showAgentKlineModal"
-                :title="`[AI 联动] ${agentKlineName} (${agentKlineCode}) K线图`"
-                preset="card"
-                style="width: min(1100px, 96vw); max-width: 96vw; box-sizing: border-box"
-                :content-style="{
-                  maxHeight: 'min(85vh, 820px)',
-                  overflowY: 'auto',
-                  overflowX: 'hidden',
-                  minWidth: 0,
-                  boxSizing: 'border-box',
-                }"
-              >
-                <StockLightweightKlineChart
-                  v-if="showAgentKlineModal && agentKlineCode"
-                  :key="'agent-kline-' + agentKlineCode"
-                  :code="agentKlineCode"
-                  :stock-name="agentKlineName"
-                  :chart-height="500"
-                />
-              </n-modal>
               <n-flex>
                 <n-grid x-gap="12" :cols="1">
                   <n-gi>
