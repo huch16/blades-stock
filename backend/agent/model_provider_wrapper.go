@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"blades-stock/backend/data"
+	"blades-stock/backend/agent/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 	"github.com/go-kratos/blades"
 	"golang.org/x/time/rate"
 )
@@ -20,6 +23,7 @@ type ModelProviderWrapper struct {
 	limiter      *rate.Limiter // token bucket for rate limiting
 	quotaMu      sync.Mutex    // protects dailyQuota and lastResetDate
 	dailyQuota   int           // requests used today
+	dailyCostUSD float64       // cost used today
 	lastResetDate string        // date string (YYYY-MM-DD) of last reset
 	config       *data.AIConfig
 }
@@ -42,8 +46,43 @@ func NewModelProviderWrapper(provider blades.ModelProvider, config *data.AIConfi
 		w.limiter = rate.NewLimiter(rate.Limit(config.RateLimitPerSecond), burst)
 	}
 	// Initialize quota tracking
+	w.dailyQuota = 0
+	w.dailyCostUSD = 0
 	w.lastResetDate = time.Now().UTC().Format("2006-01-02")
 	return w
+}
+
+// estimateLLMCost provides a rough estimate of LLM request cost in USD.
+// This is a placeholder implementation - in a production system, this would
+// use actual token usage from the LLM response.
+func estimateLLMCost(config *data.AIConfig, req *blades.ModelRequest) float64 {
+	// Placeholder: return a fixed small cost per request
+	// In practice, this should be based on actual token usage and model pricing
+	return 0.001
+}
+
+// recordLLMQotaMetrics records LLM quota metrics for observability
+func recordLLMQotaMetrics(ctx context.Context, dailyQuota int64, dailyCostUSD float64, requestQuota int64, costQuota float64) {
+	telemetry.initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{}
+
+	if telemetry.toolQuotaLimitGauge != nil {
+		if requestQuota > 0 {
+			telemetry.toolQuotaLimitGauge.Record(ctx, float64(requestQuota), metric.WithAttributes(append(attrs, attribute.String("type", "llm_request_quota"))...))
+		}
+		if costQuota > 0 {
+			telemetry.toolQuotaLimitGauge.Record(ctx, float64(costQuota), metric.WithAttributes(append(attrs, attribute.String("type", "llm_cost_quota"))...))
+		}
+	}
+
+	if telemetry.toolQuotaUsedGauge != nil {
+		telemetry.toolQuotaUsedGauge.Record(ctx, float64(dailyQuota), metric.WithAttributes(append(attrs, attribute.String("type", "llm_request_used"))...))
+		telemetry.toolQuotaUsedGauge.Record(ctx, float64(dailyCostUSD), metric.WithAttributes(append(attrs, attribute.String("type", "llm_cost_used"))...))
+	}
 }
 
 // Generate wraps the provider's Generate method with rate limit and quota checks.
@@ -61,6 +100,7 @@ func (w *ModelProviderWrapper) Generate(ctx context.Context, req *blades.ModelRe
 		if today != w.lastResetDate {
 			// New day, reset quota
 			w.dailyQuota = 0
+			w.dailyCostUSD = 0
 			w.lastResetDate = today
 		}
 		if w.dailyQuota >= w.config.DailyRequestQuota {
@@ -68,11 +108,31 @@ func (w *ModelProviderWrapper) Generate(ctx context.Context, req *blades.ModelRe
 			return nil, ErrRateLimited
 		}
 		w.dailyQuota++
+		// Record LLM quota metrics
+		go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
 		w.quotaMu.Unlock()
 	}
-	// TODO: Implement daily cost quota tracking if needed.
-	// For now, we skip cost tracking.
-
+	// Check daily cost quota
+	if w.config.DailyCostQuota > 0 {
+		w.quotaMu.Lock()
+		today := time.Now().UTC().Format("2006-01-02")
+		if today != w.lastResetDate {
+			// New day, reset cost tracking
+			w.dailyQuota = 0
+			w.dailyCostUSD = 0
+			w.lastResetDate = today
+		}
+		// Estimate cost for this request (placeholder - in practice would use token usage)
+		estimatedCost := estimateLLMCost(w.config, req)
+		if w.dailyCostUSD + estimatedCost > w.config.DailyCostQuota {
+			w.quotaMu.Unlock()
+			return nil, ErrRateLimited
+		}
+		w.dailyCostUSD += estimatedCost
+		// Record LLM quota metrics
+		go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
+		w.quotaMu.Unlock()
+	}
 	// Call the underlying provider
 	resp, err := w.ModelProvider.Generate(ctx, req)
 	if err != nil {

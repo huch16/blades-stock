@@ -9,6 +9,7 @@ import (
 	"blades-stock/backend/models"
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -263,7 +264,27 @@ func matchSkills(question string, embedSvc *EmbeddingService) []models.Skill {
 		return nil
 	}
 	skillEmbedSvc := GetSkillEmbeddingService(embedSvc)
-	return skillEmbedSvc.MatchSkills(question, 2)
+	matched := skillEmbedSvc.MatchSkills(question, 2)
+	if len(matched) == 0 {
+		return nil
+	}
+	// Apply sandbox filtering: for sandbox skills, only allow a percentage of requests.
+	var result []models.Skill
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for _, skill := range matched {
+		if !skill.Sandbox {
+			result = append(result, skill)
+			continue
+		}
+		if skill.SandboxPercentage <= 0 {
+			// treat as disabled
+			continue
+		}
+		if rnd.Intn(100) < skill.SandboxPercentage {
+			result = append(result, skill)
+		}
+	}
+	return result
 }
 
 // BuildSkillPromptForTest exports buildSkillPrompt for testing purposes.
@@ -510,6 +531,18 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 		}
 	}
 	RecordMCPConnect(context.Background(), server.Name, connectErr == nil, time.Since(connStart))
+
+		// Audit log for MCP connection
+		mcpAuditEntry := models.AuditLog{
+			ToolName:    "MCP_CONNECT",
+			ServerName:  server.Name,
+			Success:     connectErr == nil,
+			DurationMs:  int64(time.Since(connStart).Milliseconds()),
+		}
+		if connectErr != nil {
+			mcpAuditEntry.ErrorMsg = connectErr.Error()
+		}
+		go RecordAuditLog(mcpAuditEntry)
 	if connectErr != nil {
 		logger.SugaredLogger.Errorf("MCP连接最终失败 [%s]: %v", server.Name, connectErr)
 		return nil

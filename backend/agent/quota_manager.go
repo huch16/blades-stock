@@ -10,6 +10,7 @@ import (
 
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/agent/telemetry"
 	bladesTools "github.com/go-kratos/blades/tools"
 )
 
@@ -208,7 +209,6 @@ func (qm *ToolQuotaManager) ResetDailyQuota() {
 	qm.blockedCalls = 0
 }
 
-// WrapToolWithQuota 为单个工具注入配额拦截与成本核销包装
 func WrapToolWithQuota(original bladesTools.Tool) bladesTools.Tool {
 	toolName := original.Name()
 	return bladesTools.NewTool(
@@ -227,15 +227,17 @@ func WrapToolWithQuota(original bladesTools.Tool) bladesTools.Tool {
 					"suggestion": "请直接利用目前已掌握的数据形成最终研报或交易策略总结。",
 				}
 				bytes, _ := json.Marshal(resp)
-				// 返回 JSON 形式的错误信息给大模型，避免底层 Go 错误导致整个推理流程中断
 				return string(bytes), nil
 			}
 			logger.SugaredLogger.Debugf("[ToolQuota] 工具 [%s] 预算核销成功 (预估成本: $%.4f)", toolName, cost)
-			return original.Handle(ctx, input)
+			start := time.Now()
+			result, err := original.Handle(ctx, input)
+			duration := time.Since(start)
+			RecordToolCall(ctx, toolName, err == nil, duration)
+			return result, err
 		}),
 	)
 }
-
 // WrapToolsWithQuota 批量为工具列表注入配额与成本控制器
 func WrapToolsWithQuota(toolList []bladesTools.Tool) []bladesTools.Tool {
 	if len(toolList) == 0 {

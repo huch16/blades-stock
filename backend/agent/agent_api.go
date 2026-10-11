@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"encoding/json"
 	"math"
 	"math/rand"
 	"os"
@@ -433,6 +434,18 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 						RecordToolCall(ctx, tp.Name, succeeded, 0)
 						safeReq := tools.SanitizeSensitiveInfo(tp.Request)
 						safeResp := tools.SanitizeSensitiveInfo(tp.Response)
+
+						// Audit log for tool call
+						auditEntry := models.AuditLog{
+							ToolName:    tp.Name,
+							RequestBody: tp.Request,
+							Response:    tp.Response,
+							Success:     succeeded,
+						}
+						if !succeeded && tp.Response != "" {
+							auditEntry.ErrorMsg = tp.Response
+						}
+						go RecordAuditLog(auditEntry)
 						logger.SugaredLogger.Infof("[ToolCall] %s(%s)", tp.Name, safeReq)
 						ch <- &StreamMessage{
 							Role:             "assistant",
@@ -531,6 +544,17 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		// 记录业务级 OpenTelemetry 指标
 		RecordLLMRun(ctx, totalDur, firstChunkLat, finalStatus, retryCount)
 
+		// Audit log for LLM run
+		llmAuditEntry := models.AuditLog{
+			ToolName:    "LLM_RUN",
+			Success:     finalStatus == nil || *finalStatus == "",
+			DurationMs:  int64(totalDur.Milliseconds()),
+		}
+		if finalStatus != nil && *finalStatus != "" {
+			llmAuditEntry.ErrorMsg = *finalStatus
+		}
+		go RecordAuditLog(llmAuditEntry)
+
 		if agentErr != nil {
 			logger.SugaredLogger.Errorf("agent run error: %v", agentErr)
 
@@ -583,6 +607,20 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		// 解析并在结束前下发伴随的全局控制动作指令
 		if fullResponse.Len() > 0 {
 			_, actions := types.ParseAndExtractActions(fullResponse.String())
+
+			// Audit log for agent actions
+			if len(actions) > 0 {
+				for _, action := range actions {
+					actionAuditEntry := models.AuditLog{
+						ToolName:    "AGENT_ACTION_" + action.Type,
+						Success:     true,  // Actions are parsed from successful LLM responses
+					}
+					// Serialize action details as JSON for the request/response fields
+					actionJSON, _ := json.Marshal(action)
+					actionAuditEntry.RequestBody = string(actionJSON)
+					go RecordAuditLog(actionAuditEntry)
+				}
+			}
 			if len(actions) > 0 {
 				ch <- &StreamMessage{
 					Role:    "assistant",
