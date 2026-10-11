@@ -699,3 +699,116 @@ func countNotSkippedResults(results []aiReportResult) int {
 	}
 	return n
 }
+
+// getReportsForSkill retrieves reports that match the skill's trigger keywords.
+func (m *BacktestManager) getReportsForSkill(skill *models.Skill, limit int) ([]models.AIResponseResult, error) {
+	if skill == nil {
+		return nil, fmt.Errorf("skill is nil")
+	}
+	keywords := strings.Split(skill.TriggerKeywords, ",")
+	var kwList []string
+	for _, k := range keywords {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			kwList = append(kwList, k)
+		}
+	}
+	if len(kwList) == 0 {
+		return nil, fmt.Errorf("no trigger keywords for skill %d", skill.ID)
+	}
+	var reports []models.AIResponseResult
+	db := db.Dao.Model(&models.AIResponseResult{})
+	for i, k := range kwList {
+		if i == 0 {
+			db = db.Where("question LIKE ?", "%"+k+"%")
+		} else {
+			db = db.Or("question LIKE ?", "%"+k+"%")
+		}
+	}
+	if limit > 0 {
+		db = db.Limit(limit)
+	}
+	if err := db.Find(&reports).Error; err != nil {
+		return nil, fmt.Errorf("query reports: %w", err)
+	}
+	return reports, nil
+}
+
+// RunSkillABTest runs an A/B test between two skills based on trigger keyword matching
+// and returns accuracy for each.
+func (m *BacktestManager) RunSkillABTest(ctx context.Context, skillID1, skillID2 uint, limit int) (*SkillABTestResult, error) {
+	skill1, err := data.NewSkillApi().GetByID(skillID1)
+	if err != nil {
+		return nil, fmt.Errorf("get skill %d: %w", skillID1, err)
+	}
+	skill2, err := data.NewSkillApi().GetByID(skillID2)
+	if err != nil {
+		return nil, fmt.Errorf("get skill %d: %w", skillID2, err)
+	}
+	if skill1 == nil || skill2 == nil {
+		return nil, fmt.Errorf("one or both skills not found")
+	}
+	// Get reports for each skill
+	reports1, err := m.getReportsForSkill(skill1, limit)
+	if err != nil {
+		return nil, err
+	}
+	reports2, err := m.getReportsForSkill(skill2, limit)
+	if err != nil {
+		return nil, err
+	}
+	// Run backtest for each set
+	var acc1, acc2 float64
+	var total1, total2 int
+	if len(reports1) > 0 {
+		var accurate1 int
+		for _, r := range reports1 {
+			br, err := m.RunSingleReportBacktest(r)
+			if err != nil {
+				continue
+			}
+			if br.IsAccurate {
+				accurate1++
+			}
+			total1++
+		}
+		if total1 > 0 {
+			acc1 = float64(accurate1) / float64(total1)
+		}
+	}
+	if len(reports2) > 0 {
+		var accurate2 int
+		for _, r := range reports2 {
+			br, err := m.RunSingleReportBacktest(r)
+			if err != nil {
+				continue
+			}
+			if br.IsAccurate {
+				accurate2++
+			}
+			total2++
+		}
+		if total2 > 0 {
+			acc2 = float64(accurate2) / float64(total2)
+		}
+	}
+	result := &SkillABTestResult{
+		SkillID1:   skill1.ID,
+		SkillID2:   skill2.ID,
+		Accuracy1:  acc1,
+		Accuracy2:  acc2,
+		TotalTested: total1 + total2,
+		Details:    map[uint]int{skill1.ID: total1, skill2.ID: total2},
+	}
+	return result, nil
+}
+
+// SkillABTestResult holds the result of an A/B test between two skills.
+type SkillABTestResult struct {
+	SkillID1     uint
+	SkillID2     uint
+	Accuracy1    float64
+	Accuracy2    float64
+	TotalTested  int
+	Details      map[uint]int // skillID -> number of reports tested
+}

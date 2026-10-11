@@ -120,6 +120,25 @@ var migrationRegistry = []MigrationStep{
 			}
 			return nil
 		},
+	{
+		Version:     20260401006,
+		Description: "create skill_versions table",
+		Migrate: func(tx *gorm.DB) error {
+			if !tx.Migrator().HasTable("skill_versions") {
+				return tx.Exec(`
+					CREATE TABLE IF NOT EXISTS skill_versions (
+						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						created_at DATETIME,
+						skill_id INTEGER NOT NULL,
+						version_number INTEGER NOT NULL,
+						content TEXT NOT NULL,
+						created_at DATETIME NOT NULL,
+						is_active BOOLEAN NOT NULL DEFAULT FALSE
+					);
+				`).Error
+			}
+			return nil
+		},
 	},
 }
 

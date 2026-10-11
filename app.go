@@ -1595,6 +1595,15 @@ func (a *App) TriggerAIReportBacktest(limit int) (*quant.AIReportBacktestResult,
 	return mgr.RunAIReportBacktest(context.Background(), limit)
 }
 
+// RunSkillABTest runs an A/B test between two skills.
+func (a *App) RunSkillABTest(skillID1, skillID2 uint, limit int) (*quant.SkillABTestResult, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	mgr := quant.NewBacktestManager()
+	return mgr.RunSkillABTest(context.Background(), skillID1, skillID2, limit)
+}
+
 // GetAuditLogList 分页获取审计日志
 func (a *App) GetAuditLogList(query models.AuditLogQuery) (*models.AuditLogPageResp, error) {
 	if query.Page <= 0 {

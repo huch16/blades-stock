@@ -263,6 +263,8 @@ func (ev *Evolver) LearnFromProject(projectName, analysis string, llm LLMOptimiz
 		Examples:        skill.Examples,
 		TriggerKeywords: strings.Join(skill.TriggerKeywords, ","),
 		Enable:          true,
+		Sandbox:         true,
+		SandboxPercentage: 10, // default 10% of requests
 	}
 	if err := data.NewSkillApi().Create(dbSkill); err != nil {
 		return nil, fmt.Errorf("save skill failed: %w", err)

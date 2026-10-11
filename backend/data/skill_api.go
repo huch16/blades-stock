@@ -2,14 +2,17 @@ package data
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 
+	"encoding/json"
 	"gorm.io/gorm"
 )
 
@@ -216,4 +219,118 @@ func (s *SkillAPI) GetMCPServerIDs(skill *models.Skill) []uint {
 		}
 	}
 	return ids
+}
+
+// CreateSkillVersion creates a new version for a skill.
+func (s *SkillAPI) CreateSkillVersion(skillID uint) (*models.SkillVersion, error) {
+	skill, err := s.GetByID(skillID)
+	if err != nil {
+		return nil, err
+	}
+	if skill == nil {
+		return nil, fmt.Errorf("skill %d not found", skillID)
+	}
+	// Determine next version number
+	var lastVersion models.SkillVersion
+	err = s.dao.Model(&models.SkillVersion{}).
+		Where("skill_id = ?", skillID).
+		Order("version_number desc").
+		First(&lastVersion).Error
+	var versionNumber int
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	if err == gorm.ErrRecordNotFound {
+		versionNumber = 1
+	} else {
+		versionNumber = lastVersion.VersionNumber + 1
+	}
+	// Serialize skill to JSON
+	skillBytes, err := json.Marshal(skill)
+	if err != nil {
+		return nil, err
+	}
+	// Deactivate any existing active version for this skill (optional, we'll keep IsActive false by default)
+	// Create version
+	ver := &models.SkillVersion{
+		SkillID:      skillID,
+		VersionNumber: versionNumber,
+		Content:      string(skillBytes),
+		CreatedAt:    time.Now(),
+		IsActive:     false, // new versions are not active by default; activation via ActivateSkillVersion
+	}
+	err = s.dao.Create(ver).Error
+	if err != nil {
+		return nil, err
+	}
+	return ver, nil
+}
+
+// GetSkillVersions returns paginated list of versions for a skill.
+func (s *SkillAPI) GetSkillVersions(query *models.SkillVersionQuery) (*models.SkillVersionPageResp, error) {
+	if query == nil {
+		query = &models.SkillVersionQuery{}
+	}
+	var result models.SkillVersionPageResp
+	db := s.dao.Model(&models.SkillVersion{})
+	if query.SkillID != 0 {
+		db = db.Where("skill_id = ?", query.SkillID)
+	}
+	if query.Active != nil {
+		db = db.Where("is_active = ?", *query.Active)
+	}
+	// Count total
+	if err := db.Count(&result.Total).Error; err != nil {
+		logger.SugaredLogger.Errorf("GetSkillVersions count failed: %v", err)
+		return &result
+	}
+	// Pagination
+	page := query.Page
+	if page <= 0 {
+		page = 1
+	}
+	pageSize := query.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	offset := (page - 1) * pageSize
+	// Get data
+	var versions []models.SkillVersion
+	if err := db.Offset(offset).Limit(pageSize).Find(&versions).Error; err != nil {
+		logger.SugaredLogger.Errorf("GetSkillVersions find failed: %v", err)
+		return &result
+	}
+	result.Data = versions
+	return &result, nil
+}
+
+// GetActiveSkillVersion returns the active version for a skill.
+func (s *SkillAPI) GetActiveSkillVersion(skillID uint) (*models.SkillVersion, error) {
+	var ver models.SkillVersion
+	err := s.dao.Where("skill_id = ? AND is_active = true", skillID).First(&ver).Error
+	if err != nil {
+		return nil, err
+	}
+	return &ver, nil
+}
+
+// ActivateSkillVersion activates a specific version, deactivating all other versions of the same skill.
+func (s *SkillAPI) ActivateSkillVersion(versionID uint) error {
+	var ver models.SkillVersion
+	err := s.dao.First(&ver, versionID).Error
+	if err != nil {
+		return err
+	}
+	if ver == nil {
+		return fmt.Errorf("skill version %d not found", versionID)
+	}
+	// Deactivate all versions of this skill
+	if err := s.dao.Model(&models.SkillVersion{}).Where("skill_id = ?", ver.SkillID).Update("is_active", false).Error; err != nil {
+		return err
+	}
+	// Activate the requested version
+	if err := s.dao.Model(&models.SkillVersion{}).Where("id = ?", versionID).Update("is_active", true).Error; err != nil {
+		return err
+	}
+	return nil
 }

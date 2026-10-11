@@ -77,6 +77,9 @@ type Skill struct {
 	MCPServerIDs    string `json:"mcpServerIds" gorm:"size:500"`
 	Enable          bool   `json:"enable" gorm:"default:true"`
 	SortOrder       int    `json:"sortOrder" gorm:"default:0"`
+	// Sandbox mechanism: if true, skill is only active for a percentage of requests.
+	Sandbox         bool   `json:"sandbox" gorm:"default:false"`
+	SandboxPercentage int   `json:"sandbox_percentage" gorm:"default:0"` // 0-100, 0 means disabled
 }
 
 func (Skill) TableName() string {

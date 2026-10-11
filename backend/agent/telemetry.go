@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -241,6 +242,24 @@ func initMetrics() {
 		if err != nil {
 			logger.SugaredLogger.Warnf("创建 toolCostCounter 失败: %v", err)
 		}
+
+		modelCostCounter, err = meter.Float64Counter(
+			"agent_model_cost_usd_total",
+			metric.WithDescription("Agent 模型调用累计估算成本(美元)"),
+			metric.WithUnit("USD"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 modelCostCounter 失败: %v", err)
+		}
+
+		backtestAccuracyGauge, err = meter.Float64Gauge(
+			"agent_backtest_accuracy",
+			metric.WithDescription("Agent 回测准确率"),
+			metric.WithUnit("ratio"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 backtestAccuracyGauge 失败: %v", err)
+		}
 	})
 }
 
@@ -362,5 +381,21 @@ func RecordQuotaLimits(ctx context.Context, runBudget, dailyBudget int64, dailyC
 	if toolQuotaLimitGauge != nil {
 		toolQuotaLimitGauge.Record(ctx, runBudget, metric.WithAttributes(attribute.String("type", "run_budget")))
 		toolQuotaLimitGauge.Record(ctx, dailyBudget, metric.WithAttributes(attribute.String("type", "daily_budget")))
+	}
+
+	// SetBacktestAccuracy 设置回测准备率指标
+	func SetBacktestAccuracy(ctx context.Context, skillID uint, accuracy float64) {
+		initMetrics()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+
+		attrs := []attribute.KeyValue{
+			attribute.String("skill_id", strconv.FormatUint(uint64(skillID), 10)),
+		}
+
+		if backtestAccuracyGauge != nil {
+			backtestAccuracyGauge.Record(ctx, accuracy, metric.WithAttributes(attrs...))
+		}
 	}
 }
