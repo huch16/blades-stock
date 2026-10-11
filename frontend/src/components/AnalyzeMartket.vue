@@ -1897,133 +1897,326 @@ function handleTreemap() {
 </script>
 
 <template>
-  <n-collapse :trigger-areas="triggerAreas" :default-expanded-names="['1']" display-directive="show">
-    <n-collapse-item  name="1" >
+  <n-collapse
+    :trigger-areas="triggerAreas"
+    :default-expanded-names="['1']"
+    display-directive="show"
+  >
+    <n-collapse-item name="1">
       <template #header>
-          <n-flex>
-              <n-tag size="small" :bordered="false" v-for="(item, index) in mainIndex" :type="item.zdf>0?'error':'success'">
-                <n-flex>
-                  <n-image :width="20" :src="item.img" />
-                  <n-text style="font-size: 14px" :type="item.zdf>0?'error':'success'">{{item.name}}&nbsp;{{item.zxj}}</n-text>
-                  <n-number-animation :precision="2" :from="0" :to="item.zdf" style="font-size: 14px"/>
-                  <n-text style="margin-left: -12px;font-size: 14px" :type="item.zdf>0?'error':'success'">%</n-text>
-                </n-flex>
-              </n-tag>
-          </n-flex>
+        <n-flex>
+          <n-tag
+            v-for="(item, index) in mainIndex"
+            size="small"
+            :bordered="false"
+            :type="item.zdf>0?'error':'success'"
+          >
+            <n-flex>
+              <n-image
+                :width="20"
+                :src="item.img"
+              />
+              <n-text
+                style="font-size: 14px"
+                :type="item.zdf>0?'error':'success'"
+              >
+                {{ item.name }}&nbsp;{{ item.zxj }}
+              </n-text>
+              <n-number-animation
+                :precision="2"
+                :from="0"
+                :to="item.zdf"
+                style="font-size: 14px"
+              />
+              <n-text
+                style="margin-left: -12px;font-size: 14px"
+                :type="item.zdf>0?'error':'success'"
+              >
+                %
+              </n-text>
+            </n-flex>
+          </n-tag>
+        </n-flex>
       </template>
       <template #header-extra>
         主要股指
       </template>
-      <n-flex justify="end" style="margin-bottom: 4px">
+      <n-flex
+        justify="end"
+        style="margin-bottom: 4px"
+      >
         <n-button-group size="tiny">
-          <n-button :type="changeRankDays===1?'primary':'default'" @click="changeRankDays=1">当日</n-button>
-          <n-button :type="changeRankDays===3?'primary':'default'" @click="changeRankDays=3">近3日</n-button>
-          <n-button :type="changeRankDays===5?'primary':'default'" @click="changeRankDays=5">近5日</n-button>
-          <n-button :type="changeRankDays===10?'primary':'default'" @click="changeRankDays=10">近10日</n-button>
+          <n-button
+            :type="changeRankDays===1?'primary':'default'"
+            @click="changeRankDays=1"
+          >
+            当日
+          </n-button>
+          <n-button
+            :type="changeRankDays===3?'primary':'default'"
+            @click="changeRankDays=3"
+          >
+            近3日
+          </n-button>
+          <n-button
+            :type="changeRankDays===5?'primary':'default'"
+            @click="changeRankDays=5"
+          >
+            近5日
+          </n-button>
+          <n-button
+            :type="changeRankDays===10?'primary':'default'"
+            @click="changeRankDays=10"
+          >
+            近10日
+          </n-button>
         </n-button-group>
       </n-flex>
-      <n-grid :cols="24" :y-gap="0">
+      <n-grid
+        :cols="24"
+        :y-gap="0"
+      >
         <n-gi span="8">
-          <div ref="chartRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+          <div
+            ref="chartRef"
+            style="width: 100%;height: auto;--wails-draggable:no-drag"
+            :style="{height:chartHeight+'px'}"
+          />
         </n-gi>
         <n-gi span="8">
-          <div ref="limitChartRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+          <div
+            ref="limitChartRef"
+            style="width: 100%;height: auto;--wails-draggable:no-drag"
+            :style="{height:chartHeight+'px'}"
+          />
         </n-gi>
         <n-gi span="8">
-          <div ref="changeRankConceptRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+          <div
+            ref="changeRankConceptRef"
+            style="width: 100%;height: auto;--wails-draggable:no-drag"
+            :style="{height:chartHeight+'px'}"
+          />
         </n-gi>
       </n-grid>
-      <n-flex justify="center" style="margin: 8px 0" :wrap="false">
-        <n-button text @click="showTreemap = !showTreemap" :type="showTreemap?'primary':''">
+      <n-flex
+        justify="center"
+        style="margin: 8px 0"
+        :wrap="false"
+      >
+        <n-button
+          text
+          :type="showTreemap?'primary':''"
+          @click="showTreemap = !showTreemap"
+        >
           {{ showTreemap ? '隐藏热词' : '查看热词' }}
         </n-button>
         <n-divider vertical />
-        <n-button text @click="showDailyChart = !showDailyChart" :type="showDailyChart?'primary':''">
+        <n-button
+          text
+          :type="showDailyChart?'primary':''"
+          @click="showDailyChart = !showDailyChart"
+        >
           {{ showDailyChart ? '隐藏按天分析' : '按天涨跌/涨跌停分析' }}
         </n-button>
         <n-divider vertical />
-        <n-button text @click="showChangeStats = !showChangeStats" :type="showChangeStats?'primary':''">
+        <n-button
+          text
+          :type="showChangeStats?'primary':''"
+          @click="showChangeStats = !showChangeStats"
+        >
           {{ showChangeStats ? '隐藏异动分析' : '历史异动分析' }}
         </n-button>
         <n-divider vertical />
-        <n-button text @click="showChangeRank = !showChangeRank" :type="showChangeRank?'primary':''">
+        <n-button
+          text
+          :type="showChangeRank?'primary':''"
+          @click="showChangeRank = !showChangeRank"
+        >
           {{ showChangeRank ? '隐藏异动排行' : '异动排行' }}
         </n-button>
         <n-divider vertical />
-        <n-button text @click="showBullBearRank = !showBullBearRank" :type="showBullBearRank?'primary':''">
+        <n-button
+          text
+          :type="showBullBearRank?'primary':''"
+          @click="showBullBearRank = !showBullBearRank"
+        >
           {{ showBullBearRank ? '隐藏利好/利空排行' : '利好/利空排行' }}
         </n-button>
       </n-flex>
       <n-collapse-transition :show="showTreemap">
-        <div ref="treemapRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+        <div
+          ref="treemapRef"
+          style="width: 100%;height: auto;--wails-draggable:no-drag"
+          :style="{height:chartHeight+'px'}"
+        />
       </n-collapse-transition>
       <n-collapse-transition :show="showDailyChart">
-        <n-grid :cols="24" :y-gap="0">
+        <n-grid
+          :cols="24"
+          :y-gap="0"
+        >
           <n-gi span="12">
-            <div ref="dailyUpDownChartRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="dailyUpDownChartRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
           <n-gi span="12">
-            <div ref="dailyLimitChartRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="dailyLimitChartRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
         </n-grid>
       </n-collapse-transition>
       <n-collapse-transition :show="showChangeStats">
-        <n-grid :cols="24" :y-gap="0">
+        <n-grid
+          :cols="24"
+          :y-gap="0"
+        >
           <n-gi span="12">
-            <div ref="changeStatsChartRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="changeStatsChartRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
           <n-gi span="12">
-            <div ref="changeTypeChartRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="changeTypeChartRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
         </n-grid>
       </n-collapse-transition>
       <n-collapse-transition :show="showChangeRank">
-        <n-grid :cols="24" :y-gap="0">
+        <n-grid
+          :cols="24"
+          :y-gap="0"
+        >
           <n-gi span="12">
-            <div ref="changeRankStockRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="changeRankStockRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
           <n-gi span="12">
-            <div ref="changeRankIndustryRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="changeRankIndustryRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
         </n-grid>
       </n-collapse-transition>
       <n-collapse-transition :show="showBullBearRank">
-        <n-flex justify="end" style="margin-bottom: 4px">
+        <n-flex
+          justify="end"
+          style="margin-bottom: 4px"
+        >
           <n-button-group size="tiny">
-            <n-button :type="bullBearDays===1?'primary':'default'" @click="bullBearDays=1">当日</n-button>
-            <n-button :type="bullBearDays===3?'primary':'default'" @click="bullBearDays=3">近3日</n-button>
-            <n-button :type="bullBearDays===5?'primary':'default'" @click="bullBearDays=5">近5日</n-button>
-            <n-button :type="bullBearDays===10?'primary':'default'" @click="bullBearDays=10">近10日</n-button>
-            <n-button :type="bullBearDays===30?'primary':'default'" @click="bullBearDays=30">近30日</n-button>
+            <n-button
+              :type="bullBearDays===1?'primary':'default'"
+              @click="bullBearDays=1"
+            >
+              当日
+            </n-button>
+            <n-button
+              :type="bullBearDays===3?'primary':'default'"
+              @click="bullBearDays=3"
+            >
+              近3日
+            </n-button>
+            <n-button
+              :type="bullBearDays===5?'primary':'default'"
+              @click="bullBearDays=5"
+            >
+              近5日
+            </n-button>
+            <n-button
+              :type="bullBearDays===10?'primary':'default'"
+              @click="bullBearDays=10"
+            >
+              近10日
+            </n-button>
+            <n-button
+              :type="bullBearDays===30?'primary':'default'"
+              @click="bullBearDays=30"
+            >
+              近30日
+            </n-button>
           </n-button-group>
         </n-flex>
-        <n-grid :cols="24" :y-gap="0">
+        <n-grid
+          :cols="24"
+          :y-gap="0"
+        >
           <n-gi span="8">
-            <div ref="bullBearStockUpRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="bullBearStockUpRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
           <n-gi span="8">
-            <div ref="bullBearIndustryUpRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="bullBearIndustryUpRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
           <n-gi span="8">
-            <div ref="bullBearConceptUpRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="bullBearConceptUpRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
         </n-grid>
-        <n-grid :cols="24" :y-gap="0">
+        <n-grid
+          :cols="24"
+          :y-gap="0"
+        >
           <n-gi span="8">
-            <div ref="bullBearStockDownRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="bullBearStockDownRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
           <n-gi span="8">
-            <div ref="bullBearIndustryDownRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="bullBearIndustryDownRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
           <n-gi span="8">
-            <div ref="bullBearConceptDownRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+            <div
+              ref="bullBearConceptDownRef"
+              style="width: 100%;height: auto;--wails-draggable:no-drag"
+              :style="{height:chartHeight+'px'}"
+            />
           </n-gi>
         </n-grid>
       </n-collapse-transition>
     </n-collapse-item>
   </n-collapse>
-  <n-modal v-model:show="showDimensionModal" preset="card" :title="dimensionModalTitle" style="width: 800px;max-width: calc(100vw - 32px);" :mask-closable="true">
-    <div ref="dimensionDetailChartRef" style="width: 100%;height: 450px;--wails-draggable:no-drag"></div>
+  <n-modal
+    v-model:show="showDimensionModal"
+    preset="card"
+    :title="dimensionModalTitle"
+    style="width: 800px;max-width: calc(100vw - 32px);"
+    :mask-closable="true"
+  >
+    <div
+      ref="dimensionDetailChartRef"
+      style="width: 100%;height: 450px;--wails-draggable:no-drag"
+    />
   </n-modal>
 </template>
 

@@ -105,14 +105,32 @@ function getMarketCode(item) {
 </script>
 
 <template>
-  <n-spin :show="loading" size="small">
-    <n-alert v-if="errorMsg && list.length === 0" type="warning" style="margin-bottom: 10px" :bordered="false">
+  <n-spin
+    :show="loading"
+    size="small"
+  >
+    <n-alert
+      v-if="errorMsg && list.length === 0"
+      type="warning"
+      style="margin-bottom: 10px"
+      :bordered="false"
+    >
       <template #header>
         {{ errorMsg }}
-        <n-button size="tiny" type="primary" @click="fetchHotStock" style="margin-left: 10px">重试</n-button>
+        <n-button
+          size="tiny"
+          type="primary"
+          style="margin-left: 10px"
+          @click="fetchHotStock"
+        >
+          重试
+        </n-button>
       </template>
     </n-alert>
-    <n-table striped size="small">
+    <n-table
+      striped
+      size="small"
+    >
       <n-thead>
         <n-tr>
           <n-th>股票名称</n-th>
@@ -124,29 +142,75 @@ function getMarketCode(item) {
         </n-tr>
       </n-thead>
       <n-tbody>
-        <n-tr v-for="item in list" :key="item.code">
-          <n-td><n-text type="info">
-            <n-popover trigger="hover" placement="right">
-              <template #trigger>
-                <n-tag type="info"  :bordered="false">  {{item.name}} {{item.code}}</n-tag>
-              </template>
-              <k-line-chart style="width: 800px" :code="getMarketCode(item)" :chart-height="500" :stockName="item.name" :k-days="20" :dark-theme="true"></k-line-chart>
-            </n-popover>
-          </n-text></n-td>
-          <n-td><n-text :type="item.percent>0?'error':'success'">{{item.percent}}%</n-text></n-td>
-          <n-td><n-text type="info">{{item.current}}</n-text></n-td>
-          <n-td><n-text type="info">{{item.value}}</n-text></n-td>
-          <n-td><n-text  :type="item.increment>0?'error':'success'">
-            {{item.increment}}
-            <n-icon v-if="item.increment>0" :component="ArrowUp"/>
-            <n-icon v-else :component="ArrowDown"/>
-          </n-text></n-td>
+        <n-tr
+          v-for="item in list"
+          :key="item.code"
+        >
           <n-td>
-            <n-text  :type="item.rank_change>0?'error':'success'">
-              {{item.rank_change}}
-              <n-icon v-if="item.rank_change>0" :component="ArrowUp"/>
-              <n-text v-else-if="item.rank_change==0" ></n-text>
-              <n-icon v-else :component="ArrowDown"/>
+            <n-text type="info">
+              <n-popover
+                trigger="hover"
+                placement="right"
+              >
+                <template #trigger>
+                  <n-tag
+                    type="info"
+                    :bordered="false"
+                  >
+                    {{ item.name }} {{ item.code }}
+                  </n-tag>
+                </template>
+                <k-line-chart
+                  style="width: 800px"
+                  :code="getMarketCode(item)"
+                  :chart-height="500"
+                  :stock-name="item.name"
+                  :k-days="20"
+                  :dark-theme="true"
+                />
+              </n-popover>
+            </n-text>
+          </n-td>
+          <n-td>
+            <n-text :type="item.percent>0?'error':'success'">
+              {{ item.percent }}%
+            </n-text>
+          </n-td>
+          <n-td>
+            <n-text type="info">
+              {{ item.current }}
+            </n-text>
+          </n-td>
+          <n-td>
+            <n-text type="info">
+              {{ item.value }}
+            </n-text>
+          </n-td>
+          <n-td>
+            <n-text :type="item.increment>0?'error':'success'">
+              {{ item.increment }}
+              <n-icon
+                v-if="item.increment>0"
+                :component="ArrowUp"
+              />
+              <n-icon
+                v-else
+                :component="ArrowDown"
+              />
+            </n-text>
+          </n-td>
+          <n-td>
+            <n-text :type="item.rank_change>0?'error':'success'">
+              {{ item.rank_change }}
+              <n-icon
+                v-if="item.rank_change>0"
+                :component="ArrowUp"
+              />
+              <n-text v-else-if="item.rank_change==0" />
+              <n-icon
+                v-else
+                :component="ArrowDown"
+              />
             </n-text>
           </n-td>
         </n-tr>

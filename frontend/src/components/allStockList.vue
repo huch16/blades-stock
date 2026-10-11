@@ -650,190 +650,353 @@ const toNumber = (value, defaultValue = 0) => {
 </script>
 
 <template>
-    <n-space justify="start">
-      <n-card size="small" :bordered="false"  style="text-align: left">
-        <n-checkbox   @update:checked="handleCheckedChange" v-model:checked="technicalIndicatorReactive.MACD_GOLDEN_FORK">
+  <n-space justify="start">
+    <n-card
+      size="small"
+      :bordered="false"
+      style="text-align: left"
+    >
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.MACD_GOLDEN_FORK"
+        @update:checked="handleCheckedChange"
+      >
         MACD金叉
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.KDJ_GOLDEN_FORK">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.KDJ_GOLDEN_FORK"
+        @update:checked="handleCheckedChange"
+      >
         KDJ金叉
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.BREAK_THROUGH">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.BREAK_THROUGH"
+        @update:checked="handleCheckedChange"
+      >
         放量突破
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.LOW_FUNDS_INFLOW">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.LOW_FUNDS_INFLOW"
+        @update:checked="handleCheckedChange"
+      >
         低位资金净流入
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.HIGH_FUNDS_OUTFLOW">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.HIGH_FUNDS_OUTFLOW"
+        @update:checked="handleCheckedChange"
+      >
         高位资金净流出
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.BREAKUP_MA_5DAYS">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.BREAKUP_MA_5DAYS"
+        @update:checked="handleCheckedChange"
+      >
         向上突破5日均线
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.LONG_AVG_ARRAY">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.LONG_AVG_ARRAY"
+        @update:checked="handleCheckedChange"
+      >
         均线多头排列
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.SHORT_AVG_ARRAY">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.SHORT_AVG_ARRAY"
+        @update:checked="handleCheckedChange"
+      >
         均线空头排列
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.UPPER_LARGE_VOLUME">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.UPPER_LARGE_VOLUME"
+        @update:checked="handleCheckedChange"
+      >
         连涨放量
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.DOWN_NARROW_VOLUME">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.DOWN_NARROW_VOLUME"
+        @update:checked="handleCheckedChange"
+      >
         下跌无量
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.ONE_DAYANG_LINE">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.ONE_DAYANG_LINE"
+        @update:checked="handleCheckedChange"
+      >
         一根大阳线
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.TWO_DAYANG_LINES">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.TWO_DAYANG_LINES"
+        @update:checked="handleCheckedChange"
+      >
         两根大阳线
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"     v-model:checked="technicalIndicatorReactive.RISE_SUN">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.RISE_SUN"
+        @update:checked="handleCheckedChange"
+      >
         旭日东升
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.POWER_FULGUN">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.POWER_FULGUN"
+        @update:checked="handleCheckedChange"
+      >
         强势多方炮
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.RESTORE_JUSTICE">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.RESTORE_JUSTICE"
+        @update:checked="handleCheckedChange"
+      >
         拨云见日
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"     v-model:checked="technicalIndicatorReactive.DOWN_7DAYS">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.DOWN_7DAYS"
+        @update:checked="handleCheckedChange"
+      >
         七仙女下凡(七连阴)
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.UPPER_8DAYS">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.UPPER_8DAYS"
+        @update:checked="handleCheckedChange"
+      >
         八仙过海(八连阳)
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.UPPER_9DAYS">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.UPPER_9DAYS"
+        @update:checked="handleCheckedChange"
+      >
         九阳神功(九连阳)
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.UPPER_4DAYS">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.UPPER_4DAYS"
+        @update:checked="handleCheckedChange"
+      >
         四串阳
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.HEAVEN_RULE">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.HEAVEN_RULE"
+        @update:checked="handleCheckedChange"
+      >
         天量法则
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.UPSIDE_VOLUME">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.UPSIDE_VOLUME"
+        @update:checked="handleCheckedChange"
+      >
         放量上攻
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.BEARISH_ENGULFING">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.BEARISH_ENGULFING"
+        @update:checked="handleCheckedChange"
+      >
         穿头破脚
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.REVERSING_HAMMER">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.REVERSING_HAMMER"
+        @update:checked="handleCheckedChange"
+      >
         倒转锤头
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.SHOOTING_STAR">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.SHOOTING_STAR"
+        @update:checked="handleCheckedChange"
+      >
         射击之星
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.EVENING_STAR">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.EVENING_STAR"
+        @update:checked="handleCheckedChange"
+      >
         黄昏之星
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.FIRST_DAWN">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.FIRST_DAWN"
+        @update:checked="handleCheckedChange"
+      >
         曙光初现
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.PREGNANT">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.PREGNANT"
+        @update:checked="handleCheckedChange"
+      >
         身怀六甲
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.BLACK_CLOUD_TOPS">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.BLACK_CLOUD_TOPS"
+        @update:checked="handleCheckedChange"
+      >
         乌云盖顶
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.MORNING_STAR">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.MORNING_STAR"
+        @update:checked="handleCheckedChange"
+      >
         早晨之星
       </n-checkbox>
-      <n-checkbox  @update:checked="handleCheckedChange"    v-model:checked="technicalIndicatorReactive.NARROW_FINISH">
+      <n-checkbox
+        v-model:checked="technicalIndicatorReactive.NARROW_FINISH"
+        @update:checked="handleCheckedChange"
+      >
         窄幅整理
       </n-checkbox>
-      </n-card>
-      <n-card size="small" :bordered="false"  style="text-align: left">
-        <n-radio-group size="small"  @update:checked="handleCheckedChange" name="UPP_DAYS"   v-model:value="technicalIndicatorReactive.UPP_DAYS">
-          <n-radio :value="3">人气排名连涨:3天及以上</n-radio>
-          <n-radio :value="5">人气排名连涨:5天及以上</n-radio>
-          <n-radio :value="7">人气排名连涨:7天及以上</n-radio>
-        </n-radio-group>
-        <n-divider vertical/>
-        <n-radio-group  size="small" @update:checked="handleCheckedChange"  name="CONCERN_RANK_7DAYS"  v-model:value="technicalIndicatorReactive.CONCERN_RANK_7DAYS">
-          <n-radio :value="10"> 7日关注排名:前10名</n-radio>
-          <n-radio :value="50"> 7日关注排名:前50名</n-radio>
-          <n-radio :value="100"> 7日关注排名:前100名</n-radio>
-        </n-radio-group>
+    </n-card>
+    <n-card
+      size="small"
+      :bordered="false"
+      style="text-align: left"
+    >
+      <n-radio-group
+        v-model:value="technicalIndicatorReactive.UPP_DAYS"
+        size="small"
+        name="UPP_DAYS"
+        @update:checked="handleCheckedChange"
+      >
+        <n-radio :value="3">
+          人气排名连涨:3天及以上
+        </n-radio>
+        <n-radio :value="5">
+          人气排名连涨:5天及以上
+        </n-radio>
+        <n-radio :value="7">
+          人气排名连涨:7天及以上
+        </n-radio>
+      </n-radio-group>
+      <n-divider vertical />
+      <n-radio-group
+        v-model:value="technicalIndicatorReactive.CONCERN_RANK_7DAYS"
+        size="small"
+        name="CONCERN_RANK_7DAYS"
+        @update:checked="handleCheckedChange"
+      >
+        <n-radio :value="10">
+          7日关注排名:前10名
+        </n-radio>
+        <n-radio :value="50">
+          7日关注排名:前50名
+        </n-radio>
+        <n-radio :value="100">
+          7日关注排名:前100名
+        </n-radio>
+      </n-radio-group>
 
-        <n-radio-group  size="small" @update:checked="handleCheckedChange" name="UPNDAY"  v-model:value="technicalIndicatorReactive.UPNDAY">
-          <n-radio :value="3"> 连涨天数:3天及以上</n-radio>
-          <n-radio :value="5"> 连涨天数:5天及以上</n-radio>
-          <n-radio :value="8"> 连涨天数:8天及以上</n-radio>
-        </n-radio-group>
-        <n-divider vertical/>
-        <n-radio-group  size="small" @update:checked="handleCheckedChange" name="DOWNNDAY"  v-model:value="technicalIndicatorReactive.DOWNNDAY">
-          <n-radio :value="3"> 连跌天数:3天及以上</n-radio>
-          <n-radio :value="5"> 连跌天数:5天及以上</n-radio>
-          <n-radio :value="8"> 连跌天数:8天及以上</n-radio>
-          <n-radio :value="10"> 连跌天数:10天及以上</n-radio>
-          <n-radio :value="14"> 连跌天数:14天及以上</n-radio>
-        </n-radio-group>
-      </n-card>
-
-    </n-space>
-    <n-input-group>
-<!--    <n-input clearable placeholder="输入股票名称" v-model:value="paginationReactive.keyword"/>-->
-      <n-auto-complete
-          v-model:value="paginationReactive.keyword"
-          :input-props="{
-            autocomplete: 'disabled',
-          }"
-          :options="optionsReactive"
-          placeholder="输入搜索关键词"
-          clearable
-          @input="handleUpdateVal"
-          @select="(value) => {
-            paginationReactive.keyword = value
-            handleSearch()
-          }"
-      />
-    <n-button type="primary" ghost @click="handleSearch"  @input="handleSearch">
+      <n-radio-group
+        v-model:value="technicalIndicatorReactive.UPNDAY"
+        size="small"
+        name="UPNDAY"
+        @update:checked="handleCheckedChange"
+      >
+        <n-radio :value="3">
+          连涨天数:3天及以上
+        </n-radio>
+        <n-radio :value="5">
+          连涨天数:5天及以上
+        </n-radio>
+        <n-radio :value="8">
+          连涨天数:8天及以上
+        </n-radio>
+      </n-radio-group>
+      <n-divider vertical />
+      <n-radio-group
+        v-model:value="technicalIndicatorReactive.DOWNNDAY"
+        size="small"
+        name="DOWNNDAY"
+        @update:checked="handleCheckedChange"
+      >
+        <n-radio :value="3">
+          连跌天数:3天及以上
+        </n-radio>
+        <n-radio :value="5">
+          连跌天数:5天及以上
+        </n-radio>
+        <n-radio :value="8">
+          连跌天数:8天及以上
+        </n-radio>
+        <n-radio :value="10">
+          连跌天数:10天及以上
+        </n-radio>
+        <n-radio :value="14">
+          连跌天数:14天及以上
+        </n-radio>
+      </n-radio-group>
+    </n-card>
+  </n-space>
+  <n-input-group>
+    <!--    <n-input clearable placeholder="输入股票名称" v-model:value="paginationReactive.keyword"/>-->
+    <n-auto-complete
+      v-model:value="paginationReactive.keyword"
+      :input-props="{
+        autocomplete: 'disabled',
+      }"
+      :options="optionsReactive"
+      placeholder="输入搜索关键词"
+      clearable
+      @input="handleUpdateVal"
+      @select="(value) => {
+        paginationReactive.keyword = value
+        handleSearch()
+      }"
+    />
+    <n-button
+      type="primary"
+      ghost
+      @click="handleSearch"
+      @input="handleSearch"
+    >
       搜索
     </n-button>
-      <n-button @click="handleReset">重置</n-button>
-      <n-button
-        type="warning"
-        secondary
-        @click="triggerAiShapeListSummary"
-        :disabled="loadingRef || !dataRef.length"
-      >
-        ⚡ AI 形态共振推演
-      </n-button>
-
-    </n-input-group>
-    <!-- 数据表格 -->
-    <n-data-table
-      remote
-      size="small"
-      :columns="columnsRef"
-      :data="dataRef"
-      :loading="loadingRef"
-      :pagination="paginationReactive"
-      :row-key="(rowData) => rowData.SECUCODE"
-      flex-height
-      style="height: calc(100vh - 380px);margin-top: 10px"
-      @update:page="handlePageChange"
-    />
+    <n-button @click="handleReset">
+      重置
+    </n-button>
+    <n-button
+      type="warning"
+      secondary
+      :disabled="loadingRef || !dataRef.length"
+      @click="triggerAiShapeListSummary"
+    >
+      ⚡ AI 形态共振推演
+    </n-button>
+  </n-input-group>
+  <!-- 数据表格 -->
+  <n-data-table
+    remote
+    size="small"
+    :columns="columnsRef"
+    :data="dataRef"
+    :loading="loadingRef"
+    :pagination="paginationReactive"
+    :row-key="(rowData) => rowData.SECUCODE"
+    flex-height
+    style="height: calc(100vh - 380px);margin-top: 10px"
+    @update:page="handlePageChange"
+  />
     
-    <!-- 分页控件 -->
-<!--    <div style="margin-top: 16px; display: flex; justify-content: center;">-->
-<!--      <n-pagination-->
-<!--        v-model:page="paginationReactive.page"-->
-<!--        v-model:page-size="paginationReactive.pageSize"-->
-<!--        :page-count="paginationReactive.pageCount"-->
-<!--        :item-count="paginationReactive.itemCount"-->
-<!--        :page-sizes="[10, 20, 50, 100]"-->
-<!--        show-size-picker-->
-<!--        show-quick-jumper-->
-<!--        @update:page="handlePageChange"-->
-<!--        @update:page-size="handlePageSizeChange"-->
-<!--      />-->
-<!--    </div>-->
+  <!-- 分页控件 -->
+  <!--    <div style="margin-top: 16px; display: flex; justify-content: center;">-->
+  <!--      <n-pagination-->
+  <!--        v-model:page="paginationReactive.page"-->
+  <!--        v-model:page-size="paginationReactive.pageSize"-->
+  <!--        :page-count="paginationReactive.pageCount"-->
+  <!--        :item-count="paginationReactive.itemCount"-->
+  <!--        :page-sizes="[10, 20, 50, 100]"-->
+  <!--        show-size-picker-->
+  <!--        show-quick-jumper-->
+  <!--        @update:page="handlePageChange"-->
+  <!--        @update:page-size="handlePageSizeChange"-->
+  <!--      />-->
+  <!--    </div>-->
 
-  <n-modal v-model:show="modalDataRef.visible" :title="modalDataRef.title" preset="card" style="width: 850px;max-width: calc(100vw - 32px);">
+  <n-modal
+    v-model:show="modalDataRef.visible"
+    :title="modalDataRef.title"
+    preset="card"
+    style="width: 850px;max-width: calc(100vw - 32px);"
+  >
     <n-card size="small">
-      <KLineChart style="width: 100%;max-width: 800px;" :code="getStockCode(modalDataRef.stockCode)" :chart-height="500" :stock-name="modalDataRef.stockName" :k-days="30" :dark-theme="editorDataRef.darkTheme"></KLineChart>
+      <KLineChart
+        style="width: 100%;max-width: 800px;"
+        :code="getStockCode(modalDataRef.stockCode)"
+        :chart-height="500"
+        :stock-name="modalDataRef.stockName"
+        :k-days="30"
+        :dark-theme="editorDataRef.darkTheme"
+      />
     </n-card>
   </n-modal>
 
@@ -860,11 +1023,25 @@ const toNumber = (value, defaultValue = 0) => {
     />
   </n-modal>
 
-  <n-modal v-model:show="showFollowGroupModal" preset="dialog" title="新建分组" positive-text="创建并关注" negative-text="取消"
-           @positive-click="handleCreateGroupAndFollow" style="width: 420px;">
-    <n-form label-placement="left" label-width="80">
+  <n-modal
+    v-model:show="showFollowGroupModal"
+    preset="dialog"
+    title="新建分组"
+    positive-text="创建并关注"
+    negative-text="取消"
+    style="width: 420px;"
+    @positive-click="handleCreateGroupAndFollow"
+  >
+    <n-form
+      label-placement="left"
+      label-width="80"
+    >
       <n-form-item label="分组名称">
-        <n-input v-model:value="newGroupName" placeholder="请输入分组名称" @keyup.enter="handleCreateGroupAndFollow"/>
+        <n-input
+          v-model:value="newGroupName"
+          placeholder="请输入分组名称"
+          @keyup.enter="handleCreateGroupAndFollow"
+        />
       </n-form-item>
     </n-form>
   </n-modal>

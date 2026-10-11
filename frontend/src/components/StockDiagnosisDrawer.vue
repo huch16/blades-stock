@@ -117,17 +117,20 @@ function askAgentAssistant() {
 <template>
   <NDrawer
     :show="show"
-    @update:show="handleClose"
     :width="540"
     placement="right"
     :trap-focus="false"
+    @update:show="handleClose"
   >
     <NDrawerContent
       :title="`✨ ${diagnosisData?.stockName || activeName || stockName} (${diagnosisData?.stockCode || activeCode || stockCode}) 量化三维诊断`"
       closable
     >
       <!-- 快速历史对比切换条 -->
-      <div v-if="recentStocks.length > 1" style="margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+      <div
+        v-if="recentStocks.length > 1"
+        style="margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;"
+      >
         <span style="font-size: 11px; color: #888;">快速切换标的:</span>
         <NButton
           v-for="s in recentStocks"
@@ -141,17 +144,38 @@ function askAgentAssistant() {
         </NButton>
       </div>
 
-      <div v-if="loading" style="display: flex; justify-content: center; align-items: center; height: 300px;">
-        <NSpin size="large" description="正在调取 VectorBT 回测引擎、资金筹码及技术形态..." />
+      <div
+        v-if="loading"
+        style="display: flex; justify-content: center; align-items: center; height: 300px;"
+      >
+        <NSpin
+          size="large"
+          description="正在调取 VectorBT 回测引擎、资金筹码及技术形态..."
+        />
       </div>
 
-      <div v-else-if="diagnosisData" class="diagnosis-container">
+      <div
+        v-else-if="diagnosisData"
+        class="diagnosis-container"
+      >
         <!-- 核心评分卡片 -->
-        <NCard size="small" embedded class="score-card">
-          <NFlex justify="space-between" align="center">
+        <NCard
+          size="small"
+          embedded
+          class="score-card"
+        >
+          <NFlex
+            justify="space-between"
+            align="center"
+          >
             <div>
-              <div class="score-label">综合量化评分</div>
-              <div class="score-value" :class="diagnosisData.overallScore >= 70 ? 'bull' : (diagnosisData.overallScore <= 40 ? 'bear' : 'neutral')">
+              <div class="score-label">
+                综合量化评分
+              </div>
+              <div
+                class="score-value"
+                :class="diagnosisData.overallScore >= 70 ? 'bull' : (diagnosisData.overallScore <= 40 ? 'bear' : 'neutral')"
+              >
                 {{ diagnosisData.overallScore }} <span class="score-max">/ 100</span>
               </div>
             </div>
@@ -173,12 +197,21 @@ function askAgentAssistant() {
           <NDivider style="margin: 10px 0 8px 0;" />
 
           <!-- 关键点位建议 -->
-          <NGrid :cols="4" :x-gap="8">
+          <NGrid
+            :cols="4"
+            :x-gap="8"
+          >
             <NGridItem>
-              <NStatistic label="当前价格" :value="diagnosisData.currentPrice.toFixed(2)" />
+              <NStatistic
+                label="当前价格"
+                :value="diagnosisData.currentPrice.toFixed(2)"
+              />
             </NGridItem>
             <NGridItem>
-              <NStatistic label="第一目标价" :value="diagnosisData.targetPrice.toFixed(2)">
+              <NStatistic
+                label="第一目标价"
+                :value="diagnosisData.targetPrice.toFixed(2)"
+              >
                 <template #suffix>
                   <span style="font-size: 10px; color: #18a058;">
                     (+{{ (((diagnosisData.targetPrice - diagnosisData.currentPrice) / diagnosisData.currentPrice) * 100).toFixed(1) }}%)
@@ -187,7 +220,10 @@ function askAgentAssistant() {
               </NStatistic>
             </NGridItem>
             <NGridItem>
-              <NStatistic label="建议止损价" :value="diagnosisData.stopLossPrice.toFixed(2)">
+              <NStatistic
+                label="建议止损价"
+                :value="diagnosisData.stopLossPrice.toFixed(2)"
+              >
                 <template #suffix>
                   <span style="font-size: 10px; color: #d03050;">
                     ({{ (((diagnosisData.stopLossPrice - diagnosisData.currentPrice) / diagnosisData.currentPrice) * 100).toFixed(1) }}%)
@@ -196,15 +232,25 @@ function askAgentAssistant() {
               </NStatistic>
             </NGridItem>
             <NGridItem>
-              <NStatistic label="盈亏比" :value="diagnosisData.riskRewardRatio.toFixed(2)" />
+              <NStatistic
+                label="盈亏比"
+                :value="diagnosisData.riskRewardRatio.toFixed(2)"
+              />
             </NGridItem>
           </NGrid>
         </NCard>
 
         <!-- 维度1: 量化回测维度 -->
-        <NCard size="small" class="dim-card" style="margin-top: 10px">
+        <NCard
+          size="small"
+          class="dim-card"
+          style="margin-top: 10px"
+        >
           <template #header>
-            <NFlex justify="space-between" align="center">
+            <NFlex
+              justify="space-between"
+              align="center"
+            >
               <span>📊 量化回测验证 (VectorBT)</span>
               <span style="font-weight: 700; color: #2080f0;">{{ diagnosisData.quantDim.score }} 分</span>
             </NFlex>
@@ -219,27 +265,55 @@ function askAgentAssistant() {
           <div style="font-size: 12px; color: #666; margin-bottom: 6px;">
             策略: {{ diagnosisData.quantDim.strategyName }} (交易样本: {{ diagnosisData.quantDim.totalTrades }} 次)
           </div>
-          <NGrid :cols="3" :x-gap="6" style="margin-bottom: 8px">
+          <NGrid
+            :cols="3"
+            :x-gap="6"
+            style="margin-bottom: 8px"
+          >
             <NGridItem>
-              <div class="mini-stat-label">历史胜率</div>
-              <div class="mini-stat-value">{{ diagnosisData.quantDim.winRatePct }}%</div>
+              <div class="mini-stat-label">
+                历史胜率
+              </div>
+              <div class="mini-stat-value">
+                {{ diagnosisData.quantDim.winRatePct }}%
+              </div>
             </NGridItem>
             <NGridItem>
-              <div class="mini-stat-label">夏普比率</div>
-              <div class="mini-stat-value">{{ diagnosisData.quantDim.sharpeRatio }}</div>
+              <div class="mini-stat-label">
+                夏普比率
+              </div>
+              <div class="mini-stat-value">
+                {{ diagnosisData.quantDim.sharpeRatio }}
+              </div>
             </NGridItem>
             <NGridItem>
-              <div class="mini-stat-label">最大回撤</div>
-              <div class="mini-stat-value" style="color: #d03050">{{ diagnosisData.quantDim.maxDrawdownPct }}%</div>
+              <div class="mini-stat-label">
+                最大回撤
+              </div>
+              <div
+                class="mini-stat-value"
+                style="color: #d03050"
+              >
+                {{ diagnosisData.quantDim.maxDrawdownPct }}%
+              </div>
             </NGridItem>
           </NGrid>
-          <div class="dim-evaluation">{{ diagnosisData.quantDim.evaluation }}</div>
+          <div class="dim-evaluation">
+            {{ diagnosisData.quantDim.evaluation }}
+          </div>
         </NCard>
 
         <!-- 维度2: 资金筹码维度 -->
-        <NCard size="small" class="dim-card" style="margin-top: 10px">
+        <NCard
+          size="small"
+          class="dim-card"
+          style="margin-top: 10px"
+        >
           <template #header>
-            <NFlex justify="space-between" align="center">
+            <NFlex
+              justify="space-between"
+              align="center"
+            >
               <span>💰 资金筹码博弈</span>
               <span style="font-weight: 700; color: #2080f0;">{{ diagnosisData.moneyDim.score }} 分</span>
             </NFlex>
@@ -251,31 +325,62 @@ function askAgentAssistant() {
             :show-indicator="false"
             style="margin-bottom: 8px;"
           />
-          <NGrid :cols="2" :x-gap="6" style="margin-bottom: 8px">
+          <NGrid
+            :cols="2"
+            :x-gap="6"
+            style="margin-bottom: 8px"
+          >
             <NGridItem>
-              <div class="mini-stat-label">近5日主力净买入</div>
-              <div class="mini-stat-value" :class="diagnosisData.moneyDim.mainNetInflow5D >= 0 ? 'bull' : 'bear'">
+              <div class="mini-stat-label">
+                近5日主力净买入
+              </div>
+              <div
+                class="mini-stat-value"
+                :class="diagnosisData.moneyDim.mainNetInflow5D >= 0 ? 'bull' : 'bear'"
+              >
                 {{ diagnosisData.moneyDim.mainNetInflow5D }} 万元
               </div>
             </NGridItem>
             <NGridItem>
-              <div class="mini-stat-label">超大单净占比</div>
+              <div class="mini-stat-label">
+                超大单净占比
+              </div>
               <div class="mini-stat-value">
                 {{ diagnosisData.moneyDim.superLargeNetPct }}%
               </div>
             </NGridItem>
           </NGrid>
           <div style="font-size: 12px; margin-bottom: 4px;">
-            <NTag size="tiny" type="info">{{ diagnosisData.moneyDim.recentInflowTrend }}</NTag>
-            <NTag size="tiny" type="default" style="margin-left: 6px;">{{ diagnosisData.moneyDim.chipConcentration }}</NTag>
+            <NTag
+              size="tiny"
+              type="info"
+            >
+              {{ diagnosisData.moneyDim.recentInflowTrend }}
+            </NTag>
+            <NTag
+              size="tiny"
+              type="default"
+              style="margin-left: 6px;"
+            >
+              {{ diagnosisData.moneyDim.chipConcentration }}
+            </NTag>
           </div>
-          <div class="dim-evaluation">{{ diagnosisData.moneyDim.evaluation }}</div>
+          <div class="dim-evaluation">
+            {{ diagnosisData.moneyDim.evaluation }}
+          </div>
         </NCard>
 
         <!-- 维度3: 技术形态维度 -->
-        <NCard size="small" class="dim-card" style="margin-top: 10px">
+        <NCard
+          size="small"
+          class="dim-card"
+          style="margin-top: 10px"
+        >
           <template #header>
-            <NFlex justify="space-between" align="center">
+            <NFlex
+              justify="space-between"
+              align="center"
+            >
               <span>📈 技术与波动形态</span>
               <span style="font-weight: 700; color: #2080f0;">{{ diagnosisData.technicalDim.score }} 分</span>
             </NFlex>
@@ -290,11 +395,17 @@ function askAgentAssistant() {
           <div style="font-size: 12px; color: #666; margin-bottom: 6px;">
             均线形态: <strong>{{ diagnosisData.technicalDim.trend }}</strong> | ATR(14): {{ diagnosisData.technicalDim.atr }}
           </div>
-          <div class="dim-evaluation">{{ diagnosisData.technicalDim.evaluation }}</div>
+          <div class="dim-evaluation">
+            {{ diagnosisData.technicalDim.evaluation }}
+          </div>
         </NCard>
 
         <!-- 历史战绩与反思记录 -->
-        <NCard size="small" class="dim-card" style="margin-top: 10px; background: rgba(32, 128, 240, 0.04);">
+        <NCard
+          size="small"
+          class="dim-card"
+          style="margin-top: 10px; background: rgba(32, 128, 240, 0.04);"
+        >
           <template #header>
             <span style="font-size: 13px;">🧠 AI 历史预测复盘闭环</span>
           </template>
@@ -304,17 +415,34 @@ function askAgentAssistant() {
         </NCard>
 
         <!-- 风险提示 -->
-        <div style="margin-top: 10px" v-if="diagnosisData.risks && diagnosisData.risks.length > 0">
-          <NAlert title="关键风险排查" type="warning" :show-icon="true">
+        <div
+          v-if="diagnosisData.risks && diagnosisData.risks.length > 0"
+          style="margin-top: 10px"
+        >
+          <NAlert
+            title="关键风险排查"
+            type="warning"
+            :show-icon="true"
+          >
             <ul style="margin: 0; padding-left: 16px; font-size: 12px;">
-              <li v-for="(r, idx) in diagnosisData.risks" :key="idx">{{ r }}</li>
+              <li
+                v-for="(r, idx) in diagnosisData.risks"
+                :key="idx"
+              >
+                {{ r }}
+              </li>
             </ul>
           </NAlert>
         </div>
 
         <!-- 底部操作按钮 -->
         <div style="margin-top: 16px; text-align: center;">
-          <NButton type="primary" block size="medium" @click="askAgentAssistant">
+          <NButton
+            type="primary"
+            block
+            size="medium"
+            @click="askAgentAssistant"
+          >
             💬 与 AI 投研助手深度探讨
           </NButton>
         </div>

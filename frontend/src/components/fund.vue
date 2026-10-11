@@ -21,12 +21,23 @@ onBeforeUnmount(() => {
 
 <template>
   <n-card>
-    <n-tabs type="line" animated v-model:value="nowTab" style="--wails-draggable:no-drag">
-      <n-tab-pane name="基金自选" display-directive="show">
-        <FundFollow/>
+    <n-tabs
+      v-model:value="nowTab"
+      type="line"
+      animated
+      style="--wails-draggable:no-drag"
+    >
+      <n-tab-pane
+        name="基金自选"
+        display-directive="show"
+      >
+        <FundFollow />
       </n-tab-pane>
-      <n-tab-pane name="基金排行" display-directive="show">
-        <FundRanking/>
+      <n-tab-pane
+        name="基金排行"
+        display-directive="show"
+      >
+        <FundRanking />
       </n-tab-pane>
     </n-tabs>
   </n-card>

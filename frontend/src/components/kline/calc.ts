@@ -851,10 +851,10 @@ export function satsValues(highs, lows, closes, vols, {
     const hl2 = (highs[i] + lows[i]) / 2
     const lowerBandRaw = hl2 - lowerMult * effAtr
     const upperBandRaw = hl2 + upperMult * effAtr
-    let lowerBand = prevLowerBand == null
+    const lowerBand = prevLowerBand == null
       ? lowerBandRaw
       : (closes[i - 1] > prevLowerBand ? Math.max(lowerBandRaw, prevLowerBand) : lowerBandRaw)
-    let upperBand = prevUpperBand == null
+    const upperBand = prevUpperBand == null
       ? upperBandRaw
       : (closes[i - 1] < prevUpperBand ? Math.min(upperBandRaw, prevUpperBand) : upperBandRaw)
     const priceFlipUp = prevDir === -1 && prevUpperBand != null && closes[i] > prevUpperBand
@@ -866,7 +866,7 @@ export function satsValues(highs, lows, closes, vols, {
     const charFlipUp = charFlipCondBase && curPrevDir === -1 && i > 0 && closes[i] > closes[i - 1]
     const finalFlipUp = priceFlipUp || charFlipUp
     const finalFlipDown = priceFlipDown || charFlipDown
-    let dir = prevDir === 0 ? 1 : (finalFlipUp ? 1 : (finalFlipDown ? -1 : curPrevDir))
+    const dir = prevDir === 0 ? 1 : (finalFlipUp ? 1 : (finalFlipDown ? -1 : curPrevDir))
     if (dir !== curPrevDir) trendStartBar = i
     prevLowerBand = lowerBand
     prevUpperBand = upperBand

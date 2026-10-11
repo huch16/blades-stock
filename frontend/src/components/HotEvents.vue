@@ -21,13 +21,24 @@ onUnmounted(async ()=>{
     <template #header>
       雪球热门
     </template>
-    <n-list-item v-for="(item, index) in list" :key="index">
-        <n-thing :title="item.tag" :description="item.content"  >
-          <template v-if="item.pic" #avatar>
-            <n-avatar :src="item.pic" :size="60">
-            </n-avatar>
-          </template>
-        </n-thing>
+    <n-list-item
+      v-for="(item, index) in list"
+      :key="index"
+    >
+      <n-thing
+        :title="item.tag"
+        :description="item.content"
+      >
+        <template
+          v-if="item.pic"
+          #avatar
+        >
+          <n-avatar
+            :src="item.pic"
+            :size="60"
+          />
+        </template>
+      </n-thing>
     </n-list-item>
   </n-list>
 </template>

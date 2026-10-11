@@ -95,9 +95,19 @@ function getmMarketCode(market,code) {
 
 <template>
   <n-card>
-    <n-auto-complete  :options="options" placeholder="请输入A股名称或者代码"  clearable filterable  :on-select="handleSearch" :on-update:value="findStockList"  />
+    <n-auto-complete
+      :options="options"
+      placeholder="请输入A股名称或者代码"
+      clearable
+      filterable
+      :on-select="handleSearch"
+      :on-update:value="findStockList"
+    />
   </n-card>
-  <n-table striped size="small">
+  <n-table
+    striped
+    size="small"
+  >
     <n-thead>
       <n-tr>
         <n-th>股票代码</n-th>
@@ -105,38 +115,93 @@ function getmMarketCode(market,code) {
         <n-th>公告标题</n-th>
         <n-th>公告类型</n-th>
         <n-th>公告日期</n-th>
-        <n-th><n-flex>数据更新时间<n-icon @click="getNotice('')" color="#409EFF" :size="20"  :component="RefreshCircleSharp"/></n-flex></n-th>
+        <n-th>
+          <n-flex>
+            数据更新时间<n-icon
+              color="#409EFF"
+              :size="20"
+              :component="RefreshCircleSharp"
+              @click="getNotice('')"
+            />
+          </n-flex>
+        </n-th>
       </n-tr>
     </n-thead>
     <n-tbody>
-      <n-tr v-for="item in list" :key="item.art_code">
+      <n-tr
+        v-for="item in list"
+        :key="item.art_code"
+      >
         <n-td>
-          <n-popover trigger="hover" placement="right">
+          <n-popover
+            trigger="hover"
+            placement="right"
+          >
             <template #trigger>
-              <n-tag type="info"  :bordered="false">{{item.codes[0].stock_code }}</n-tag>
+              <n-tag
+                type="info"
+                :bordered="false"
+              >
+                {{ item.codes[0].stock_code }}
+              </n-tag>
             </template>
-            <money-trend style="width: 800px" :code="getmMarketCode(item.codes[0].market_code,item.codes[0].stock_code)" :name="item.codes[0].short_name"  :days="360" :dark-theme="true" :chart-height="500"></money-trend>
+            <money-trend
+              style="width: 800px"
+              :code="getmMarketCode(item.codes[0].market_code,item.codes[0].stock_code)"
+              :name="item.codes[0].short_name"
+              :days="360"
+              :dark-theme="true"
+              :chart-height="500"
+            />
           </n-popover>
         </n-td>
         <n-td>
-          <n-popover trigger="hover" placement="right">
+          <n-popover
+            trigger="hover"
+            placement="right"
+          >
             <template #trigger>
-              <n-tag type="info"  :bordered="false">{{item.codes[0].short_name }}</n-tag>
+              <n-tag
+                type="info"
+                :bordered="false"
+              >
+                {{ item.codes[0].short_name }}
+              </n-tag>
             </template>
-            <k-line-chart style="width: 800px" :code="getmMarketCode(item.codes[0].market_code,item.codes[0].stock_code)" :chart-height="500" :stockName="item.codes[0].short_name" :k-days="20" :dark-theme="true"></k-line-chart>
+            <k-line-chart
+              style="width: 800px"
+              :code="getmMarketCode(item.codes[0].market_code,item.codes[0].stock_code)"
+              :chart-height="500"
+              :stock-name="item.codes[0].short_name"
+              :k-days="20"
+              :dark-theme="true"
+            />
           </n-popover>
         </n-td>
         <n-td>
-          <n-a type="info"  @click="openWin(item.art_code)"><n-text  :type="getTypeColor(item.columns[0].column_name)"> {{item.title}}</n-text></n-a>
+          <n-a
+            type="info"
+            @click="openWin(item.art_code)"
+          >
+            <n-text :type="getTypeColor(item.columns[0].column_name)">
+              {{ item.title }}
+            </n-text>
+          </n-a>
         </n-td>
         <n-td>
-          <n-text :type="getTypeColor(item.columns[0].column_name)">{{item.columns[0].column_name }}</n-text>
+          <n-text :type="getTypeColor(item.columns[0].column_name)">
+            {{ item.columns[0].column_name }}
+          </n-text>
         </n-td>
         <n-td>
-          <n-tag type="info">{{item.notice_date.substring(0,10) }}</n-tag>
+          <n-tag type="info">
+            {{ item.notice_date.substring(0,10) }}
+          </n-tag>
         </n-td>
         <n-td>
-          <n-tag type="info">{{item.display_time.substring(0,19)}}</n-tag>
+          <n-tag type="info">
+            {{ item.display_time.substring(0,19) }}
+          </n-tag>
         </n-td>
       </n-tr>
     </n-tbody>

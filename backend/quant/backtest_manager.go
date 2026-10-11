@@ -21,9 +21,19 @@ import (
 	"time"
 )
 
+// StockDataLoaderInterface defines the interface for loading stock data
+// This allows for mocking in tests
+type StockDataLoaderInterface interface {
+	LoadKLineData(stockCode string, days int) (
+		close, high, low, open, volume []float64,
+		dates []string,
+		err error,
+	)
+}
+
 // BacktestManager 统一回测管理器
 type BacktestManager struct {
-	loader *StockDataLoader
+	loader StockDataLoaderInterface
 }
 
 // NewBacktestManager 创建回测管理器

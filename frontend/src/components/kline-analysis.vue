@@ -207,23 +207,63 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="kline-analysis-page" :class="{ 'kline-analysis-page--dark': darkTheme }">
+  <div
+    class="kline-analysis-page"
+    :class="{ 'kline-analysis-page--dark': darkTheme }"
+  >
     <!-- 顶部综合控制台：股票名称/代码 + 最近浏览 + 搜索框 + 三维诊断 -->
     <div class="kline-title-bar">
-      <NFlex justify="space-between" align="center" :wrap="false">
+      <NFlex
+        justify="space-between"
+        align="center"
+        :wrap="false"
+      >
         <!-- 左侧：选中国股票与快速历史切换标签 -->
-        <NFlex align="center" :size="12">
-          <div v-if="selectedCode" class="kline-stock-badge">
-            <NText :depth="darkTheme ? 1 : 3" class="kline-stock-name">{{ selectedName || selectedCode }}&nbsp;</NText>
-            <NTag size="small" :bordered="false" type="info">{{ selectedCode }}</NTag>
+        <NFlex
+          align="center"
+          :size="12"
+        >
+          <div
+            v-if="selectedCode"
+            class="kline-stock-badge"
+          >
+            <NText
+              :depth="darkTheme ? 1 : 3"
+              class="kline-stock-name"
+            >
+              {{ selectedName || selectedCode }}&nbsp;
+            </NText>
+            <NTag
+              size="small"
+              :bordered="false"
+              type="info"
+            >
+              {{ selectedCode }}
+            </NTag>
           </div>
-          <div v-else class="kline-stock-badge">
-            <NText depth="3" style="font-size: 15px; font-weight: 600">未选择个股</NText>
+          <div
+            v-else
+            class="kline-stock-badge"
+          >
+            <NText
+              depth="3"
+              style="font-size: 15px; font-weight: 600"
+            >
+              未选择个股
+            </NText>
           </div>
 
           <!-- 最近浏览快捷标签 -->
-          <div v-if="recentStocks.length" class="recent-stocks">
-            <NText depth="3" style="font-size: 11px; white-space: nowrap">历史:</NText>
+          <div
+            v-if="recentStocks.length"
+            class="recent-stocks"
+          >
+            <NText
+              depth="3"
+              style="font-size: 11px; white-space: nowrap"
+            >
+              历史:
+            </NText>
             <NButton
               v-for="s in recentStocks.slice(0, 6)"
               :key="s.code"
@@ -238,7 +278,10 @@ onBeforeUnmount(() => {
         </NFlex>
 
         <!-- 右侧：搜索栏与 AI 三维量化诊断 -->
-        <NFlex align="center" :size="8">
+        <NFlex
+          align="center"
+          :size="8"
+        >
           <n-input-group style="width: 250px;">
             <n-auto-complete
               v-model:value="searchQuery"
@@ -249,7 +292,12 @@ onBeforeUnmount(() => {
               :on-select="handleSearch"
               @update:value="findStockList"
             />
-            <n-button size="small" type="primary" secondary @click="handleSearch(searchQuery)">
+            <n-button
+              size="small"
+              type="primary"
+              secondary
+              @click="handleSearch(searchQuery)"
+            >
               🔍
             </n-button>
           </n-input-group>
@@ -270,8 +318,18 @@ onBeforeUnmount(() => {
         </NFlex>
       </NFlex>
 
-      <NFlex v-if="unsupportedCode" align="center" :size="6" style="margin-top: 4px">
-        <NText type="warning" style="font-size: 12px">⚠️ 该股票代码格式暂不支持绘制 K 线图，请尝试规范的 6 位 A 股代码</NText>
+      <NFlex
+        v-if="unsupportedCode"
+        align="center"
+        :size="6"
+        style="margin-top: 4px"
+      >
+        <NText
+          type="warning"
+          style="font-size: 12px"
+        >
+          ⚠️ 该股票代码格式暂不支持绘制 K 线图，请尝试规范的 6 位 A 股代码
+        </NText>
       </NFlex>
     </div>
 
@@ -280,13 +338,19 @@ onBeforeUnmount(() => {
       v-if="selectedCode"
       :key="selectedCode"
       :code="selectedCode"
-      :stockName="selectedName"
-      :darkTheme="darkTheme"
-      :chartHeight="chartHeight"
-      :realtimeIntervalMs="60000"
+      :stock-name="selectedName"
+      :dark-theme="darkTheme"
+      :chart-height="chartHeight"
+      :realtime-interval-ms="60000"
     />
-    <div v-else class="kline-empty-placeholder">
-      <NText depth="3" style="font-size: 14px">
+    <div
+      v-else
+      class="kline-empty-placeholder"
+    >
+      <NText
+        depth="3"
+        style="font-size: 14px"
+      >
         🔍 请在上方搜索框输入股票名称或代码以加载 K 线图与三维诊断
       </NText>
     </div>

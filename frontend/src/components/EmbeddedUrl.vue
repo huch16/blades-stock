@@ -1,23 +1,33 @@
 <template>
   <div class="embed-container">
-    <h3 v-if="title">{{ title }}</h3>
+    <h3 v-if="title">
+      {{ title }}
+    </h3>
     <div class="iframe-wrapper">
       <iframe
-          :src="url"
-          :title="iframeTitle"
-          frameborder="0"
-          scrolling="auto"
-          class="embedded-iframe"
-          @load="onLoad"
-          @error="onError"
-          :style="iframeStyle"
-      ></iframe>
+        :src="url"
+        :title="iframeTitle"
+        frameborder="0"
+        scrolling="auto"
+        class="embedded-iframe"
+        :style="iframeStyle"
+        @load="onLoad"
+        @error="onError"
+      />
     </div>
-    <div v-if="loading" class="loading-indicator">
-      <div class="spinner"></div>
+    <div
+      v-if="loading"
+      class="loading-indicator"
+    >
+      <div class="spinner" />
       <p>加载中...</p>
     </div>
-    <p v-if="error" class="error-message">{{ error }}</p>
+    <p
+      v-if="error"
+      class="error-message"
+    >
+      {{ error }}
+    </p>
   </div>
 </template>
 

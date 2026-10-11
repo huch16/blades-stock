@@ -136,6 +136,8 @@ watchEffect(() => {
 
 </script>
 <template>
-<div style="height: 20px;width: 100%"  :id="'sparkLine'+stockCode+idSuffix">
-</div>
+  <div
+    :id="'sparkLine'+stockCode+idSuffix"
+    style="height: 20px;width: 100%"
+  />
 </template>

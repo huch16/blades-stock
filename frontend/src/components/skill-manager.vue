@@ -1,5 +1,8 @@
 <template>
-  <n-space vertical style="margin-bottom: 12px">
+  <n-space
+    vertical
+    style="margin-bottom: 12px"
+  >
     <n-space>
       <n-input
         v-model:value="searchKeyword"
@@ -30,11 +33,17 @@
         clearable
       />
 
-      <n-button type="primary" @click="handleSearch">
+      <n-button
+        type="primary"
+        @click="handleSearch"
+      >
         搜索
       </n-button>
 
-      <n-button type="warning" @click="handleCreate">
+      <n-button
+        type="warning"
+        @click="handleCreate"
+      >
         <template #icon>
           <n-icon :component="AddOutline" />
         </template>
@@ -61,114 +70,167 @@
     :mask-closable="false"
   >
     <n-scrollbar style="max-height: calc(85vh - 120px)">
-    <n-form
-      ref="formRef"
-      :model="formData"
-      :rules="formRules"
-      label-placement="top"
-      label-align="left"
-    >
-      <n-grid :cols="4" :x-gap="16">
-        <n-form-item-gi label="技能名称" path="name" :span="2">
-          <n-input v-model:value="formData.name" placeholder="请输入技能名称" clearable />
-        </n-form-item-gi>
+      <n-form
+        ref="formRef"
+        :model="formData"
+        :rules="formRules"
+        label-placement="top"
+        label-align="left"
+      >
+        <n-grid
+          :cols="4"
+          :x-gap="16"
+        >
+          <n-form-item-gi
+            label="技能名称"
+            path="name"
+            :span="2"
+          >
+            <n-input
+              v-model:value="formData.name"
+              placeholder="请输入技能名称"
+              clearable
+            />
+          </n-form-item-gi>
 
-        <n-form-item-gi label="分类" path="category">
+          <n-form-item-gi
+            label="分类"
+            path="category"
+          >
+            <n-select
+              v-model:value="formData.category"
+              :options="categoryOptions"
+              placeholder="选择或输入分类"
+              clearable
+              filterable
+              tag
+            />
+          </n-form-item-gi>
+
+          <n-form-item-gi
+            label="排序"
+            path="sortOrder"
+          >
+            <n-input-number
+              v-model:value="formData.sortOrder"
+              :min="0"
+              :max="999"
+              style="width: 100%"
+            />
+          </n-form-item-gi>
+        </n-grid>
+
+        <n-grid
+          :cols="4"
+          :x-gap="16"
+        >
+          <n-form-item-gi
+            label="启用"
+            path="enable"
+            :span="1"
+          >
+            <n-switch v-model:value="formData.enable" />
+          </n-form-item-gi>
+
+          <n-form-item-gi
+            label="触发关键词"
+            path="triggerKeywords"
+            :span="3"
+          >
+            <n-input
+              v-model:value="formData.triggerKeywords"
+              placeholder="关键词用逗号分隔，例如：技术分析,K线,MACD"
+              clearable
+            />
+          </n-form-item-gi>
+        </n-grid>
+
+        <n-form-item
+          label="强制工具组"
+          path="toolGroups"
+        >
           <n-select
-            v-model:value="formData.category"
-            :options="categoryOptions"
-            placeholder="选择或输入分类"
+            v-model:value="formData.toolGroups"
+            :options="toolGroupOptions"
+            placeholder="命中本技能时强制启用的工具组（否则被关键词分类过滤掉，指令永远执行不）"
+            multiple
             clearable
-            filterable
             tag
           />
-        </n-form-item-gi>
+        </n-form-item>
 
-        <n-form-item-gi label="排序" path="sortOrder">
-          <n-input-number v-model:value="formData.sortOrder" :min="0" :max="999" style="width: 100%" />
-        </n-form-item-gi>
-      </n-grid>
-
-      <n-grid :cols="4" :x-gap="16">
-        <n-form-item-gi label="启用" path="enable" :span="1">
-          <n-switch v-model:value="formData.enable" />
-        </n-form-item-gi>
-
-        <n-form-item-gi label="触发关键词" path="triggerKeywords" :span="3">
+        <n-form-item
+          label="技能描述"
+          path="description"
+        >
           <n-input
-            v-model:value="formData.triggerKeywords"
-            placeholder="关键词用逗号分隔，例如：技术分析,K线,MACD"
+            v-model:value="formData.description"
+            type="textarea"
+            :autosize="{ minRows: 1, maxRows: 3 }"
+            placeholder="请输入技能描述"
+            show-count
+            maxlength="500"
+          />
+        </n-form-item>
+
+        <n-form-item
+          label="绑定MCP服务"
+          path="mcpServerIds"
+        >
+          <n-select
+            v-model:value="formData.mcpServerIds"
+            :options="mcpServerOptions"
+            placeholder="选择绑定的MCP服务器"
+            multiple
             clearable
           />
-        </n-form-item-gi>
-      </n-grid>
+        </n-form-item>
 
-      <n-form-item label="强制工具组" path="toolGroups">
-        <n-select
-          v-model:value="formData.toolGroups"
-          :options="toolGroupOptions"
-          placeholder="命中本技能时强制启用的工具组（否则被关键词分类过滤掉，指令永远执行不）"
-          multiple
-          clearable
-          tag
-        />
-      </n-form-item>
+        <n-form-item
+          label="系统提示词"
+          path="systemPrompt"
+        >
+          <MdEditor
+            v-model="formData.systemPrompt"
+            style="height: 200px"
+            :theme="editorTheme"
+            :preview="true"
+            :toolbars-exclude="['github', 'htmlPreview', 'catalog', 'save']"
+            placeholder="当此技能激活时，将追加到系统提示词中，指导 Agent 如何使用此技能"
+          />
+        </n-form-item>
 
-      <n-form-item label="技能描述" path="description">
-        <n-input
-          v-model:value="formData.description"
-          type="textarea"
-          :autosize="{ minRows: 1, maxRows: 3 }"
-          placeholder="请输入技能描述"
-          show-count
-          maxlength="500"
-        />
-      </n-form-item>
-
-      <n-form-item label="绑定MCP服务" path="mcpServerIds">
-        <n-select
-          v-model:value="formData.mcpServerIds"
-          :options="mcpServerOptions"
-          placeholder="选择绑定的MCP服务器"
-          multiple
-          clearable
-        />
-      </n-form-item>
-
-      <n-form-item label="系统提示词" path="systemPrompt">
-        <MdEditor
-          v-model="formData.systemPrompt"
-          style="height: 200px"
-          :theme="editorTheme"
-          :preview="true"
-          :toolbarsExclude="['github', 'htmlPreview', 'catalog', 'save']"
-          placeholder="当此技能激活时，将追加到系统提示词中，指导 Agent 如何使用此技能"
-        />
-      </n-form-item>
-
-      <n-form-item label="示例对话" path="examples">
-        <MdEditor
-          v-model="formData.examples"
-          style="height: 160px"
-          :theme="editorTheme"
-          :preview="true"
-          :toolbarsExclude="['github', 'htmlPreview', 'catalog', 'save']"
-          placeholder="提供示例对话，帮助 Agent 理解如何使用此技能"
-        />
-      </n-form-item>
-    </n-form>
+        <n-form-item
+          label="示例对话"
+          path="examples"
+        >
+          <MdEditor
+            v-model="formData.examples"
+            style="height: 160px"
+            :theme="editorTheme"
+            :preview="true"
+            :toolbars-exclude="['github', 'htmlPreview', 'catalog', 'save']"
+            placeholder="提供示例对话，帮助 Agent 理解如何使用此技能"
+          />
+        </n-form-item>
+      </n-form>
     </n-scrollbar>
 
     <template #footer>
       <n-space justify="end">
-        <n-button @click="showCreateModal = false">取消</n-button>
-        <n-button type="primary" :loading="submitting" @click="handleSubmit">
+        <n-button @click="showCreateModal = false">
+          取消
+        </n-button>
+        <n-button
+          type="primary"
+          :loading="submitting"
+          @click="handleSubmit"
+        >
           {{ editingSkill ? '保存' : '创建' }}
         </n-button>
       </n-space>
     </template>
   </n-modal>
-
 </template>
 
 <script setup>

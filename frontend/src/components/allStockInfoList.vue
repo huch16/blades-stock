@@ -317,31 +317,47 @@ function handleReset() {
 <template>
   <div>
     <!-- 搜索条件区域 -->
-    <n-card  size="small" style="margin-bottom: 16px;text-align: left">
-      <n-grid :cols="5" :x-gap="12" :y-gap="12">
+    <n-card
+      size="small"
+      style="margin-bottom: 16px;text-align: left"
+    >
+      <n-grid
+        :cols="5"
+        :x-gap="12"
+        :y-gap="12"
+      >
         <n-grid-item>
-          <n-form-item label="交易所" label-placement="left">
+          <n-form-item
+            label="交易所"
+            label-placement="left"
+          >
             <n-select
-                v-model:value="searchFormRef.market"
-                :options="marketsRef"
-                placeholder="请选择交易所"
-                clearable
+              v-model:value="searchFormRef.market"
+              :options="marketsRef"
+              placeholder="请选择交易所"
+              clearable
             />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="所属行业" label-placement="left">
+          <n-form-item
+            label="所属行业"
+            label-placement="left"
+          >
             <n-select
-                v-model:value="searchFormRef.industry"
-                :options="industriesRef"
-                placeholder="请选择行业"
-                clearable
-                style="width: 200px"
+              v-model:value="searchFormRef.industry"
+              :options="industriesRef"
+              placeholder="请选择行业"
+              clearable
+              style="width: 200px"
             />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="股票名称/代码" label-placement="left">
+          <n-form-item
+            label="股票名称/代码"
+            label-placement="left"
+          >
             <n-input 
               v-model:value="searchFormRef.securityName" 
               placeholder="请输入股票名称/代码"
@@ -350,7 +366,10 @@ function handleReset() {
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
-          <n-form-item label="所属概念" label-placement="left">
+          <n-form-item
+            label="所属概念"
+            label-placement="left"
+          >
             <n-input
               v-model:value="searchFormRef.concept"
               :options="conceptsRef"
@@ -361,8 +380,15 @@ function handleReset() {
         </n-grid-item>
         <n-grid-item>
           <n-space>
-            <n-button type="primary" @click="handleSearch">搜索</n-button>
-            <n-button @click="handleReset">重置</n-button>
+            <n-button
+              type="primary"
+              @click="handleSearch"
+            >
+              搜索
+            </n-button>
+            <n-button @click="handleReset">
+              重置
+            </n-button>
           </n-space>
         </n-grid-item>
       </n-grid>
@@ -383,19 +409,19 @@ function handleReset() {
     />
 
     <!-- 分页控件 -->
-<!--    <div style="margin-top: 16px; display: flex; justify-content: center;">-->
-<!--      <n-pagination-->
-<!--        v-model:page="paginationReactive.page"-->
-<!--        v-model:page-size="paginationReactive.pageSize"-->
-<!--        :page-count="paginationReactive.pageCount"-->
-<!--        :item-count="paginationReactive.itemCount"-->
-<!--        :page-sizes="[10, 20, 50, 100]"-->
-<!--        show-size-picker-->
-<!--        show-quick-jumper-->
-<!--        @update:page="handlePageChange"-->
-<!--        @update:page-size="handlePageSizeChange"-->
-<!--      />-->
-<!--    </div>-->
+    <!--    <div style="margin-top: 16px; display: flex; justify-content: center;">-->
+    <!--      <n-pagination-->
+    <!--        v-model:page="paginationReactive.page"-->
+    <!--        v-model:page-size="paginationReactive.pageSize"-->
+    <!--        :page-count="paginationReactive.pageCount"-->
+    <!--        :item-count="paginationReactive.itemCount"-->
+    <!--        :page-sizes="[10, 20, 50, 100]"-->
+    <!--        show-size-picker-->
+    <!--        show-quick-jumper-->
+    <!--        @update:page="handlePageChange"-->
+    <!--        @update:page-size="handlePageSizeChange"-->
+    <!--      />-->
+    <!--    </div>-->
   </div>
 </template>
 

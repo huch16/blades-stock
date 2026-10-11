@@ -4,21 +4,36 @@
     <div
       v-if="showButton"
       :class="['edge-trigger', { 'edge-trigger-busy': hasBackgroundTask }]"
-      @click="togglePanel"
       :title="hasBackgroundTask ? 'Blades Stock AI 助手正在后台分析...' : 'Blades Stock AI 助手'"
+      @click="togglePanel"
     >
       <div class="edge-trigger-inner">
-        <NIcon :component="ChatbubbleEllipsesOutline" size="22" />
-        <div v-if="hasBackgroundTask" class="edge-trigger-badge" />
+        <NIcon
+          :component="ChatbubbleEllipsesOutline"
+          size="22"
+        />
+        <div
+          v-if="hasBackgroundTask"
+          class="edge-trigger-badge"
+        />
       </div>
     </div>
   </Transition>
 
   <!-- 右侧抽屉：点击或悬停触发条时从右往左滑出 -->
   <Transition name="drawer-slide">
-    <div v-if="panelVisible" class="drawer-wrap">
-      <div class="drawer-mask" @click="closePanel" />
-      <div class="drawer-panel" @click.stop>
+    <div
+      v-if="panelVisible"
+      class="drawer-wrap"
+    >
+      <div
+        class="drawer-mask"
+        @click="closePanel"
+      />
+      <div
+        class="drawer-panel"
+        @click.stop
+      >
         <NCard
           size="small"
           class="panel-card"
@@ -29,15 +44,33 @@
             <div class="panel-header">
               <span class="panel-title">Blades Stock AI 助手</span>
               <div class="panel-actions">
-                <NButton size="small" quaternary @click="startNewChat" title="开始新对话">
+                <NButton
+                  size="small"
+                  quaternary
+                  title="开始新对话"
+                  @click="startNewChat"
+                >
                   新对话
                 </NButton>
-                <NButton quaternary circle size="small" title="分享到社区" :loading="shareLoading" @click="shareAiToCommunity">
+                <NButton
+                  quaternary
+                  circle
+                  size="small"
+                  title="分享到社区"
+                  :loading="shareLoading"
+                  @click="shareAiToCommunity"
+                >
                   <template #icon>
                     <NIcon :component="ShareSocialOutline" />
                   </template>
                 </NButton>
-                <NButton quaternary circle size="small" title="关闭" @click="closePanel">
+                <NButton
+                  quaternary
+                  circle
+                  size="small"
+                  title="关闭"
+                  @click="closePanel"
+                >
                   <template #icon>
                     <NIcon :component="CloseOutline" />
                   </template>
@@ -47,14 +80,36 @@
           </template>
 
           <div class="chat-body">
-            <div v-if="shareTipVisible" class="share-tip">
-              <div class="share-tip-text">{{ shareTipText }}</div>
-              <NButton size="tiny" quaternary class="share-tip-close" @click="shareTipVisible = false">关闭</NButton>
+            <div
+              v-if="shareTipVisible"
+              class="share-tip"
+            >
+              <div class="share-tip-text">
+                {{ shareTipText }}
+              </div>
+              <NButton
+                size="tiny"
+                quaternary
+                class="share-tip-close"
+                @click="shareTipVisible = false"
+              >
+                关闭
+              </NButton>
             </div>
-            <NScrollbar ref="scrollbarRef" class="chat-scroll">
+            <NScrollbar
+              ref="scrollbarRef"
+              class="chat-scroll"
+            >
               <div class="message-list">
-                <div v-if="messages.length > DEFAULT_VISIBLE_COUNT" class="message-list-expand">
-                  <NButton quaternary size="small" @click="showMoreHistory">
+                <div
+                  v-if="messages.length > DEFAULT_VISIBLE_COUNT"
+                  class="message-list-expand"
+                >
+                  <NButton
+                    quaternary
+                    size="small"
+                    @click="showMoreHistory"
+                  >
                     {{ expandAll ? '收起' : '展开更多历史' }}{{ expandAll ? '' : '（共 ' + hiddenCount + ' 条）' }}
                   </NButton>
                 </div>
@@ -63,37 +118,78 @@
                   :key="displayFromIndex + index"
                   :class="['message-item', msg.role]"
                 >
-                  <div v-if="msg.role === 'assistant'" class="msg-avatar assistant-avatar">
-                    <NIcon :component="SparklesOutline" size="20" />
+                  <div
+                    v-if="msg.role === 'assistant'"
+                    class="msg-avatar assistant-avatar"
+                  >
+                    <NIcon
+                      :component="SparklesOutline"
+                      size="20"
+                    />
                   </div>
                   <div class="msg-bubble">
                     <template v-if="needBubbleCollapse(msg) && !isBubbleExpanded(displayFromIndex + index) && !(index === displayedMessages.length - 1 && isStreamLoad)">
-                      <div v-if="msg.role === 'assistant'" class="ai-reply-export-root">
-                        <div class="msg-content msg-content-collapsed" style="text-align: left">
+                      <div
+                        v-if="msg.role === 'assistant'"
+                        class="ai-reply-export-root"
+                      >
+                        <div
+                          class="msg-content msg-content-collapsed"
+                          style="text-align: left"
+                        >
                           {{ getBubblePreview(msg) }}
                         </div>
                       </div>
                       <template v-else>
-                        <div class="msg-content msg-content-collapsed" style="text-align: left">
+                        <div
+                          class="msg-content msg-content-collapsed"
+                          style="text-align: left"
+                        >
                           {{ getBubblePreview(msg) }}
                         </div>
-                        <div v-if="msg.role === 'user' && msg.time" class="msg-meta msg-meta-user-inner">
+                        <div
+                          v-if="msg.role === 'user' && msg.time"
+                          class="msg-meta msg-meta-user-inner"
+                        >
                           <span class="msg-time">{{ msg.time }}</span>
                         </div>
                       </template>
 
-                      <div class="msg-bubble-actions" v-if="msg.role === 'assistant'">
-                        <div v-if="msg.modelName || msg.time" class="msg-meta-row-assistant">
-                          <span v-if="msg.modelName" class="msg-model-name" :title="msg.modelName">{{ msg.modelName }}</span>
-                          <span v-if="msg.time" class="msg-time">{{ msg.time }}</span>
+                      <div
+                        v-if="msg.role === 'assistant'"
+                        class="msg-bubble-actions"
+                      >
+                        <div
+                          v-if="msg.modelName || msg.time"
+                          class="msg-meta-row-assistant"
+                        >
+                          <span
+                            v-if="msg.modelName"
+                            class="msg-model-name"
+                            :title="msg.modelName"
+                          >{{ msg.modelName }}</span>
+                          <span
+                            v-if="msg.time"
+                            class="msg-time"
+                          >{{ msg.time }}</span>
                         </div>
-                        <NButton quaternary size="tiny" class="msg-expand-btn" @click="toggleBubble(displayFromIndex + index)">
+                        <NButton
+                          quaternary
+                          size="tiny"
+                          class="msg-expand-btn"
+                          @click="toggleBubble(displayFromIndex + index)"
+                        >
                           <template #icon>
                             <NIcon :component="ChevronDownOutline" />
                           </template>
                           展开
                         </NButton>
-                        <NButton quaternary size="tiny" class="msg-copy-btn" @click="copyAiContent(msg)">
+                        <NButton
+                          quaternary
+                          size="tiny"
+                          class="msg-copy-btn"
+                          @click="copyAiContent(msg)"
+                        >
                           <template #icon>
                             <NIcon :component="CopyOutline" />
                           </template>
@@ -112,7 +208,13 @@
                           </template>
                           导出图
                         </NButton>
-                        <NButton quaternary size="tiny" class="msg-share-btn" :loading="shareLoading" @click="shareAiContent(msg)">
+                        <NButton
+                          quaternary
+                          size="tiny"
+                          class="msg-share-btn"
+                          :loading="shareLoading"
+                          @click="shareAiContent(msg)"
+                        >
                           <template #icon>
                             <NIcon :component="ShareSocialOutline" />
                           </template>
@@ -121,58 +223,106 @@
                       </div>
                     </template>
                     <template v-else>
-                      <div v-if="msg.role === 'assistant'" class="ai-reply-export-root">
-                        <div v-if="msg.reasoning" class="msg-reasoning-wrapper">
-                          <div class="msg-reasoning-header" @click="toggleReasoning(displayFromIndex + index)">
-                            <NIcon :component="reasoningExpandedMap[displayFromIndex + index] ? ChevronDownOutline : ChevronForwardOutline" size="14" />
+                      <div
+                        v-if="msg.role === 'assistant'"
+                        class="ai-reply-export-root"
+                      >
+                        <div
+                          v-if="msg.reasoning"
+                          class="msg-reasoning-wrapper"
+                        >
+                          <div
+                            class="msg-reasoning-header"
+                            @click="toggleReasoning(displayFromIndex + index)"
+                          >
+                            <NIcon
+                              :component="reasoningExpandedMap[displayFromIndex + index] ? ChevronDownOutline : ChevronForwardOutline"
+                              size="14"
+                            />
                             <span class="msg-reasoning-title">💭 思考过程</span>
                           </div>
-                          <div v-show="reasoningExpandedMap[displayFromIndex + index]" class="msg-reasoning-content">
+                          <div
+                            v-show="reasoningExpandedMap[displayFromIndex + index]"
+                            class="msg-reasoning-content"
+                          >
                             {{ msg.reasoning }}
                           </div>
                         </div>
                         <div class="msg-content">
                           <MdPreview
+                            v-if="msg.content"
                             :theme="theme"
                             :style="{ textAlign: 'left' }"
-                            v-if="msg.content"
                             :model-value="msg.content"
                             :editor-id="'ai-msg-' + (displayFromIndex + index)"
                             class="msg-markdown"
                           />
                         </div>
                       </div>
-                      <div v-else class="msg-content">
+                      <div
+                        v-else
+                        class="msg-content"
+                      >
                         <!-- 用户提问时间：气泡内、正文下方右对齐 -->
-                        <div v-if="msg.role === 'user' && msg.time" class="msg-meta msg-meta-user-inner">
+                        <div
+                          v-if="msg.role === 'user' && msg.time"
+                          class="msg-meta msg-meta-user-inner"
+                        >
                           <span class="msg-time">{{ msg.time }}</span>
                         </div>
                         <MdPreview
+                          v-if="msg.content"
                           :theme="theme"
                           :style="{ textAlign: 'right' }"
-                          v-if="msg.content"
                           :model-value="msg.content"
                           :editor-id="'ai-msg-' + (displayFromIndex + index)"
                           class="msg-markdown"
                         />
                       </div>
 
-                      <div class="msg-bubble-actions" v-if="msg.role === 'assistant'">
-                        <div v-if="msg.role === 'assistant' && isStreamLoad && index === displayedMessages.length - 1" class="msg-loading msg-loading-row">
+                      <div
+                        v-if="msg.role === 'assistant'"
+                        class="msg-bubble-actions"
+                      >
+                        <div
+                          v-if="msg.role === 'assistant' && isStreamLoad && index === displayedMessages.length - 1"
+                          class="msg-loading msg-loading-row"
+                        >
                           <NSpin size="small" />
                           <span>思考中...</span>
                         </div>
-                        <div v-if="msg.modelName || msg.time" class="msg-meta-row-assistant">
-                          <span v-if="msg.modelName" class="msg-model-name" :title="msg.modelName">{{ msg.modelName }}</span>
-                          <span v-if="msg.time" class="msg-time">{{ msg.time }}</span>
+                        <div
+                          v-if="msg.modelName || msg.time"
+                          class="msg-meta-row-assistant"
+                        >
+                          <span
+                            v-if="msg.modelName"
+                            class="msg-model-name"
+                            :title="msg.modelName"
+                          >{{ msg.modelName }}</span>
+                          <span
+                            v-if="msg.time"
+                            class="msg-time"
+                          >{{ msg.time }}</span>
                         </div>
-                        <NButton v-if="needBubbleCollapse(msg) && !(index === displayedMessages.length - 1 && isStreamLoad)" quaternary size="tiny" class="msg-expand-btn" @click="toggleBubble(displayFromIndex + index)">
+                        <NButton
+                          v-if="needBubbleCollapse(msg) && !(index === displayedMessages.length - 1 && isStreamLoad)"
+                          quaternary
+                          size="tiny"
+                          class="msg-expand-btn"
+                          @click="toggleBubble(displayFromIndex + index)"
+                        >
                           <template #icon>
                             <NIcon :component="ChevronUpOutline" />
                           </template>
                           收起
                         </NButton>
-                        <NButton quaternary size="tiny" class="msg-copy-btn" @click="copyAiContent(msg)">
+                        <NButton
+                          quaternary
+                          size="tiny"
+                          class="msg-copy-btn"
+                          @click="copyAiContent(msg)"
+                        >
                           <template #icon>
                             <NIcon :component="CopyOutline" />
                           </template>
@@ -191,7 +341,13 @@
                           </template>
                           导出图
                         </NButton>
-                        <NButton quaternary size="tiny" class="msg-share-btn" :loading="shareLoading" @click="shareAiContent(msg)">
+                        <NButton
+                          quaternary
+                          size="tiny"
+                          class="msg-share-btn"
+                          :loading="shareLoading"
+                          @click="shareAiContent(msg)"
+                        >
                           <template #icon>
                             <NIcon :component="ShareSocialOutline" />
                           </template>
@@ -200,8 +356,14 @@
                       </div>
                     </template>
                   </div>
-                  <div v-if="msg.role === 'user'" class="msg-avatar user-avatar">
-                    <NIcon :component="PersonCircleOutline" size="20" />
+                  <div
+                    v-if="msg.role === 'user'"
+                    class="msg-avatar user-avatar"
+                  >
+                    <NIcon
+                      :component="PersonCircleOutline"
+                      size="20"
+                    />
                   </div>
                 </div>
               </div>
@@ -223,11 +385,17 @@
                 />
                 <div class="chat-footer-thinking">
                   <span class="chat-footer-thinking-label">思考模式</span>
-                  <NSwitch v-model:value="thinkingMode" size="small" />
+                  <NSwitch
+                    v-model:value="thinkingMode"
+                    size="small"
+                  />
                 </div>
                 <div class="chat-footer-memory">
                   <span class="chat-footer-thinking-label">记忆模式</span>
-                  <NSwitch v-model:value="memoryMode" size="small" />
+                  <NSwitch
+                    v-model:value="memoryMode"
+                    size="small"
+                  />
                   <NSelect
                     v-if="memoryMode"
                     v-model:value="memoryCount"

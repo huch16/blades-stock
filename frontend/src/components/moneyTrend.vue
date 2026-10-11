@@ -366,7 +366,11 @@ const handleLine = (code, days) => {
 </script>
 
 <template>
-  <div ref="LineChartRef" style="width: 100%;height: auto;" :style="{height:chartHeight+'px'}"></div>
+  <div
+    ref="LineChartRef"
+    style="width: 100%;height: auto;"
+    :style="{height:chartHeight+'px'}"
+  />
 </template>
 
 <style scoped>

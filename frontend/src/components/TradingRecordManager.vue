@@ -778,7 +778,11 @@ onUnmounted(() => {
 
 <template>
   <n-input-group>
-    <n-date-picker v-model:value="paginationReactive.range" type="daterange" style="width: 32%" />
+    <n-date-picker
+      v-model:value="paginationReactive.range"
+      type="daterange"
+      style="width: 32%"
+    />
     <n-select
       v-model:value="paginationReactive.direction"
       :options="directionOptions"
@@ -786,51 +790,99 @@ onUnmounted(() => {
       style="width: 14%"
       clearable
     />
-    <n-input clearable placeholder="股票代码 / 名称" v-model:value="paginationReactive.keyword" />
-    <n-button type="primary" ghost @click="handleSearch">搜索</n-button>
-    <n-button @click="resetFilter">重置</n-button>
-    <n-button type="primary" ghost @click="openAddModal">添加记录</n-button>
-    <n-button type="warning" secondary @click="triggerAiPortfolioAudit">
+    <n-input
+      v-model:value="paginationReactive.keyword"
+      clearable
+      placeholder="股票代码 / 名称"
+    />
+    <n-button
+      type="primary"
+      ghost
+      @click="handleSearch"
+    >
+      搜索
+    </n-button>
+    <n-button @click="resetFilter">
+      重置
+    </n-button>
+    <n-button
+      type="primary"
+      ghost
+      @click="openAddModal"
+    >
+      添加记录
+    </n-button>
+    <n-button
+      type="warning"
+      secondary
+      @click="triggerAiPortfolioAudit"
+    >
       📋 AI 账户纪律体检
     </n-button>
   </n-input-group>
 
-  <n-grid :cols="6" :x-gap="12" style="margin-top: 12px; padding: 12px; border-radius: 4px">
+  <n-grid
+    :cols="6"
+    :x-gap="12"
+    style="margin-top: 12px; padding: 12px; border-radius: 4px"
+  >
     <n-grid-item>
       <n-statistic label="持仓金额(元)">
-        <n-number-animation :from="0" :to="statisticsRef?.holdingsAmount || 0" :precision="2" />
+        <n-number-animation
+          :from="0"
+          :to="statisticsRef?.holdingsAmount || 0"
+          :precision="2"
+        />
       </n-statistic>
     </n-grid-item>
     <n-grid-item>
       <n-statistic label="持仓市值(元)">
-        <n-number-animation :from="0" :to="statisticsRef?.currentValue || 0" :precision="2" />
+        <n-number-animation
+          :from="0"
+          :to="statisticsRef?.currentValue || 0"
+          :precision="2"
+        />
       </n-statistic>
     </n-grid-item>
     <n-grid-item>
       <n-statistic label="总买入(元)">
-        <n-number-animation :from="0" :to="statisticsRef?.totalBuyAmount || 0" :precision="2" />
+        <n-number-animation
+          :from="0"
+          :to="statisticsRef?.totalBuyAmount || 0"
+          :precision="2"
+        />
       </n-statistic>
     </n-grid-item>
     <n-grid-item>
       <n-statistic label="总卖出(元)">
-        <n-number-animation :from="0" :to="statisticsRef?.totalSellAmount || 0" :precision="2" />
+        <n-number-animation
+          :from="0"
+          :to="statisticsRef?.totalSellAmount || 0"
+          :precision="2"
+        />
       </n-statistic>
     </n-grid-item>
     <n-grid-item>
       <n-statistic label="总收益(元)">
         <n-text :type="statisticsRef?.totalProfit > 0 ? 'error' : 'success'">
-          <n-number-animation :from="0" :to="statisticsRef?.totalProfit || 0" :precision="2"  />
+          <n-number-animation
+            :from="0"
+            :to="statisticsRef?.totalProfit || 0"
+            :precision="2"
+          />
         </n-text>
       </n-statistic>
     </n-grid-item>
     <n-grid-item>
-
       <n-statistic label="收益率">
         <n-text :type="statisticsRef?.profitRate > 0 ? 'error' : 'success'">
-          <n-number-animation :from="0" :to="statisticsRef?.profitRate || 0" :precision="2"  />%
+          <n-number-animation
+            :from="0"
+            :to="statisticsRef?.profitRate || 0"
+            :precision="2"
+          />%
         </n-text>
       </n-statistic>
-
     </n-grid-item>
   </n-grid>
 
@@ -842,14 +894,26 @@ onUnmounted(() => {
     :loading="loadingRef"
     :pagination="paginationReactive"
     :row-key="(rowData) => rowData.ID"
-    @update:page="handlePageChange"
     flex-height
     style="height: calc(100vh - 310px); margin-top: 10px"
+    @update:page="handlePageChange"
   />
 
-  <n-modal v-model:show="showAddModal" preset="card" title="添加交易日志" style="width: 820px;max-width: calc(100vw - 32px);">
-    <n-form label-placement="top" size="small">
-      <n-grid :cols="3" :x-gap="12" :y-gap="2">
+  <n-modal
+    v-model:show="showAddModal"
+    preset="card"
+    title="添加交易日志"
+    style="width: 820px;max-width: calc(100vw - 32px);"
+  >
+    <n-form
+      label-placement="top"
+      size="small"
+    >
+      <n-grid
+        :cols="3"
+        :x-gap="12"
+        :y-gap="2"
+      >
         <n-grid-item>
           <n-form-item label="股票代码">
             <n-auto-complete
@@ -889,57 +953,116 @@ onUnmounted(() => {
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="价格">
-            <n-input-number v-model:value="formData.Price" :precision="2" :min="0" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.Price"
+              :precision="2"
+              :min="0"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="成交数量">
-            <n-input-number v-model:value="formData.Volume" :min="1" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.Volume"
+              :min="1"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="交易时间">
-            <n-date-picker v-model:value="formData.TradingTime" type="datetime" style="width: 100%" />
+            <n-date-picker
+              v-model:value="formData.TradingTime"
+              type="datetime"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="止损价">
-            <n-input-number v-model:value="formData.StopLossPrice" :precision="2" :min="0" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.StopLossPrice"
+              :precision="2"
+              :min="0"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="止盈价">
-            <n-input-number v-model:value="formData.TakeProfitPrice" :precision="2" :min="0" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.TakeProfitPrice"
+              :precision="2"
+              :min="0"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="手续费">
-            <n-input-number v-model:value="formData.Fee" :precision="2" :min="0" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.Fee"
+              :precision="2"
+              :min="0"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item :span="3">
           <n-form-item label="交易理由">
-            <n-input v-model:value="formData.Reason" type="textarea" placeholder="请输入交易理由" :rows="4"  style="text-align: left" />
+            <n-input
+              v-model:value="formData.Reason"
+              type="textarea"
+              placeholder="请输入交易理由"
+              :rows="4"
+              style="text-align: left"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item :span="3">
           <n-form-item label="交易心态/感悟/复盘/备注">
-            <n-input v-model:value="formData.Mindset" type="textarea" placeholder="请输入交易心态" :rows="5" style="text-align: left" />
+            <n-input
+              v-model:value="formData.Mindset"
+              type="textarea"
+              placeholder="请输入交易心态"
+              :rows="5"
+              style="text-align: left"
+            />
           </n-form-item>
         </n-grid-item>
       </n-grid>
     </n-form>
     <template #footer>
       <n-space justify="end">
-        <n-button @click="showAddModal = false">取消</n-button>
-        <n-button type="primary" @click="handleAdd">添加</n-button>
+        <n-button @click="showAddModal = false">
+          取消
+        </n-button>
+        <n-button
+          type="primary"
+          @click="handleAdd"
+        >
+          添加
+        </n-button>
       </n-space>
     </template>
   </n-modal>
 
-  <n-modal v-model:show="showEditModal" preset="card" title="编辑交易日志" style="width: 820px;max-width: calc(100vw - 32px);">
-    <n-form label-placement="top" size="small">
-      <n-grid :cols="3" :x-gap="12" :y-gap="2">
+  <n-modal
+    v-model:show="showEditModal"
+    preset="card"
+    title="编辑交易日志"
+    style="width: 820px;max-width: calc(100vw - 32px);"
+  >
+    <n-form
+      label-placement="top"
+      size="small"
+    >
+      <n-grid
+        :cols="3"
+        :x-gap="12"
+        :y-gap="2"
+      >
         <n-grid-item>
           <n-form-item label="股票代码">
             <n-auto-complete
@@ -979,68 +1102,123 @@ onUnmounted(() => {
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="价格">
-            <n-input-number v-model:value="formData.Price" :precision="2" :min="0" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.Price"
+              :precision="2"
+              :min="0"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="成交数量">
-            <n-input-number v-model:value="formData.Volume" :min="1" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.Volume"
+              :min="1"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="交易时间">
-            <n-date-picker v-model:value="formData.TradingTime" type="datetime" style="width: 100%" />
+            <n-date-picker
+              v-model:value="formData.TradingTime"
+              type="datetime"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="止损价">
-            <n-input-number v-model:value="formData.StopLossPrice" :precision="2" :min="0" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.StopLossPrice"
+              :precision="2"
+              :min="0"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="止盈价">
-            <n-input-number v-model:value="formData.TakeProfitPrice" :precision="2" :min="0" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.TakeProfitPrice"
+              :precision="2"
+              :min="0"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item>
           <n-form-item label="手续费">
-            <n-input-number v-model:value="formData.Fee" :precision="2" :min="0" style="width: 100%" />
+            <n-input-number
+              v-model:value="formData.Fee"
+              :precision="2"
+              :min="0"
+              style="width: 100%"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item :span="3">
           <n-form-item label="交易理由">
-            <n-input v-model:value="formData.Reason" type="textarea" placeholder="请输入交易理由" :rows="2" />
+            <n-input
+              v-model:value="formData.Reason"
+              type="textarea"
+              placeholder="请输入交易理由"
+              :rows="2"
+            />
           </n-form-item>
         </n-grid-item>
         <n-grid-item :span="3">
           <n-form-item label="交易心态">
-            <n-input v-model:value="formData.Mindset" type="textarea" placeholder="请输入交易心态" :rows="2" />
+            <n-input
+              v-model:value="formData.Mindset"
+              type="textarea"
+              placeholder="请输入交易心态"
+              :rows="2"
+            />
           </n-form-item>
         </n-grid-item>
       </n-grid>
     </n-form>
     <template #footer>
       <n-space justify="space-between">
-        <n-button type="primary" secondary size="small" @click="triggerAiTradeAudit(formData)">
+        <n-button
+          type="primary"
+          secondary
+          size="small"
+          @click="triggerAiTradeAudit(formData)"
+        >
           🩺 AI 诊断此笔交易
         </n-button>
         <n-space justify="end">
-          <n-button @click="showEditModal = false">取消</n-button>
-          <n-button type="primary" @click="handleUpdate">更新</n-button>
+          <n-button @click="showEditModal = false">
+            取消
+          </n-button>
+          <n-button
+            type="primary"
+            @click="handleUpdate"
+          >
+            更新
+          </n-button>
         </n-space>
       </n-space>
     </template>
   </n-modal>
 
-  <n-modal v-model:show="showKlineModal" preset="card" :title="'K线 - ' + klineStockName" style="width: 95vw; max-width: 1400px">
+  <n-modal
+    v-model:show="showKlineModal"
+    preset="card"
+    :title="'K线 - ' + klineStockName"
+    style="width: 95vw; max-width: 1400px"
+  >
     <StockLightweightKlineChart
       :code="klineStockCode"
       :stock-name="klineStockName"
       :chart-height="500"
       :dark-theme="darkTheme"
-      :longStopLossPrice="longStopLossPrice"
-      :longTakeProfitPrice="longTakeProfitPrice"
-      :costPrice="costPrice"
+      :long-stop-loss-price="longStopLossPrice"
+      :long-take-profit-price="longTakeProfitPrice"
+      :cost-price="costPrice"
     />
   </n-modal>
 </template>

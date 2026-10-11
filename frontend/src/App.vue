@@ -1213,24 +1213,29 @@ onMounted(() => {
 })
 </script>
 <template>
-  <n-config-provider ref="containerRef" :theme="enableDarkTheme" :locale="zhCN" :date-locale="dateZhCN">
+  <n-config-provider
+    ref="containerRef"
+    :theme="enableDarkTheme"
+    :locale="zhCN"
+    :date-locale="dateZhCN"
+  >
     <n-message-provider>
       <n-notification-provider>
         <n-modal-provider>
           <n-dialog-provider>
             <n-watermark
-                :content="''"
-                cross
-                selectable
-                :font-size="16"
-                :line-height="16"
-                :width="500"
-                :height="400"
-                :x-offset="50"
-                :y-offset="150"
-                :rotate="-15"
+              :content="''"
+              cross
+              selectable
+              :font-size="16"
+              :line-height="16"
+              :width="500"
+              :height="400"
+              :x-offset="50"
+              :y-offset="150"
+              :rotate="-15"
             >
-<!--              <FloatingAiAssistant />-->
+              <!--              <FloatingAiAssistant />-->
               <FloatingAgentAssistant @open-market-intelligence="onOpenMarketIntelligence" />
               <MarketIntelligenceDrawer
                 v-model:show="showMarketIntelligenceDrawer"
@@ -1244,31 +1249,48 @@ onMounted(() => {
                 :stock-name="agentDiagnosisStockName"
               />
               <n-flex>
-                <n-grid x-gap="12" :cols="1">
+                <n-grid
+                  x-gap="12"
+                  :cols="1"
+                >
                   <n-gi>
                     <n-spin :show="loading">
                       <template #description>
                         {{ loadingMsg }}
                       </template>
-                      <n-marquee :speed="100" style="position: relative;top:0;z-index: 19;width: 100%"
-                                 v-if="(telegraph.length>0)&&(enableNews)">
-                        <n-tag type="warning" v-for="item in telegraph" style="margin-right: 10px">
+                      <n-marquee
+                        v-if="(telegraph.length>0)&&(enableNews)"
+                        :speed="100"
+                        style="position: relative;top:0;z-index: 19;width: 100%"
+                      >
+                        <n-tag
+                          v-for="item in telegraph"
+                          type="warning"
+                          style="margin-right: 10px"
+                        >
                           {{ item }}
                         </n-tag>
                       </n-marquee>
                       <n-scrollbar :style="contentStyle">
-                        <n-skeleton v-if="loading" height="calc(100vh)" />
-                        <RouterView/>
+                        <n-skeleton
+                          v-if="loading"
+                          height="calc(100vh)"
+                        />
+                        <RouterView />
                       </n-scrollbar>
                     </n-spin>
                   </n-gi>
                   <n-gi style="position: fixed;bottom:0;z-index: 9;width: 100%;">
-                    <n-card size="small" style="--wails-draggable:no-drag">
-                      <n-menu style="font-size: 18px;"
-                              v-model:value="activeKey"
-                              mode="horizontal"
-                              :options="menuOptions"
-                              responsive
+                    <n-card
+                      size="small"
+                      style="--wails-draggable:no-drag"
+                    >
+                      <n-menu
+                        v-model:value="activeKey"
+                        style="font-size: 18px;"
+                        mode="horizontal"
+                        :options="menuOptions"
+                        responsive
                       />
                     </n-card>
                   </n-gi>

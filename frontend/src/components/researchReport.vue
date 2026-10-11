@@ -266,49 +266,106 @@ function deleteAIResponseResult(id){
 
 <template>
   <n-input-group>
-    <n-date-picker  v-model:value="paginationReactive.range" type="daterange"   style="width: 50%"/>
-    <n-input clearable placeholder="输入关键词搜索" v-model:value="paginationReactive.keyword"/>
-    <n-button type="primary" ghost @click="handleSearch"  @input="handleSearch">
+    <n-date-picker
+      v-model:value="paginationReactive.range"
+      type="daterange"
+      style="width: 50%"
+    />
+    <n-input
+      v-model:value="paginationReactive.keyword"
+      clearable
+      placeholder="输入关键词搜索"
+    />
+    <n-button
+      type="primary"
+      ghost
+      @click="handleSearch"
+      @input="handleSearch"
+    >
       搜索
     </n-button>
   </n-input-group>
-        <n-data-table
-            remote
-            size="small"
-            :columns="columnsRef"
-            :data="dataRef"
-            :loading="loadingRef"
-            :pagination="paginationReactive"
-            :row-key="(rowData)=>rowData.ID"
-            @update:page="handlePageChange"
-            flex-height
-            style="height: calc(100vh - 210px);margin-top: 10px"
-        />
+  <n-data-table
+    remote
+    size="small"
+    :columns="columnsRef"
+    :data="dataRef"
+    :loading="loadingRef"
+    :pagination="paginationReactive"
+    :row-key="(rowData)=>rowData.ID"
+    flex-height
+    style="height: calc(100vh - 210px);margin-top: 10px"
+    @update:page="handlePageChange"
+  />
 
 
 
-  <n-modal transform-origin="center" v-model:show="editorDataRef.show" preset="card" style="width: 800px;max-width: calc(100vw - 32px);"
-           :title="'['+editorDataRef.stockName+']AI分析'">
-    <n-spin size="small" :show="editorDataRef.loading">
-      <MdPreview  ref="mdPreviewRef" style="height: 540px;max-height: 60vh;text-align: left;overflow-y: auto;"
-                 :modelValue="editorDataRef.content" :theme="theme"/>
+  <n-modal
+    v-model:show="editorDataRef.show"
+    transform-origin="center"
+    preset="card"
+    style="width: 800px;max-width: calc(100vw - 32px);"
+    :title="'['+editorDataRef.stockName+']AI分析'"
+  >
+    <n-spin
+      size="small"
+      :show="editorDataRef.loading"
+    >
+      <MdPreview
+        ref="mdPreviewRef"
+        style="height: 540px;max-height: 60vh;text-align: left;overflow-y: auto;"
+        :model-value="editorDataRef.content"
+        :theme="theme"
+      />
     </n-spin>
     <template #footer>
-      <n-flex justify="space-between" ref="tipsRef">
-        <n-text type="info" v-if="editorDataRef.chatId">
-          <n-tag v-if="editorDataRef.modelName" type="warning" round :title="editorDataRef.chatId" :bordered="false">
+      <n-flex
+        ref="tipsRef"
+        justify="space-between"
+      >
+        <n-text
+          v-if="editorDataRef.chatId"
+          type="info"
+        >
+          <n-tag
+            v-if="editorDataRef.modelName"
+            type="warning"
+            round
+            :title="editorDataRef.chatId"
+            :bordered="false"
+          >
             {{ editorDataRef.modelName }}
           </n-tag>
           {{ editorDataRef.CreatedAt }}
         </n-text>
-        <n-text type="error">*AI分析结果仅供参考，请以实际行情为准。投资需谨慎，风险自担。</n-text>
+        <n-text type="error">
+          *AI分析结果仅供参考，请以实际行情为准。投资需谨慎，风险自担。
+        </n-text>
       </n-flex>
     </template>
     <template #action>
       <n-flex justify="right">
-        <n-button size="tiny" type="success" @click="copyToClipboard">复制到剪切板</n-button>
-        <n-button size="tiny" type="primary" @click="saveAsMarkdown(editorDataRef.stockCode,editorDataRef.stockName)">保存为Markdown文件</n-button>
-        <n-button size="tiny" type="error" @click="share(editorDataRef.stockCode,editorDataRef.stockName)">分享到项目社区</n-button>
+        <n-button
+          size="tiny"
+          type="success"
+          @click="copyToClipboard"
+        >
+          复制到剪切板
+        </n-button>
+        <n-button
+          size="tiny"
+          type="primary"
+          @click="saveAsMarkdown(editorDataRef.stockCode,editorDataRef.stockName)"
+        >
+          保存为Markdown文件
+        </n-button>
+        <n-button
+          size="tiny"
+          type="error"
+          @click="share(editorDataRef.stockCode,editorDataRef.stockName)"
+        >
+          分享到项目社区
+        </n-button>
       </n-flex>
     </template>
   </n-modal>

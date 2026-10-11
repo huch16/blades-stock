@@ -266,8 +266,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div>
-    <n-flex justify="space-between" align="center" style="margin-bottom: 8px">
-      <n-flex align="center" :wrap="false">
+    <n-flex
+      justify="space-between"
+      align="center"
+      style="margin-bottom: 8px"
+    >
+      <n-flex
+        align="center"
+        :wrap="false"
+      >
         <n-button
           v-for="interval in intervals"
           :key="interval.klt"
@@ -285,14 +292,27 @@ onBeforeUnmount(() => {
           MA
         </n-button>
       </n-flex>
-      <n-text v-if="dataSource" depth="3" style="font-size: 12px">
+      <n-text
+        v-if="dataSource"
+        depth="3"
+        style="font-size: 12px"
+      >
         数据源: {{ dataSource }}
       </n-text>
     </n-flex>
 
     <n-spin :show="loading">
-      <div ref="chartContainerRef" :style="{ height: chartHeight + 'px' }"></div>
+      <div
+        ref="chartContainerRef"
+        :style="{ height: chartHeight + 'px' }"
+      />
     </n-spin>
-    <n-text v-if="errorText" type="error" style="margin-top: 8px; display: block">{{ errorText }}</n-text>
+    <n-text
+      v-if="errorText"
+      type="error"
+      style="margin-top: 8px; display: block"
+    >
+      {{ errorText }}
+    </n-text>
   </div>
 </template>

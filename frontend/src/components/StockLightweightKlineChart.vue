@@ -3904,325 +3904,866 @@ watch(showLongPosition, (newVal) => {
 </script>
 
 <template>
-  <div class="lw-kline-root" :class="{ 'lw-kline--dark': darkTheme }">
+  <div
+    class="lw-kline-root"
+    :class="{ 'lw-kline--dark': darkTheme }"
+  >
     <div class="lw-kline-body">
       <div class="lw-kline-sidebar">
         <div class="lw-kline-sidebar__inner">
-          <NFlex vertical :size="6">
+          <NFlex
+            vertical
+            :size="6"
+          >
             <div class="lw-kline-sidebar__section">
-              <NText depth="3" style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(239,68,68,0.08); border-radius: 4px; border-left: 3px solid #ef4444; color: #ef4444">📈趋势</NText>
-              <NFlex :size="4" wrap style="row-gap: 4px">
-                <NTooltip :delay="500" placement="right-start">
+              <NText
+                depth="3"
+                style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(239,68,68,0.08); border-radius: 4px; border-left: 3px solid #ef4444; color: #ef4444"
+              >
+                📈趋势
+              </NText>
+              <NFlex
+                :size="4"
+                wrap
+                style="row-gap: 4px"
+              >
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showMA ? 'primary' : 'default'" :secondary="!showMA" @click="toggleMA">MA</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showMA ? 'primary' : 'default'"
+                      :secondary="!showMA"
+                      @click="toggleMA"
+                    >
+                      MA
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.ma }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showEMA ? 'primary' : 'default'" :secondary="!showEMA" @click="toggleEMA">EMA</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showEMA ? 'primary' : 'default'"
+                      :secondary="!showEMA"
+                      @click="toggleEMA"
+                    >
+                      EMA
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.ema }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showKAMA ? 'primary' : 'default'" :secondary="!showKAMA" @click="toggleKAMA">KAMA</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showKAMA ? 'primary' : 'default'"
+                      :secondary="!showKAMA"
+                      @click="toggleKAMA"
+                    >
+                      KAMA
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.kama }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showSupertrend ? 'primary' : 'default'" :secondary="!showSupertrend" @click="toggleSupertrend">STrend</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showSupertrend ? 'primary' : 'default'"
+                      :secondary="!showSupertrend"
+                      @click="toggleSupertrend"
+                    >
+                      STrend
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.supertrend }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showSAR ? 'primary' : 'default'" :secondary="!showSAR" @click="toggleSAR">SAR</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showSAR ? 'primary' : 'default'"
+                      :secondary="!showSAR"
+                      @click="toggleSAR"
+                    >
+                      SAR
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.sar }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showIchimoku ? 'primary' : 'default'" :secondary="!showIchimoku" @click="toggleIchimoku">Ichi</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showIchimoku ? 'primary' : 'default'"
+                      :secondary="!showIchimoku"
+                      @click="toggleIchimoku"
+                    >
+                      Ichi
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.ichimoku }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showAroon ? 'primary' : 'default'" :secondary="!showAroon" @click="toggleAroon">Aroon</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showAroon ? 'primary' : 'default'"
+                      :secondary="!showAroon"
+                      @click="toggleAroon"
+                    >
+                      Aroon
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.aroon }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showDEMA ? 'primary' : 'default'" :secondary="!showDEMA" @click="toggleDEMA">DEMA</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showDEMA ? 'primary' : 'default'"
+                      :secondary="!showDEMA"
+                      @click="toggleDEMA"
+                    >
+                      DEMA
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.dema }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showSATS ? 'primary' : 'default'" :secondary="!showSATS" @click="toggleSATS">SATS</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showSATS ? 'primary' : 'default'"
+                      :secondary="!showSATS"
+                      @click="toggleSATS"
+                    >
+                      SATS
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.sats }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showAlligator ? 'primary' : 'default'" :secondary="!showAlligator" @click="toggleAlligator">Gator</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showAlligator ? 'primary' : 'default'"
+                      :secondary="!showAlligator"
+                      @click="toggleAlligator"
+                    >
+                      Gator
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.alligator }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showHullMA ? 'primary' : 'default'" :secondary="!showHullMA" @click="toggleHullMA">Hull</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showHullMA ? 'primary' : 'default'"
+                      :secondary="!showHullMA"
+                      @click="toggleHullMA"
+                    >
+                      Hull
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.hullMA }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showTEMA ? 'primary' : 'default'" :secondary="!showTEMA" @click="toggleTEMA">TEMA</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showTEMA ? 'primary' : 'default'"
+                      :secondary="!showTEMA"
+                      @click="toggleTEMA"
+                    >
+                      TEMA
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.tema }}</span>
                 </NTooltip>
               </NFlex>
             </div>
             <div class="lw-kline-sidebar__section">
-              <NText depth="3" style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(245,158,11,0.08); border-radius: 4px; border-left: 3px solid #f59e0b; color: #d97706">🎢波动</NText>
-              <NFlex :size="4" wrap style="row-gap: 4px">
-                <NTooltip :delay="500" placement="right-start">
+              <NText
+                depth="3"
+                style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(245,158,11,0.08); border-radius: 4px; border-left: 3px solid #f59e0b; color: #d97706"
+              >
+                🎢波动
+              </NText>
+              <NFlex
+                :size="4"
+                wrap
+                style="row-gap: 4px"
+              >
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showBOLL ? 'primary' : 'default'" :secondary="!showBOLL" @click="toggleBOLL">BOLL</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showBOLL ? 'primary' : 'default'"
+                      :secondary="!showBOLL"
+                      @click="toggleBOLL"
+                    >
+                      BOLL
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.boll }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showKeltner ? 'primary' : 'default'" :secondary="!showKeltner" @click="toggleKeltner">Kelt</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showKeltner ? 'primary' : 'default'"
+                      :secondary="!showKeltner"
+                      @click="toggleKeltner"
+                    >
+                      Kelt
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.keltner }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showDonchian ? 'primary' : 'default'" :secondary="!showDonchian" @click="toggleDonchian">Donch</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showDonchian ? 'primary' : 'default'"
+                      :secondary="!showDonchian"
+                      @click="toggleDonchian"
+                    >
+                      Donch
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.donchian }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showATR ? 'primary' : 'default'" :secondary="!showATR" @click="toggleATR">ATR</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showATR ? 'primary' : 'default'"
+                      :secondary="!showATR"
+                      @click="toggleATR"
+                    >
+                      ATR
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.atr }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showAvgAmp ? 'primary' : 'default'" :secondary="!showAvgAmp" @click="toggleAvgAmp">均幅</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showAvgAmp ? 'primary' : 'default'"
+                      :secondary="!showAvgAmp"
+                      @click="toggleAvgAmp"
+                    >
+                      均幅
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.avgAmp }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showTTMSqueeze ? 'primary' : 'default'" :secondary="!showTTMSqueeze" @click="toggleTTMSqueeze">TTM</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showTTMSqueeze ? 'primary' : 'default'"
+                      :secondary="!showTTMSqueeze"
+                      @click="toggleTTMSqueeze"
+                    >
+                      TTM
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.ttmSqueeze }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showZigZag ? 'primary' : 'default'" :secondary="!showZigZag" @click="toggleZigZag">ZigZag</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showZigZag ? 'primary' : 'default'"
+                      :secondary="!showZigZag"
+                      @click="toggleZigZag"
+                    >
+                      ZigZag
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.zigzag }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showFractal ? 'primary' : 'default'" :secondary="!showFractal" @click="toggleFractal">Fractal</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showFractal ? 'primary' : 'default'"
+                      :secondary="!showFractal"
+                      @click="toggleFractal"
+                    >
+                      Fractal
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.fractal }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showMassIndex ? 'primary' : 'default'" :secondary="!showMassIndex" @click="toggleMassIndex">Mass</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showMassIndex ? 'primary' : 'default'"
+                      :secondary="!showMassIndex"
+                      @click="toggleMassIndex"
+                    >
+                      Mass
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.massIndex }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showSMC ? 'primary' : 'default'" :secondary="!showSMC" @click="toggleSMC">SMC</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showSMC ? 'primary' : 'default'"
+                      :secondary="!showSMC"
+                      @click="toggleSMC"
+                    >
+                      SMC
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.smc }}</span>
                 </NTooltip>
               </NFlex>
             </div>
             <div class="lw-kline-sidebar__section">
-              <NText depth="3" style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(59,130,246,0.08); border-radius: 4px; border-left: 3px solid #3b82f6; color: #2563eb">💫动量</NText>
-              <NFlex :size="4" wrap style="row-gap: 4px">
-                <NTooltip :delay="500" placement="right-start">
+              <NText
+                depth="3"
+                style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(59,130,246,0.08); border-radius: 4px; border-left: 3px solid #3b82f6; color: #2563eb"
+              >
+                💫动量
+              </NText>
+              <NFlex
+                :size="4"
+                wrap
+                style="row-gap: 4px"
+              >
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showMACD ? 'primary' : 'default'" :secondary="!showMACD" @click="toggleMACD">MACD</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showMACD ? 'primary' : 'default'"
+                      :secondary="!showMACD"
+                      @click="toggleMACD"
+                    >
+                      MACD
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.macd }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showKDJ ? 'primary' : 'default'" :secondary="!showKDJ" @click="toggleKDJ">KDJ</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showKDJ ? 'primary' : 'default'"
+                      :secondary="!showKDJ"
+                      @click="toggleKDJ"
+                    >
+                      KDJ
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.kdj }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showRSI ? 'primary' : 'default'" :secondary="!showRSI" @click="toggleRSI">RSI</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showRSI ? 'primary' : 'default'"
+                      :secondary="!showRSI"
+                      @click="toggleRSI"
+                    >
+                      RSI
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.rsi }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showCCI ? 'primary' : 'default'" :secondary="!showCCI" @click="toggleCCI">CCI</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showCCI ? 'primary' : 'default'"
+                      :secondary="!showCCI"
+                      @click="toggleCCI"
+                    >
+                      CCI
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.cci }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showWilliamsR ? 'primary' : 'default'" :secondary="!showWilliamsR" @click="toggleWilliamsR">W%R</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showWilliamsR ? 'primary' : 'default'"
+                      :secondary="!showWilliamsR"
+                      @click="toggleWilliamsR"
+                    >
+                      W%R
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.williamsR }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showStochRSI ? 'primary' : 'default'" :secondary="!showStochRSI" @click="toggleStochRSI">SRSI</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showStochRSI ? 'primary' : 'default'"
+                      :secondary="!showStochRSI"
+                      @click="toggleStochRSI"
+                    >
+                      SRSI
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.stochRsi }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showCMO ? 'primary' : 'default'" :secondary="!showCMO" @click="toggleCMO">CMO</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showCMO ? 'primary' : 'default'"
+                      :secondary="!showCMO"
+                      @click="toggleCMO"
+                    >
+                      CMO
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.cmo }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showAO ? 'primary' : 'default'" :secondary="!showAO" @click="toggleAO">AO</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showAO ? 'primary' : 'default'"
+                      :secondary="!showAO"
+                      @click="toggleAO"
+                    >
+                      AO
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.ao }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showTRIX ? 'primary' : 'default'" :secondary="!showTRIX" @click="toggleTRIX">TRIX</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showTRIX ? 'primary' : 'default'"
+                      :secondary="!showTRIX"
+                      @click="toggleTRIX"
+                    >
+                      TRIX
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.trix }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showTRIXSlope ? 'primary' : 'default'" :secondary="!showTRIXSlope" @click="toggleTRIXSlope">TRIX斜率</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showTRIXSlope ? 'primary' : 'default'"
+                      :secondary="!showTRIXSlope"
+                      @click="toggleTRIXSlope"
+                    >
+                      TRIX斜率
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.trixSlope }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showROC ? 'primary' : 'default'" :secondary="!showROC" @click="toggleROC">ROC</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showROC ? 'primary' : 'default'"
+                      :secondary="!showROC"
+                      @click="toggleROC"
+                    >
+                      ROC
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.roc }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showSMI ? 'primary' : 'default'" :secondary="!showSMI" @click="toggleSMI">SMI</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showSMI ? 'primary' : 'default'"
+                      :secondary="!showSMI"
+                      @click="toggleSMI"
+                    >
+                      SMI
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.smi }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showCoppock ? 'primary' : 'default'" :secondary="!showCoppock" @click="toggleCoppock">Coppck</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showCoppock ? 'primary' : 'default'"
+                      :secondary="!showCoppock"
+                      @click="toggleCoppock"
+                    >
+                      Coppck
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.coppock }}</span>
                 </NTooltip>
               </NFlex>
             </div>
             <div class="lw-kline-sidebar__section">
-              <NText depth="3" style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(16,185,129,0.08); border-radius: 4px; border-left: 3px solid #10b981; color: #059669">📊量价</NText>
-              <NFlex :size="4" wrap style="row-gap: 4px">
-                <NTooltip :delay="500" placement="right-start">
+              <NText
+                depth="3"
+                style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(16,185,129,0.08); border-radius: 4px; border-left: 3px solid #10b981; color: #059669"
+              >
+                📊量价
+              </NText>
+              <NFlex
+                :size="4"
+                wrap
+                style="row-gap: 4px"
+              >
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showOBV ? 'primary' : 'default'" :secondary="!showOBV" @click="toggleOBV">OBV</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showOBV ? 'primary' : 'default'"
+                      :secondary="!showOBV"
+                      @click="toggleOBV"
+                    >
+                      OBV
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.obv }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showVWAP ? 'primary' : 'default'" :secondary="!showVWAP" @click="toggleVWAP">VWAP</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showVWAP ? 'primary' : 'default'"
+                      :secondary="!showVWAP"
+                      @click="toggleVWAP"
+                    >
+                      VWAP
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.vwap }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showMFI ? 'primary' : 'default'" :secondary="!showMFI" @click="toggleMFI">MFI</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showMFI ? 'primary' : 'default'"
+                      :secondary="!showMFI"
+                      @click="toggleMFI"
+                    >
+                      MFI
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.mfi }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showCMF ? 'primary' : 'default'" :secondary="!showCMF" @click="toggleCMF">CMF</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showCMF ? 'primary' : 'default'"
+                      :secondary="!showCMF"
+                      @click="toggleCMF"
+                    >
+                      CMF
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.cmf }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showForceIndex ? 'primary' : 'default'" :secondary="!showForceIndex" @click="toggleForceIndex">FI</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showForceIndex ? 'primary' : 'default'"
+                      :secondary="!showForceIndex"
+                      @click="toggleForceIndex"
+                    >
+                      FI
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.forceIndex }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showAD ? 'primary' : 'default'" :secondary="!showAD" @click="toggleAD">A/D</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showAD ? 'primary' : 'default'"
+                      :secondary="!showAD"
+                      @click="toggleAD"
+                    >
+                      A/D
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.ad }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showChaikinOsc ? 'primary' : 'default'" :secondary="!showChaikinOsc" @click="toggleChaikinOsc">ChkOsc</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showChaikinOsc ? 'primary' : 'default'"
+                      :secondary="!showChaikinOsc"
+                      @click="toggleChaikinOsc"
+                    >
+                      ChkOsc
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.chaikinOsc }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showVWAPBands ? 'primary' : 'default'" :secondary="!showVWAPBands" @click="toggleVWAPBands">VWBnd</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showVWAPBands ? 'primary' : 'default'"
+                      :secondary="!showVWAPBands"
+                      @click="toggleVWAPBands"
+                    >
+                      VWBnd
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.vwapBands }}</span>
                 </NTooltip>
               </NFlex>
             </div>
             <div class="lw-kline-sidebar__section">
-              <NText depth="3" style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(139,92,246,0.08); border-radius: 4px; border-left: 3px solid #8b5cf6; color: #7c3aed">📏强度</NText>
-              <NFlex :size="4" wrap style="row-gap: 4px">
-                <NTooltip :delay="500" placement="right-start">
+              <NText
+                depth="3"
+                style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 4px; padding: 2px 6px; background: rgba(139,92,246,0.08); border-radius: 4px; border-left: 3px solid #8b5cf6; color: #7c3aed"
+              >
+                📏强度
+              </NText>
+              <NFlex
+                :size="4"
+                wrap
+                style="row-gap: 4px"
+              >
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showADX ? 'primary' : 'default'" :secondary="!showADX" @click="toggleADX">ADX</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showADX ? 'primary' : 'default'"
+                      :secondary="!showADX"
+                      @click="toggleADX"
+                    >
+                      ADX
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.adx }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showPivot ? 'primary' : 'default'" :secondary="!showPivot" @click="togglePivot">Pivot</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showPivot ? 'primary' : 'default'"
+                      :secondary="!showPivot"
+                      @click="togglePivot"
+                    >
+                      Pivot
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.pivot }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showCHOP ? 'primary' : 'default'" :secondary="!showCHOP" @click="toggleCHOP">CHOP</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showCHOP ? 'primary' : 'default'"
+                      :secondary="!showCHOP"
+                      @click="toggleCHOP"
+                    >
+                      CHOP
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.chop }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showElderRay ? 'primary' : 'default'" :secondary="!showElderRay" @click="toggleElderRay">Elder</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showElderRay ? 'primary' : 'default'"
+                      :secondary="!showElderRay"
+                      @click="toggleElderRay"
+                    >
+                      Elder
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.elderRay }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showUlcerIndex ? 'primary' : 'default'" :secondary="!showUlcerIndex" @click="toggleUlcerIndex">Ulcer</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showUlcerIndex ? 'primary' : 'default'"
+                      :secondary="!showUlcerIndex"
+                      @click="toggleUlcerIndex"
+                    >
+                      Ulcer
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.ulcerIndex }}</span>
                 </NTooltip>
-                <NTooltip :delay="500" placement="right-start">
+                <NTooltip
+                  :delay="500"
+                  placement="right-start"
+                >
                   <template #trigger>
-                    <NButton size="tiny" :type="showSignalRatio ? 'primary' : 'default'" :secondary="!showSignalRatio" @click="toggleSignalRatio">信号比</NButton>
+                    <NButton
+                      size="tiny"
+                      :type="showSignalRatio ? 'primary' : 'default'"
+                      :secondary="!showSignalRatio"
+                      @click="toggleSignalRatio"
+                    >
+                      信号比
+                    </NButton>
                   </template>
                   <span style="white-space: pre-line; text-align: left">{{ indicatorTips.signalRatio }}</span>
                 </NTooltip>
@@ -4241,8 +4782,17 @@ watch(showLongPosition, (newVal) => {
         </div>
       </div>
       <div class="lw-kline-main">
-        <NFlex :size="6" wrap style="row-gap: 4px; align-items: center">
-          <NText depth="3" style="font-size: 12px; margin-right: 2px">周期</NText>
+        <NFlex
+          :size="6"
+          wrap
+          style="row-gap: 4px; align-items: center"
+        >
+          <NText
+            depth="3"
+            style="font-size: 12px; margin-right: 2px"
+          >
+            周期
+          </NText>
           <NButton
             v-for="it in INTERVALS"
             :key="it.klt"
@@ -4254,7 +4804,12 @@ watch(showLongPosition, (newVal) => {
             {{ it.label }}
           </NButton>
           <span style="width: 12px" />
-          <NText depth="3" style="font-size: 12px; margin-right: 2px">多单</NText>
+          <NText
+            depth="3"
+            style="font-size: 12px; margin-right: 2px"
+          >
+            多单
+          </NText>
           <NButton
             size="tiny"
             :type="showLongPosition ? 'primary' : 'default'"
@@ -4290,7 +4845,11 @@ watch(showLongPosition, (newVal) => {
             @focus="onLongPriceInputFocus('takeProfit')"
             @blur="onLongPriceInputBlur"
           />
-          <NButton size="tiny" secondary @click="fillLongEntryFromLatestClose">
+          <NButton
+            size="tiny"
+            secondary
+            @click="fillLongEntryFromLatestClose"
+          >
             最新收盘
           </NButton>
           <NButton
@@ -4323,7 +4882,11 @@ watch(showLongPosition, (newVal) => {
           >
             点击K线设置{{ longClickNextLabel }}
           </NText>
-          <NText v-if="longPositionHint" depth="3" class="lw-kline-longpos-hint">
+          <NText
+            v-if="longPositionHint"
+            depth="3"
+            class="lw-kline-longpos-hint"
+          >
             {{ longPositionHint }}
           </NText>
         </NFlex>
@@ -4338,91 +4901,137 @@ watch(showLongPosition, (newVal) => {
             <div class="lw-kline-crosshair-strip__grid">
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">开盘</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cOpenClose }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cOpenClose }"
+                >{{
                   crosshairPanel.open
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">收盘</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cOpenClose }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cOpenClose }"
+                >{{
                   crosshairPanel.close
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">最高</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cHigh }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cHigh }"
+                >{{
                   crosshairPanel.high
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">最低</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cLow }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cLow }"
+                >{{
                   crosshairPanel.low
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">涨跌幅</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cChg }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cChg }"
+                >{{
                   crosshairPanel.changePercent
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">涨跌额</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cChg }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cChg }"
+                >{{
                   crosshairPanel.changeValue
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">成交量</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cNeu }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cNeu }"
+                >{{
                   crosshairPanel.volume
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">成交额</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cNeu }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cNeu }"
+                >{{
                   crosshairPanel.amount
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">振幅</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cNeu }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cNeu }"
+                >{{
                   crosshairPanel.amplitude
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">均幅5</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cNeu }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cNeu }"
+                >{{
                   crosshairPanel.avgAmp5
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">均幅10</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cNeu }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cNeu }"
+                >{{
                   crosshairPanel.avgAmp10
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">均幅20</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cNeu }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cNeu }"
+                >{{
                   crosshairPanel.avgAmp20
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">换手率</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cNeu }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cNeu }"
+                >{{
                   crosshairPanel.turnoverRate
                 }}</span>
               </span>
               <span class="lw-kline-kv">
                 <span class="lw-kline-crosshair-strip__k">量比</span>
-                <span class="lw-kline-crosshair-strip__v" :style="{ color: crosshairPanel.cChg }">{{
+                <span
+                  class="lw-kline-crosshair-strip__v"
+                  :style="{ color: crosshairPanel.cChg }"
+                >{{
                   crosshairPanel.volumeRatio
                 }}</span>
               </span>
             </div>
           </template>
-          <NText v-else depth="3" style="font-size: 11px; line-height: 1.5">
+          <NText
+            v-else
+            depth="3"
+            style="font-size: 11px; line-height: 1.5"
+          >
             {{ loading ? '加载中…' : '暂无 K 线数据' }}
           </NText>
         </div>
@@ -4436,26 +5045,38 @@ watch(showLongPosition, (newVal) => {
             <span class="lw-kline-signal-summary__total">共 {{ indicatorSignalSummary.total }} 项</span>
           </div>
           <div class="lw-kline-signal-summary__bar">
-            <div class="lw-kline-signal-summary__bar-seg lw-kline-signal-summary__bar-seg--bullish" :style="{ width: indicatorSignalSummary.bullishPct + '%' }"></div>
-            <div class="lw-kline-signal-summary__bar-seg lw-kline-signal-summary__bar-seg--bearish" :style="{ width: indicatorSignalSummary.bearishPct + '%' }"></div>
-            <div class="lw-kline-signal-summary__bar-seg lw-kline-signal-summary__bar-seg--oscillating" :style="{ width: indicatorSignalSummary.oscillatingPct + '%' }"></div>
-            <div class="lw-kline-signal-summary__bar-seg lw-kline-signal-summary__bar-seg--neutral" :style="{ width: indicatorSignalSummary.neutralPct + '%' }"></div>
+            <div
+              class="lw-kline-signal-summary__bar-seg lw-kline-signal-summary__bar-seg--bullish"
+              :style="{ width: indicatorSignalSummary.bullishPct + '%' }"
+            />
+            <div
+              class="lw-kline-signal-summary__bar-seg lw-kline-signal-summary__bar-seg--bearish"
+              :style="{ width: indicatorSignalSummary.bearishPct + '%' }"
+            />
+            <div
+              class="lw-kline-signal-summary__bar-seg lw-kline-signal-summary__bar-seg--oscillating"
+              :style="{ width: indicatorSignalSummary.oscillatingPct + '%' }"
+            />
+            <div
+              class="lw-kline-signal-summary__bar-seg lw-kline-signal-summary__bar-seg--neutral"
+              :style="{ width: indicatorSignalSummary.neutralPct + '%' }"
+            />
           </div>
           <div class="lw-kline-signal-summary__legend">
             <span class="lw-kline-signal-summary__legend-item">
-              <span class="lw-kline-signal-summary__dot lw-kline-signal-summary__dot--bullish"></span>
+              <span class="lw-kline-signal-summary__dot lw-kline-signal-summary__dot--bullish" />
               看多 {{ indicatorSignalSummary.bullish }} ({{ indicatorSignalSummary.bullishPct }}%)
             </span>
             <span class="lw-kline-signal-summary__legend-item">
-              <span class="lw-kline-signal-summary__dot lw-kline-signal-summary__dot--bearish"></span>
+              <span class="lw-kline-signal-summary__dot lw-kline-signal-summary__dot--bearish" />
               看空 {{ indicatorSignalSummary.bearish }} ({{ indicatorSignalSummary.bearishPct }}%)
             </span>
             <span class="lw-kline-signal-summary__legend-item">
-              <span class="lw-kline-signal-summary__dot lw-kline-signal-summary__dot--oscillating"></span>
+              <span class="lw-kline-signal-summary__dot lw-kline-signal-summary__dot--oscillating" />
               震荡 {{ indicatorSignalSummary.oscillating }} ({{ indicatorSignalSummary.oscillatingPct }}%)
             </span>
             <span class="lw-kline-signal-summary__legend-item">
-              <span class="lw-kline-signal-summary__dot lw-kline-signal-summary__dot--neutral"></span>
+              <span class="lw-kline-signal-summary__dot lw-kline-signal-summary__dot--neutral" />
               中性 {{ indicatorSignalSummary.neutral }} ({{ indicatorSignalSummary.neutralPct }}%)
             </span>
           </div>
@@ -4468,7 +5089,13 @@ watch(showLongPosition, (newVal) => {
             >{{ s.name }}</span>
           </div>
         </div>
-        <NText v-if="errorText" type="error" style="font-size: 12px">{{ errorText }}</NText>
+        <NText
+          v-if="errorText"
+          type="error"
+          style="font-size: 12px"
+        >
+          {{ errorText }}
+        </NText>
         <div class="lw-kline-chart-wrap">
           <div
             ref="chartContainerRef"
@@ -4483,15 +5110,24 @@ watch(showLongPosition, (newVal) => {
           >
             <div class="lw-chip__head">
               <span class="lw-chip__title">筹码分布</span>
-              <span v-if="chipMeta.hoverDate" class="lw-chip__meta">
+              <span
+                v-if="chipMeta.hoverDate"
+                class="lw-chip__meta"
+              >
                 {{ chipMeta.hoverDate }}
               </span>
-              <span v-if="chipItems.length" class="lw-chip__meta">
+              <span
+                v-if="chipItems.length"
+                class="lw-chip__meta"
+              >
                 均成本 {{ chipMeta.avgCost.toFixed(2) }} · 获利
                 {{ (chipMeta.profitRatio * 100).toFixed(1) }}%
               </span>
             </div>
-            <div v-if="!chipItems.length" class="lw-chip__empty">
+            <div
+              v-if="!chipItems.length"
+              class="lw-chip__empty"
+            >
               {{ mergedRawRows.length ? '移动鼠标到K线查看' : '暂无K线数据' }}
             </div>
             <canvas
@@ -4501,8 +5137,15 @@ watch(showLongPosition, (newVal) => {
             />
           </div>
         </div>
-        <NFlex align="center" :size="8" class="lw-kline-hint-row">
-          <NText depth="3" class="lw-kline-hint-text">
+        <NFlex
+          align="center"
+          :size="8"
+          class="lw-kline-hint-row"
+        >
+          <NText
+            depth="3"
+            class="lw-kline-hint-text"
+          >
             {{ stockName || code }} ·
             {{ 
               realtimeIntervalMs > 0
@@ -4510,11 +5153,18 @@ watch(showLongPosition, (newVal) => {
                 : '切换周期后加载'
             }}
             · 按住拖动查看左侧历史时会自动加载更早 K 线
-            <span v-if="activeDataSource" class="lw-kline-source-tag" :class="{ 'lw-kline-source-tag--fallback': activeDataSource !== 'eastmoney' && activeDataSource !== 'tdx-mac' && activeDataSource !== 'tdx-mac-ex' }">
+            <span
+              v-if="activeDataSource"
+              class="lw-kline-source-tag"
+              :class="{ 'lw-kline-source-tag--fallback': activeDataSource !== 'eastmoney' && activeDataSource !== 'tdx-mac' && activeDataSource !== 'tdx-mac-ex' }"
+            >
               {{ activeDataSource === 'eastmoney' ? '东方财富' : activeDataSource === 'tdx-mac' ? '通达信MAC' : activeDataSource === 'tdx-mac-ex' ? '通达信MAC扩展' : activeDataSource === 'sina' ? '新浪财经' : activeDataSource === 'tencent' ? '腾讯财经' : activeDataSource === 'tdx' ? '通达信' : activeDataSource }}
             </span>
           </NText>
-          <NSpin v-if="loading || loadingHistory" size="small" />
+          <NSpin
+            v-if="loading || loadingHistory"
+            size="small"
+          />
         </NFlex>
       </div>
     </div>

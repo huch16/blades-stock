@@ -373,30 +373,75 @@ function showStockKline(stockCode, stockName, market) {
 </script>
 
 <template>
-    <n-flex :wrap="false" align="center" :size="12" style="flex-shrink: 0; margin-bottom: 8px;">
-      <n-select v-model:value="marketType" :options="marketTypeOptions" style="width: 120px;" size="small"/>
-      <n-input v-model:value="searchKeyword" placeholder="基金名称/代码" clearable size="small" style="width: 180px;" @update:value="onSearchKeywordChange"/>
-      <n-select v-model:value="rankingFundType" :options="fundTypeOptions" style="width: 120px;" size="small"/>
-      <n-select v-model:value="rankingSortField" :options="sortFieldOptions" style="width: 140px;" size="small"/>
-      <n-button type="primary" size="small" @click="fetchFundRanking" :loading="rankingLoading">查询</n-button>
-      <n-button size="small" @click="resetRankingFilter">重置</n-button>
-      <n-text depth="3" v-if="searchCodes !== null" style="font-size: 12px;">搜索到 {{ searchCodes.length }} 只，当前页匹配 {{ filteredData.length }} 只</n-text>
-    </n-flex>
-    <n-data-table
-      remote
-      :columns="rankingColumns"
-      :data="filteredData"
-      :loading="rankingLoading"
-      :bordered="false"
+  <n-flex
+    :wrap="false"
+    align="center"
+    :size="12"
+    style="flex-shrink: 0; margin-bottom: 8px;"
+  >
+    <n-select
+      v-model:value="marketType"
+      :options="marketTypeOptions"
+      style="width: 120px;"
       size="small"
-      striped
-      :pagination="paginationReactive"
-      @update:page="handlePageChange"
-      @update:sorter="handleSorterChange"
-      :scroll-x="1700"
-      flex-height
-      style="height: calc(100vh - 210px);margin-top: 10px"
     />
+    <n-input
+      v-model:value="searchKeyword"
+      placeholder="基金名称/代码"
+      clearable
+      size="small"
+      style="width: 180px;"
+      @update:value="onSearchKeywordChange"
+    />
+    <n-select
+      v-model:value="rankingFundType"
+      :options="fundTypeOptions"
+      style="width: 120px;"
+      size="small"
+    />
+    <n-select
+      v-model:value="rankingSortField"
+      :options="sortFieldOptions"
+      style="width: 140px;"
+      size="small"
+    />
+    <n-button
+      type="primary"
+      size="small"
+      :loading="rankingLoading"
+      @click="fetchFundRanking"
+    >
+      查询
+    </n-button>
+    <n-button
+      size="small"
+      @click="resetRankingFilter"
+    >
+      重置
+    </n-button>
+    <n-text
+      v-if="searchCodes !== null"
+      depth="3"
+      style="font-size: 12px;"
+    >
+      搜索到 {{ searchCodes.length }} 只，当前页匹配 {{ filteredData.length }} 只
+    </n-text>
+  </n-flex>
+  <n-data-table
+    remote
+    :columns="rankingColumns"
+    :data="filteredData"
+    :loading="rankingLoading"
+    :bordered="false"
+    size="small"
+    striped
+    :pagination="paginationReactive"
+    :scroll-x="1700"
+    flex-height
+    style="height: calc(100vh - 210px);margin-top: 10px"
+    @update:page="handlePageChange"
+    @update:sorter="handleSorterChange"
+  />
 
   <n-modal
     v-model:show="holdingsModalShow"
@@ -405,7 +450,11 @@ function showStockKline(stockCode, stockName, market) {
     style="max-width: 1400px;"
     :mask-closable="true"
   >
-    <n-text v-if="holdingsData.length > 0 && holdingsData[0]?.quarter" depth="3" style="font-size: 12px; margin-bottom: 4px; display: inline-block;">
+    <n-text
+      v-if="holdingsData.length > 0 && holdingsData[0]?.quarter"
+      depth="3"
+      style="font-size: 12px; margin-bottom: 4px; display: inline-block;"
+    >
       {{ holdingsData[0].quarter }}
     </n-text>
     <n-data-table

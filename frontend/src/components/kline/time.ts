@@ -17,7 +17,7 @@ export function eastMoneyDayToUnixSeconds(dayStr) {
 }
 
 export function eastMoneyKlineFieldToUnixSeconds(s) {
-  let sec = eastMoneyDayToUnixSeconds(s)
+  const sec = eastMoneyDayToUnixSeconds(s)
   if (sec != null) return sec
   const t = String(s || '').trim().replace(/\//g, '-')
   const dm = t.match(/^(\d{4}-\d{2}-\d{2})$/)

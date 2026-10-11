@@ -441,8 +441,8 @@ async function batchApprove() {
     return
   }
   try {
-    for const item of skillDataList.value {
-      if item.status === 'pending' {
+    for (const item of skillDataList.value) {
+      if (item.status === 'pending') {
         await ApproveSkillChange(item.id)
       }
     }
@@ -461,8 +461,8 @@ async function batchReject() {
     return
   }
   try {
-    for const item of skillDataList.value {
-      if item.status === 'pending' {
+    for (const item of skillDataList.value) {
+      if (item.status === 'pending') {
         await RejectSkillChange(item.id)
       }
     }

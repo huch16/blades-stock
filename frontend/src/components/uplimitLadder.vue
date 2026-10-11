@@ -478,10 +478,22 @@ function showKline(code, name) {
 <template>
   <div style="padding: 0 4px;">
     <n-spin :show="loading">
-      <n-space vertical :size="16">
-        <n-card size="small" :bordered="true">
-          <n-space justify="space-between" align="center">
-            <n-space align="center" :size="16">
+      <n-space
+        vertical
+        :size="16"
+      >
+        <n-card
+          size="small"
+          :bordered="true"
+        >
+          <n-space
+            justify="space-between"
+            align="center"
+          >
+            <n-space
+              align="center"
+              :size="16"
+            >
               <n-date-picker
                 v-model:formatted-value="selectedDate"
                 value-format="yyyy-MM-dd"
@@ -490,15 +502,58 @@ function showKline(code, name) {
                 style="width: 150px"
                 :on-update:formatted-value="(v) => { if(v) fetchData(v) }"
               />
-              <n-tag type="success" size="small" round>涨停 {{ totalZtCount }} 只</n-tag>
-              <n-tag type="warning" size="small" round>最高 {{ maxCount }} 连板</n-tag>
-              <n-tag v-if="rawData?.today" type="info" size="small" round>实时数据</n-tag>
+              <n-tag
+                type="success"
+                size="small"
+                round
+              >
+                涨停 {{ totalZtCount }} 只
+              </n-tag>
+              <n-tag
+                type="warning"
+                size="small"
+                round
+              >
+                最高 {{ maxCount }} 连板
+              </n-tag>
+              <n-tag
+                v-if="rawData?.today"
+                type="info"
+                size="small"
+                round
+              >
+                实时数据
+              </n-tag>
             </n-space>
             <n-space>
-              <n-button :type="activeView==='ladder'?'primary':'default'" size="small" @click="activeView='ladder'">涨停高度</n-button>
-              <n-button :type="activeView==='plate'?'primary':'default'" size="small" @click="activeView='plate'">板块热度</n-button>
-              <n-button :type="activeView==='hot'?'primary':'default'" size="small" @click="activeView='hot'">个股热度</n-button>
-              <n-button :type="activeView==='exploded'?'primary':'default'" size="small" @click="activeView='exploded'">炸板股</n-button>
+              <n-button
+                :type="activeView==='ladder'?'primary':'default'"
+                size="small"
+                @click="activeView='ladder'"
+              >
+                涨停高度
+              </n-button>
+              <n-button
+                :type="activeView==='plate'?'primary':'default'"
+                size="small"
+                @click="activeView='plate'"
+              >
+                板块热度
+              </n-button>
+              <n-button
+                :type="activeView==='hot'?'primary':'default'"
+                size="small"
+                @click="activeView='hot'"
+              >
+                个股热度
+              </n-button>
+              <n-button
+                :type="activeView==='exploded'?'primary':'default'"
+                size="small"
+                @click="activeView='exploded'"
+              >
+                炸板股
+              </n-button>
             </n-space>
           </n-space>
         </n-card>
@@ -518,16 +573,32 @@ function showKline(code, name) {
               />
               <div class="sentiment-info">
                 <div class="sentiment-title-row">
-                  <span class="sentiment-status-title" :style="{ color: sentimentLight.color }">
+                  <span
+                    class="sentiment-status-title"
+                    :style="{ color: sentimentLight.color }"
+                  >
                     {{ sentimentLight.levelText }}
                   </span>
-                  <n-tag size="tiny" round :type="brokenRate >= 30 ? 'error' : brokenRate >= 20 ? 'warning' : 'success'">
+                  <n-tag
+                    size="tiny"
+                    round
+                    :type="brokenRate >= 30 ? 'error' : brokenRate >= 20 ? 'warning' : 'success'"
+                  >
                     炸板率 {{ brokenRate }}% ({{ explodedCount }}只炸板)
                   </n-tag>
-                  <n-tag size="tiny" round type="info">
+                  <n-tag
+                    size="tiny"
+                    round
+                    type="info"
+                  >
                     最高 {{ maxCount }} 连板
                   </n-tag>
-                  <n-tag size="tiny" round :bordered="false" style="opacity: 0.85;">
+                  <n-tag
+                    size="tiny"
+                    round
+                    :bordered="false"
+                    style="opacity: 0.85;"
+                  >
                     {{ sentimentLight.shortDesc }}
                   </n-tag>
                 </div>
@@ -550,88 +621,249 @@ function showKline(code, name) {
         </n-card>
 
         <template v-if="activeView==='ladder'">
-          <n-collapse v-model:expanded-names="expandedLadders" :accordion="false">
-            <n-collapse-item v-for="level in banInfo" :key="level.level" :name="String(level.level)">
+          <n-collapse
+            v-model:expanded-names="expandedLadders"
+            :accordion="false"
+          >
+            <n-collapse-item
+              v-for="level in banInfo"
+              :key="level.level"
+              :name="String(level.level)"
+            >
               <template #header>
-                <n-space align="center" :size="8">
-                  <n-tag :type="level.level>=5?'error':level.level>=3?'warning':'info'" round size="small" style="font-weight:bold;">
+                <n-space
+                  align="center"
+                  :size="8"
+                >
+                  <n-tag
+                    :type="level.level>=5?'error':level.level>=3?'warning':'info'"
+                    round
+                    size="small"
+                    style="font-weight:bold;"
+                  >
                     {{ level.level }} 板
                   </n-tag>
-                  <n-text depth="3" style="font-size:12px;">{{ level.count }}只</n-text>
+                  <n-text
+                    depth="3"
+                    style="font-size:12px;"
+                  >
+                    {{ level.count }}只
+                  </n-text>
                 </n-space>
               </template>
-              <n-space vertical :size="8">
-                <n-card v-for="stock in ladderData[level.level]" :key="stock.stock_code"
-                  size="small" :bordered="true" embedded
-                  :style="'border-left: 3px solid ' + getTypeColor(stock.up_limit_type)">
-                  <n-space justify="space-between" align="center" wrap :size="8">
-                    <n-space align="center" :size="8" wrap>
-                      <n-text strong style="font-size:15px;cursor:pointer;color:#2080f0;text-decoration:underline;" @click="showKline(stock.stock_code, stock.stock_name)">{{ stock.stock_name }}</n-text>
-                      <n-text depth="3" style="font-size:12px;">{{ stock.stock_code }}</n-text>
-                      <n-tag :color="{color: getTypeColor(stock.up_limit_type), textColor:'#fff'}" size="tiny" round>
+              <n-space
+                vertical
+                :size="8"
+              >
+                <n-card
+                  v-for="stock in ladderData[level.level]"
+                  :key="stock.stock_code"
+                  size="small"
+                  :bordered="true"
+                  embedded
+                  :style="'border-left: 3px solid ' + getTypeColor(stock.up_limit_type)"
+                >
+                  <n-space
+                    justify="space-between"
+                    align="center"
+                    wrap
+                    :size="8"
+                  >
+                    <n-space
+                      align="center"
+                      :size="8"
+                      wrap
+                    >
+                      <n-text
+                        strong
+                        style="font-size:15px;cursor:pointer;color:#2080f0;text-decoration:underline;"
+                        @click="showKline(stock.stock_code, stock.stock_name)"
+                      >
+                        {{ stock.stock_name }}
+                      </n-text>
+                      <n-text
+                        depth="3"
+                        style="font-size:12px;"
+                      >
+                        {{ stock.stock_code }}
+                      </n-text>
+                      <n-tag
+                        :color="{color: getTypeColor(stock.up_limit_type), textColor:'#fff'}"
+                        size="tiny"
+                        round
+                      >
                         {{ getTypeLabel(stock.up_limit_type) }}
                       </n-tag>
-                      <n-tag v-if="stock.up_limit_desc" type="primary" size="tiny" round>{{ stock.up_limit_desc }}</n-tag>
-                      <n-text depth="3" style="font-size:12px;">{{ stock.up_limit_time }}</n-text>
+                      <n-tag
+                        v-if="stock.up_limit_desc"
+                        type="primary"
+                        size="tiny"
+                        round
+                      >
+                        {{ stock.up_limit_desc }}
+                      </n-tag>
+                      <n-text
+                        depth="3"
+                        style="font-size:12px;"
+                      >
+                        {{ stock.up_limit_time }}
+                      </n-text>
                     </n-space>
-                    <n-space align="center" :size="12" wrap>
-                      <n-space align="center" :size="4">
-                        <n-text depth="3" style="font-size:11px;">封单</n-text>
-                        <n-text :style="'color:'+getFdCloseColor(stock.fd_close)+';font-weight:bold;font-size:13px;'">{{ stock.fd_close }}%</n-text>
+                    <n-space
+                      align="center"
+                      :size="12"
+                      wrap
+                    >
+                      <n-space
+                        align="center"
+                        :size="4"
+                      >
+                        <n-text
+                          depth="3"
+                          style="font-size:11px;"
+                        >
+                          封单
+                        </n-text>
+                        <n-text :style="'color:'+getFdCloseColor(stock.fd_close)+';font-weight:bold;font-size:13px;'">
+                          {{ stock.fd_close }}%
+                        </n-text>
                       </n-space>
-                      <n-space align="center" :size="4">
-                        <n-text depth="3" style="font-size:11px;">成交</n-text>
-                        <n-text style="font-size:13px;">{{ stock.amount }}亿</n-text>
+                      <n-space
+                        align="center"
+                        :size="4"
+                      >
+                        <n-text
+                          depth="3"
+                          style="font-size:11px;"
+                        >
+                          成交
+                        </n-text>
+                        <n-text style="font-size:13px;">
+                          {{ stock.amount }}亿
+                        </n-text>
                       </n-space>
-                      <n-space align="center" :size="4">
-                        <n-text depth="3" style="font-size:11px;">市值</n-text>
-                        <n-text style="font-size:13px;">{{ stock.market_c }}亿</n-text>
+                      <n-space
+                        align="center"
+                        :size="4"
+                      >
+                        <n-text
+                          depth="3"
+                          style="font-size:11px;"
+                        >
+                          市值
+                        </n-text>
+                        <n-text style="font-size:13px;">
+                          {{ stock.market_c }}亿
+                        </n-text>
                       </n-space>
                     </n-space>
                   </n-space>
-                  <n-space :size="4" style="margin-top:4px;" v-if="stock.plates && stock.plates.length">
-                    <n-tag v-for="p in stock.plates.slice(0,6)" :key="p" size="tiny" :bordered="false" type="info">{{ p }}</n-tag>
+                  <n-space
+                    v-if="stock.plates && stock.plates.length"
+                    :size="4"
+                    style="margin-top:4px;"
+                  >
+                    <n-tag
+                      v-for="p in stock.plates.slice(0,6)"
+                      :key="p"
+                      size="tiny"
+                      :bordered="false"
+                      type="info"
+                    >
+                      {{ p }}
+                    </n-tag>
                   </n-space>
                 </n-card>
               </n-space>
             </n-collapse-item>
           </n-collapse>
-          <n-card v-if="banInfo.length === 0 && !loading" size="small">
-            <n-empty description="暂无连板数据"/>
+          <n-card
+            v-if="banInfo.length === 0 && !loading"
+            size="small"
+          >
+            <n-empty description="暂无连板数据" />
           </n-card>
         </template>
 
         <template v-if="activeView==='plate'">
-          <n-space vertical :size="12">
-            <n-card size="small" :bordered="true" v-if="relayPlates.length">
+          <n-space
+            vertical
+            :size="12"
+          >
+            <n-card
+              v-if="relayPlates.length"
+              size="small"
+              :bordered="true"
+            >
               <template #header>
-                <n-text style="font-weight:bold;">🔥 接力主线</n-text>
+                <n-text style="font-weight:bold;">
+                  🔥 接力主线
+                </n-text>
               </template>
-              <n-space :size="8" wrap>
-                <n-tag v-for="rp in relayPlates" :key="rp.p_code" round
+              <n-space
+                :size="8"
+                wrap
+              >
+                <n-tag
+                  v-for="rp in relayPlates"
+                  :key="rp.p_code"
+                  round
                   :type="rp.p_score > 5000 ? 'error' : rp.p_score > 2000 ? 'warning' : 'info'"
                   style="cursor:pointer;font-size:13px;"
-                  @click="selectPlate(rp.p_code)">
+                  @click="selectPlate(rp.p_code)"
+                >
                   {{ rp.name }}
                   <template #avatar>
-                    <n-text style="font-size:11px;opacity:0.7;margin-right:2px;">{{ rp.count }}只</n-text>
+                    <n-text style="font-size:11px;opacity:0.7;margin-right:2px;">
+                      {{ rp.count }}只
+                    </n-text>
                   </template>
                 </n-tag>
               </n-space>
             </n-card>
 
-            <n-grid :cols="2" :x-gap="12" :y-gap="12" responsive="screen">
-              <n-gi v-for="plate in plateList" :key="plate.code">
-                <n-card size="small" :bordered="true"
-                  style="cursor:pointer;" @click="selectPlate(plate.code)">
-                  <n-space justify="space-between" align="center">
-                    <n-space align="center" :size="8">
-                      <n-text strong style="font-size:14px;">{{ plate.name }}</n-text>
-                      <n-tag size="tiny" round :type="plate.score>5000?'error':plate.score>2000?'warning':'info'">
+            <n-grid
+              :cols="2"
+              :x-gap="12"
+              :y-gap="12"
+              responsive="screen"
+            >
+              <n-gi
+                v-for="plate in plateList"
+                :key="plate.code"
+              >
+                <n-card
+                  size="small"
+                  :bordered="true"
+                  style="cursor:pointer;"
+                  @click="selectPlate(plate.code)"
+                >
+                  <n-space
+                    justify="space-between"
+                    align="center"
+                  >
+                    <n-space
+                      align="center"
+                      :size="8"
+                    >
+                      <n-text
+                        strong
+                        style="font-size:14px;"
+                      >
+                        {{ plate.name }}
+                      </n-text>
+                      <n-tag
+                        size="tiny"
+                        round
+                        :type="plate.score>5000?'error':plate.score>2000?'warning':'info'"
+                      >
                         热度 {{ plate.score }}
                       </n-tag>
                     </n-space>
-                    <n-text depth="3" style="font-size:12px;">
+                    <n-text
+                      depth="3"
+                      style="font-size:12px;"
+                    >
                       涨停{{ rawData?.plate_stocks?.[plate.code]?.length || 0 }}只
                       炸板{{ rawData?.plate_stocks_zb?.[plate.code]?.length || 0 }}只
                     </n-text>
@@ -650,15 +882,32 @@ function showKline(code, name) {
         </template>
 
         <template v-if="activeView==='hot'">
-          <n-card size="small" :bordered="true">
+          <n-card
+            size="small"
+            :bordered="true"
+          >
             <template #header>
-              <n-text style="font-weight:bold;">个股热度排行</n-text>
-              <n-text depth="3" style="font-size:12px;margin-left:8px;">热度≥{{ hotThreshold }}为超级热门</n-text>
+              <n-text style="font-weight:bold;">
+                个股热度排行
+              </n-text>
+              <n-text
+                depth="3"
+                style="font-size:12px;margin-left:8px;"
+              >
+                热度≥{{ hotThreshold }}为超级热门
+              </n-text>
             </template>
-            <n-table :single-line="false" striped size="small" style="font-size:13px;">
+            <n-table
+              :single-line="false"
+              striped
+              size="small"
+              style="font-size:13px;"
+            >
               <n-thead>
                 <n-tr>
-                  <n-th width="50px">排名</n-th>
+                  <n-th width="50px">
+                    排名
+                  </n-th>
                   <n-th>代码</n-th>
                   <n-th>名称</n-th>
                   <n-th>热度</n-th>
@@ -666,15 +915,45 @@ function showKline(code, name) {
                 </n-tr>
               </n-thead>
               <n-tbody>
-                <n-tr v-for="(item, idx) in stocksHot" :key="item.code">
+                <n-tr
+                  v-for="(item, idx) in stocksHot"
+                  :key="item.code"
+                >
                   <n-td>
-                    <n-tag v-if="idx<3" type="error" size="tiny" round>{{ idx+1 }}</n-tag>
-                    <n-text v-else depth="3">{{ idx+1 }}</n-text>
+                    <n-tag
+                      v-if="idx<3"
+                      type="error"
+                      size="tiny"
+                      round
+                    >
+                      {{ idx+1 }}
+                    </n-tag>
+                    <n-text
+                      v-else
+                      depth="3"
+                    >
+                      {{ idx+1 }}
+                    </n-text>
                   </n-td>
-                  <n-td><n-text strong>{{ item.code }}</n-text></n-td>
-                  <n-td><n-text strong style="cursor:pointer;color:#2080f0;text-decoration:underline;" @click="showKline(item.code, item.name)">{{ item.name }}</n-text></n-td>
                   <n-td>
-                    <n-space align="center" :size="4">
+                    <n-text strong>
+                      {{ item.code }}
+                    </n-text>
+                  </n-td>
+                  <n-td>
+                    <n-text
+                      strong
+                      style="cursor:pointer;color:#2080f0;text-decoration:underline;"
+                      @click="showKline(item.code, item.name)"
+                    >
+                      {{ item.name }}
+                    </n-text>
+                  </n-td>
+                  <n-td>
+                    <n-space
+                      align="center"
+                      :size="4"
+                    >
                       <n-progress
                         type="line"
                         :percentage="Math.min(100, (item.score / (stocksHot[0]?.score || 1)) * 100)"
@@ -683,12 +962,28 @@ function showKline(code, name) {
                         :height="8"
                         style="width:80px;"
                       />
-                      <n-text :type="item.score >= hotThreshold ? 'error' : 'default'" strong>{{ item.score }}</n-text>
+                      <n-text
+                        :type="item.score >= hotThreshold ? 'error' : 'default'"
+                        strong
+                      >
+                        {{ item.score }}
+                      </n-text>
                     </n-space>
                   </n-td>
                   <n-td>
-                    <n-space :size="4" wrap>
-                      <n-tag v-for="p in item.plates.slice(0,6)" :key="p" size="tiny" :bordered="false" type="info">{{ p }}</n-tag>
+                    <n-space
+                      :size="4"
+                      wrap
+                    >
+                      <n-tag
+                        v-for="p in item.plates.slice(0,6)"
+                        :key="p"
+                        size="tiny"
+                        :bordered="false"
+                        type="info"
+                      >
+                        {{ p }}
+                      </n-tag>
                     </n-space>
                   </n-td>
                 </n-tr>
@@ -698,14 +993,34 @@ function showKline(code, name) {
         </template>
 
         <template v-if="activeView==='exploded'">
-          <n-card size="small" :bordered="true">
+          <n-card
+            size="small"
+            :bordered="true"
+          >
             <template #header>
-              <n-space align="center" :size="8">
-                <n-text style="font-weight:bold;">炸板股</n-text>
-                <n-tag type="warning" size="small" round>{{ explodedStocks.length }}只</n-tag>
+              <n-space
+                align="center"
+                :size="8"
+              >
+                <n-text style="font-weight:bold;">
+                  炸板股
+                </n-text>
+                <n-tag
+                  type="warning"
+                  size="small"
+                  round
+                >
+                  {{ explodedStocks.length }}只
+                </n-tag>
               </n-space>
             </template>
-            <n-table v-if="explodedStocks.length" :single-line="false" striped size="small" style="font-size:13px;">
+            <n-table
+              v-if="explodedStocks.length"
+              :single-line="false"
+              striped
+              size="small"
+              style="font-size:13px;"
+            >
               <n-thead>
                 <n-tr>
                   <n-th>代码</n-th>
@@ -718,45 +1033,108 @@ function showKline(code, name) {
                 </n-tr>
               </n-thead>
               <n-tbody>
-                <n-tr v-for="s in explodedStocks" :key="s.stock_code + s.plate_code">
-                  <n-td><n-text depth="3" style="font-size:12px;">{{ s.stock_code }}</n-text></n-td>
-                  <n-td><n-text type="error" style="cursor:pointer;text-decoration:underline;" @click="showKline(s.stock_code, s.stock_name)">{{ s.stock_name }}</n-text></n-td>
-                  <n-td><n-text depth="3" style="font-size:12px;">{{ s.up_limit_time }}</n-text></n-td>
-                  <n-td><n-text style="font-size:12px;">{{ s.fd_max }}%</n-text></n-td>
-                  <n-td><n-text style="font-size:12px;">{{ s.amount }}亿</n-text></n-td>
-                  <n-td><n-text style="font-size:12px;">{{ s.market_c }}亿</n-text></n-td>
+                <n-tr
+                  v-for="s in explodedStocks"
+                  :key="s.stock_code + s.plate_code"
+                >
                   <n-td>
-                    <n-space :size="4" wrap>
-                      <n-tag v-for="p in s.plates.slice(0,5)" :key="p" size="tiny" :bordered="false" type="info">{{ p }}</n-tag>
+                    <n-text
+                      depth="3"
+                      style="font-size:12px;"
+                    >
+                      {{ s.stock_code }}
+                    </n-text>
+                  </n-td>
+                  <n-td>
+                    <n-text
+                      type="error"
+                      style="cursor:pointer;text-decoration:underline;"
+                      @click="showKline(s.stock_code, s.stock_name)"
+                    >
+                      {{ s.stock_name }}
+                    </n-text>
+                  </n-td>
+                  <n-td>
+                    <n-text
+                      depth="3"
+                      style="font-size:12px;"
+                    >
+                      {{ s.up_limit_time }}
+                    </n-text>
+                  </n-td>
+                  <n-td>
+                    <n-text style="font-size:12px;">
+                      {{ s.fd_max }}%
+                    </n-text>
+                  </n-td>
+                  <n-td>
+                    <n-text style="font-size:12px;">
+                      {{ s.amount }}亿
+                    </n-text>
+                  </n-td>
+                  <n-td>
+                    <n-text style="font-size:12px;">
+                      {{ s.market_c }}亿
+                    </n-text>
+                  </n-td>
+                  <n-td>
+                    <n-space
+                      :size="4"
+                      wrap
+                    >
+                      <n-tag
+                        v-for="p in s.plates.slice(0,5)"
+                        :key="p"
+                        size="tiny"
+                        :bordered="false"
+                        type="info"
+                      >
+                        {{ p }}
+                      </n-tag>
                     </n-space>
                   </n-td>
                 </n-tr>
               </n-tbody>
             </n-table>
-            <n-empty v-else description="暂无炸板数据"/>
+            <n-empty
+              v-else
+              description="暂无炸板数据"
+            />
           </n-card>
         </template>
-
       </n-space>
     </n-spin>
 
-    <n-modal v-model:show="showPlateModal" preset="card"
+    <n-modal
+      v-model:show="showPlateModal"
+      preset="card"
       :title="plateInfo[selectedPlate]?.name + ' - 涨停股详情' || '涨停股详情'"
       style="width: 900px; max-width: 95vw;"
-      :bordered="true" :segmented="{content:true}">
-      <n-data-table :columns="plateStockColumns" :data="plateStocksFiltered"
-        :max-height="plateTableMaxHeight" virtual-scroll
-        size="small" :bordered="false" striped />
+      :bordered="true"
+      :segmented="{content:true}"
+    >
+      <n-data-table
+        :columns="plateStockColumns"
+        :data="plateStocksFiltered"
+        :max-height="plateTableMaxHeight"
+        virtual-scroll
+        size="small"
+        :bordered="false"
+        striped
+      />
     </n-modal>
 
-    <n-modal v-model:show="showKlineModal" preset="card"
+    <n-modal
+      v-model:show="showKlineModal"
+      preset="card"
       :title="(klineName || '') + ' — 多周期K线'"
       style="width: 95vw; max-width: 1200px;"
-      :bordered="true">
+      :bordered="true"
+    >
       <stock-lightweight-kline-chart
         v-if="showKlineModal"
-        :dark-theme="darkTheme"
         :key="'kline-' + klineCode"
+        :dark-theme="darkTheme"
         :code="klineCode"
         :stock-name="klineName"
         :chart-height="500"

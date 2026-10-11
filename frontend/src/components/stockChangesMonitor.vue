@@ -675,37 +675,82 @@ onBeforeUnmount(() => {
   <n-card>
     <template #header>
       <n-space vertical>
-        <n-space justify="space-between" align="center">
+        <n-space
+          justify="space-between"
+          align="center"
+        >
           <n-space align="center">
-            <n-text strong>股票异动监控</n-text>
-            <n-tag v-if="viewMode === 'realtime'" :type="isTrading ? 'success' : 'warning'" size="small">
+            <n-text strong>
+              股票异动监控
+            </n-text>
+            <n-tag
+              v-if="viewMode === 'realtime'"
+              :type="isTrading ? 'success' : 'warning'"
+              size="small"
+            >
               {{ marketStatus }}
             </n-tag>
-            <n-tag :type="viewMode === 'realtime' ? 'error' : 'info'" size="small">
+            <n-tag
+              :type="viewMode === 'realtime' ? 'error' : 'info'"
+              size="small"
+            >
               {{ viewMode === 'realtime' ? '实时数据' : '历史数据' }}
             </n-tag>
-            <n-text depth="3" style="font-size: 12px">共 {{ paginationReactive.itemCount }} 条记录</n-text>
+            <n-text
+              depth="3"
+              style="font-size: 12px"
+            >
+              共 {{ paginationReactive.itemCount }} 条记录
+            </n-text>
           </n-space>
           <n-space align="center">
-            <n-radio-group v-model:value="viewMode" @update:value="handleViewModeChange">
-              <n-radio-button value="realtime">实时数据</n-radio-button>
-              <n-radio-button value="history">历史数据</n-radio-button>
+            <n-radio-group
+              v-model:value="viewMode"
+              @update:value="handleViewModeChange"
+            >
+              <n-radio-button value="realtime">
+                实时数据
+              </n-radio-button>
+              <n-radio-button value="history">
+                历史数据
+              </n-radio-button>
             </n-radio-group>
             
             <template v-if="viewMode === 'realtime'">
-              <n-text v-if="autoRefresh && isTrading" depth="3" style="font-size: 12px">
+              <n-text
+                v-if="autoRefresh && isTrading"
+                depth="3"
+                style="font-size: 12px"
+              >
                 {{ countdown }}秒后刷新
               </n-text>
-              <n-text v-else-if="!isTrading" depth="3" style="font-size: 12px">
+              <n-text
+                v-else-if="!isTrading"
+                depth="3"
+                style="font-size: 12px"
+              >
                 非交易时间暂停刷新
               </n-text>
-              <n-switch v-model:value="autoRefresh" @update:value="toggleAutoRefresh" :disabled="!isTrading">
-                <template #checked>自动刷新</template>
-                <template #unchecked>手动刷新</template>
+              <n-switch
+                v-model:value="autoRefresh"
+                :disabled="!isTrading"
+                @update:value="toggleAutoRefresh"
+              >
+                <template #checked>
+                  自动刷新
+                </template>
+                <template #unchecked>
+                  手动刷新
+                </template>
               </n-switch>
             </template>
             
-            <n-button @click="fetchData" :loading="loadingRef" type="primary" size="small">
+            <n-button
+              :loading="loadingRef"
+              type="primary"
+              size="small"
+              @click="fetchData"
+            >
               刷新
             </n-button>
 
@@ -713,23 +758,34 @@ onBeforeUnmount(() => {
               type="warning"
               secondary
               size="small"
-              @click="triggerAiMarketAnomalySummary"
               :disabled="loadingRef || !dataRef.length"
+              @click="triggerAiMarketAnomalySummary"
             >
               ⚡ AI 异动大盘全景透视
             </n-button>
             
-            <n-button v-if="viewMode === 'realtime'" @click="saveCurrentData" size="small">
+            <n-button
+              v-if="viewMode === 'realtime'"
+              size="small"
+              @click="saveCurrentData"
+            >
               保存到历史
             </n-button>
           </n-space>
         </n-space>
 
-        <n-alert v-if="viewMode === 'realtime' && !isTrading" type="info" size="small">
+        <n-alert
+          v-if="viewMode === 'realtime' && !isTrading"
+          type="info"
+          size="small"
+        >
           当前非A股交易时间（周一至周五 9:30-11:30, 13:00-15:00），自动刷新已暂停。您可以查看历史数据或手动刷新。
         </n-alert>
 
-        <n-space v-if="viewMode === 'history'" align="center">
+        <n-space
+          v-if="viewMode === 'history'"
+          align="center"
+        >
           <n-input 
             v-model:value="paginationReactive.keyword" 
             placeholder="输入股票代码或名称" 
@@ -737,7 +793,11 @@ onBeforeUnmount(() => {
             style="width: 200px"
             @keyup="handleSearchKeyup"
           />
-          <n-date-picker v-model:value="paginationReactive.range" type="daterange" clearable />
+          <n-date-picker
+            v-model:value="paginationReactive.range"
+            type="daterange"
+            clearable
+          />
           <n-time-picker 
             v-model:value="paginationReactive.startTime" 
             placeholder="开始时间" 
@@ -752,14 +812,25 @@ onBeforeUnmount(() => {
             format="HH:mm:ss"
             style="width: 120px"
           />
-          <n-button type="primary" @click="handleSearch" :loading="loadingRef">
+          <n-button
+            type="primary"
+            :loading="loadingRef"
+            @click="handleSearch"
+          >
             查询
           </n-button>
-          <n-button @click="fetchAllCurrentData" :loading="loadingRef">
+          <n-button
+            :loading="loadingRef"
+            @click="fetchAllCurrentData"
+          >
             获取今日全部数据
           </n-button>
         </n-space>
-        <n-space v-if="viewMode === 'history'" align="center" style="margin-top: 8px">
+        <n-space
+          v-if="viewMode === 'history'"
+          align="center"
+          style="margin-top: 8px"
+        >
           <n-select
             v-model:value="paginationReactive.minVolume"
             :options="volumeOptions"
@@ -795,23 +866,61 @@ onBeforeUnmount(() => {
           />
         </n-space>
         
-        <n-space align="center" style="margin-top: 8px">
-          <n-text depth="3">异动类型筛选：</n-text>
-          <n-button size="tiny" type="primary" @click="selectAllTypes">全选</n-button>
-          <n-button size="tiny" @click="clearAllTypes">清空</n-button>
-          <n-text depth="3" style="font-size: 12px">已选 {{ selectedTypes.length }}/{{ allTypeValues.length }} 种</n-text>
+        <n-space
+          align="center"
+          style="margin-top: 8px"
+        >
+          <n-text depth="3">
+            异动类型筛选：
+          </n-text>
+          <n-button
+            size="tiny"
+            type="primary"
+            @click="selectAllTypes"
+          >
+            全选
+          </n-button>
+          <n-button
+            size="tiny"
+            @click="clearAllTypes"
+          >
+            清空
+          </n-button>
+          <n-text
+            depth="3"
+            style="font-size: 12px"
+          >
+            已选 {{ selectedTypes.length }}/{{ allTypeValues.length }} 种
+          </n-text>
         </n-space>
 
         <n-space vertical>
           <n-space align="center">
-            <n-text style="color: #dc2626; font-weight: 500;">利好异动</n-text>
-            <n-button size="tiny" @click="selectAllBullish">全选利好</n-button>
+            <n-text style="color: #dc2626; font-weight: 500;">
+              利好异动
+            </n-text>
+            <n-button
+              size="tiny"
+              @click="selectAllBullish"
+            >
+              全选利好
+            </n-button>
           </n-space>
-          <n-checkbox-group v-model:value="selectedTypes" @update:value="fetchData">
+          <n-checkbox-group
+            v-model:value="selectedTypes"
+            @update:value="fetchData"
+          >
             <n-space>
-              <n-checkbox v-for="item in bullishTypes" :key="item.value" :value="item.value" :label="item.label">
+              <n-checkbox
+                v-for="item in bullishTypes"
+                :key="item.value"
+                :value="item.value"
+                :label="item.label"
+              >
                 <template #default>
-                  <n-text :style="{color: selectedTypes.includes(item.value) ? '#dc2626' : undefined}">{{ item.label }}</n-text>
+                  <n-text :style="{color: selectedTypes.includes(item.value) ? '#dc2626' : undefined}">
+                    {{ item.label }}
+                  </n-text>
                 </template>
               </n-checkbox>
             </n-space>
@@ -820,14 +929,31 @@ onBeforeUnmount(() => {
 
         <n-space vertical>
           <n-space align="center">
-            <n-text style="color: #16a34a; font-weight: 500;">利空异动</n-text>
-            <n-button size="tiny" @click="selectAllBearish">全选利空</n-button>
+            <n-text style="color: #16a34a; font-weight: 500;">
+              利空异动
+            </n-text>
+            <n-button
+              size="tiny"
+              @click="selectAllBearish"
+            >
+              全选利空
+            </n-button>
           </n-space>
-          <n-checkbox-group v-model:value="selectedTypes" @update:value="fetchData">
+          <n-checkbox-group
+            v-model:value="selectedTypes"
+            @update:value="fetchData"
+          >
             <n-space>
-              <n-checkbox v-for="item in bearishTypes" :key="item.value" :value="item.value" :label="item.label">
+              <n-checkbox
+                v-for="item in bearishTypes"
+                :key="item.value"
+                :value="item.value"
+                :label="item.label"
+              >
                 <template #default>
-                  <n-text :style="{color: selectedTypes.includes(item.value) ? '#16a34a' : undefined}">{{ item.label }}</n-text>
+                  <n-text :style="{color: selectedTypes.includes(item.value) ? '#16a34a' : undefined}">
+                    {{ item.label }}
+                  </n-text>
                 </template>
               </n-checkbox>
             </n-space>
@@ -837,17 +963,17 @@ onBeforeUnmount(() => {
     </template>
 
     <n-data-table
-        remote
-        :columns="columnsRef"
-        :data="dataRef"
-        :loading="loadingRef"
-        :pagination="viewMode === 'history' ? paginationReactive : false"
-        :bordered="false"
-        :max-height="500"
-        :scroll-x="1460"
-        striped
-        size="small"
-        @update:page="handlePageChange"
+      remote
+      :columns="columnsRef"
+      :data="dataRef"
+      :loading="loadingRef"
+      :pagination="viewMode === 'history' ? paginationReactive : false"
+      :bordered="false"
+      :max-height="500"
+      :scroll-x="1460"
+      striped
+      size="small"
+      @update:page="handlePageChange"
     />
   </n-card>
 
@@ -860,8 +986,8 @@ onBeforeUnmount(() => {
   >
     <stock-lightweight-kline-chart
       v-if="showKlineModal"
-      :dark-theme="darkTheme"
       :key="'kline-' + klineCode"
+      :dark-theme="darkTheme"
       :code="klineCode"
       :stock-name="klineName"
       :chart-height="500"

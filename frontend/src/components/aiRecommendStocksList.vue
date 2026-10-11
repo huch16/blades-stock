@@ -514,19 +514,45 @@ function toggleAlert(row, newEnableAlert) {
   <div style="display: flex; flex-direction: column; gap: 10px;">
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
       <n-input-group style="max-width: 720px;">
-        <n-date-picker v-model:value="paginationReactive.range" type="daterange" style="width: 38%"/>
-        <n-select v-model:value="paginationReactive.enableAlert" :options="enableAlertOptions" placeholder="预警状态" style="width: 22%" clearable />
-        <n-input clearable placeholder="输入股票/模型搜索" v-model:value="paginationReactive.keyword"/>
-        <n-button type="primary" ghost @click="handleSearch">
+        <n-date-picker
+          v-model:value="paginationReactive.range"
+          type="daterange"
+          style="width: 38%"
+        />
+        <n-select
+          v-model:value="paginationReactive.enableAlert"
+          :options="enableAlertOptions"
+          placeholder="预警状态"
+          style="width: 22%"
+          clearable
+        />
+        <n-input
+          v-model:value="paginationReactive.keyword"
+          clearable
+          placeholder="输入股票/模型搜索"
+        />
+        <n-button
+          type="primary"
+          ghost
+          @click="handleSearch"
+        >
           搜索
         </n-button>
       </n-input-group>
 
       <n-space>
-        <n-button type="primary" :loading="syncingRef" @click="handleSyncFromIntelligence">
+        <n-button
+          type="primary"
+          :loading="syncingRef"
+          @click="handleSyncFromIntelligence"
+        >
           ⚡ 汇聚智能研报/ETF推荐
         </n-button>
-        <n-button type="warning" secondary @click="handleTriggerAgentRecommendation">
+        <n-button
+          type="warning"
+          secondary
+          @click="handleTriggerAgentRecommendation"
+        >
           🤖 唤醒Agent态势推演
         </n-button>
       </n-space>
@@ -540,23 +566,36 @@ function toggleAlert(row, newEnableAlert) {
       :loading="loadingRef"
       :pagination="paginationReactive"
       :row-key="(rowData)=>rowData.ID"
-      @update:page="handlePageChange"
       flex-height
       style="height: calc(100vh - 210px);"
+      @update:page="handlePageChange"
     >
       <template #empty>
         <div style="padding: 48px 0; text-align: center;">
           <n-empty description="当前暂无推荐股票记录">
             <template #extra>
               <div style="margin-top: 14px; display: flex; flex-direction: column; align-items: center; gap: 10px;">
-                <n-text depth="3" style="font-size: 13px;">
+                <n-text
+                  depth="3"
+                  style="font-size: 13px;"
+                >
                   系统已沉淀全生命周期智能研报、ETF动量轮动池与全市场态势感知结果：
                 </n-text>
                 <n-space justify="center">
-                  <n-button type="primary" size="medium" :loading="syncingRef" @click="handleSyncFromIntelligence">
+                  <n-button
+                    type="primary"
+                    size="medium"
+                    :loading="syncingRef"
+                    @click="handleSyncFromIntelligence"
+                  >
                     ⚡ 一键从最新智能研报 & ETF动量池提炼推荐
                   </n-button>
-                  <n-button type="warning" secondary size="medium" @click="handleTriggerAgentRecommendation">
+                  <n-button
+                    type="warning"
+                    secondary
+                    size="medium"
+                    @click="handleTriggerAgentRecommendation"
+                  >
                     🧭 调起 Agent 结合当前态势推演金股
                   </n-button>
                 </n-space>
@@ -568,24 +607,42 @@ function toggleAlert(row, newEnableAlert) {
     </n-data-table>
   </div>
 
-  <n-modal v-model:show="modalDataRef.visible" :title="modalDataRef.title" preset="card" style="max-width: 1400px;">
-    <n-gradient-text :size="16" type="warning">{{modalDataRef.remarks}}</n-gradient-text>
+  <n-modal
+    v-model:show="modalDataRef.visible"
+    :title="modalDataRef.title"
+    preset="card"
+    style="max-width: 1400px;"
+  >
+    <n-gradient-text
+      :size="16"
+      type="warning"
+    >
+      {{ modalDataRef.remarks }}
+    </n-gradient-text>
     <n-card size="small">
       <StockLightweightKlineChart
+        v-model:long-entry-price="modalDataRef.longEntryPrice"
+        v-model:long-stop-loss-price="modalDataRef.longStopLossPrice"
+        v-model:long-take-profit-price="modalDataRef.longTakeProfitPrice"
         style="width: 100%;"
         :code="modalDataRef.stockCode"
         :chart-height="350"
         :stock-name="modalDataRef.stockName"
         :dark-theme="editorDataRef.darkTheme"
-        v-model:long-entry-price="modalDataRef.longEntryPrice"
-        v-model:long-stop-loss-price="modalDataRef.longStopLossPrice"
-        v-model:long-take-profit-price="modalDataRef.longTakeProfitPrice"
       />
     </n-card>
     <n-card size="small">
-    <n-text type="info">{{modalDataRef.content}}</n-text>
-    <n-divider><n-gradient-text type="error">风险提示</n-gradient-text></n-divider>
-    <n-text type="error">{{modalDataRef.riskRemarks}}</n-text>
+      <n-text type="info">
+        {{ modalDataRef.content }}
+      </n-text>
+      <n-divider>
+        <n-gradient-text type="error">
+          风险提示
+        </n-gradient-text>
+      </n-divider>
+      <n-text type="error">
+        {{ modalDataRef.riskRemarks }}
+      </n-text>
     </n-card>
   </n-modal>
 </template>

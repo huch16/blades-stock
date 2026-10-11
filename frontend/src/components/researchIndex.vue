@@ -42,24 +42,30 @@ function updateTab(name) {
 
 <template>
   <n-card>
-    <n-tabs type="line" animated @update-value="updateTab" :value="nowTab" style="--wails-draggable:no-drag">
+    <n-tabs
+      type="line"
+      animated
+      :value="nowTab"
+      style="--wails-draggable:no-drag"
+      @update-value="updateTab"
+    >
       <n-tab-pane name="AI分析报告">
-        <ResearchReport/>
+        <ResearchReport />
       </n-tab-pane>
       <n-tab-pane name="股票推荐记录">
-        <AiRecommendStocksList/>
+        <AiRecommendStocksList />
       </n-tab-pane>
       <n-tab-pane name="异动监控">
-        <StockChangesMonitor/>
+        <StockChangesMonitor />
       </n-tab-pane>
       <n-tab-pane name="涨停梯队">
-        <UplimitLadder/>
+        <UplimitLadder />
       </n-tab-pane>
       <n-tab-pane name="形态选股">
-        <AllStockList/>
+        <AllStockList />
       </n-tab-pane>
       <n-tab-pane name="指标选股">
-        <SelectStock/>
+        <SelectStock />
       </n-tab-pane>
       <n-tab-pane name="定时任务">
         <CronTaskManager />
@@ -67,14 +73,14 @@ function updateTab(name) {
       <n-tab-pane name="交易日志">
         <TradingRecordManager />
       </n-tab-pane>
-<!--      <n-tab-pane name="全部股票信息">-->
-<!--        <AllStockInfoList/>-->
-<!--      </n-tab-pane>-->
+      <!--      <n-tab-pane name="全部股票信息">-->
+      <!--        <AllStockInfoList/>-->
+      <!--      </n-tab-pane>-->
       <n-tab-pane name="MCP服务">
-        <MCPServiceManager/>
+        <MCPServiceManager />
       </n-tab-pane>
       <n-tab-pane name="技能管理">
-        <SkillManager/>
+        <SkillManager />
       </n-tab-pane>
     </n-tabs>
   </n-card>

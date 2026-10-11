@@ -1,5 +1,8 @@
 <template>
-  <n-space vertical style="margin-bottom: 12px">
+  <n-space
+    vertical
+    style="margin-bottom: 12px"
+  >
     <n-space>
       <n-input
         v-model:value="searchKeyword"
@@ -21,11 +24,17 @@
         clearable
       />
 
-      <n-button type="primary" @click="handleSearch">
+      <n-button
+        type="primary"
+        @click="handleSearch"
+      >
         搜索
       </n-button>
 
-      <n-button type="warning" @click="handleCreate">
+      <n-button
+        type="warning"
+        @click="handleCreate"
+      >
         <template #icon>
           <n-icon :component="AddOutline" />
         </template>
@@ -44,10 +53,10 @@
     :row-key="(rowData) => rowData.id"
     :expanded-row-keys="expandedKeys"
     :row-props="rowProps"
-    @update:expanded-row-keys="handleExpand"
-    @update:page="handlePageChange"
     flex-height
     style="height: calc(100vh - 210px); margin-top: 10px"
+    @update:expanded-row-keys="handleExpand"
+    @update:page="handlePageChange"
   />
 
   <n-modal
@@ -55,9 +64,9 @@
     :title="editingServer ? '修改服务器' : '创建新服务器'"
     preset="dialog"
     :style="{ width: '750px' }"
-    @close="resetForm"
     :z-index="2000"
     to="body"
+    @close="resetForm"
   >
     <n-form
       ref="formRef"
@@ -67,11 +76,21 @@
       label-width="130px"
       require-mark-placement="right-hanging"
     >
-      <n-form-item label="服务器名称" path="name">
-        <n-input v-model:value="formData.name" placeholder="请输入服务器名称" clearable />
+      <n-form-item
+        label="服务器名称"
+        path="name"
+      >
+        <n-input
+          v-model:value="formData.name"
+          placeholder="请输入服务器名称"
+          clearable
+        />
       </n-form-item>
 
-      <n-form-item label="描述" path="description">
+      <n-form-item
+        label="描述"
+        path="description"
+      >
         <n-input
           v-model:value="formData.description"
           type="textarea"
@@ -82,22 +101,38 @@
         />
       </n-form-item>
 
-      <n-form-item label="URL" path="url">
-        <n-input v-model:value="formData.url" placeholder="例如：http://localhost:8080 或 SSE 端点地址" clearable />
+      <n-form-item
+        label="URL"
+        path="url"
+      >
+        <n-input
+          v-model:value="formData.url"
+          placeholder="例如：http://localhost:8080 或 SSE 端点地址"
+          clearable
+        />
       </n-form-item>
 
-      <n-form-item label="环境变量" path="env">
+      <n-form-item
+        label="环境变量"
+        path="env"
+      >
         <n-input
           v-model:value="formData.env"
           type="textarea"
           :rows="3"
-          placeholder='JSON 对象格式，例如：{"API_KEY": "your-api-key"}'
+          placeholder="JSON 对象格式，例如：{&quot;API_KEY&quot;: &quot;your-api-key&quot;}"
           show-count
         />
       </n-form-item>
 
-      <n-form-item label="启用状态" path="enable">
-        <n-switch v-model:value="formData.enable" size="large">
+      <n-form-item
+        label="启用状态"
+        path="enable"
+      >
+        <n-switch
+          v-model:value="formData.enable"
+          size="large"
+        >
           <template #checked>
             <n-icon :component="PlayCircleOutline" />
             启用
@@ -111,8 +146,14 @@
     </n-form>
 
     <template #action>
-      <n-button @click="showCreateModal = false">取消</n-button>
-      <n-button type="primary" @click="handleSubmit" :loading="submitting">
+      <n-button @click="showCreateModal = false">
+        取消
+      </n-button>
+      <n-button
+        type="primary"
+        :loading="submitting"
+        @click="handleSubmit"
+      >
         <template #icon>
           <n-icon :component="CheckmarkCircleOutline" />
         </template>
@@ -129,15 +170,30 @@
     :z-index="2000"
   >
     <template v-if="currentTool">
-      <n-descriptions bordered label-placement="top" :column="1" style="margin-bottom: 16px" content-style="text-align: left">
+      <n-descriptions
+        bordered
+        label-placement="top"
+        :column="1"
+        style="margin-bottom: 16px"
+        content-style="text-align: left"
+      >
         <n-descriptions-item label="工具名称">
-          <n-text code>{{ currentTool.toolName }}</n-text>
+          <n-text code>
+            {{ currentTool.toolName }}
+          </n-text>
         </n-descriptions-item>
-        <n-descriptions-item label="描述">{{ currentTool.description || '无描述' }}</n-descriptions-item>
+        <n-descriptions-item label="描述">
+          {{ currentTool.description || '无描述' }}
+        </n-descriptions-item>
       </n-descriptions>
 
       <template v-if="parsedParams.length > 0">
-        <n-text strong style="margin-bottom: 8px; display: block">参数列表</n-text>
+        <n-text
+          strong
+          style="margin-bottom: 8px; display: block"
+        >
+          参数列表
+        </n-text>
         <n-data-table
           :columns="paramDetailColumns"
           :data="parsedParams"
@@ -146,10 +202,21 @@
           :pagination="false"
         />
       </template>
-      <n-text v-else depth="3">此工具无需参数</n-text>
+      <n-text
+        v-else
+        depth="3"
+      >
+        此工具无需参数
+      </n-text>
 
-      <n-collapse style="margin-top: 12px" v-if="currentTool.paramsSchema">
-        <n-collapse-item title="原始 JSON Schema" name="raw">
+      <n-collapse
+        v-if="currentTool.paramsSchema"
+        style="margin-top: 12px"
+      >
+        <n-collapse-item
+          title="原始 JSON Schema"
+          name="raw"
+        >
           <VueJsonPretty
             :data="parseJSON(currentTool.paramsSchema)"
             :deep="3"

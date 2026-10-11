@@ -384,16 +384,19 @@ onBeforeUnmount(() => {
 <template>
   <NDrawer
     :show="show"
-    @update:show="handleClose"
     :width="860"
     placement="right"
+    @update:show="handleClose"
   >
     <NDrawerContent
       :title="'🧠 AI 市场智能中枢 · ' + currentTitle"
       :native-scrollbar="false"
       closable
     >
-      <div class="intel-drawer-container" :class="{ 'is-dark': isDark }">
+      <div
+        class="intel-drawer-container"
+        :class="{ 'is-dark': isDark }"
+      >
         <!-- 1. 顶部 4 大核心维度导航卡片栏（高辨识度，完美适配暗黑） -->
         <div class="nav-tabs-container">
           <div
@@ -403,19 +406,33 @@ onBeforeUnmount(() => {
             :class="{ active: currentTab === item.key }"
             @click="handleTabChange(item.key)"
           >
-            <div class="tab-icon-box">{{ item.icon }}</div>
-            <div class="tab-text-box">
-              <div class="tab-title">{{ item.title }}</div>
-              <div class="tab-subtitle">{{ item.desc }}</div>
+            <div class="tab-icon-box">
+              {{ item.icon }}
             </div>
-            <div v-if="currentTab === item.key" class="tab-active-indicator" />
+            <div class="tab-text-box">
+              <div class="tab-title">
+                {{ item.title }}
+              </div>
+              <div class="tab-subtitle">
+                {{ item.desc }}
+              </div>
+            </div>
+            <div
+              v-if="currentTab === item.key"
+              class="tab-active-indicator"
+            />
           </div>
         </div>
 
         <!-- 2. 市场状态与模型控制栏 -->
         <div class="market-status-bar">
           <div class="status-left">
-            <NTag :type="phaseTagType" round size="small" class="phase-tag">
+            <NTag
+              :type="phaseTagType"
+              round
+              size="small"
+              class="phase-tag"
+            >
               ● {{ lifecycle?.phaseName || '休市整固' }}
             </NTag>
             <span class="status-clock">
@@ -426,7 +443,10 @@ onBeforeUnmount(() => {
             </span>
           </div>
           <div class="status-right">
-            <span v-if="lifecycle?.nextEvent" class="next-event-chip">
+            <span
+              v-if="lifecycle?.nextEvent"
+              class="next-event-chip"
+            >
               ⏭ 下一节点: <strong>{{ lifecycle.nextEvent }} ({{ lifecycle.nextEventTime }})</strong>
             </span>
             <div class="model-picker-wrap">
@@ -453,7 +473,10 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 3. Serenity 专属参数输入栏 -->
-        <div v-if="currentTab === 'serenity_industry_analysis'" class="serenity-ctrl-card">
+        <div
+          v-if="currentTab === 'serenity_industry_analysis'"
+          class="serenity-ctrl-card"
+        >
           <div class="serenity-input-row">
             <NInput
               v-model:value="serenityTarget"
@@ -468,7 +491,12 @@ onBeforeUnmount(() => {
               placeholder="可选代码(如: 300308)"
               style="width: 130px;"
             />
-            <NButton type="primary" size="small" :loading="loading" @click="generate">
+            <NButton
+              type="primary"
+              size="small"
+              :loading="loading"
+              @click="generate"
+            >
               🔬 发起深度拆解
             </NButton>
           </div>
@@ -481,8 +509,8 @@ onBeforeUnmount(() => {
               round
               checkable
               :checked="serenityTarget === p"
-              @click="selectSerenityPreset(p)"
               style="cursor: pointer;"
+              @click="selectSerenityPreset(p)"
             >
               {{ p }}
             </NTag>
@@ -492,13 +520,22 @@ onBeforeUnmount(() => {
         <!-- 4. 报告元数据与快捷操作条 -->
         <div class="report-meta-bar">
           <div class="meta-left">
-            <span v-if="currentReport" class="meta-item">
+            <span
+              v-if="currentReport"
+              class="meta-item"
+            >
               📅 生成时间：<strong>{{ new Date(currentReport.generatedAt).toLocaleString() }}</strong>
             </span>
-            <span v-if="currentReport?.source" class="meta-item meta-source">
+            <span
+              v-if="currentReport?.source"
+              class="meta-item meta-source"
+            >
               来源：{{ currentReport.source }}
             </span>
-            <span v-if="!currentReport" class="meta-item meta-empty">
+            <span
+              v-if="!currentReport"
+              class="meta-item meta-empty"
+            >
               当前尚未生成该维度研报，点击右侧按钮立即推演
             </span>
           </div>
@@ -523,7 +560,10 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 5. 核心决策摘要卡片 (清晰醒目，适配暗黑) -->
-        <div v-if="currentReport?.summary" class="summary-card">
+        <div
+          v-if="currentReport?.summary"
+          class="summary-card"
+        >
           <div class="summary-header">
             <span class="summary-badge">💡 核心决策摘要</span>
           </div>
@@ -533,8 +573,13 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 研报伴随系统联动动作项 (Agent-Action) -->
-        <div v-if="reportActions && reportActions.length > 0" class="report-actions-container">
-          <div class="report-actions-title">⚡ 研报建议系统联动：</div>
+        <div
+          v-if="reportActions && reportActions.length > 0"
+          class="report-actions-container"
+        >
+          <div class="report-actions-title">
+            ⚡ 研报建议系统联动：
+          </div>
           <div class="report-actions-list">
             <NButton
               v-for="(act, idx) in reportActions"
@@ -551,23 +596,34 @@ onBeforeUnmount(() => {
 
         <!-- 6. 研报正文展示容器 (支持主题自适应) -->
         <NSpin :show="loading">
-          <div v-if="!currentReport || !displayContent" class="empty-report-view">
+          <div
+            v-if="!currentReport || !displayContent"
+            class="empty-report-view"
+          >
             <NEmpty
               :description="`尚未生成 ${currentTitle}`"
               style="padding: 48px 0;"
             >
               <template #extra>
-                <NButton type="primary" size="medium" @click="generate" :loading="loading">
+                <NButton
+                  type="primary"
+                  size="medium"
+                  :loading="loading"
+                  @click="generate"
+                >
                   🚀 立即启动 {{ currentTitle }} 多Agent分析
                 </NButton>
               </template>
             </NEmpty>
           </div>
 
-          <div v-else class="markdown-preview-container">
+          <div
+            v-else
+            class="markdown-preview-container"
+          >
             <MdPreview
               :theme="isDark ? 'dark' : 'light'"
-              :modelValue="displayContent"
+              :model-value="displayContent"
               preview-theme="github"
               :show-code-row-number="false"
               style="background: transparent;"
@@ -582,13 +638,26 @@ onBeforeUnmount(() => {
             {{ currentReport ? '🧠 由 blades-stock 量化矩阵引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
           </span>
           <NSpace>
-            <NButton @click="askAgentAssistant" v-if="currentReport" secondary type="info">
+            <NButton
+              v-if="currentReport"
+              secondary
+              type="info"
+              @click="askAgentAssistant"
+            >
               💬 针对本报告提问AI助手
             </NButton>
-            <NButton @click="loadLatestForTab(currentTab)" tertiary v-if="currentReport">
+            <NButton
+              v-if="currentReport"
+              tertiary
+              @click="loadLatestForTab(currentTab)"
+            >
               刷新缓存
             </NButton>
-            <NButton @click="generate" type="primary" :loading="loading">
+            <NButton
+              type="primary"
+              :loading="loading"
+              @click="generate"
+            >
               {{ currentReport ? '重新推演' : '立即生成' }}
             </NButton>
           </NSpace>

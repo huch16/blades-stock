@@ -3,21 +3,36 @@
     <div
       v-if="showButton"
       :class="['edge-trigger', { 'edge-trigger-busy': hasBackgroundTask }]"
-      @click="togglePanel"
       :title="hasBackgroundTask ? 'Blades Stock AI Agent 助手正在后台分析...' : 'Blades Stock AI Agent 助手'"
+      @click="togglePanel"
     >
       <div class="edge-trigger-inner">
-        <NIcon :component="SparklesOutline" size="18" />
+        <NIcon
+          :component="SparklesOutline"
+          size="18"
+        />
         <span class="edge-trigger-text">AI助手</span>
-        <div v-if="hasBackgroundTask" class="edge-trigger-badge" />
+        <div
+          v-if="hasBackgroundTask"
+          class="edge-trigger-badge"
+        />
       </div>
     </div>
   </Transition>
 
   <Transition name="drawer-slide">
-    <div v-if="panelVisible" class="drawer-wrap">
-      <div class="drawer-mask" @click="closePanel" />
-      <div class="drawer-panel" @click.stop>
+    <div
+      v-if="panelVisible"
+      class="drawer-wrap"
+    >
+      <div
+        class="drawer-mask"
+        @click="closePanel"
+      />
+      <div
+        class="drawer-panel"
+        @click.stop
+      >
         <NCard
           size="small"
           class="panel-card"
@@ -28,15 +43,33 @@
             <div class="panel-header">
               <span class="panel-title">Blades Stock AI Agent 助手</span>
               <div class="panel-actions">
-                <NButton size="small" quaternary @click="startNewChat" title="开始新对话">
+                <NButton
+                  size="small"
+                  quaternary
+                  title="开始新对话"
+                  @click="startNewChat"
+                >
                   新对话
                 </NButton>
-                <NButton quaternary circle size="small" title="分享到社区" :loading="shareLoading" @click="shareAiToCommunity">
+                <NButton
+                  quaternary
+                  circle
+                  size="small"
+                  title="分享到社区"
+                  :loading="shareLoading"
+                  @click="shareAiToCommunity"
+                >
                   <template #icon>
                     <NIcon :component="ShareSocialOutline" />
                   </template>
                 </NButton>
-                <NButton quaternary circle size="small" title="关闭" @click="closePanel">
+                <NButton
+                  quaternary
+                  circle
+                  size="small"
+                  title="关闭"
+                  @click="closePanel"
+                >
                   <template #icon>
                     <NIcon :component="CloseOutline" />
                   </template>
@@ -45,21 +78,40 @@
             </div>
           </template>
 
-            <div class="chat-body">
+          <div class="chat-body">
             <!-- 全局态势感知仪表条 -->
-            <div v-if="perceptionSnapshot" class="perception-banner" @click="askMacroPerception" title="点击呼叫 Agent 深度解读当前宏观节律与持仓策略">
+            <div
+              v-if="perceptionSnapshot"
+              class="perception-banner"
+              title="点击呼叫 Agent 深度解读当前宏观节律与持仓策略"
+              @click="askMacroPerception"
+            >
               <div class="perception-left">
                 <span class="phase-tag">{{ perceptionSnapshot.Phase }}</span>
-                <span class="traffic-dot" :style="{ backgroundColor: getTrafficColor(perceptionSnapshot.TrafficLight) }"></span>
-                <span class="traffic-text" :style="{ color: getTrafficColor(perceptionSnapshot.TrafficLight) }">
+                <span
+                  class="traffic-dot"
+                  :style="{ backgroundColor: getTrafficColor(perceptionSnapshot.TrafficLight) }"
+                />
+                <span
+                  class="traffic-text"
+                  :style="{ color: getTrafficColor(perceptionSnapshot.TrafficLight) }"
+                >
                   {{ getTrafficText(perceptionSnapshot.TrafficLight) }}
                 </span>
-                <span v-if="perceptionSnapshot.MarketBreadth" class="breadth-text">
+                <span
+                  v-if="perceptionSnapshot.MarketBreadth"
+                  class="breadth-text"
+                >
                   <span style="color:#d03050">涨{{ perceptionSnapshot.MarketBreadth.UpCount }}</span> / <span style="color:#18a058">跌{{ perceptionSnapshot.MarketBreadth.DownCount }}</span>
                 </span>
               </div>
               <div class="perception-right">
-                <NTag v-if="perceptionSnapshot.PortfolioRisk && perceptionSnapshot.PortfolioRisk.RiskLevel !== 'SAFE'" size="tiny" type="error" round>
+                <NTag
+                  v-if="perceptionSnapshot.PortfolioRisk && perceptionSnapshot.PortfolioRisk.RiskLevel !== 'SAFE'"
+                  size="tiny"
+                  type="error"
+                  round
+                >
                   ⚠️ {{ perceptionSnapshot.PortfolioRisk.RiskLevel === 'DANGER' ? '高危持仓' : '持仓警示' }}
                 </NTag>
                 <span class="ask-hint">态势推演 ➔</span>
@@ -67,61 +119,117 @@
             </div>
 
             <!-- 当前聚焦个股智能感知与一键直达条 -->
-            <div v-if="currentStock && currentStock.code" class="context-stock-banner">
+            <div
+              v-if="currentStock && currentStock.code"
+              class="context-stock-banner"
+            >
               <div class="context-stock-left">
                 <span class="context-stock-pin">📌 当前关注:</span>
                 <span class="context-stock-name">{{ currentStock.name || currentStock.code }}</span>
                 <span class="context-stock-code">({{ currentStock.code }})</span>
               </div>
               <div class="context-stock-actions">
-                <NButton size="tiny" secondary type="primary" round @click="sendDirectPrompt(`对 ${currentStock.name || currentStock.code} (${currentStock.code}) 进行量化三维深度诊断，包括胜率、目标价与量化评分`)">
+                <NButton
+                  size="tiny"
+                  secondary
+                  type="primary"
+                  round
+                  @click="sendDirectPrompt(`对 ${currentStock.name || currentStock.code} (${currentStock.code}) 进行量化三维深度诊断，包括胜率、目标价与量化评分`)"
+                >
                   🎯 三维体检
                 </NButton>
-                <NButton size="tiny" secondary type="info" round @click="sendDirectPrompt(`详细分析 ${currentStock.name || currentStock.code} (${currentStock.code}) 的主力资金流向、游资龙虎榜席位与筹码集中度博弈`)">
+                <NButton
+                  size="tiny"
+                  secondary
+                  type="info"
+                  round
+                  @click="sendDirectPrompt(`详细分析 ${currentStock.name || currentStock.code} (${currentStock.code}) 的主力资金流向、游资龙虎榜席位与筹码集中度博弈`)"
+                >
                   💰 资金筹码
                 </NButton>
-                <NButton size="tiny" secondary type="warning" round @click="sendDirectPrompt(`运行 VectorBT 向量化回测分析 ${currentStock.name || currentStock.code} (${currentStock.code}) 的双均线策略表现与夏普比率`)">
+                <NButton
+                  size="tiny"
+                  secondary
+                  type="warning"
+                  round
+                  @click="sendDirectPrompt(`运行 VectorBT 向量化回测分析 ${currentStock.name || currentStock.code} (${currentStock.code}) 的双均线策略表现与夏普比率`)"
+                >
                   🧪 策略回测
                 </NButton>
               </div>
             </div>
             <Transition name="hint-fade">
-              <div v-if="hintVisible" class="hint-bar">{{ hintText }}</div>
+              <div
+                v-if="hintVisible"
+                class="hint-bar"
+              >
+                {{ hintText }}
+              </div>
             </Transition>
-            <div v-if="shareTipVisible" class="share-tip">
-              <div class="share-tip-text">{{ shareTipText }}</div>
-              <NButton size="tiny" quaternary class="share-tip-close" @click="shareTipVisible = false">关闭</NButton>
+            <div
+              v-if="shareTipVisible"
+              class="share-tip"
+            >
+              <div class="share-tip-text">
+                {{ shareTipText }}
+              </div>
+              <NButton
+                size="tiny"
+                quaternary
+                class="share-tip-close"
+                @click="shareTipVisible = false"
+              >
+                关闭
+              </NButton>
             </div>
-            <NScrollbar ref="scrollbarRef" class="chat-scroll">
+            <NScrollbar
+              ref="scrollbarRef"
+              class="chat-scroll"
+            >
               <div class="message-list">
                 <div
                   v-for="(group, groupIndex) in messageGroups"
                   :key="group.id"
                   class="message-group"
                 >
-                  <div class="message-group-header" @click="toggleGroup(groupIndex)">
+                  <div
+                    class="message-group-header"
+                    @click="toggleGroup(groupIndex)"
+                  >
                     <div class="message-group-summary">
-                      <NIcon :component="isGroupExpanded(groupIndex) ? ChevronDownOutline : ChevronForwardOutline" size="16" />
+                      <NIcon
+                        :component="isGroupExpanded(groupIndex) ? ChevronDownOutline : ChevronForwardOutline"
+                        size="16"
+                      />
                       <span class="message-group-title">{{ group.userMsg.content.slice(0, 50) }}{{ group.userMsg.content.length > 50 ? '...' : '' }}</span>
                       <span class="message-group-time">{{ group.userMsg.time }}</span>
                     </div>
                   </div>
-                  <div v-show="isGroupExpanded(groupIndex)" class="message-group-content">
+                  <div
+                    v-show="isGroupExpanded(groupIndex)"
+                    class="message-group-content"
+                  >
                     <div
                       :class="['message-item', group.userMsg.role]"
                     >
                       <div class="msg-avatar user-avatar">
-                        <NIcon :component="PersonCircleOutline" size="18" />
+                        <NIcon
+                          :component="PersonCircleOutline"
+                          size="18"
+                        />
                       </div>
                       <div class="msg-bubble">
                         <div class="msg-content">
-                          <div v-if="group.userMsg.time" class="msg-meta msg-meta-user-inner">
+                          <div
+                            v-if="group.userMsg.time"
+                            class="msg-meta msg-meta-user-inner"
+                          >
                             <span class="msg-time">{{ group.userMsg.time }}</span>
                           </div>
                           <MdPreview
+                            v-if="group.userMsg.content"
                             :theme="theme"
                             :style="{ textAlign: 'right' }"
-                            v-if="group.userMsg.content"
                             :model-value="group.userMsg.content"
                             :editor-id="'agent-msg-' + group.userIndex"
                             class="msg-markdown"
@@ -134,32 +242,71 @@
                       :class="['message-item', 'assistant']"
                     >
                       <div class="msg-avatar assistant-avatar">
-                        <NIcon :component="SparklesOutline" size="20" />
+                        <NIcon
+                          :component="SparklesOutline"
+                          size="20"
+                        />
                       </div>
                       <div class="msg-bubble">
                         <div class="msg-content">
-                          <div v-if="group.assistantMsg.statusText && isStreamLoad" class="msg-status-text">
+                          <div
+                            v-if="group.assistantMsg.statusText && isStreamLoad"
+                            class="msg-status-text"
+                          >
                             <NSpin size="small" /> <span>{{ group.assistantMsg.statusText }}</span>
                           </div>
-                          <div v-if="group.assistantMsg.steps && group.assistantMsg.steps.length > 0" class="msg-steps-wrapper">
-                            <div class="msg-steps-header" :class="{ 'steps-expanded': isStreamLoad }" @click="toggleReasoning(group.assistantIndex)">
-                              <NIcon :component="reasoningExpandedMap[group.assistantIndex] || isStreamLoad ? ChevronDownOutline : ChevronForwardOutline" size="14" />
+                          <div
+                            v-if="group.assistantMsg.steps && group.assistantMsg.steps.length > 0"
+                            class="msg-steps-wrapper"
+                          >
+                            <div
+                              class="msg-steps-header"
+                              :class="{ 'steps-expanded': isStreamLoad }"
+                              @click="toggleReasoning(group.assistantIndex)"
+                            >
+                              <NIcon
+                                :component="reasoningExpandedMap[group.assistantIndex] || isStreamLoad ? ChevronDownOutline : ChevronForwardOutline"
+                                size="14"
+                              />
                               <span class="msg-steps-title">📋 执行步骤</span>
                               <span class="msg-steps-count">{{ group.assistantMsg.steps.length }}</span>
                             </div>
-                            <div v-show="reasoningExpandedMap[group.assistantIndex] || isStreamLoad" class="msg-steps-content">
-                              <div v-for="(step, si) in group.assistantMsg.steps" :key="si" class="msg-step-item">
-                                <div class="msg-step-dot" :class="getStepDotClass(step)"></div>
+                            <div
+                              v-show="reasoningExpandedMap[group.assistantIndex] || isStreamLoad"
+                              class="msg-steps-content"
+                            >
+                              <div
+                                v-for="(step, si) in group.assistantMsg.steps"
+                                :key="si"
+                                class="msg-step-item"
+                              >
+                                <div
+                                  class="msg-step-dot"
+                                  :class="getStepDotClass(step)"
+                                />
                                 <span class="msg-step-text">{{ step }}</span>
                               </div>
                             </div>
                           </div>
-                          <div v-if="group.assistantMsg.reasoning || (isStreamLoad && group.assistantMsg.rawReasoning)" class="msg-reasoning-wrapper">
-                            <div class="msg-reasoning-header" :class="{ 'reasoning-expanded': isStreamLoad }" @click="toggleReasoning('r-' + group.assistantIndex)">
-                              <NIcon :component="reasoningExpandedMap['r-' + group.assistantIndex] || isStreamLoad ? ChevronDownOutline : ChevronForwardOutline" size="14" />
+                          <div
+                            v-if="group.assistantMsg.reasoning || (isStreamLoad && group.assistantMsg.rawReasoning)"
+                            class="msg-reasoning-wrapper"
+                          >
+                            <div
+                              class="msg-reasoning-header"
+                              :class="{ 'reasoning-expanded': isStreamLoad }"
+                              @click="toggleReasoning('r-' + group.assistantIndex)"
+                            >
+                              <NIcon
+                                :component="reasoningExpandedMap['r-' + group.assistantIndex] || isStreamLoad ? ChevronDownOutline : ChevronForwardOutline"
+                                size="14"
+                              />
                               <span class="msg-reasoning-title">💭 思考过程</span>
                             </div>
-                            <div v-show="reasoningExpandedMap['r-' + group.assistantIndex] || isStreamLoad" class="msg-reasoning-content">
+                            <div
+                              v-show="reasoningExpandedMap['r-' + group.assistantIndex] || isStreamLoad"
+                              class="msg-reasoning-content"
+                            >
                               <MdPreview
                                 :theme="theme"
                                 :style="{ textAlign: 'left' }"
@@ -169,19 +316,31 @@
                               />
                             </div>
                           </div>
-                          <div v-if="group.assistantMsg.jsonMarkdown" class="msg-json-md-wrapper">
-                            <div class="msg-json-md-header" @click="toggleReasoning('j-' + group.assistantIndex)">
-                              <NIcon :component="reasoningExpandedMap['j-' + group.assistantIndex] ? ChevronDownOutline : ChevronForwardOutline" size="14" />
+                          <div
+                            v-if="group.assistantMsg.jsonMarkdown"
+                            class="msg-json-md-wrapper"
+                          >
+                            <div
+                              class="msg-json-md-header"
+                              @click="toggleReasoning('j-' + group.assistantIndex)"
+                            >
+                              <NIcon
+                                :component="reasoningExpandedMap['j-' + group.assistantIndex] ? ChevronDownOutline : ChevronForwardOutline"
+                                size="14"
+                              />
                               <span class="msg-json-md-title">📊 分析报告</span>
                             </div>
-                            <div v-show="reasoningExpandedMap['j-' + group.assistantIndex]" class="msg-json-md-content">
+                            <div
+                              v-show="reasoningExpandedMap['j-' + group.assistantIndex]"
+                              class="msg-json-md-content"
+                            >
                               <MdPreview
                                 :theme="theme"
                                 :style="{ textAlign: 'left' }"
                                 :model-value="group.assistantMsg.jsonMarkdown"
                                 :editor-id="'agent-json-md-' + group.assistantIndex"
                                 class="msg-markdown"
-                                @onHtmlChanged="onMdHtmlChanged"
+                                @on-html-changed="onMdHtmlChanged"
                               />
                             </div>
                           </div>
@@ -191,43 +350,96 @@
                             :model-value="group.assistantMsg.content || '...'"
                             :editor-id="'agent-msg-' + group.assistantIndex"
                             class="msg-markdown"
-                            @onHtmlChanged="onMdHtmlChanged"
+                            @on-html-changed="onMdHtmlChanged"
                           />
                           <!-- 伴随全局联动控制动作卡片 -->
-                          <div v-if="group.assistantMsg.actions && group.assistantMsg.actions.length > 0" class="agent-action-cards">
-                            <div v-for="(act, actIdx) in group.assistantMsg.actions" :key="actIdx" class="agent-action-card">
+                          <div
+                            v-if="group.assistantMsg.actions && group.assistantMsg.actions.length > 0"
+                            class="agent-action-cards"
+                          >
+                            <div
+                              v-for="(act, actIdx) in group.assistantMsg.actions"
+                              :key="actIdx"
+                              class="agent-action-card"
+                            >
                               <div class="action-card-info">
                                 <span class="action-icon">⚡</span>
                                 <span class="action-title">{{ getActionDesc(act) }}</span>
                               </div>
-                              <NButton size="tiny" type="primary" secondary @click="executeAction(act)">
+                              <NButton
+                                size="tiny"
+                                type="primary"
+                                secondary
+                                @click="executeAction(act)"
+                              >
                                 立即联动
                               </NButton>
                             </div>
                           </div>
                           <!-- 性能与可观测性监控胶囊 -->
-                          <div v-if="group.assistantMsg.metrics" class="agent-metrics-capsule">
-                            <span class="metrics-tag" title="端到端总耗时">⏱️ {{ formatDuration(group.assistantMsg.metrics.total_duration) }}</span>
-                            <span v-if="group.assistantMsg.metrics.first_chunk_latency" class="metrics-tag" title="模型首包响应延迟">⚡ 首包: {{ formatDuration(group.assistantMsg.metrics.first_chunk_latency) }}</span>
-                            <span v-if="group.assistantMsg.metrics.tool_call_count > 0" class="metrics-tag" title="执行工具调用次数">🔧 {{ group.assistantMsg.metrics.tool_call_count }}次工具</span>
-                            <span v-if="group.assistantMsg.metrics.retry_count > 0" class="metrics-tag metrics-warning" title="遭遇瞬时网络/限流故障后自动恢复">🔁 重试{{ group.assistantMsg.metrics.retry_count }}次成功</span>
+                          <div
+                            v-if="group.assistantMsg.metrics"
+                            class="agent-metrics-capsule"
+                          >
+                            <span
+                              class="metrics-tag"
+                              title="端到端总耗时"
+                            >⏱️ {{ formatDuration(group.assistantMsg.metrics.total_duration) }}</span>
+                            <span
+                              v-if="group.assistantMsg.metrics.first_chunk_latency"
+                              class="metrics-tag"
+                              title="模型首包响应延迟"
+                            >⚡ 首包: {{ formatDuration(group.assistantMsg.metrics.first_chunk_latency) }}</span>
+                            <span
+                              v-if="group.assistantMsg.metrics.tool_call_count > 0"
+                              class="metrics-tag"
+                              title="执行工具调用次数"
+                            >🔧 {{ group.assistantMsg.metrics.tool_call_count }}次工具</span>
+                            <span
+                              v-if="group.assistantMsg.metrics.retry_count > 0"
+                              class="metrics-tag metrics-warning"
+                              title="遭遇瞬时网络/限流故障后自动恢复"
+                            >🔁 重试{{ group.assistantMsg.metrics.retry_count }}次成功</span>
                           </div>
-                          <div v-if="isStreamLoad && groupIndex === messageGroups.length - 1 && !group.assistantMsg.content" class="msg-loading">
+                          <div
+                            v-if="isStreamLoad && groupIndex === messageGroups.length - 1 && !group.assistantMsg.content"
+                            class="msg-loading"
+                          >
                             <NSpin size="small" />
                             <span>思考中...</span>
                           </div>
                           <div class="msg-bubble-actions">
-                            <div v-if="group.assistantMsg.modelName || group.assistantMsg.time" class="msg-meta-row-assistant">
-                              <span v-if="group.assistantMsg.modelName" class="msg-model-name" :title="group.assistantMsg.modelName">{{ group.assistantMsg.modelName }}</span>
-                              <span v-if="group.assistantMsg.time" class="msg-time">{{ group.assistantMsg.time }}</span>
+                            <div
+                              v-if="group.assistantMsg.modelName || group.assistantMsg.time"
+                              class="msg-meta-row-assistant"
+                            >
+                              <span
+                                v-if="group.assistantMsg.modelName"
+                                class="msg-model-name"
+                                :title="group.assistantMsg.modelName"
+                              >{{ group.assistantMsg.modelName }}</span>
+                              <span
+                                v-if="group.assistantMsg.time"
+                                class="msg-time"
+                              >{{ group.assistantMsg.time }}</span>
                             </div>
-                            <NButton quaternary size="tiny" class="msg-toggle-btn" @click="toggleGroup(groupIndex)">
+                            <NButton
+                              quaternary
+                              size="tiny"
+                              class="msg-toggle-btn"
+                              @click="toggleGroup(groupIndex)"
+                            >
                               <template #icon>
                                 <NIcon :component="isGroupExpanded(groupIndex) ? ChevronUpOutline : ChevronDownOutline" />
                               </template>
                               {{ isGroupExpanded(groupIndex) ? '收起' : '展开' }}
                             </NButton>
-                            <NButton quaternary size="tiny" class="msg-copy-btn" @click="copyAiContent(group.assistantMsg)">
+                            <NButton
+                              quaternary
+                              size="tiny"
+                              class="msg-copy-btn"
+                              @click="copyAiContent(group.assistantMsg)"
+                            >
                               <template #icon>
                                 <NIcon :component="CopyOutline" />
                               </template>
@@ -246,7 +458,13 @@
                               </template>
                               导出图
                             </NButton>
-                            <NButton quaternary size="tiny" class="msg-share-btn" :loading="shareLoading" @click="shareAiContent(group.assistantMsg)">
+                            <NButton
+                              quaternary
+                              size="tiny"
+                              class="msg-share-btn"
+                              :loading="shareLoading"
+                              @click="shareAiContent(group.assistantMsg)"
+                            >
                               <template #icon>
                                 <NIcon :component="ShareSocialOutline" />
                               </template>
@@ -260,92 +478,158 @@
                 </div>
               </div>
             </NScrollbar>
-            </div>
+          </div>
 
-            <div class="chat-footer">
-              <div class="chat-footer-row">
-                <NSelect
-                  v-model:value="aiConfigId"
-                  :options="aiConfigOptions"
+          <div class="chat-footer">
+            <div class="chat-footer-row">
+              <NSelect
+                v-model:value="aiConfigId"
+                :options="aiConfigOptions"
+                size="small"
+                filterable
+                to="body"
+                placement="top-start"
+                placeholder="选择模型"
+                :consistent-menu-width="false"
+                :menu-props="{ style: { zIndex: 10002 } }"
+                class="chat-footer-select"
+              />
+              <div class="chat-footer-thinking">
+                <span class="chat-footer-thinking-label">思考模式</span>
+                <NSwitch
+                  v-model:value="thinkingMode"
                   size="small"
-                  filterable
+                />
+              </div>
+              <div class="chat-footer-memory">
+                <span class="chat-footer-thinking-label">记忆模式</span>
+                <NSwitch
+                  v-model:value="memoryMode"
+                  size="small"
+                />
+                <NSelect
+                  v-if="memoryMode"
+                  v-model:value="memoryCount"
+                  :options="memoryCountOptions"
+                  size="small"
+                  :consistent-menu-width="false"
                   to="body"
                   placement="top-start"
-                  placeholder="选择模型"
+                  :menu-props="{ style: { zIndex: 10002 } }"
+                  class="chat-footer-memory-count"
+                />
+              </div>
+              <div class="chat-footer-agent-mode">
+                <NSelect
+                  v-model:value="agentMode"
+                  :options="agentModeOptions"
+                  size="small"
+                  to="body"
+                  placement="top-start"
+                  placeholder="Agent模式"
                   :consistent-menu-width="false"
                   :menu-props="{ style: { zIndex: 10002 } }"
-                  class="chat-footer-select"
+                  class="chat-footer-agent-mode-select"
                 />
-                <div class="chat-footer-thinking">
-                  <span class="chat-footer-thinking-label">思考模式</span>
-                  <NSwitch v-model:value="thinkingMode" size="small" />
-                </div>
-                <div class="chat-footer-memory">
-                  <span class="chat-footer-thinking-label">记忆模式</span>
-                  <NSwitch v-model:value="memoryMode" size="small" />
-                  <NSelect
-                    v-if="memoryMode"
-                    v-model:value="memoryCount"
-                    :options="memoryCountOptions"
-                    size="small"
-                    :consistent-menu-width="false"
-                    to="body"
-                    placement="top-start"
-                    :menu-props="{ style: { zIndex: 10002 } }"
-                    class="chat-footer-memory-count"
-                  />
-                </div>
-                <div class="chat-footer-agent-mode">
-                  <NSelect
-                    v-model:value="agentMode"
-                    :options="agentModeOptions"
-                    size="small"
-                    to="body"
-                    placement="top-start"
-                    placeholder="Agent模式"
-                    :consistent-menu-width="false"
-                    :menu-props="{ style: { zIndex: 10002 } }"
-                    class="chat-footer-agent-mode-select"
-                  />
-                </div>
-              </div>
-              <div class="chat-quick-chips">
-                <NTag size="small" round :bordered="false" class="quick-chip" @click="handleQuickChip('三维量化诊断')">🎯 量化诊断</NTag>
-                <NTag size="small" round :bordered="false" class="quick-chip" @click="handleQuickChip('VectorBT 策略回测: ')">🧪 策略回测</NTag>
-                <NTag size="small" round :bordered="false" class="quick-chip" @click="handleQuickChip('主力资金博弈与筹码集中度分析: ')">💰 资金筹码</NTag>
-                <NTag size="small" round :bordered="false" type="info" class="quick-chip" @click="triggerMarketIntelligence('pre_market_briefing')">🌅 盘前前瞻</NTag>
-                <NTag size="small" round :bordered="false" type="warning" class="quick-chip" @click="triggerMarketIntelligence('post_market_review')">🌆 盘后复盘</NTag>
-                <NTag size="small" round :bordered="false" type="success" class="quick-chip" @click="triggerMarketIntelligence('etf_rotation_decision')">📈 ETF轮动</NTag>
-                <NTag size="small" round :bordered="false" type="error" class="quick-chip" @click="triggerMarketIntelligence('serenity_industry_analysis')">🔍 产业链拆解</NTag>
-              </div>
-              <div class="chat-footer-input">
-                <NInput
-                  v-model:value="inputValue"
-                  type="textarea"
-                  placeholder="输入消息，回车发送..."
-                  :autosize="{ minRows: 2, maxRows: 4 }"
-                  :disabled="isStreamLoad"
-                  @keydown.enter.exact.prevent="sendMessage"
-                />
-                <NButton
-                  v-if="isStreamLoad"
-                  type="warning"
-                  quaternary
-                  class="chat-footer-abort"
-                  @click="abortStream(true)"
-                >
-                  中断
-                </NButton>
-                <NButton
-                  type="primary"
-                  :loading="isStreamLoad"
-                  :disabled="isStreamLoad || !canSend"
-                  @click="sendMessage"
-                >
-                  发送
-                </NButton>
               </div>
             </div>
+            <div class="chat-quick-chips">
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                class="quick-chip"
+                @click="handleQuickChip('三维量化诊断')"
+              >
+                🎯 量化诊断
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                class="quick-chip"
+                @click="handleQuickChip('VectorBT 策略回测: ')"
+              >
+                🧪 策略回测
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                class="quick-chip"
+                @click="handleQuickChip('主力资金博弈与筹码集中度分析: ')"
+              >
+                💰 资金筹码
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                type="info"
+                class="quick-chip"
+                @click="triggerMarketIntelligence('pre_market_briefing')"
+              >
+                🌅 盘前前瞻
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                type="warning"
+                class="quick-chip"
+                @click="triggerMarketIntelligence('post_market_review')"
+              >
+                🌆 盘后复盘
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                type="success"
+                class="quick-chip"
+                @click="triggerMarketIntelligence('etf_rotation_decision')"
+              >
+                📈 ETF轮动
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                type="error"
+                class="quick-chip"
+                @click="triggerMarketIntelligence('serenity_industry_analysis')"
+              >
+                🔍 产业链拆解
+              </NTag>
+            </div>
+            <div class="chat-footer-input">
+              <NInput
+                v-model:value="inputValue"
+                type="textarea"
+                placeholder="输入消息，回车发送..."
+                :autosize="{ minRows: 2, maxRows: 4 }"
+                :disabled="isStreamLoad"
+                @keydown.enter.exact.prevent="sendMessage"
+              />
+              <NButton
+                v-if="isStreamLoad"
+                type="warning"
+                quaternary
+                class="chat-footer-abort"
+                @click="abortStream(true)"
+              >
+                中断
+              </NButton>
+              <NButton
+                type="primary"
+                :loading="isStreamLoad"
+                :disabled="isStreamLoad || !canSend"
+                @click="sendMessage"
+              >
+                发送
+              </NButton>
+            </div>
+          </div>
         </NCard>
       </div>
     </div>

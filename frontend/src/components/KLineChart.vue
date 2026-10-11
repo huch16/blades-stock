@@ -385,7 +385,11 @@ function calculateMA(dayCount,values) {
 </script>
 
 <template>
-  <div ref="kLineChartRef" style="width: 100%;height: auto;--wails-draggable:no-drag" :style="{height:chartHeight+'px'}" ></div>
+  <div
+    ref="kLineChartRef"
+    style="width: 100%;height: auto;--wails-draggable:no-drag"
+    :style="{height:chartHeight+'px'}"
+  />
 </template>
 
 <style scoped>
