@@ -47,6 +47,28 @@ var migrationRegistry = []MigrationStep{
 			return nil
 		},
 	},
+	{
+		Version:     20260401003,
+		Description: "ensure tool quota and budget columns in settings",
+		Migrate: func(tx *gorm.DB) error {
+			if !tx.Migrator().HasColumn("settings", "tool_run_budget") {
+				if err := tx.Exec("ALTER TABLE settings ADD COLUMN tool_run_budget INTEGER DEFAULT 15").Error; err != nil {
+					return err
+				}
+			}
+			if !tx.Migrator().HasColumn("settings", "tool_daily_budget") {
+				if err := tx.Exec("ALTER TABLE settings ADD COLUMN tool_daily_budget INTEGER DEFAULT 200").Error; err != nil {
+					return err
+				}
+			}
+			if !tx.Migrator().HasColumn("settings", "tool_daily_cost_usd") {
+				if err := tx.Exec("ALTER TABLE settings ADD COLUMN tool_daily_cost_usd REAL DEFAULT 2.0").Error; err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	},
 }
 
 // RunVersionedMigrations 依次执行未应用的版本化迁移

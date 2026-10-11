@@ -63,6 +63,9 @@ type Settings struct {
 	EmbeddingBaseUrl          string  `json:"embeddingBaseUrl" gorm:"column:embedding_base_url"`
 	EmbeddingApiKey           string  `json:"embeddingApiKey" gorm:"column:embedding_api_key"`
 	McpTimeout                int64   `json:"mcpTimeout" gorm:"column:mcp_timeout;default:8"`
+	ToolRunBudget             int64   `json:"toolRunBudget" gorm:"column:tool_run_budget;default:15"`
+	ToolDailyBudget           int64   `json:"toolDailyBudget" gorm:"column:tool_daily_budget;default:200"`
+	ToolDailyCostUSD          float64 `json:"toolDailyCostUSD" gorm:"column:tool_daily_cost_usd;default:2.0"`
 }
 
 func (receiver Settings) TableName() string {
@@ -141,6 +144,42 @@ func (c *SettingConfig) GetMcpTimeout() time.Duration {
 		return time.Duration(c.McpTimeout) * time.Second
 	}
 	return 8 * time.Second
+}
+
+func (c *SettingConfig) GetToolRunBudget() int64 {
+	if env := os.Getenv("AGENT_TOOL_RUN_BUDGET"); env != "" {
+		if v, err := strconv.ParseInt(env, 10, 64); err == nil && v > 0 {
+			return v
+		}
+	}
+	if c != nil && c.Settings != nil && c.ToolRunBudget > 0 {
+		return c.ToolRunBudget
+	}
+	return 15
+}
+
+func (c *SettingConfig) GetToolDailyBudget() int64 {
+	if env := os.Getenv("AGENT_TOOL_DAILY_BUDGET"); env != "" {
+		if v, err := strconv.ParseInt(env, 10, 64); err == nil && v > 0 {
+			return v
+		}
+	}
+	if c != nil && c.Settings != nil && c.ToolDailyBudget > 0 {
+		return c.ToolDailyBudget
+	}
+	return 200
+}
+
+func (c *SettingConfig) GetToolDailyCostUSD() float64 {
+	if env := os.Getenv("AGENT_TOOL_DAILY_COST_USD"); env != "" {
+		if v, err := strconv.ParseFloat(env, 64); err == nil && v > 0 {
+			return v
+		}
+	}
+	if c != nil && c.Settings != nil && c.ToolDailyCostUSD > 0 {
+		return c.ToolDailyCostUSD
+	}
+	return 2.0
 }
 
 type SettingsApi struct {
@@ -879,6 +918,15 @@ func GetSettingConfig() *SettingConfig {
 	}
 	if settings.BrowserPath == "" {
 		settings.BrowserPath, _ = CheckBrowser()
+	}
+	if settings.ToolRunBudget <= 0 {
+		settings.ToolRunBudget = 15
+	}
+	if settings.ToolDailyBudget <= 0 {
+		settings.ToolDailyBudget = 200
+	}
+	if settings.ToolDailyCostUSD <= 0 {
+		settings.ToolDailyCostUSD = 2.0
 	}
 	settingConfig.Settings = settings
 	settingConfig.AiConfigs = aiConfigs

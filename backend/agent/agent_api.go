@@ -138,6 +138,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		}
 
 		settingConfig := data.GetSettingConfig()
+		runBudget := settingConfig.GetToolRunBudget()
+		ctx = WithRunQuota(ctx, runBudget)
 
 		var originalAiConfig *data.AIConfig
 		for _, cfg := range settingConfig.AiConfigs {

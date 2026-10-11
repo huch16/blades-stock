@@ -111,6 +111,7 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 
 	allTools := getToolsByQuestion(question, matchedSkills)
 	allTools = append(allTools, extraTools...)
+	allTools = WrapToolsWithQuota(allTools)
 
 	var mode AgentMode
 	switch AgentMode(agentMode) {
@@ -299,7 +300,7 @@ func GetAllTools() []bladesTools.Tool {
 		allTools = append(allTools, mcpTools...)
 	}
 
-	return allTools
+	return WrapToolsWithQuota(allTools)
 }
 
 func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesTools.Tool {

@@ -2,12 +2,15 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"sync"
 	"time"
 
+	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	otelpromexp "go.opentelemetry.io/otel/exporters/prometheus"
@@ -19,26 +22,28 @@ var (
 	meterInitOnce sync.Once
 
 	// 指标定义
-	llmRequestDuration metric.Float64Histogram
-	llmFirstChunkDelay metric.Float64Histogram
-	toolCallCounter    metric.Int64Counter
-	toolCallDuration   metric.Float64Histogram
-	retryCounter       metric.Int64Counter
-	mcpConnectDuration metric.Float64Histogram
+	llmRequestDuration       metric.Float64Histogram
+	llmFirstChunkDelay       metric.Float64Histogram
+	toolCallCounter          metric.Int64Counter
+	toolCallDuration         metric.Float64Histogram
+	retryCounter             metric.Int64Counter
+	mcpConnectDuration       metric.Float64Histogram
+	toolQuotaLimitGauge      metric.Int64Gauge
+	toolQuotaUsedGauge       metric.Int64Gauge
+	toolQuotaExceededCounter metric.Int64Counter
+	toolCostCounter          metric.Float64Counter
+
+	serverStartTime = time.Now()
 )
 
-// httpHandlerProvider is an interface that matches the otel prometheus exporter's
-// HTTPHandler method if it exists.
-type httpHandlerProvider interface {
-	HTTPHandler() http.Handler
-}
-
-// StartMetricsExporter 根据环境变量启动相应的 exporter 并（可选）启动一个 HTTP server 暴露 /metrics。
+// StartMetricsExporter 根据环境变量启动 Prometheus 导出器并暴露 HTTP 服务。
 // - 如果 METRICS_EXPORTER != "prometheus"，不执行任何操作，返回 (nil, nil)。
-// - 如果使用 prometheus 导出器，会创建 otel prometheus exporter，
-//   使用该 exporter 创建 MeterProvider 并设置为全局，并在 METRICS_PROMETHEUS_ADDR（默认 ":9464"）
-//   启动 HTTP 服务暴露 /metrics（使用 exporter.HTTPHandler() 如果可用）。
-// 返回值：shutdownFunc, error。shutdownFunc 用于在应用退出时关闭 HTTP server。
+// - 开启时在 METRICS_PROMETHEUS_ADDR（默认 ":9464"）启动 HTTP 服务：
+//   - /metrics: 标准 Prometheus 抓取端点 (promhttp.Handler)
+//   - /healthz: 运行健康检查 (状态、运行时间与时间戳)
+//   - /livez: 存活探测端点
+//   - /readyz: 就绪检查 (验证数据库连接等就绪态)
+// 返回值：shutdownFunc, error。shutdownFunc 用于在应用退出时优雅关闭 HTTP server。
 func StartMetricsExporter(ctx context.Context) (func(context.Context) error, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -63,49 +68,83 @@ func StartMetricsExporter(ctx context.Context) (func(context.Context) error, err
 	otel.SetMeterProvider(provider)
 	logger.SugaredLogger.Infof("Prometheus exporter attached to global meter provider.")
 
-	// 尝试使用 exporter 的 HTTPHandler 方法来启动 HTTP server。
 	addr := os.Getenv("METRICS_PROMETHEUS_ADDR")
 	if addr == "" {
 		addr = ":9464"
 	}
 	mux := http.NewServeMux()
-	var handler http.Handler
-	if p, ok := interface{}(exp).(httpHandlerProvider); ok {
-		handler = p.HTTPHandler()
-		logger.SugaredLogger.Infof("Using exporter.HTTPHandler() for /metrics")
-	} else {
-		// 如果没有 HTTPHandler 方法，则不启动 HTTP server，仅记录警告。
-		logger.SugaredLogger.Warnf("Prometheus exporter does not provide HTTPHandler; metrics will not be exposed via /metrics. Consider using an OTel collector to scrape metrics.")
-		handler = nil
-	}
-	if handler != nil {
-		mux.Handle("/metrics", handler)
-		srv := &http.Server{
-			Addr:    addr,
-			Handler: mux,
+
+	// 1. Prometheus 核心指标抓取接口
+	mux.Handle("/metrics", promhttp.Handler())
+
+	// 2. 健康探针端点 /healthz 与 /livez
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":         "UP",
+			"uptime_seconds": time.Since(serverStartTime).Seconds(),
+			"timestamp":      time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+
+	mux.HandleFunc("/livez", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ALIVE"}`))
+	})
+
+	// 3. 就绪探测端点 /readyz
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		dbReady := db.Dao != nil
+		if dbReady {
+			if sqlDB, err := db.Dao.DB(); err == nil {
+				if err := sqlDB.Ping(); err != nil {
+					dbReady = false
+				}
+			} else {
+				dbReady = false
+			}
 		}
 
-		// 启动 server（后台 goroutine）
-		go func() {
-			logger.SugaredLogger.Infof("Metrics HTTP server listening on %s", addr)
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logger.SugaredLogger.Errorf("Metrics HTTP server error: %v", err)
-			}
-			logger.SugaredLogger.Infof("Metrics HTTP server stopped")
-		}()
-
-		shutdown := func(shutdownCtx context.Context) error {
-			if shutdownCtx == nil {
-				shutdownCtx = context.Background()
-			}
-			logger.SugaredLogger.Infof("Shutting down metrics HTTP server")
-			return srv.Shutdown(shutdownCtx)
+		if dbReady {
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "READY",
+				"db":     "connected",
+			})
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "NOT_READY",
+				"db":     "disconnected",
+			})
 		}
-		return shutdown, nil
+	})
+
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: mux,
 	}
 
-	// 没有 HTTP server 可启动，返回 nil shutdown。
-	return nil, nil
+	// 启动 server（后台 goroutine）
+	go func() {
+		logger.SugaredLogger.Infof("Metrics & Probe HTTP server listening on %s (routes: /metrics, /healthz, /livez, /readyz)", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.SugaredLogger.Errorf("Metrics HTTP server error: %v", err)
+		}
+		logger.SugaredLogger.Infof("Metrics HTTP server stopped")
+	}()
+
+	shutdown := func(shutdownCtx context.Context) error {
+		if shutdownCtx == nil {
+			shutdownCtx = context.Background()
+		}
+		logger.SugaredLogger.Infof("Shutting down metrics HTTP server")
+		return srv.Shutdown(shutdownCtx)
+	}
+	return shutdown, nil
 }
 
 func initMetrics() {
@@ -166,6 +205,42 @@ func initMetrics() {
 		if err != nil {
 			logger.SugaredLogger.Warnf("创建 mcpConnectDuration 失败: %v", err)
 		}
+
+		toolQuotaLimitGauge, err = meter.Int64Gauge(
+			"agent_tool_quota_limit",
+			metric.WithDescription("Agent 工具调用配额上限限制"),
+			metric.WithUnit("{limit}"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 toolQuotaLimitGauge 失败: %v", err)
+		}
+
+		toolQuotaUsedGauge, err = meter.Int64Gauge(
+			"agent_tool_quota_used",
+			metric.WithDescription("Agent 今日工具调用累计使用量"),
+			metric.WithUnit("{call}"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 toolQuotaUsedGauge 失败: %v", err)
+		}
+
+		toolQuotaExceededCounter, err = meter.Int64Counter(
+			"agent_tool_quota_exceeded_total",
+			metric.WithDescription("Agent 工具调用超出预算被拦截次数"),
+			metric.WithUnit("{event}"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 toolQuotaExceededCounter 失败: %v", err)
+		}
+
+		toolCostCounter, err = meter.Float64Counter(
+			"agent_tool_cost_usd_total",
+			metric.WithDescription("Agent 外部工具与模型调用累计估算成本(美元)"),
+			metric.WithUnit("USD"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 toolCostCounter 失败: %v", err)
+		}
 	})
 }
 
@@ -225,5 +300,67 @@ func RecordMCPConnect(ctx context.Context, serverName string, success bool, dura
 
 	if mcpConnectDuration != nil {
 		mcpConnectDuration.Record(ctx, float64(duration.Milliseconds()), metric.WithAttributes(attrs...))
+	}
+}
+
+// RecordQuotaUsage 记录配额使用量变化
+func RecordQuotaUsage(ctx context.Context, toolName string, amount int64) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("tool_name", toolName),
+	}
+
+	if toolQuotaUsedGauge != nil {
+		toolQuotaUsedGauge.Record(ctx, amount, metric.WithAttributes(attrs...))
+	}
+}
+
+// RecordQuotaExceeded 记录配额/成本超限拦截事件
+func RecordQuotaExceeded(ctx context.Context, toolName string, quotaType string) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("tool_name", toolName),
+		attribute.String("quota_type", quotaType),
+	}
+
+	if toolQuotaExceededCounter != nil {
+		toolQuotaExceededCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+}
+
+// RecordToolCost 记录工具调用估算成本累加 (美元)
+func RecordToolCost(ctx context.Context, toolName string, costUSD float64) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("tool_name", toolName),
+	}
+
+	if toolCostCounter != nil && costUSD > 0 {
+		toolCostCounter.Add(ctx, costUSD, metric.WithAttributes(attrs...))
+	}
+}
+
+// RecordQuotaLimits 记录当前生效的各项配额上限值
+func RecordQuotaLimits(ctx context.Context, runBudget, dailyBudget int64, dailyCostUSD float64) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if toolQuotaLimitGauge != nil {
+		toolQuotaLimitGauge.Record(ctx, runBudget, metric.WithAttributes(attribute.String("type", "run_budget")))
+		toolQuotaLimitGauge.Record(ctx, dailyBudget, metric.WithAttributes(attribute.String("type", "daily_budget")))
 	}
 }

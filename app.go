@@ -1564,6 +1564,17 @@ func (a *App) GetSystemStateSnapshot() *agent.SystemStateSnapshot {
 	return agent.GetGlobalMarketSensor().GetSnapshot()
 }
 
+// GetToolQuotaStatus 获取大模型工具调用成本预算与配额使用状态
+func (a *App) GetToolQuotaStatus() agent.QuotaStatus {
+	return agent.GetToolQuotaManager().GetQuotaStatus()
+}
+
+// ResetToolDailyQuota 手动重置今日工具调用配额与成本计数
+func (a *App) ResetToolDailyQuota() string {
+	agent.GetToolQuotaManager().ResetDailyQuota()
+	return "今日外部工具调用配额与预算已成功重置"
+}
+
 // SyncRecommendStocksFromIntelligence 从最新研报、ETF动量池及历史深度分析中一键提炼推荐股票
 func (a *App) SyncRecommendStocksFromIntelligence() (int, error) {
 	return agent.SyncRecommendStocksFromAllIntelligence(a.ctx)
