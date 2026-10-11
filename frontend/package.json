@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint --ext .js,.ts,.vue src/"
   },
   "dependencies": {
     "@lezer/highlight": "^1.2.1",
@@ -30,6 +31,8 @@
   },
   "devDependencies": {
     "@tdesign-vue-next/auto-import-resolver": "^0.1.6",
+    "@typescript-eslint/eslint-plugin": "^8.71.1",
+    "@typescript-eslint/parser": "^8.71.1",
     "@vicons/antd": "^0.13.0",
     "@vicons/carbon": "^0.13.0",
     "@vicons/fa": "^0.13.0",
@@ -39,6 +42,8 @@
     "@vicons/material": "^0.13.0",
     "@vicons/tabler": "^0.13.0",
     "@vitejs/plugin-vue": "^6.0.6",
+    "eslint": "^10.12.0",
+    "eslint-plugin-vue": "^10.11.1",
     "html-docx-js-typescript": "^0.1.5",
     "less": "^4.6.4",
     "pinia": "^3.0.4",

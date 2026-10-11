@@ -14,6 +14,11 @@ func RecordAuditLog(entry models.AuditLog) {
 		entry.CreatedAt = time.Now()
 	}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("panic in RecordAuditLog: %v", r)
+			}
+		}()
 		if db.Dao == nil {
 			return
 		}
