@@ -22,18 +22,37 @@ import (
 var (
 	meterInitOnce sync.Once
 
-	// 指标定义
+	// 指标定义 - LLM/Request metrics
 	llmRequestDuration       metric.Float64Histogram
 	llmFirstChunkDelay       metric.Float64Histogram
+	requestCounter           metric.Int64Counter
+	requestDuration          metric.Float64Histogram
+	retryCounter             metric.Int64Counter
+
+	// 工具调用指标
 	toolCallCounter          metric.Int64Counter
 	toolCallDuration         metric.Float64Histogram
-	retryCounter             metric.Int64Counter
+	toolErrorCounter         metric.Int64Counter
+
+	// MCP 指标
 	mcpConnectDuration       metric.Float64Histogram
+
+	// 配额与成本指标
 	toolQuotaLimitGauge      metric.Int64Gauge
 	toolQuotaUsedGauge       metric.Int64Gauge
 	toolQuotaExceededCounter metric.Int64Counter
 	toolCostCounter          metric.Float64Counter
 	modelCostCounter         metric.Float64Counter
+
+	// 检索器指标
+	retrieverHitsCounter     metric.Int64Counter
+	retrieverMissesCounter   metric.Int64Counter
+	retrieverLatency         metric.Float64Histogram
+
+	// Token 使用指标
+	modelTokenUsageCounter   metric.Int64Counter
+
+	// 回测准确率指标
 	backtestAccuracyGauge    metric.Float64Gauge
 
 	serverStartTime = time.Now()
@@ -173,6 +192,25 @@ func initMetrics() {
 			logger.SugaredLogger.Warnf("创建 llmFirstChunkDelay 失败: %v", err)
 		}
 
+		// Agent request metrics (mode: react|plan_execute)
+		requestCounter, err = meter.Int64Counter(
+			"agent_requests_total",
+			metric.WithDescription("Agent 请求总次数"),
+			metric.WithUnit("{request}"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 requestCounter 失败: %v", err)
+		}
+
+		requestDuration, err = meter.Float64Histogram(
+			"agent_request_duration_seconds",
+			metric.WithDescription("Agent 请求端到端耗时(秒)"),
+			metric.WithUnit("s"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 requestDuration 失败: %v", err)
+		}
+
 		toolCallCounter, err = meter.Int64Counter(
 			"agent_tool_call_total",
 			metric.WithDescription("Agent 工具调用总次数"),
@@ -189,6 +227,15 @@ func initMetrics() {
 		)
 		if err != nil {
 			logger.SugaredLogger.Warnf("创建 toolCallDuration 失败: %v", err)
+		}
+
+		toolErrorCounter, err = meter.Int64Counter(
+			"agent_tool_errors_total",
+			metric.WithDescription("Agent 工具调用错误总次数"),
+			metric.WithUnit("{error}"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 toolErrorCounter 失败: %v", err)
 		}
 
 		retryCounter, err = meter.Int64Counter(
@@ -252,6 +299,44 @@ func initMetrics() {
 		)
 		if err != nil {
 			logger.SugaredLogger.Warnf("创建 modelCostCounter 失败: %v", err)
+		}
+
+		// Retriever metrics
+		retrieverHitsCounter, err = meter.Int64Counter(
+			"agent_retriever_hits_total",
+			metric.WithDescription("Agent 检索器命中次数"),
+			metric.WithUnit("{hit}"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 retrieverHitsCounter 失败: %v", err)
+		}
+
+		retrieverMissesCounter, err = meter.Int64Counter(
+			"agent_retriever_misses_total",
+			metric.WithDescription("Agent 检索器未命中次数"),
+			metric.WithUnit("{miss}"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 retrieverMissesCounter 失败: %v", err)
+		}
+
+		retrieverLatency, err = meter.Float64Histogram(
+			"agent_retriever_latency_ms",
+			metric.WithDescription("Agent 检索器查询延迟(毫秒)"),
+			metric.WithUnit("ms"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 retrieverLatency 失败: %v", err)
+		}
+
+		// Token usage metrics
+		modelTokenUsageCounter, err = meter.Int64Counter(
+			"agent_model_token_usage_total",
+			metric.WithDescription("Agent 模型 Token 使用总量"),
+			metric.WithUnit("{token}"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 modelTokenUsageCounter 失败: %v", err)
 		}
 
 		backtestAccuracyGauge, err = meter.Float64Gauge(
@@ -399,5 +484,110 @@ func SetBacktestAccuracy(ctx context.Context, skillID uint, accuracy float64) {
 
 	if backtestAccuracyGauge != nil {
 		backtestAccuracyGauge.Record(ctx, accuracy, metric.WithAttributes(attrs...))
+	}
+}
+
+// RecordAgentRequest 记录 Agent 请求（包含模式：react|plan_execute）
+func RecordAgentRequest(ctx context.Context, mode string, success bool, duration time.Duration) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("mode", mode),
+		attribute.Bool("success", success),
+	}
+
+	if requestCounter != nil {
+		requestCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+	if requestDuration != nil {
+		requestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+	}
+}
+
+// RecordToolCallV2 记录工具调用（扩展版本，支持错误类型）
+func RecordToolCallV2(ctx context.Context, toolName string, success bool, duration time.Duration, errType string) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("tool_name", toolName),
+		attribute.Bool("success", success),
+	}
+
+	if toolCallCounter != nil {
+		toolCallCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+	}
+	if toolCallDuration != nil && duration > 0 {
+		toolCallDuration.Record(ctx, float64(duration.Milliseconds()), metric.WithAttributes(attrs...))
+	}
+	if !success && toolErrorCounter != nil && errType != "" {
+		errAttrs := append(attrs, attribute.String("error_type", errType))
+		toolErrorCounter.Add(ctx, 1, metric.WithAttributes(errAttrs...))
+	}
+}
+
+// RecordRetrieverHit 记录检索器命中/未命中及延迟
+func RecordRetrieverHit(ctx context.Context, retrieverName string, hit bool, latency time.Duration) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("retriever", retrieverName),
+	}
+
+	if hit {
+		if retrieverHitsCounter != nil {
+			retrieverHitsCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+	} else {
+		if retrieverMissesCounter != nil {
+			retrieverMissesCounter.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
+	}
+	if retrieverLatency != nil && latency > 0 {
+		retrieverLatency.Record(ctx, float64(latency.Milliseconds()), metric.WithAttributes(attrs...))
+	}
+}
+
+// RecordTokenUsage 记录模型 Token 使用量
+func RecordTokenUsage(ctx context.Context, modelName string, promptTokens, completionTokens int64) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("model", modelName),
+	}
+
+	if modelTokenUsageCounter != nil {
+		if promptTokens > 0 {
+			modelTokenUsageCounter.Add(ctx, promptTokens, metric.WithAttributes(append(attrs, attribute.String("type", "prompt"))...))
+		}
+		if completionTokens > 0 {
+			modelTokenUsageCounter.Add(ctx, completionTokens, metric.WithAttributes(append(attrs, attribute.String("type", "completion"))...))
+		}
+	}
+}
+
+// RecordEmbeddingLatency 记录嵌入模型延迟
+func RecordEmbeddingLatency(ctx context.Context, modelName string, latency time.Duration) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	attrs := []attribute.KeyValue{
+		attribute.String("model", modelName),
+	}
+	if retrieverLatency != nil && latency > 0 {
+		retrieverLatency.Record(ctx, float64(latency.Milliseconds()), metric.WithAttributes(attrs...))
 	}
 }

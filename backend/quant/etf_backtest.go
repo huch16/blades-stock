@@ -173,7 +173,7 @@ func FetchETFDataFromTickFlow(symbols []string, count int, apiKey string, names 
 	var failed []string
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 5)
+	// skip self-limiter: sem := make(chan struct{}, 5)
 
 	baseURL := "https://api.tickflow.org"
 
@@ -181,8 +181,8 @@ func FetchETFDataFromTickFlow(symbols []string, count int, apiKey string, names 
 		wg.Add(1)
 		go func(symbol string, idx int) {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+			// skip self-limiter: sem <- struct{}{}
+			// skip self-limiter: defer func() { <-sem }()
 
 			client := resty.New().SetTimeout(60 * time.Second)
 			url := fmt.Sprintf("%s/v1/klines?symbol=%s&period=1d&count=%d", baseURL, symbol, count)

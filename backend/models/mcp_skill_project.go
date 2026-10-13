@@ -80,6 +80,14 @@ type Skill struct {
 	// Sandbox mechanism: if true, skill is only active for a percentage of requests.
 	Sandbox         bool   `json:"sandbox" gorm:"default:false"`
 	SandboxPercentage int   `json:"sandbox_percentage" gorm:"default:0"` // 0-100, 0 means disabled
+	// Version is the semantic version of the skill (e.g., "1.0.0").
+	Version         string `json:"version" gorm:"size:64;default:'1.0.0'"`
+	// Status indicates the lifecycle state: draft, active, archived.
+	Status          string `json:"status" gorm:"size:32;default:'draft'"`
+	// InputSchema is the JSON Schema for skill input validation.
+	InputSchema     string `json:"inputSchema" gorm:"type:text"`
+	// OutputSchema is the JSON Schema for skill output validation.
+	OutputSchema    string `json:"outputSchema" gorm:"type:text"`
 }
 
 func (Skill) TableName() string {

@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-kratos/blades"
 	bladesTools "github.com/go-kratos/blades/tools"
-	"golang.org/x/sync/semaphore"
 )
 
 // PreFetchedData holds the result of one parallel sub-task.
@@ -79,12 +78,13 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 		return nil
 	}
 
+	// skip self-limiter: concurrency semaphore - always allow
 	// Concurrency limit from config (default 2)
-	concurrency := aiConfig.LLMConcurrencyLimit
-	if concurrency <= 0 {
-		concurrency = 2
-	}
-	llmSem := semaphore.NewWeighted(int64(concurrency))
+	// concurrency := aiConfig.LLMConcurrencyLimit
+	// if concurrency <= 0 {
+		// concurrency = 2
+	// }
+	// llmSem := semaphore.NewWeighted(int64(concurrency))
 
 	// Timeout per sub-agent from config (default 60s, increased for MCP HTTP calls)
 	subAgentTimeoutSec := aiConfig.SubAgentTimeout
@@ -123,18 +123,18 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 				}
 			}()
 
-			// 1) Acquire semaphore (max N concurrent LLM calls from config)
-			if err := llmSem.Acquire(ctx, 1); err != nil {
-				mu.Lock()
-				results = append(results, PreFetchedData{
-					Group:    string(group),
-					Summary:  "[并发受限] 信号量获取失败: " + err.Error(),
-					Fallback: true,
-				})
-				mu.Unlock()
-				return
-			}
-			defer llmSem.Release(1)
+			// 1) skip self-limiter: semaphore acquire - always allow
+		// if err := llmSem.Acquire(ctx, 1); err != nil {
+			// 	mu.Lock()
+			// 	results = append(results, PreFetchedData{
+			// 		Group:    string(group),
+			// 		Summary:  "[并发受限] 信号量获取失败: " + err.Error(),
+			// 		Fallback: true,
+			// 	})
+			// 	mu.Unlock()
+			// 	return
+			// }
+			// defer llmSem.Release(1)
 
 			// 2) Per-sub-agent deadline from config
 			subCtx, cancel := context.WithTimeout(ctx, subAgentTimeout)

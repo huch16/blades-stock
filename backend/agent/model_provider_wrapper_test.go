@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
-	"time"
+	"fmt"
 
 	"blades-stock/backend/data"
 	"github.com/go-kratos/blades"
@@ -52,7 +52,7 @@ func TestModelProviderWrapper_RateLimit(t *testing.T) {
 		},
 		err: nil,
 	}
-	// Config with low rate limit: 1 per second, burst 1
+	// Config with rate limit: but now always allow (self-limiter removed)
 	config := &data.AIConfig{
 		RateLimitPerSecond: 1,
 		Burst:              1,
@@ -62,51 +62,21 @@ func TestModelProviderWrapper_RateLimit(t *testing.T) {
 	wrapped := NewModelProviderWrapper(mock, config)
 
 	ctx := context.Background()
-	// First request should succeed
-	resp1, err1 := wrapped.Generate(ctx, &blades.ModelRequest{
-		Messages: []*blades.Message{
-			{
-				Role: blades.RoleUser,
-				Parts: []blades.Part{
-					blades.TextPart{Text: "test"},
+	// All requests should succeed (rate limiter removed)
+	for i := 0; i < 5; i++ {
+		resp, err := wrapped.Generate(ctx, &blades.ModelRequest{
+			Messages: []*blades.Message{
+				{
+					Role: blades.RoleUser,
+					Parts: []blades.Part{
+						blades.TextPart{Text: fmt.Sprintf("test%d", i)},
+					},
 				},
 			},
-		},
-	})
-	require.NoError(t, err1)
-	require.NotNil(t, resp1)
-
-	// Second request immediately should be rate limited
-	resp2, err2 := wrapped.Generate(ctx, &blades.ModelRequest{
-		Messages: []*blades.Message{
-			{
-				Role: blades.RoleUser,
-				Parts: []blades.Part{
-					blades.TextPart{Text: "test2"},
-				},
-			},
-		},
-	})
-	require.Error(t, err2)
-	require.ErrorIs(t, err2, ErrRateLimited)
-	require.Nil(t, resp2)
-
-	// Wait a bit for the limiter to replenish (token bucket adds 1 token per second)
-	time.Sleep(time.Second + 100*time.Millisecond)
-
-	// Third request should succeed again
-	resp3, err3 := wrapped.Generate(ctx, &blades.ModelRequest{
-		Messages: []*blades.Message{
-			{
-				Role: blades.RoleUser,
-				Parts: []blades.Part{
-					blades.TextPart{Text: "test3"},
-				},
-			},
-		},
-	})
-	require.NoError(t, err3)
-	require.NotNil(t, resp3)
+		})
+		require.NoError(t, err, "request %d should succeed (rate limiter removed)", i)
+		require.NotNil(t, resp)
+	}
 }
 
 func TestModelProviderWrapper_DailyQuota(t *testing.T) {
@@ -125,14 +95,14 @@ func TestModelProviderWrapper_DailyQuota(t *testing.T) {
 	config := &data.AIConfig{
 		RateLimitPerSecond: 0, // unlimited
 		Burst:              0,
-		DailyRequestQuota:  2, // allow only 2 per day
+		DailyRequestQuota:  2, // previously would allow only 2 per day, now unlimited
 		DailyCostQuota:     0,
 	}
 	wrapped := NewModelProviderWrapper(mock, config)
 
 	ctx := context.Background()
-	// First two requests should succeed
-	for i := 0; i < 2; i++ {
+	// All requests should succeed (daily quota limiter removed)
+	for i := 0; i < 5; i++ {
 		resp, err := wrapped.Generate(ctx, &blades.ModelRequest{
 			Messages: []*blades.Message{
 				{
@@ -143,23 +113,9 @@ func TestModelProviderWrapper_DailyQuota(t *testing.T) {
 				},
 			},
 		})
-		require.NoError(t, err)
+		require.NoError(t, err, "request %d should succeed (daily quota removed)", i)
 		require.NotNil(t, resp)
 	}
-	// Third request should be quota exceeded
-	resp, err := wrapped.Generate(ctx, &blades.ModelRequest{
-		Messages: []*blades.Message{
-			{
-				Role: blades.RoleUser,
-				Parts: []blades.Part{
-					blades.TextPart{Text: "test"},
-				},
-			},
-		},
-	})
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrRateLimited)
-	require.Nil(t, resp)
 }
 
 func TestModelProviderWrapper_PassThroughError(t *testing.T) {

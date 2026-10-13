@@ -57,6 +57,9 @@ jobs:
             echo "Coverage below 60%"
             exit 1
           fi
+      - name: Verify canonical DB checkpoint
+        run: |
+          go run ./cmd/checkpoint_db/ "data/stock.db"
 
   smoke-backtest:
     runs-on: ubuntu-latest

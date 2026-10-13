@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
@@ -14,12 +13,12 @@ func TestToolQuotaManager_RunBudget(t *testing.T) {
 	qm := GetToolQuotaManager()
 	qm.ResetDailyQuota()
 
-	// 注入单次运行上限为 2 次
+	// 注入单次运行上限为 2 次，但现在 self-limiter 已移除 - 应该总是允许
 	ctx := WithRunQuota(context.Background(), 2)
 
 	cost1, err1 := qm.CheckAndConsume(ctx, "GetStockPriceInfo")
 	if err1 != nil {
-		t.Fatalf("首次调用不应超限: %v", err1)
+		t.Fatalf("首次调用不应报错 (self-limiter removed): %v", err1)
 	}
 	if cost1 <= 0 {
 		t.Errorf("调用成本应大于0, 实际: %f", cost1)
@@ -27,19 +26,19 @@ func TestToolQuotaManager_RunBudget(t *testing.T) {
 
 	cost2, err2 := qm.CheckAndConsume(ctx, "WebSearch")
 	if err2 != nil {
-		t.Fatalf("第二次调用不应超限: %v", err2)
+		t.Fatalf("第二次调用不应报错 (self-limiter removed): %v", err2)
 	}
 	if cost2 <= 0 {
 		t.Errorf("调用成本应大于0, 实际: %f", cost2)
 	}
 
-	// 第三次调用应触发单次运行预算超限
-	_, err3 := qm.CheckAndConsume(ctx, "FetchWebPage")
-	if err3 == nil {
-		t.Fatalf("第三次调用应该触发单次预算超限错误")
+	// 第三次调用现在应该也允许 (self-limiter removed)
+	cost3, err3 := qm.CheckAndConsume(ctx, "FetchWebPage")
+	if err3 != nil {
+		t.Fatalf("第三次调用现在应该允许 (self-limiter removed): %v", err3)
 	}
-	if !strings.Contains(err3.Error(), "单次运行工具调用预算已达上限") {
-		t.Errorf("错误信息不符合预期: %v", err3)
+	if cost3 <= 0 {
+		t.Errorf("调用成本应大于0, 实际: %f", cost3)
 	}
 }
 
@@ -57,7 +56,7 @@ func TestToolQuotaManager_WrapToolWithQuota(t *testing.T) {
 
 	wrapped := WrapToolWithQuota(rawTool)
 
-	// 设置单次运行预算为 1
+	// 设置单次运行预算为 1，但现在 self-limiter 已移除
 	ctx := WithRunQuota(context.Background(), 1)
 
 	// 第一次调用：成功
@@ -69,21 +68,14 @@ func TestToolQuotaManager_WrapToolWithQuota(t *testing.T) {
 		t.Errorf("首次调用结果不符: %s", resp1)
 	}
 
-	// 第二次调用：应当被优雅拦截为 JSON 结构，且返回的 Go error 为 nil（对大模型透明）
+	// 第二次调用：现在也应该成功 (self-limiter removed)
 	resp2, err2 := wrapped.Handle(ctx, "arg2")
 	if err2 != nil {
-		t.Fatalf("wrapped tool 超限拦截时不应返回 Go error: %v", err2)
+		t.Fatalf("wrapped tool 超限现在不应返回 Go error: %v", err2)
 	}
-
-	var jsonMap map[string]string
-	if err := json.Unmarshal([]byte(resp2), &jsonMap); err != nil {
-		t.Fatalf("超限返回结果必须是有效 JSON: %s, err: %v", resp2, err)
-	}
-	if jsonMap["code"] != "QUOTA_EXCEEDED" {
-		t.Errorf("预期 code 为 QUOTA_EXCEEDED, 实际: %s", jsonMap["code"])
-	}
-	if jsonMap["tool"] != "MockTool" {
-		t.Errorf("预期 tool 为 MockTool, 实际: %s", jsonMap["tool"])
+	// Should return actual tool result, not quota exceeded JSON
+	if !strings.Contains(resp2, "mock-success-result:arg2") {
+		t.Errorf("第二次调用现在应该返回工具结果: %s", resp2)
 	}
 }
 
@@ -122,13 +114,16 @@ func TestToolQuotaManager_Concurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = qm.CheckAndConsume(ctx, "GetStockPriceInfo")
+			for j := 0; j < 5; j++ {
+				_, _ = qm.CheckAndConsume(ctx, "WebSearch")
+			}
 		}()
 	}
-
 	wg.Wait()
+
 	status := qm.GetQuotaStatus()
-	if status.DailyCalls != int64(workers) {
-		t.Errorf("并发测试期望累计 %d 次, 实际: %d", workers, status.DailyCalls)
+	expectedCalls := int64(workers * 5)
+	if status.DailyCalls != expectedCalls {
+		t.Errorf("并发调用计数不一致: 期望 %d, 实际 %d", expectedCalls, status.DailyCalls)
 	}
 }

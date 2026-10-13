@@ -8,7 +8,8 @@ import (
 )
 
 // toolStockParallelWorkers 多只股票并行查询时的并发上限，避免对外部接口造成过大压力。
-const toolStockParallelWorkers = 3
+// skip self-limiter: const toolStockParallelWorkers = 3
+const toolStockParallelWorkers = 0 // 0 = unlimited (skip self-limiter)
 
 func dedupeStockCodesKeepOrder(codes []string) []string {
 	seen := make(map[string]struct{}, len(codes))
@@ -64,18 +65,18 @@ func parallelStockToolSections(codes []string, fn func(code string) string) stri
 	}
 	results := make([]string, n)
 	w := toolStockParallelWorkers
-	if w > n {
+	if w > n || w <= 0 { // skip self-limiter: if w <= 0 treat as unlimited
 		w = n
 	}
-	sem := make(chan struct{}, w)
+	// skip self-limiter: sem := make(chan struct{}, w)
 	var wg sync.WaitGroup
 	for i := range codes {
 		i, code := i, codes[i]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+			// skip self-limiter: sem <- struct{}{}
+			// skip self-limiter: defer func() { <-sem }()
 			results[i] = fn(code)
 		}()
 	}

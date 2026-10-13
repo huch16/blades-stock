@@ -77,7 +77,7 @@ var migrationRegistry = []MigrationStep{
 				if err := tx.Exec(`
 					CREATE TABLE IF NOT EXISTS audit_logs (
 						id INTEGER PRIMARY KEY AUTOINCREMENT,
-						created_at DATETIME,
+					created_at DATETIME NOT NULL,
 						user_id TEXT,
 						agent_id TEXT,
 						skill_id INTEGER,
@@ -107,7 +107,7 @@ var migrationRegistry = []MigrationStep{
 				return tx.Exec(`
 					CREATE TABLE IF NOT EXISTS skill_change_requests (
 						id INTEGER PRIMARY KEY AUTOINCREMENT,
-						created_at DATETIME,
+					created_at DATETIME NOT NULL,
 						skill_id INTEGER,
 						change_type TEXT,
 						new_skill TEXT,
@@ -129,12 +129,35 @@ var migrationRegistry = []MigrationStep{
 				return tx.Exec(`
 					CREATE TABLE IF NOT EXISTS skill_versions (
 						id INTEGER PRIMARY KEY AUTOINCREMENT,
-						created_at DATETIME,
-						skill_id INTEGER NOT NULL,
+					created_at DATETIME NOT NULL,
 						version_number INTEGER NOT NULL,
 						content TEXT NOT NULL,
-						created_at DATETIME NOT NULL,
 						is_active BOOLEAN NOT NULL DEFAULT FALSE
+					);
+				`).Error
+			}
+			return nil
+		},
+	},
+	{
+		Version:     20260401007,
+		Description: "create evaluator_reports table",
+		Migrate: func(tx *gorm.DB) error {
+			if !tx.Migrator().HasTable("evaluator_reports") {
+				return tx.Exec(`
+					CREATE TABLE IF NOT EXISTS evaluator_reports (
+						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						created_at DATETIME NOT NULL,
+						plan_id TEXT NOT NULL,
+						session_id TEXT NOT NULL,
+						total_steps INTEGER NOT NULL,
+						passed_steps INTEGER NOT NULL,
+						failed_steps INTEGER NOT NULL,
+						success_rate REAL NOT NULL,
+						avg_step_duration_ms INTEGER,
+						total_duration_ms INTEGER,
+						report_data TEXT,
+						saved_at DATETIME NOT NULL
 					);
 				`).Error
 			}
