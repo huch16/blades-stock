@@ -1,0 +1,464 @@
+<template>
+  <div class="msg-wrapper assistant">
+    <div class="msg-avatar">
+      <t-avatar :size="40" :src="avatar" shape="circle" />
+    </div>
+    <div class="msg-content">
+      <div class="msg-header">
+        <span class="msg-name">{{ name }}</span>
+        <span class="msg-time">{{ formatTime(datetime) }}</span>
+        <span v-if="isStreaming" class="streaming-badge">生成中…</span>
+      </div>
+
+      <!-- 1. 思考过程（可折叠，默认折叠；流式时自动展开） -->
+      <CollapsibleSection
+        v-if="reasoning || rawReasoning"
+        title="🧠 思考过程"
+        :expanded="expandedReasoning"
+        @toggle="expandedReasoning = !expandedReasoning"
+        class="section-reasoning"
+      >
+        <t-chat-content :content="reasoning || rawReasoning || ''" />
+      </CollapsibleSection>
+
+      <!-- 2. 执行步骤（可折叠，默认折叠） -->
+      <CollapsibleSection
+        v-if="steps && steps.length > 0"
+        :title="`📋 执行步骤 (${steps.length})`"
+        :expanded="expandedSteps"
+        @toggle="expandedSteps = !expandedSteps"
+        class="section-steps"
+      >
+        <div class="steps-list">
+          <div
+            v-for="(step, si) in steps"
+            :key="si"
+            class="step-item"
+            :class="{ 'step-done': step.includes('✅'), 'step-tool': step.includes('🔧'), 'step-active': step.includes('⚡') || step.includes('🔄') }"
+          >
+            <span class="step-dot" :class="getStepDotClass(step)"></span>
+            <span class="step-text">{{ step }}</span>
+          </div>
+        </div>
+      </CollapsibleSection>
+
+      <!-- 3. 工具调用时间轴（新增动画版） -->
+      <ToolTimeline
+        v-if="toolCalls && toolCalls.length > 0"
+        :calls="toolCalls"
+        :expanded="expandedTools"
+        @toggle="expandedTools = !expandedTools"
+        @copy-args="handleCopyToolArgs"
+        @copy-result="handleCopyToolResult"
+      />
+
+      <!-- 4. 结构化报告（可折叠，默认折叠） -->
+      <CollapsibleSection
+        v-if="jsonMarkdown"
+        title="📊 结构化报告"
+        :expanded="expandedReport"
+        @toggle="expandedReport = !expandedReport"
+        class="section-report"
+      >
+        <t-chat-content :content="jsonMarkdown" />
+      </CollapsibleSection>
+
+      <!-- 5. 最终回答（主内容，始终展示） -->
+      <div class="msg-main-content" :id="anchorId">
+        <t-chat-content v-if="content" :content="content" />
+        <div v-else-if="isStreaming" class="streaming-placeholder">
+          <StreamingSkeleton
+            :lines="estimatedLines"
+            :content="rawContent"
+            :char-mode="true"
+            :cursor="true"
+            :show-end="false"
+            @complete="onSkeletonComplete"
+          />
+        </div>
+        <div v-else class="empty-state">（空回复）</div>
+      </div>
+
+      <!-- 6. 性能指标胶囊（底部，低优先级） -->
+      <div v-if="metrics" class="metrics-capsule">
+        <span class="metric-tag" title="端到端总耗时">⏱️ {{ formatDuration(metrics.total_duration) }}</span>
+        <span v-if="metrics.first_chunk_latency" class="metric-tag" title="首包延迟">⚡ {{ formatDuration(metrics.first_chunk_latency) }}</span>
+        <span v-if="metrics.tool_call_count > 0" class="metric-tag" title="工具调用次数">🔧 {{ metrics.tool_call_count }}次工具</span>
+        <span v-if="metrics.retry_count > 0" class="metric-tag metric-warning" title="重试次数">🔁 {{ metrics.retry_count }}次重试</span>
+        <span v-if="metrics.tokens?.total" class="metric-tag" title="Token 使用">📝 {{ metrics.tokens.total }} tokens</span>
+        <span v-if="metrics.cost_usd" class="metric-tag" title="预估成本">💰 $${metrics.cost_usd.toFixed(4)}</span>
+      </div>
+
+      <!-- 7. 消息操作栏 -->
+      <div class="msg-actions">
+        <t-button size="small" variant="text" theme="default" @click="$emit('copy', content)">📋 复制</t-button>
+        <t-button size="small" variant="text" theme="default" @click="$emit('retry')">🔄 重试</t-button>
+        <t-button size="small" variant="text" theme="default" @click="$emit('reference')">🔗 引用</t-button>
+        <t-button size="small" variant="text" theme="default" @click="copyAnchorLink">📍 链接</t-button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
+import CollapsibleSection from './CollapsibleSection.vue'
+import StreamingSkeleton from './StreamingSkeleton.vue'
+import ToolTimeline from './ToolTimeline.vue'
+import {
+  formatDuration,
+  getToolCallStatusText,
+  type ChatMessage,
+  type ToolCall
+} from './types'
+
+const props = defineProps<{
+  message: ChatMessage
+  avatar: string
+  name: string
+  isStreaming?: boolean
+}>()
+
+const emit = defineEmits<{
+  copy: [content: string]
+  retry: []
+  reference: []
+}>()
+
+// 注入锚点注册函数
+const registerElement = inject<Function>('registerMessageElement')
+const unregisterElement = inject<Function>('unregisterMessageElement')
+
+// 从 message 解构，提供响应式默认值
+const {
+  content,
+  reasoning,
+  rawReasoning,
+  rawContent,
+  jsonMarkdown,
+  steps,
+  toolCalls,
+  metrics,
+  datetime,
+} = props.message
+
+// 展开状态（默认全折叠）
+const expandedReasoning = ref(false)
+const expandedSteps = ref(false)
+const expandedTools = ref(false)
+const expandedReport = ref(false)
+
+// 如果正在流式，自动展开思考过程
+watch(() => props.isStreaming, (val) => {
+  if (val) expandedReasoning.value = true
+})
+
+// 锚点 ID（用于深度链接）
+const anchorId = computed(() => `msg-${props.message.id}`)
+
+// 注册/注销锚点元素
+onMounted(() => {
+  const el = document.getElementById(anchorId.value)
+  if (el) registerElement?.(anchorId.value, el)
+})
+
+onUnmounted(() => {
+  unregisterElement?.(anchorId.value)
+})
+
+// 预估行数（用于骨架屏）
+const estimatedLines = computed(() => {
+  if (!rawContent.value) return 5
+  const charsPerLine = 40
+  return Math.min(12, Math.max(3, Math.ceil(rawContent.value.length / charsPerLine)))
+})
+
+function formatTime(dt: string): string {
+  if (!dt) return ''
+  const date = new Date(dt)
+  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+function getStepDotClass(step: string): string {
+  if (step.includes('✅')) return 'step-done'
+  if (step.includes('🔧')) return 'step-tool'
+  if (step.includes('⚡') || step.includes('🔄')) return 'step-active'
+  return ''
+}
+
+function onSkeletonComplete() {
+  // 骨架屏完成，实际内容会由父组件替换
+}
+
+function handleCopyToolArgs(args: string) {
+  navigator.clipboard.writeText(args).then(() => {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('参数已复制'))
+  }).catch(() => {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
+  })
+}
+
+function handleCopyToolResult(result: string) {
+  navigator.clipboard.writeText(result).then(() => {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('结果已复制'))
+  }).catch(() => {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
+  })
+}
+
+function copyAnchorLink() {
+  const url = `${window.location.origin}${window.location.pathname}#${anchorId.value}`
+  navigator.clipboard.writeText(url).then(() => {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('深度链接已复制'))
+  }).catch(() => {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
+  })
+}
+</script>
+
+<style scoped lang="less">
+.msg-wrapper {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: flex-start;
+
+  &.assistant {
+    flex-direction: row;
+  }
+}
+
+.msg-avatar {
+  flex-shrink: 0;
+}
+
+.msg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 85%;
+  width: 100%;
+}
+
+.msg-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+}
+
+.msg-name {
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.msg-time {
+  color: var(--td-text-color-disabled);
+}
+
+.streaming-badge {
+  font-size: 11px;
+  background: var(--td-brand-color-light, #e8f5e9);
+  color: var(--td-brand-color, #0052d9);
+  padding: 2px 8px;
+  border-radius: 10px;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* 折叠面板通用样式 */
+.section-reasoning,
+.section-steps,
+.section-tools,
+.section-report {
+  border: 1px solid var(--td-component-border);
+  border-radius: 8px;
+  background: var(--td-bg-color-container-hover);
+  overflow: hidden;
+}
+
+:deep(.collapsible-section) {
+  border: none;
+  background: transparent;
+}
+
+:deep(.collapsible-header) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--td-text-color-secondary);
+  background: linear-gradient(135deg, rgba(56, 173, 169, 0.06) 0%, rgba(46, 139, 87, 0.06) 100%);
+  border-bottom: 1px solid var(--td-component-border);
+  user-select: none;
+  transition: background 0.2s;
+
+  &:hover {
+    background: linear-gradient(135deg, rgba(56, 173, 169, 0.12) 0%, rgba(46, 139, 87, 0.12) 100%);
+  }
+}
+
+:deep(.collapsible-arrow) {
+  transition: transform 0.2s;
+  flex-shrink: 0;
+  color: var(--td-text-color-disabled);
+}
+
+:deep(.collapsible-arrow.expanded) {
+  transform: rotate(90deg);
+}
+
+:deep(.collapsible-content) {
+  padding: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  :deep(.t-chat-content) {
+    font-size: 13px;
+  }
+}
+
+/* 步骤列表 */
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--td-text-color-secondary);
+  line-height: 1.5;
+  position: relative;
+
+  &:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 16px;
+    bottom: -4px;
+    width: 1px;
+    background: var(--td-component-border);
+  }
+}
+
+.step-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--td-text-color-disabled);
+  flex-shrink: 0;
+  margin-top: 4px;
+  position: relative;
+  z-index: 1;
+  transition: all 0.2s;
+}
+
+.step-dot.step-active {
+  background: #e6a23c;
+  box-shadow: 0 0 6px rgba(230, 162, 60, 0.5);
+  animation: dot-pulse 1.2s infinite;
+}
+
+.step-dot.step-tool {
+  background: #409eff;
+  box-shadow: 0 0 6px rgba(64, 158, 255, 0.5);
+}
+
+.step-dot.step-done {
+  background: #67c23a;
+  box-shadow: 0 0 6px rgba(103, 194, 58, 0.5);
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.step-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* 主内容区 */
+.msg-main-content {
+  background: var(--td-bg-color-container);
+  border: 1px solid var(--td-component-border);
+  border-radius: 8px;
+  padding: 14px;
+  position: relative;
+  min-height: 60px;
+
+  :deep(.t-chat-content) {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--td-text-color-primary);
+  }
+}
+
+.streaming-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+}
+
+.empty-state {
+  color: var(--td-text-color-disabled);
+  font-style: italic;
+  text-align: center;
+  padding: 20px;
+}
+
+/* 指标胶囊 */
+.metrics-capsule {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  background: var(--td-bg-color-secondarycontainer, rgba(140, 140, 140, 0.06));
+  border: 1px solid var(--td-border-level-1-color, rgba(140, 140, 140, 0.12));
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--td-text-color-secondary);
+  user-select: none;
+}
+
+.metric-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 500;
+}
+
+.metric-warning {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+/* 操作栏 */
+.msg-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  padding-left: 4px;
+  border-top: 1px solid var(--td-component-border);
+  padding-top: 8px;
+}
+</style>

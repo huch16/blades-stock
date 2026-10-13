@@ -267,3 +267,84 @@ func formatPct(v float64) string {
 func formatFloat(v float64) string {
 	return strconv.FormatFloat(v, 'f', 2, 64)
 }
+
+// FallbackScreenByIndicators 在自然语言选股接口不可用或未返回有效数据时，
+// 自动通过内置量化技术指标策略（均线/MACD/放量等）或本地行业/概念股票库进行智能补全。
+func FallbackScreenByIndicators(words string) (string, bool) {
+	if strings.TrimSpace(words) == "" {
+		return "", false
+	}
+	lowerWords := strings.ToLower(words)
+
+	// 1. 匹配内置量化策略
+	var matchedStrategy string
+	if strings.Contains(lowerWords, "多头") || strings.Contains(lowerWords, "趋势") {
+		matchedStrategy = "趋势跟随"
+	} else if strings.Contains(lowerWords, "金叉") || strings.Contains(lowerWords, "macd") {
+		matchedStrategy = "macd_golden_cross"
+	} else if strings.Contains(lowerWords, "突破") || strings.Contains(lowerWords, "放量") {
+		matchedStrategy = "放量突破"
+	} else if strings.Contains(lowerWords, "回踩") {
+		matchedStrategy = "均线回踩"
+	} else if strings.Contains(lowerWords, "反弹") || strings.Contains(lowerWords, "超跌") || strings.Contains(lowerWords, "rsi") {
+		matchedStrategy = "超跌反弹"
+	}
+
+	if matchedStrategy != "" {
+		outcome, err := ScreenByStrategy(matchedStrategy, nil, 10)
+		if err == nil && outcome != nil && len(outcome.Results) > 0 {
+			var b strings.Builder
+			b.WriteString(fmt.Sprintf("\r\n> **数据源智能兜底**：东财选股服务未返回有效数据，系统已自动切换至本地量化指标引擎，执行「%s」策略评分选股：\r\n\r\n", outcome.StrategyName))
+			b.WriteString("| 排名 | 代码 | 名称 | 综合评分 | 现价 | 涨跌幅 | 量比 | 命中信号 |\r\n")
+			b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- |\r\n")
+			for i, r := range outcome.Results {
+				reason := r.Reason
+				if len([]rune(reason)) > 60 {
+					reason = string([]rune(reason)[:60]) + "…"
+				}
+				b.WriteString(fmt.Sprintf("| %d | %s | %s | %.1f | %s | %s | %s | %s |\r\n",
+					i+1, r.Code, r.Name, r.Score, r.Close, r.ChangePct, r.VolumeRatio, reason))
+			}
+			return b.String(), true
+		}
+	}
+
+	// 2. 匹配本地概念/行业股票库
+	var matchedStocks []models.AllStockInfo
+	queryWords := strings.ReplaceAll(words, ",", " ")
+	tokens := strings.Fields(queryWords)
+	if len(tokens) > 0 {
+		q := db.Dao.Model(&models.AllStockInfo{})
+		var conditions []string
+		var args []any
+		for _, token := range tokens {
+			token = strings.TrimSpace(token)
+			if len([]rune(token)) >= 2 {
+				conditions = append(conditions, "(industry LIKE ? OR concept LIKE ? OR securitynameabbr LIKE ?)")
+				pattern := "%" + token + "%"
+				args = append(args, pattern, pattern, pattern)
+			}
+		}
+		if len(conditions) > 0 {
+			q = q.Where(strings.Join(conditions, " OR "), args...).Order("changerate DESC").Limit(15)
+			if err := q.Find(&matchedStocks).Error; err == nil && len(matchedStocks) > 0 {
+				var b strings.Builder
+				b.WriteString("\r\n> **数据源智能检索**：已从本地股票全景数据库中检索到以下相关概念/行业的标的：\r\n\r\n")
+				b.WriteString("| 代码 | 名称 | 现价 | 涨跌幅(%) | 换手率(%) | 所属行业 | 所属概念 |\r\n")
+				b.WriteString("| --- | --- | --- | --- | --- | --- | --- |\r\n")
+				for _, st := range matchedStocks {
+					concept := st.CONCEPT
+					if len([]rune(concept)) > 30 {
+						concept = string([]rune(concept)[:30]) + "…"
+					}
+					b.WriteString(fmt.Sprintf("| %s | %s | %s | %s | %s | %s | %s |\r\n",
+						st.SECURITYCODE, st.SECURITYNAMEABBR, st.NEWPRICE, st.CHANGERATE, st.TURNOVERRATE, st.INDUSTRY, concept))
+				}
+				return b.String(), true
+			}
+		}
+	}
+
+	return "", false
+}
+

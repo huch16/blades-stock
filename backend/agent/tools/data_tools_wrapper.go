@@ -413,6 +413,11 @@ func GetAllDataTools() []bladesTools.Tool {
 			words := gjson.Get(args, "words").String()
 			res := data.NewSearchStockApi(words).SearchStock(random.RandInt(50, 120))
 			content := thsResultToMarkdown(res, "工具筛选出的相关股票数据")
+			if strings.Contains(content, "无符合条件") || strings.Contains(content, "请先获取东财用户标识") {
+				if fb, ok := data.FallbackScreenByIndicators(words); ok && fb != "" {
+					return fb, nil
+				}
+			}
 			return content, nil
 		},
 	))

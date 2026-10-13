@@ -830,3 +830,33 @@ export function SyncRecommendStocksFromIntelligence() {
   return window['go']['main']['App']['SyncRecommendStocksFromIntelligence']();
 }
 
+export function GetAiConfigTemplates() {
+  return window['go']['main']['App']['GetAiConfigTemplates']();
+}
+
+export function FetchAuditLogs(arg1) {
+  return window['go']['main']['App']['FetchAuditLogs'] ? window['go']['main']['App']['FetchAuditLogs'](arg1) : Promise.resolve({ code: 1, data: { list: [], total: 0 } });
+}
+
+export function FetchSkillChanges(arg1) {
+  return window['go']['main']['App']['FetchSkillChanges'] ? window['go']['main']['App']['FetchSkillChanges'](arg1) : Promise.resolve({ code: 1, data: { list: [], total: 0 } });
+}
+
+export function ApproveSkillChange(arg1) {
+  return window['go']['main']['App']['ApproveSkillChange'] ? window['go']['main']['App']['ApproveSkillChange'](arg1) : Promise.resolve({ code: 1, msg: 'ok' });
+}
+
+export function RejectSkillChange(arg1) {
+  return window['go']['main']['App']['RejectSkillChange'] ? window['go']['main']['App']['RejectSkillChange'](arg1) : Promise.resolve({ code: 1, msg: 'ok' });
+}
+
+export function BatchApproveSkillChanges(arg1) {
+  return window['go']['main']['App']['BatchApproveSkillChanges'] ? window['go']['main']['App']['BatchApproveSkillChanges'](arg1) : Promise.resolve({ code: 1, msg: 'ok' });
+}
+
+export function BatchRejectSkillChanges(arg1) {
+  return window['go']['main']['App']['BatchRejectSkillChanges'] ? window['go']['main']['App']['BatchRejectSkillChanges'](arg1) : Promise.resolve({ code: 1, msg: 'ok' });
+}
+
+
+

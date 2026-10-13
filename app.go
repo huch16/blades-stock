@@ -1919,6 +1919,11 @@ func (a *App) GetConfig() *data.SettingConfig {
 	return data.GetSettingConfig()
 }
 
+// GetAiConfigTemplates 返回预设的 AI 配置模板，供前端向导使用
+func (a *App) GetAiConfigTemplates() []*data.AiConfigTemplate {
+	return data.NewSettingsApi().GetAiConfigTemplates()
+}
+
 func (a *App) ExportConfig() string {
 	config := data.NewSettingsApi().Export()
 	file, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{

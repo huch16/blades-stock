@@ -31,7 +31,14 @@ func GetStockKLineTool() bladesTools.Tool {
 				count = 90
 			}
 			kline := data.NewStockDataApi().GetKLineData(code, kType, count)
-			if kline == nil {
+			if kline == nil || len(*kline) == 0 {
+				// 走 5 级降级链（MAC直连→东财→新浪→腾讯→通达信）兜底，确保单源故障不中断分析
+				fallbackRes := data.FetchKLineWithFallback(code, "", "101", int(count), "")
+				if fallbackRes != nil && fallbackRes.Data != nil && len(*fallbackRes.Data) > 0 {
+					kline = fallbackRes.Data
+				}
+			}
+			if kline == nil || len(*kline) == 0 {
 				return fmt.Sprintf("未获取到股票 %s 的K线数据", code), nil
 			}
 			bytes, err := json.Marshal(kline)

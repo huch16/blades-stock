@@ -10,7 +10,8 @@ import {
   TestAiConnection,
   CleanupData,
   BackupData,
-  RestoreData
+  RestoreData,
+  GetAiConfigTemplates
 } from "../../wailsjs/go/main/App";
 import {NTag, NTooltip, NIcon, NCollapse, NCollapseItem, useMessage, useDialog} from "naive-ui";
 import {data, models} from "../../wailsjs/go/models";
@@ -239,6 +240,151 @@ function copyAiConfig(index) {
   nextTick(() => {
     aiConfigExpandedNames.value = [String(idx)]
   })
+}
+
+// ========================
+// AI 配置向导（三步：选择类型 → 自动配置 → 测试保存）
+// ========================
+interface AiConfigTemplate {
+  type: 'local' | 'cloud' | 'enterprise'
+  label: string
+  description: string
+  baseUrl: string
+  modelName: string
+  apiKeyRequired: boolean
+  envHint: string
+}
+
+const wizardVisible = ref(false)
+const wizardStep = ref(1) // 1=选择类型, 2=填写详情, 3=测试并保存
+const wizardTemplates = ref<AiConfigTemplate[]>([])
+const wizardSelectedTemplate = ref<AiConfigTemplate | null>(null)
+const wizardForm = ref({
+  name: '',
+  baseUrl: '',
+  apiKey: '',
+  modelName: '',
+  temperature: 0.7,
+  maxTokens: 8192,
+  timeOut: 300,
+  thinking: false,
+  httpProxy: '',
+  httpProxyEnabled: false,
+  llmConcurrencyLimit: 2,
+  subAgentTimeout: 20,
+})
+const wizardTesting = ref(false)
+const wizardTestResult = ref<string | null>(null)
+
+async function openWizard() {
+  if (!wizardTemplates.value.length) {
+    try {
+      const list = await GetAiConfigTemplates()
+      wizardTemplates.value = list
+    } catch (e) {
+      console.error('获取模板失败', e)
+      message.error('获取配置模板失败')
+      return
+    }
+  }
+  wizardStep.value = 1
+  wizardSelectedTemplate.value = null
+  wizardForm.value = {
+    name: '',
+    baseUrl: '',
+    apiKey: '',
+    modelName: '',
+    temperature: 0.7,
+    maxTokens: 8192,
+    timeOut: 300,
+    thinking: false,
+    httpProxy: '',
+    httpProxyEnabled: false,
+    llmConcurrencyLimit: 2,
+    subAgentTimeout: 20,
+  }
+  wizardTestResult.value = null
+  wizardVisible.value = true
+}
+
+function wizardSelectTemplate(tpl: AiConfigTemplate) {
+  wizardSelectedTemplate.value = tpl
+  wizardForm.value.name = tpl.label
+  wizardForm.value.baseUrl = tpl.baseUrl
+  wizardForm.value.modelName = tpl.modelName
+  wizardForm.value.apiKey = ''
+  wizardForm.value.thinking = tpl.modelName.includes('reasoner') || tpl.modelName.includes('Reasoner')
+  wizardStep.value = 2
+}
+
+async function wizardFetchModels() {
+  if (!wizardForm.value.baseUrl) return
+  try {
+    const list = await FetchAiModels(wizardForm.value.baseUrl, wizardForm.value.apiKey || 'none')
+    if (list.length) {
+      wizardForm.value.modelName = list[0]
+    }
+  } catch (e) {
+    console.warn('向导获取模型列表失败', e)
+  }
+}
+
+async function wizardTestConnection() {
+  if (!wizardForm.value.baseUrl || !wizardForm.value.modelName) {
+    message.warning('请先填写接口地址和模型名')
+    return
+  }
+  wizardTesting.value = true
+  wizardTestResult.value = null
+  try {
+    const errMsg = await TestAiConnection(wizardForm.value.baseUrl, wizardForm.value.apiKey || 'none', wizardForm.value.modelName)
+    if (errMsg) {
+      wizardTestResult.value = '❌ 连接失败：' + errMsg
+      message.error('连接失败：' + errMsg)
+    } else {
+      wizardTestResult.value = '✅ 连接成功！配置可用'
+      message.success('连接成功！配置可用')
+      wizardStep.value = 3
+    }
+  } catch (e) {
+    wizardTestResult.value = '❌ 连接异常：' + (e as Error).message
+    message.error('连接异常：' + (e as Error).message)
+  } finally {
+    wizardTesting.value = false
+  }
+}
+
+function wizardSaveAndClose() {
+  const newConfig = new data.AIConfig({
+    ID: aiConfigs.value.reduce((max, c) => Math.max(max, c.ID || 0), 0) + 1 || nextTempId--,
+    name: wizardForm.value.name,
+    baseUrl: wizardForm.value.baseUrl,
+    apiKey: wizardForm.value.apiKey,
+    modelName: wizardForm.value.modelName,
+    temperature: wizardForm.value.temperature,
+    maxTokens: wizardForm.value.maxTokens,
+    timeOut: wizardForm.value.timeOut,
+    httpProxy: wizardForm.value.httpProxy,
+    httpProxyEnabled: wizardForm.value.httpProxyEnabled,
+    thinking: wizardForm.value.thinking,
+    embeddingEnabled: false,
+    embeddingModelName: '',
+    embeddingBaseUrl: '',
+    llmConcurrencyLimit: wizardForm.value.llmConcurrencyLimit,
+    subAgentTimeout: wizardForm.value.subAgentTimeout,
+  })
+  ;(newConfig as any)._nameTouched = true
+  aiConfigs.value.push(newConfig)
+  const idx = aiConfigs.value.length - 1
+  nextTick(() => {
+    aiConfigExpandedNames.value = [String(idx)]
+  })
+  wizardVisible.value = false
+  message.success('配置已添加，请点击「保存设置」持久化')
+}
+
+function wizardClose() {
+  wizardVisible.value = false
 }
 
 // 测试连接：真实调用 /chat/completions 验证 baseUrl + apiKey + modelName 可用（兼容不支持 /models 的服务）

@@ -43,7 +43,13 @@ type etfMomentumRow struct {
 	Mom21     float64
 }
 
-func computeETFMomentumRows() []etfMomentumRow {
+func computeETFMomentumRows(pool []struct {
+	Code string
+	Name string
+}) []etfMomentumRow {
+	if len(pool) == 0 {
+		pool = etfMomentumPool
+	}
 	var (
 		rows []etfMomentumRow
 		mu   sync.Mutex
@@ -51,7 +57,7 @@ func computeETFMomentumRows() []etfMomentumRow {
 	)
 	// skip distributed rate limit - always allow
 	// sem := make(chan struct{}, 8)
-	for _, cand := range etfMomentumPool {
+	for _, cand := range pool {
 		wg.Add(1)
 		// skip distributed rate limit - always allow
 		// sem <- struct{}{}
@@ -107,9 +113,10 @@ func computeETFMomentumRows() []etfMomentumRow {
 
 func GetETFMomentumRankingTool() bladesTools.Tool {
 	return types.NewTool("GetETFMomentumRanking",
-		"获取30只主流场内ETF的21日加权动量排名表（半衰期7日加权，按动量降序），返回：排名/代码/名称/最新收盘/涨跌幅%/基准价(21交易日前收盘)/21日加权动量%/21日动量%。ETF动量轮动分析必须优先调用本工具获取权威动量数据，禁止自行估算或编造动量数值；候选池纪律（动量>0的标的须全量纳入、排除须给理由）详见系统提示词【ETF动量轮动纪律】。",
+		"获取主流场内ETF或指定标的的21日加权动量排名表（半衰期7日加权，按动量降序），返回：排名/代码/名称/最新收盘/涨跌幅%/基准价(21交易日前收盘)/21日加权动量%/21日动量%。支持指定ETF列表或默认30只主流场内ETF池。ETF动量轮动分析必须优先调用本工具获取权威动量数据，禁止自行估算或编造动量数值；候选池纪律（动量>0的标的须全量纳入、排除须给理由）详见系统提示词【ETF动量轮动纪律】。",
 		map[string]*types.ParamDef{
-			"count": {Type: "integer", Desc: "返回前N只，默认20，最大30", Required: false},
+			"count": {Type: "integer", Desc: "返回前N只，默认20，最大50", Required: false},
+			"codes": {Type: "string", Desc: "可选，指定待排名的ETF/股票代码列表（英文或中文逗号分隔，如 sh510300,sz159915）；不填则默认使用30只主流场内ETF池", Required: false},
 		},
 		func(args string) (string, error) {
 			logger.SugaredLogger.Infof("GetETFMomentumRanking called with args: %s", args)
@@ -117,10 +124,37 @@ func GetETFMomentumRankingTool() bladesTools.Tool {
 			if c := gjson.Get(args, "count").Int(); c > 0 {
 				count = int(c)
 			}
-			if count > 30 {
-				count = 30
+			if count > 50 {
+				count = 50
 			}
-			rows := computeETFMomentumRows()
+
+			var pool []struct {
+				Code string
+				Name string
+			}
+			codesParam := gjson.Get(args, "codes").String()
+			if strings.TrimSpace(codesParam) != "" {
+				rawCodes := strings.FieldsFunc(codesParam, func(r rune) bool {
+					return r == ',' || r == '，' || r == ' ' || r == ';'
+				})
+				for _, rc := range rawCodes {
+					rc = strings.TrimSpace(rc)
+					if rc == "" {
+						continue
+					}
+					cCode := CleanStockCode(rc)
+					cCode = GetStockCode(cCode)
+					pool = append(pool, struct {
+						Code string
+						Name string
+					}{Code: cCode, Name: rc})
+				}
+			}
+			if len(pool) == 0 {
+				pool = etfMomentumPool
+			}
+
+			rows := computeETFMomentumRows(pool)
 			if len(rows) == 0 {
 				return "数据不足：所有候选ETF的K线均获取失败，无法计算动量排名。", nil
 			}

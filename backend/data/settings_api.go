@@ -686,6 +686,119 @@ func (s *SettingsApi) Export() string {
 	return string(d)
 }
 
+// AiConfigTemplate 预设配置模板，用于向导式配置
+// 字段说明：
+// - Type: "local" | "cloud" | "enterprise"
+// - Label: 显示名称
+// - Description: 简短说明
+// - BaseUrl/ModelName/ApiKeyRequired: 预填字段
+// - EnvVars: 需要用户配置的环境变量/密钥提示
+type AiConfigTemplate struct {
+	Type        string `json:"type"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+	BaseUrl     string `json:"baseUrl"`
+	ModelName   string `json:"modelName"`
+	ApiKeyRequired bool  `json:"apiKeyRequired"`
+	EnvHint     string `json:"envHint"`
+}
+
+// GetAiConfigTemplates 返回预设的 AI 配置模板，供前端向导使用
+func (s *SettingsApi) GetAiConfigTemplates() []*AiConfigTemplate {
+	return []*AiConfigTemplate{
+		{
+			Type:           "local",
+			Label:          "Ollama 本地部署",
+			Description:    "在本机运行的开源大模型（如 llama3, qwen2, deepseek-r1 等），无需 API Key，数据不出本地",
+			BaseUrl:        "http://localhost:11434/v1",
+			ModelName:      "",
+			ApiKeyRequired: false,
+			EnvHint:        "需先安装 Ollama 并拉取模型：`ollama pull qwen2:7b`",
+		},
+		{
+			Type:           "local",
+			Label:          "LM Studio 本地部署",
+			Description:    "图形化本地大模型运行工具，兼容 OpenAI 接口",
+			BaseUrl:        "http://localhost:1234/v1",
+			ModelName:      "",
+			ApiKeyRequired: false,
+			EnvHint:        "在 LM Studio 中启动本地服务器（默认端口 1234）",
+		},
+		{
+			Type:           "cloud",
+			Label:          "DeepSeek 官方 API",
+			Description:    "高性价比云端推理，支持 deepseek-chat / deepseek-reasoner",
+			BaseUrl:        "https://api.deepseek.com",
+			ModelName:      "deepseek-reasoner",
+			ApiKeyRequired: true,
+			EnvHint:        "在 https://platform.deepseek.com 获取 API Key",
+		},
+		{
+			Type:           "cloud",
+			Label:          "硅基流动 SiliconFlow",
+			Description:    "国产模型托管平台，支持 Qwen、GLM、Yi 等多种模型",
+			BaseUrl:        "https://api.siliconflow.cn/v1",
+			ModelName:      "Qwen/Qwen2.5-7B-Instruct",
+			ApiKeyRequired: true,
+			EnvHint:        "在 https://cloud.siliconflow.cn 获取 API Key",
+		},
+		{
+			Type:           "cloud",
+			Label:          "智谱 AI (GLM)",
+			Description:    "国产大模型厂商，GLM-4 系列性能优秀",
+			BaseUrl:        "https://open.bigmodel.cn/api/paas/v4",
+			ModelName:      "glm-4-flash",
+			ApiKeyRequired: true,
+			EnvHint:        "在 https://open.bigmodel.cn 获取 API Key",
+		},
+		{
+			Type:           "cloud",
+			Label:          "字节豆包 (火山引擎)",
+			Description:    "字节跳动旗下模型服务，Doubao 系列模型",
+			BaseUrl:        "https://ark.cn-beijing.volces.com/api/v3",
+			ModelName:      "doubao-pro-32k",
+			ApiKeyRequired: true,
+			EnvHint:        "在 https://console.volcengine.com/ark 获取 API Key 与 Endpoint ID",
+		},
+		{
+			Type:           "cloud",
+			Label:          "阿里云百炼",
+			Description:    "阿里云模型服务，Qwen 系列全谱系",
+			BaseUrl:        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+			ModelName:      "qwen-plus",
+			ApiKeyRequired: true,
+			EnvHint:        "在 https://dashscope.aliyuncs.com 获取 API Key",
+		},
+		{
+			Type:           "cloud",
+			Label:          "OpenAI 官方",
+			Description:    "GPT-4o / GPT-4o-mini 等顶级模型",
+			BaseUrl:        "https://api.openai.com/v1",
+			ModelName:      "gpt-4o-mini",
+			ApiKeyRequired: true,
+			EnvHint:        "在 https://platform.openai.com 获取 API Key",
+		},
+		{
+			Type:           "cloud",
+			Label:          "OpenRouter (聚合)",
+			Description:    "统一接口调用 300+ 模型，适合多模型对比",
+			BaseUrl:        "https://openrouter.ai/api/v1",
+			ModelName:      "anthropic/claude-3.5-sonnet",
+			ApiKeyRequired: true,
+			EnvHint:        "在 https://openrouter.ai 获取 API Key",
+		},
+		{
+			Type:           "enterprise",
+			Label:          "企业内网/私有化部署",
+			Description:    "企业内网部署的兼容 OpenAI 接口服务（如 vLLM, TGI, Xinference 等）",
+			BaseUrl:        "",
+			ModelName:      "",
+			ApiKeyRequired: true,
+			EnvHint:        "请咨询运维获取内网 API 地址与密钥",
+		},
+	}
+}
+
 func validateAIConfig(cfg *AIConfig) string {
 	if strings.TrimSpace(cfg.Name) == "" {
 		return "AI 配置名称不能为空"

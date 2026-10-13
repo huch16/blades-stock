@@ -2,6 +2,7 @@ package data
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"blades-stock/backend/models"
@@ -63,6 +64,11 @@ func handleSearchStockByIndicators(o *OpenAi, funcArguments string, ctx *ToolCon
 
 	res := NewSearchStockApi(words).SearchStock(random.RandInt(50, 120))
 	content := thsResultToMarkdown(res, "工具筛选出的相关股票数据")
+	if strings.Contains(content, "无符合条件") || strings.Contains(content, "请先获取东财用户标识") {
+		if fb, ok := FallbackScreenByIndicators(words); ok && fb != "" {
+			content = fb
+		}
+	}
 	//logger.SugaredLogger.Infof("SearchStockByIndicators:words:%s  --> \n%s", words, content)
 
 	appendToolMessages(

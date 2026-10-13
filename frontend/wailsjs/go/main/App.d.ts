@@ -420,3 +420,19 @@ export function GetSystemStateSnapshot():Promise<any>;
 
 export function SyncRecommendStocksFromIntelligence():Promise<number>;
 
+export function GetAiConfigTemplates():Promise<any>;
+
+export function FetchAuditLogs(arg1:any):Promise<any>;
+
+export function FetchSkillChanges(arg1:any):Promise<any>;
+
+export function ApproveSkillChange(arg1:any):Promise<any>;
+
+export function RejectSkillChange(arg1:any):Promise<any>;
+
+export function BatchApproveSkillChanges(arg1:any):Promise<any>;
+
+export function BatchRejectSkillChanges(arg1:any):Promise<any>;
+
+
+

@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -172,7 +173,16 @@ func NewWebSearchApi(timeout int) *WebSearchApi {
 	return &WebSearchApi{timeout: timeout}
 }
 
-const searxngURL = "https://search.whohai.cfd"
+const defaultSearxngURL = "https://search.whohai.cfd"
+
+func getSearXNGEndpoints() []string {
+	var endpoints []string
+	if custom := os.Getenv("SEARXNG_URL"); custom != "" {
+		endpoints = append(endpoints, strings.TrimRight(custom, "/"))
+	}
+	endpoints = append(endpoints, defaultSearxngURL, "https://searx.be", "https://search.sapti.me")
+	return endpoints
+}
 
 func (s *WebSearchApi) Search(query string, maxResults int) []WebSearchResult {
 	if maxResults <= 0 {
@@ -206,56 +216,62 @@ func (s *WebSearchApi) Search(query string, maxResults int) []WebSearchResult {
 }
 
 func (s *WebSearchApi) searchSearXNG(query string, maxResults int) []WebSearchResult {
-	client := &http.Client{Timeout: 10 * time.Second}
-	searchURL := fmt.Sprintf("%s/search?q=%s&format=json&language=zh-CN", searxngURL, url.QueryEscape(query))
+	client := &http.Client{Timeout: 5 * time.Second}
+	endpoints := getSearXNGEndpoints()
 
-	req, err := http.NewRequest("GET", searchURL, nil)
-	if err != nil {
-		return nil
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		logger.SugaredLogger.Warnf("SearXNG请求失败: %v", err)
-		return nil
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil
-	}
-
-	var searxngResp struct {
-		Results []struct {
-			URL     string `json:"url"`
-			Title   string `json:"title"`
-			Content string `json:"content"`
-			Engine  string `json:"engine"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal(body, &searxngResp); err != nil {
-		logger.SugaredLogger.Warnf("SearXNG解析失败: %v", err)
-		return nil
-	}
-
-	var results []WebSearchResult
-	for i, r := range searxngResp.Results {
-		if i >= maxResults {
-			break
+	for _, endpoint := range endpoints {
+		searchURL := fmt.Sprintf("%s/search?q=%s&format=json&language=zh-CN", endpoint, url.QueryEscape(query))
+		req, err := http.NewRequest("GET", searchURL, nil)
+		if err != nil {
+			continue
 		}
-		results = append(results, WebSearchResult{
-			Title:   r.Title,
-			Url:     r.URL,
-			Snippet: r.Content,
-			Source:  "SearXNG/" + r.Engine,
-		})
-	}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+		req.Header.Set("Accept", "application/json")
 
-	logger.SugaredLogger.Infof("SearXNG搜索到 %d 条结果: %s", len(results), query)
-	return results
+		resp, err := client.Do(req)
+		if err != nil {
+			logger.SugaredLogger.Warnf("SearXNG节点 [%s] 请求失败: %v", endpoint, err)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			continue
+		}
+
+		var searxngResp struct {
+			Results []struct {
+				URL     string `json:"url"`
+				Title   string `json:"title"`
+				Content string `json:"content"`
+				Engine  string `json:"engine"`
+			} `json:"results"`
+		}
+		if err := json.Unmarshal(body, &searxngResp); err != nil {
+			logger.SugaredLogger.Warnf("SearXNG节点 [%s] 解析失败: %v", endpoint, err)
+			continue
+		}
+
+		var results []WebSearchResult
+		for i, r := range searxngResp.Results {
+			if i >= maxResults {
+				break
+			}
+			results = append(results, WebSearchResult{
+				Title:   r.Title,
+				Url:     r.URL,
+				Snippet: r.Content,
+				Source:  "SearXNG/" + r.Engine,
+			})
+		}
+
+		if len(results) > 0 {
+			logger.SugaredLogger.Infof("SearXNG节点 [%s] 搜索到 %d 条结果: %s", endpoint, len(results), query)
+			return results
+		}
+	}
+	return nil
 }
 
 // searchBaiduHTTP 使用简单 HTTP 请求 + goquery 解析百度搜索结果，作为 Chrome 不可用时的降级方案。

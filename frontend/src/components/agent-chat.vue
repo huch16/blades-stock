@@ -1,360 +1,317 @@
 <template>
-  <div class="chat-box">
-    <t-chat
-        ref="chatRef"
-        :clear-history="chatList.length > 0 && isStreaming"
-        :data="chatList"
-        :text-loading="isStreaming"
-        :is-stream-load="isStreaming"
-        style="height: 100%"
-        @scroll="handleChatScroll"
-        @clear="clearConfirm"
-    >
-      <template #content="{ item, index }">
-        <div v-if="item.role === 'assistant' && item.steps && item.steps.length > 0" class="agent-steps">
-          <div class="agent-steps-header">📋 执行步骤 <span class="agent-steps-badge">{{ item.steps.length }}</span></div>
-          <div class="agent-steps-list">
-            <div v-for="(step, si) in item.steps" :key="si" class="agent-step-item">
-              <div class="agent-step-dot" :class="getStepDotClass(step)"></div>
-              <span class="agent-step-text">{{ step }}</span>
-            </div>
-          </div>
-        </div>
-        <div v-if="item.role === 'assistant' && isStreaming" class="agent-status">
-          <span class="agent-status-text">{{ item.statusText || '处理中...' }}</span>
-        </div>
-        <t-chat-reasoning v-if="item.role === 'assistant'" :default-expand-all="isStreaming" expand-icon-placement="right">
-          <t-chat-loading v-if="isStreaming && !item.reasoning" text="思考中..." />
-          <t-chat-content v-if="item.reasoning.length > 0" :content="item.reasoning" />
-        </t-chat-reasoning>
-        <div v-if="item.role === 'assistant' && item.jsonMarkdown" class="agent-json-md">
-          <div class="agent-json-md-header" @click="toggleJsonMd(item.id)">
-            <svg :class="['agent-json-md-arrow', { 'agent-json-md-arrow-expanded': jsonMdExpandedMap[item.id] }]" viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9 6l6 6-6 6z"/></svg>
-            <span class="agent-json-md-title">📊 分析报告</span>
-          </div>
-          <div v-show="jsonMdExpandedMap[item.id]" class="agent-json-md-content">
-            <t-chat-content :content="item.jsonMarkdown" />
-          </div>
-        </div>
-        <t-chat-content v-if="item.content.length > 0" :content="item.content" />
-        <!-- 性能与可观测性监控胶囊 -->
-        <div v-if="item.metrics" class="agent-metrics-capsule">
-          <span class="metrics-tag" title="端到端总耗时">⏱️ {{ formatDuration(item.metrics.total_duration) }}</span>
-          <span v-if="item.metrics.first_chunk_latency" class="metrics-tag" title="模型首包响应延迟">⚡ 首包: {{ formatDuration(item.metrics.first_chunk_latency) }}</span>
-          <span v-if="item.metrics.tool_call_count > 0" class="metrics-tag" title="执行工具调用次数">🔧 {{ item.metrics.tool_call_count }}次工具</span>
-          <span v-if="item.metrics.retry_count > 0" class="metrics-tag metrics-warning" title="遭遇瞬时网络/限流故障后自动恢复">🔁 重试{{ item.metrics.retry_count }}次成功</span>
-        </div>
-      </template>
-      <template #actions="{ item, index }">
-        <t-chat-action
-            :content="item.content"
-            :operation-btn="['copy']"
-            @operation="handleOperation"
-        />
-      </template>
-      <template #footer>
-          <t-chat-sender
-              ref="chatSenderRef"
-              v-model="inputValue"
-              class="chat-sender"
-              :textarea-props="{
-                placeholder: '请输入消息...',
-              }"
-              :loading="isStreaming"
-              :stop-disabled="isStreaming"
-              @send="inputEnter"
-              @stop="onStop"
-          >
-            <template #suffix>
-              <t-button theme="default" variant="text" size="large" class="btn" @click="inputEnter"> 发送 </t-button>
-            </template>
-            <template #prefix>
-              <NFlex>
-                <NSelect
-                    v-model:value="aiConfigStore.activeConfigId"
-                    :options="aiConfigStore.configs"
-                    label-field="name" value-field="ID"
-                    size="tiny"
-                    style="width: 200px;"
-                />
-                <NSelect
-                    v-model:value="agentMode"
-                    :options="agentModeOptions"
-                    size="tiny"
-                    style="width: 120px;"
-                />
-              </NFlex>
-            </template>
-          </t-chat-sender>
-
-      </template>
-    </t-chat>
-    <t-button v-show="isShowToBottom" variant="text" class="bottomBtn" @click="backBottom">
-      <div class="to-bottom">
-        <ArrowDownIcon />
+  <div class="chat-container">
+    <div class="chat-header" v-if="!isCompact">
+      <div class="header-left">
+        <h2 class="chat-title">💬 AI 投研助手</h2>
+        <span class="chat-subtitle">基于多模型协作的智能股票分析</span>
       </div>
-    </t-button>
+      <div class="header-right">
+        <n-select
+          v-model:value="activeConfigId"
+          :options="configOptions"
+          :placeholder="configOptions.length ? '' : '请先在设置中添加 AI 配置'"
+          size="small"
+          style="width: 220px;"
+          clearable
+          @update:value="onConfigChange"
+        />
+        <n-space vertical-align="center" size="small">
+          <n-select
+            v-model:value="agentMode"
+            :options="agentModeOptions"
+            size="small"
+            style="width: 110px;"
+          />
+          <n-button
+            variant="text"
+            size="small"
+            @click="toggleCompact"
+            :circle="true"
+          >
+            <template v-if="isCompact">
+              <FullscreenIcon />
+            </template>
+            <template v-else>
+              <FullscreenExitIcon />
+            </template>
+          </n-button>
+          <n-button
+            variant="text"
+            size="small"
+            @click="clearHistory"
+            :circle="true"
+          >
+            <DeleteIcon />
+          </n-button>
+        </n-space>
+      </div>
+    </div>
+
+    <div class="chat-messages" ref="messagesContainer">
+      <!-- 消息锚点导航（右侧边栏） -->
+      <MessageAnchorNav
+        :items="anchorNavItems"
+        :show="messages.length > 0"
+        @scroll="scrollToMessage"
+      />
+
+      <ChatMessage
+        v-for="msg in messages"
+        :key="msg.id"
+        :message="msg"
+        :is-streaming="isStreaming && msg.id === streamingMsgId"
+        :current-user-avatar="userAvatar"
+        :current-user-name="userName"
+        @copy="handleCopy"
+        @retry="handleRetry"
+        @reference="handleReference"
+        @edit="handleEdit"
+        @resend="handleResend"
+      />
+
+      <!-- 流式占位消息 -->
+      <ChatMessage
+        v-if="isStreaming && streamingPlaceholder"
+        :key="streamingPlaceholder.id"
+        :message="streamingPlaceholder"
+        :is-streaming="true"
+        :current-user-avatar="userAvatar"
+        :current-user-name="userName"
+      />
+
+      <!-- 空状态 -->
+      <div v-if="messages.length === 0 && !isStreaming" class="empty-state">
+        <div class="empty-icon">💬</div>
+        <h3>开始你的投研对话</h3>
+        <p>输入股票代码、名称或投资问题，AI 将为你提供专业分析</p>
+        <div class="empty-suggestions">
+          <n-tag
+            v-for="s in suggestions"
+            :key="s"
+            size="small"
+            @click="fillInput(s)"
+            class="suggestion-tag"
+          >
+            {{ s }}
+          </n-tag>
+        </div>
+      </div>
+
+      <!-- 滚动到底部按钮 -->
+      <n-button
+        v-show="showScrollBottom"
+        class="scroll-bottom-btn"
+        variant="text"
+        circle
+        @click="scrollToBottom"
+      >
+        <ArrowDownIcon />
+      </n-button>
+    </div>
+
+    <!-- 输入区域 -->
+    <div class="chat-input-area">
+      <t-chat-sender
+        ref="chatSenderRef"
+        v-model="inputValue"
+        :textarea-props="{
+          placeholder: configOptions.length ? '请输入消息... (Shift+Enter 换行)' : '请先在设置中配置 AI 模型',
+          rows: 1,
+          autosize: { minRows: 1, maxRows: 6 },
+        }"
+        :loading="isStreaming"
+        :stop-disabled="isStreaming"
+        @send="handleSend"
+        @stop="handleStop"
+      >
+        <template #prefix v-if="!isCompact">
+          <n-space vertical-align="center" size="small" class="input-prefix">
+            <n-tooltip placement="top" :content="'选择 AI 配置'">
+              <n-select
+                v-model:value="activeConfigId"
+                :options="configOptions"
+                :placeholder="configOptions.length ? '' : '无可用配置'"
+                size="small"
+                style="width: 200px;"
+                clearable
+                @update:value="onConfigChange"
+              />
+            </n-tooltip>
+            <n-tooltip placement="top" :content="'对话模式'">
+              <n-select
+                v-model:value="agentMode"
+                :options="agentModeOptions"
+                size="small"
+                style="width: 110px;"
+              />
+            </n-tooltip>
+          </n-space>
+        </template>
+        <template #suffix>
+          <n-space vertical-align="center" size="small">
+            <n-button
+              v-if="!isCompact"
+              variant="text"
+              size="small"
+              @click="insertTemplate"
+            >
+              📝 模板
+            </n-button>
+            <n-button
+              theme="primary"
+              :loading="isStreaming"
+              @click="handleSend"
+            >
+              {{ isStreaming ? '停止' : '发送' }}
+            </n-button>
+          </n-space>
+        </template>
+      </t-chat-sender>
+
+      <div v-if="!configOptions.length" class="config-hint">
+        ⚠️ 未检测到 AI 配置，请前往 <router-link to="/settings">设置页面</router-link> 添加配置后再使用
+      </div>
+    </div>
   </div>
 </template>
+
 <script setup lang="ts">
-import {ref, onMounted, h, onBeforeUnmount, onBeforeMount, nextTick, type VNode} from 'vue';
-import {ArrowDownIcon, CheckCircleIcon, SystemSumIcon} from 'tdesign-icons-vue-next';
-const isStreaming = ref(false);
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, provide, h, type VNode } from 'vue'
+import { NSelect, NSpace, NButton, NTag, NTooltip, NImage } from 'naive-ui'
+import { ArrowDownIcon, DeleteIcon, FullscreenIcon, FullscreenExitIcon } from 'tdesign-icons-vue-next'
+import { ChatWithAgent, GetConfig, GetVersionInfo } from '../../wailsjs/go/main/App'
+import { useAiConfigStore } from '@/stores/aiConfig'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime'
+import { cleanFinalContent } from '@/utils/cleanText'
+import {
+  useChatStream,
+  useMessageAnchor,
+  type ChatMessage as ChatMessageType,
+  type StreamChunk,
+  genMsgId,
+  formatDuration
+} from './chat'
+import ChatMessageComp from './chat/ChatMessage.vue'
+import MessageAnchorNav from './chat/MessageAnchorNav.vue'
 
-const inputValue = ref('');
-let formatTimer: ReturnType<typeof setInterval> | null = null
-
-const chatRef = ref(null);
-const isShowToBottom = ref(false);
-
-const icon = ref('');
-import {darkTheme, NFlex, NImage,NSelect} from "naive-ui";
-import {ChatWithAgent, GetConfig, GetVersionInfo} from "../../wailsjs/go/main/App";
-import type { AIConfig } from '../../wailsjs/go/models'
-import { useAiConfigStore } from '../stores/aiConfig';
-import {EventsOff, EventsOn} from '../../wailsjs/runtime'
-import { cleanFinalContent } from '../utils/cleanText'
-import 'tdesign-vue-next/es/style/index.css';
-
+// ========== 状态 ==========
 const aiConfigStore = useAiConfigStore()
-const allowToolTip = ref(true);
-const chatSenderRef = ref(null);
-const agentMode = ref('auto')
+const messages = ref<ChatMessage[]>([])
+const inputValue = ref('')
+const isStreaming = ref(false)
+const streamingMsgId = ref<string | null>(null)
+const streamingPlaceholder = ref<ChatMessage | null>(null)
+const showScrollBottom = ref(false)
+const isCompact = ref(false)
+const agentMode = ref<'auto' | 'react' | 'plan_execute'>('auto')
+const userAvatar = ref('https://tdesign.gtimg.com/site/avatar.jpg')
+const userName = ref('用户')
+
+const activeConfigId = computed({
+  get: () => aiConfigStore.activeConfigId,
+  set: (val) => { aiConfigStore.setActiveConfigId(val) }
+})
+
+const configOptions = computed(() => aiConfigStore.configs.map(c => ({
+  label: c.name || `配置 #${c.ID}`,
+  value: c.ID,
+  description: c.modelName ? `模型: ${c.modelName}` : '',
+})))
+
 const agentModeOptions = [
-  { label: '🤖 自动', value: 'auto' },
-  { label: '⚡ 快速', value: 'react' },
-  { label: '🧠 规划', value: 'plan_execute' },
+  { label: '🤖 自动', value: 'auto', description: '根据问题复杂度自动选择策略' },
+  { label: '⚡ 快速', value: 'react', description: 'ReAct 单步推理，适合简单问答' },
+  { label: '🧠 规划', value: 'plan_execute', description: 'Plan-and-Execute 多步规划，适合复杂分析' },
 ]
-const jsonMdExpandedMap = ref<Record<string, boolean>>({})
 
-// 会话 ID 计数器，用于取消过期的流消息 (F-18)
-let sessionIdCounter = 0
-let currentSessionId = ''
+const suggestions = [
+  '分析 000001 平安银行',
+  '对比 贵州茅台 vs 五粮液',
+  '筛选 低估值高分红股票',
+  '解释 什么是 PE TTM',
+  '回测 双均线策略 最近一年',
+]
 
-function toggleJsonMd(id: string) {
-  jsonMdExpandedMap.value = {
-    ...jsonMdExpandedMap.value,
-    [id]: !jsonMdExpandedMap.value[id]
-  }
-}
+// ========== 流式状态机 ==========
+const {
+  isStreaming: streamIsStreaming,
+  startStream,
+  feedChunk,
+  finalize,
+  cancel,
+  getSessionId,
+} = useChatStream()
 
-function getStepDotClass(step: string) {
-  if (step.includes('✅')) return 'step-done'
-  if (step.includes('🔧')) return 'step-tool'
-  if (step.includes('⚡') || step.includes('🧠') || step.includes('📋') || step.includes('🔄')) return 'step-active'
-  return ''
-}
+// ========== 锚点导航 ==========
+const {
+  activeAnchor,
+  anchorNavItems,
+  registerElement,
+  unregisterElement,
+  scrollToMessage,
+  scrollToNext,
+  scrollToPrev,
+  scrollToLatest,
+  scrollToOldest,
+} = useMessageAnchor(messages)
 
-function startFormatTimer() {
-  stopFormatTimer()
-  formatTimer = setInterval(() => {
-    const lastItem = chatList.value[0]
-    if (lastItem && lastItem.role === 'assistant') {
-      if (lastItem.rawContent) {
-        const fmt = formatMarkdown(lastItem.rawContent)
-        lastItem.content = fmt.content
-        if (fmt.jsonMarkdown) lastItem.jsonMarkdown = fmt.jsonMarkdown
-      }
-      if (lastItem.rawReasoning) {
-        const fmt = formatMarkdown(lastItem.rawReasoning)
-        lastItem.reasoning = fmt.content
-      }
-    }
-  }, 1500)
-}
+// 同步流式状态到组件
+watch(streamIsStreaming, (val) => { isStreaming.value = val })
 
-function stopFormatTimer() {
-  if (formatTimer !== null) {
-    clearInterval(formatTimer)
-    formatTimer = null
-  }
-}
+// 暴露注册函数供子组件使用
+provide('registerMessageElement', registerElement)
+provide('unregisterMessageElement', unregisterElement)
 
-function formatMarkdown(content: string) {
-  if (!content) return { content: '', jsonMarkdown: '' }
+// ========== 事件处理 ==========
+function handleAgentMessage(data: StreamChunk) {
+  // 会话过滤
+  if (data.sessionId && data.sessionId !== getSessionId()) return
 
-  const { content: cleaned, jsonMarkdown } = wrapInlineJson(content)
+  if (data.role === 'assistant') {
+    if (!streamingPlaceholder.value) return
 
-  let inCodeBlock = false
-  const lines = cleaned.split('\n')
-  const result: string[] = []
-
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i]
-    const trimmed = line.replace(/^[\t ]+/, '')
-
-    if (trimmed.startsWith('```')) {
-      inCodeBlock = !inCodeBlock
-      if (!inCodeBlock) {
-        result.push(trimmed)
-        continue
-      }
-    }
-
-    if (inCodeBlock) {
-      result.push(line)
-      continue
-    }
-
-    if (trimmed !== line && trimmed !== '') {
-      line = trimmed
-    }
-
-    if (i > 0 && isBlockElement(trimmed)) {
-      const prev = result.length > 0 ? result[result.length - 1] : ''
-      if (prev !== '' && !isBlockElement(prev.replace(/^[\t ]+/, ''))) {
-        result.push('')
-      }
-    }
-
-    line = splitInlineHeading(line)
-
-    result.push(line)
-  }
-
-  return {
-    content: result.join('\n'),
-    jsonMarkdown
-  }
-}
-
-function hasMarkdownContent(str: string) {
-  if (!str || typeof str !== 'string') return false
-  return /(^|\n)\s*#{1,6}\s/.test(str) ||
-    /(^|\n)\s*\|/.test(str) ||
-    /(^|\n)\s*---/.test(str) ||
-    /(^|\n)\s*[-*+]\s/.test(str) ||
-    /(^|\n)\s*>\s/.test(str) ||
-    /(^|\n)\s*```/.test(str)
-}
-
-function extractMarkdownFromJson(obj: any): string | null {
-  if (typeof obj === 'string') return obj
-  if (Array.isArray(obj)) {
-    const items = obj.map((item: any) => typeof item === 'string' ? item : JSON.stringify(item, null, 2))
-    return items.join('\n\n')
-  }
-  if (typeof obj === 'object' && obj !== null) {
-    for (const key of ['response', 'content', 'text', 'result', 'answer', 'message', 'output']) {
-      if (obj[key] != null) {
-        const val = obj[key]
-        if (typeof val === 'string' && hasMarkdownContent(val)) return val
-        if (typeof val === 'object') {
-          const extracted = extractMarkdownFromJson(val)
-          if (extracted) return extracted
+    if (data.reasoning_content) {
+      const rc = data.reasoning_content
+      if (rc.startsWith('[STATUS]')) {
+        streamingPlaceholder.value.statusText = rc.replace(/^\[STATUS\]/, '').trim()
+      } else if (rc.startsWith('[STEP]')) {
+        const stepText = rc.replace(/^\[STEP\]/, '').trim()
+        if (stepText) {
+          if (!streamingPlaceholder.value.steps) streamingPlaceholder.value.steps = []
+          const parsed = parseStepText(stepText)
+          streamingPlaceholder.value.steps.push(...parsed)
         }
+      } else {
+        streamingPlaceholder.value.rawReasoning = (streamingPlaceholder.value.rawReasoning || '') + rc
       }
     }
-    const values = Object.values(obj).filter(v => typeof v === 'string' && hasMarkdownContent(v))
-    if (values.length > 0) return values.join('\n\n')
-    const strValues = Object.values(obj).filter(v => typeof v === 'string')
-    if (strValues.length > 0) return strValues.join('\n\n')
-  }
-  return null
-}
 
-function wrapInlineJson(content: string) {
-  if (!content) return { content: '', jsonMarkdown: '' }
-  const cleaned: string[] = []
-  const jsonParts: string[] = []
-  let i = 0
-  const len = content.length
-  let inCodeBlock = false
-  const MAX_SCAN = 500000 // (F-24) 最多扫描 50 万字符
-
-  while (i < len && i < MAX_SCAN) {
-    if (content.substring(i, i + 3) === '```') {
-      inCodeBlock = !inCodeBlock
-      cleaned.push('```')
-      i += 3
-      continue
-    }
-
-    if (inCodeBlock) {
-      cleaned.push(content[i])
-      i++
-      continue
-    }
-
-    if (content[i] === '{') {
-      const end = findJsonEnd(content, i)
-      if (end > i) {
-        const jsonStr = content.substring(i, end + 1)
-        try {
-          const obj = JSON.parse(jsonStr)
-          const md = extractMarkdownFromJson(obj)
-          if (md) {
-            jsonParts.push(md)
-          } else {
-            cleaned.push('\n\n```json\n' + jsonStr + '\n```\n\n')
-          }
-          i = end + 1
-          continue
-        } catch {}
+    if (data.content) {
+      if (data.content === 'agent-DONE') {
+        if (data.metrics) streamingPlaceholder.value.metrics = data.metrics
+      } else {
+        streamingPlaceholder.value.rawContent = (streamingPlaceholder.value.rawContent || '') + data.content
       }
     }
-    cleaned.push(content[i])
-    i++
-  }
-  // 超出 MAX_SCAN 的字符直接追加 (F-24)
-  if (i < len) {
-    cleaned.push(content.substring(i))
-  }
 
-  return {
-    content: cleaned.join(''),
-    jsonMarkdown: jsonParts.join('\n\n---\n\n')
-  }
-}
+    if (data.tool_calls?.length) {
+      if (!streamingPlaceholder.value.toolCalls) streamingPlaceholder.value.toolCalls = []
+      streamingPlaceholder.value.toolCalls.push(...data.tool_calls)
+    }
 
-function findJsonEnd(content: string, start: number) {
-  let depth = 0
-  let bracketDepth = 0
-  let inStr = false
-  let escape = false
-  const MAX_DEPTH = 10000 // (F-24) 最多扫描 1 万字符
-  const limit = Math.min(content.length, start + MAX_DEPTH)
-  for (let i = start; i < limit; i++) {
-    const ch = content[i]
-    if (escape) { escape = false; continue }
-    if (ch === '\\' && inStr) { escape = true; continue }
-    if (ch === '"') { inStr = !inStr; continue }
-    if (inStr) continue
-    if (ch === '[') bracketDepth++
-    else if (ch === ']') bracketDepth--
-    else if (ch === '{') depth++
-    else if (ch === '}') {
-      depth--
-      if (depth === 0 && bracketDepth === 0) return i
+    if (data.response_meta?.finish_reason === 'stop') {
+      const finalMsg = finalize()
+      if (finalMsg) {
+        messages.value.unshift(finalMsg)
+        streamingPlaceholder.value = null
+        streamingMsgId.value = null
+      }
     }
   }
-  return -1
 }
 
-function splitInlineHeading(line: string) {
-  const match = line.match(/(#{1,6}\s+\S)/)
-  if (!match) return line
-  const idx = match.index!
-  if (idx === 0) return line
-  const prefix = line.substring(0, idx)
-  if (prefix.trim() === '') return line
-  return prefix + '\n\n' + line.substring(idx)
-}
-
-function isBlockElement(line: string) {
-  if (!line || line.length === 0) return false
-  if (line[0] === '#') return true
-  if (line.startsWith('- ') || line.startsWith('* ') || line.startsWith('+ ')) return true
-  if (line.startsWith('```')) return true
-  if (line.startsWith('> ')) return true
-  if (line.length >= 2 && line[0] >= '1' && line[0] <= '9' && line[1] === '.') return true
-  if (line.startsWith('---') || line.startsWith('***') || line.startsWith('___')) return true
-  if (line.startsWith('|')) return true
-  return false
-}
-
-function parseStepText(text: string) {
-  if (!text) return [text]
+// 解析步骤文本
+function parseStepText(text: string): string[] {
   const trimmed = text.trim()
   if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return [text]
   try {
@@ -367,10 +324,7 @@ function parseStepText(text: string) {
       if (Array.isArray(steps)) {
         return steps.map((item, i) => `${i + 1}. ${typeof item === 'string' ? item : JSON.stringify(item)}`)
       }
-      const entries = Object.entries(obj)
-      if (entries.length > 0) {
-        return entries.map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-      }
+      return Object.entries(obj).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
     }
     return [text]
   } catch {
@@ -378,206 +332,46 @@ function parseStepText(text: string) {
   }
 }
 
-let msgIdCounter = 0
-function nextMsgId(): string {
-  return `msg_${++msgIdCounter}_${Date.now()}`
-}
-
-const handleAgentMessage = (data: any) => {
-  console.log(data)
-  // 过滤过期会话消息 (F-18)
-  if (data?.sessionId && data.sessionId !== currentSessionId) {
-    return
-  }
-  if(data?.role==="assistant"){
-    isStreaming.value = false;
-    const lastItem = chatList.value[0]
-    if (!lastItem || lastItem.role !== 'assistant') { // (F-17)
-      console.warn('handleAgentMessage: no assistant placeholder found')
-      return
-    }
-    if (data['reasoning_content']){
-      const rc = data['reasoning_content']
-      if (rc.startsWith('[STATUS]')) {
-        lastItem.statusText = rc.replace(/^\[STATUS\]/, '').trim()
-      } else if (rc.startsWith('[STEP]')) {
-        const stepText = rc.replace(/^\[STEP\]/, '').trim()
-        if (stepText) {
-          if (!lastItem.steps) lastItem.steps = []
-          const parsed = parseStepText(stepText)
-          lastItem.steps.push(...parsed)
-        }
-      } else {
-        lastItem.rawReasoning = (lastItem.rawReasoning || '') + rc
-        lastItem.reasoning = lastItem.rawReasoning
-      }
-    }
-    if (data['content']){
-      if (data['content'] === 'agent-DONE') {
-        if (data.metrics) {
-          lastItem.metrics = data.metrics
-        }
-      } else {
-        lastItem.rawContent = (lastItem.rawContent || '') + data['content']
-        lastItem.content = lastItem.rawContent
-      }
-    }
-    if(data['tool_calls']){
-      for (const tool of  data['tool_calls']) {
-          console.log(tool.id, tool.type, tool.function.name, tool.function.arguments);
-        lastItem.reasoning += "\n```"+tool.function.name+"\n" +
-            "参数："+ (tool.function.arguments?tool.function.arguments:"无")+
-            "\n```\n";
-      }
-    }
-  }
-  if(data['response_meta']&&data['response_meta'].finish_reason==="stop"){
-    isStreaming.value = false;
-    stopFormatTimer()
-    const lastItem = chatList.value[0]
-    if (lastItem) {
-      if (lastItem.rawContent) {
-        lastItem.rawContent = cleanFinalContent(lastItem.rawContent)
-        const fmt = formatMarkdown(lastItem.rawContent)
-        lastItem.content = fmt.content
-        if (fmt.jsonMarkdown) lastItem.jsonMarkdown = fmt.jsonMarkdown
-      }
-      if (lastItem.rawReasoning) {
-        const fmt = formatMarkdown(lastItem.rawReasoning)
-        lastItem.reasoning = fmt.content
-      }
-    }
-  }
-}
-
-// (F-19/F-20) 统一注册/注销事件
+// ========== 生命周期 ==========
 onBeforeMount(() => {
-  EventsOff("agent-message", handleAgentMessage)
-  EventsOn("agent-message", handleAgentMessage)
+  EventsOff('agent-message', handleAgentMessage)
+  EventsOn('agent-message', handleAgentMessage)
 })
 
-onMounted(() => {
-  aiConfigStore.loadConfigs().catch(() => {})
+onMounted(async () => {
+  await aiConfigStore.loadConfigs()
 
   GetConfig().then((res) => {
     if (res.darkTheme) {
-      document.documentElement.setAttribute("theme-mode", "dark");
+      document.documentElement.setAttribute('theme-mode', 'dark')
     } else {
-      document.documentElement.removeAttribute("theme-mode");    }
+      document.documentElement.removeAttribute('theme-mode')
+    }
   }).catch(() => {})
 
   GetVersionInfo().then((res) => {
-    icon.value = res.icon;
+    if (res.icon) {
+      // 更新 AI 头像
+      messages.value.forEach(m => {
+        if (m.role === 'assistant') m.avatar = res.icon
+      })
+    }
   }).catch(() => {})
-});
-
-onBeforeUnmount(() => {
-  stopFormatTimer()
-  EventsOff("agent-message", handleAgentMessage)
 })
 
-const backBottom = () => {
-  chatRef.value.scrollToBottom({
-    behavior: 'smooth',
-  });
-};
+onBeforeUnmount(() => {
+  EventsOff('agent-message', handleAgentMessage)
+})
 
-const handleChatScroll = function ({ e }: any) {
-  const scrollTop = e.target.scrollTop;
-  isShowToBottom.value = scrollTop < 0;
-};
-
-const clearConfirm = function () {
-  chatList.value = [];
-};
-
-const handleOperation = function (type: string, options: any) {
-  console.log('handleOperation', type, options);
-  if (type === 'copy' && options?.content) { // (F-28)
-    navigator.clipboard.writeText(options.content).then(() => {
-      // 使用 TDesign 的 MessagePlugin
-      import('tdesign-vue-next').then(({ MessagePlugin }) => {
-        MessagePlugin.success('已复制')
-      })
-    }).catch(() => {
-      import('tdesign-vue-next').then(({ MessagePlugin }) => {
-        MessagePlugin.error('复制失败')
-      })
-    })
+// ========== 交互方法 ==========
+function handleSend() {
+  if (isStreaming.value) {
+    handleStop()
+    return
   }
-};
+  if (!inputValue.value.trim()) return
 
-interface ChatMessage {
-  id: number
-  avatar: string | VNode
-  name: string
-  datetime: string
-  content: string
-  reasoning?: string
-  rawContent?: string
-  rawReasoning?: string
-  jsonMarkdown?: string
-  role: 'assistant' | 'user'
-  duration?: number
-  steps?: string[]
-  metrics?: any
-}
-
-function formatDuration(ns: any): string {
-  if (!ns && ns !== 0) return ''
-  const ms = Number(ns) / 1000000
-  if (ms < 1000) return `${Math.round(ms)}ms`
-  return `${(ms / 1000).toFixed(1)}s`
-}
-
-const chatList = ref<ChatMessage[]>([
-  {
-    id: nextMsgId(),
-    avatar: '',
-    name: 'Blades-Stock AI',
-    datetime: '',
-    reasoning: '',
-    content: '我是您的AI赋能股票分析助手,您可以问我任何关于股票投资方面的问题。',
-    role: 'assistant',
-    duration: 10,
-  },
-  {
-    id: nextMsgId(),
-    avatar: 'https://tdesign.gtimg.com/site/avatar.jpg',
-    name: '宇宙无敌大韭菜',
-    datetime: '',
-    content: '介绍下自己？',
-    role: 'user',
-    reasoning: '',
-  },
-]);
-// 动态更新头像 (F-26)
-chatList.value[0].avatar = h(NImage, { src: icon.value, height: '48px', width: '48px'})
-
-const onStop = function () {
-  currentSessionId = '' // 标记当前会话已取消 (F-18)
-  isStreaming.value = false;
-  stopFormatTimer()
-  const lastItem = chatList.value[0]
-  if (lastItem && lastItem.role === 'assistant') {
-    if (lastItem.rawContent) {
-      const fmt = formatMarkdown(lastItem.rawContent)
-      lastItem.content = fmt.content
-      if (fmt.jsonMarkdown) lastItem.jsonMarkdown = fmt.jsonMarkdown
-    }
-    if (lastItem.rawReasoning) {
-      const fmt = formatMarkdown(lastItem.rawReasoning)
-      lastItem.reasoning = fmt.content
-    }
-  }
-};
-
-const inputEnter = function () {
-  if (isStreaming.value) return
-  if (!inputValue.value) return
-
-  // (F-21) 检查 AI 配置
-  const configId = aiConfigStore.activeConfigId
+  const configId = activeConfigId.value
   if (!configId || configId <= 0 || !aiConfigStore.activeConfig) {
     import('tdesign-vue-next').then(({ MessagePlugin }) => {
       MessagePlugin.warning('请先选择或创建 AI 配置')
@@ -585,24 +379,24 @@ const inputEnter = function () {
     return
   }
 
-  const params = {
-    id: nextMsgId(),
-    avatar: 'https://tdesign.gtimg.com/site/avatar.jpg',
-    name: '宇宙无敌大韭菜',
-    datetime: new Date().toDateString(),
+  // 用户消息
+  const userMsg: ChatMessage = {
+    id: genMsgId(),
+    avatar: userAvatar.value,
+    name: userName.value,
+    datetime: new Date().toISOString(),
     content: inputValue.value,
     role: 'user',
-  };
-  chatList.value.unshift(params);
+  }
+  messages.value.unshift(userMsg)
 
-  // 创建新的会话 ID (F-18)
-  currentSessionId = `session_${++sessionIdCounter}_${Date.now()}`
-  const assisId = nextMsgId()
-  const params2 = {
-    id: assisId,
+  // AI 占位消息
+  const assistantId = genMsgId()
+  const assistantMsg: ChatMessage = {
+    id: assistantId,
     avatar: '',
-    name: 'Blades-Stock AI',
-    datetime: new Date().toDateString(),
+    name: 'AI 助手',
+    datetime: new Date().toISOString(),
     content: '',
     rawContent: '',
     reasoning: '',
@@ -611,391 +405,318 @@ const inputEnter = function () {
     role: 'assistant',
     steps: [],
     statusText: '',
-  };
-  params2.avatar = h(NImage, { src: icon.value, height: '48px', width: '48px'}) // (F-26)
-  chatList.value.unshift(params2);
-  isStreaming.value = true;
-  startFormatTimer()
-  jsonMdExpandedMap.value = { ...jsonMdExpandedMap.value, [assisId]: true } // (F-23)
-
-  // (F-22) 确保占位已插入
-  nextTick(() => {
-    ChatWithAgent(inputValue.value, configId, 0, false, 0, false, agentMode.value === 'auto' ? '' : agentMode.value, "")
-      .catch((err: any) => {
-        console.error('ChatWithAgent error', err)
-        isStreaming.value = false
-        stopFormatTimer()
-      })
-  })
-};
-</script>
-<style lang="less">
-::-webkit-scrollbar-thumb {
-  background-color: var(--td-scrollbar-color);
-}
-::-webkit-scrollbar-thumb:horizontal:hover {
-  background-color: var(--td-scrollbar-hover-color);
-}
-::-webkit-scrollbar-track {
-  background-color: var(--td-scroll-track-color);
-}
-.chat-box {
-  position: relative;
-  height: 100%;
-  margin: 5px 10px 5px 10px;
-  text-align: left;
-  .bottomBtn {
-    position: absolute;
-    left: 50%;
-    margin-left: -20px;
-    bottom: 210px;
-    padding: 0;
-    border: 0;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    box-shadow: 0px 8px 10px -5px rgba(0, 0, 0, 0.08), 0px 16px 24px 2px rgba(0, 0, 0, 0.04),
-    0px 6px 30px 5px rgba(0, 0, 0, 0.05);
+    toolCalls: [],
   }
-  .to-bottom {
-    width: 40px;
-    height: 40px;
-    border: 1px solid #dcdcdc;
-    box-sizing: border-box;
-    background: var(--td-bg-color-container);
-    border-radius: 50%;
-    font-size: 24px;
-    line-height: 40px;
+  streamingMsgId.value = assistantId
+  streamingPlaceholder.value = assistantMsg
+  messages.value.unshift(assistantMsg) // 先加入列表，组件会根据 isStreaming 渲染骨架屏
+
+  // 开始流式
+  startStream(assistantMsg)
+
+  nextTick(() => {
+    scrollToBottom()
+    ChatWithAgent(
+      inputValue.value,
+      configId,
+      0,
+      false,
+      0,
+      false,
+      agentMode.value === 'auto' ? '' : agentMode.value,
+      ''
+    ).catch((err: any) => {
+      console.error('ChatWithAgent error', err)
+      cancel()
+      const errMsg: ChatMessage = {
+        id: genMsgId(),
+        avatar: '',
+        name: 'AI 助手',
+        datetime: new Date().toISOString(),
+        content: `❌ 调用失败：${err?.message || err}`,
+        role: 'assistant',
+      }
+      messages.value.unshift(errMsg)
+    })
+  })
+
+  inputValue.value = ''
+}
+
+function handleStop() {
+  cancel()
+  if (streamingPlaceholder.value) {
+    messages.value = messages.value.filter(m => m.id !== streamingPlaceholder.value!.id)
+    streamingPlaceholder.value = null
+    streamingMsgId.value = null
+  }
+}
+
+function handleCopy(content: string) {
+  navigator.clipboard.writeText(content).then(() => {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已复制'))
+  }).catch(() => {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
+  })
+}
+
+function handleRetry(msgId: string) {
+  const idx = messages.value.findIndex(m => m.id === msgId)
+  if (idx === -1) return
+  const msg = messages.value[idx]
+  if (msg.role === 'user') {
+    // 重发用户消息
+    inputValue.value = msg.content
+    messages.value = messages.value.slice(0, idx) // 移除该消息及之后的回复
+    handleSend()
+  }
+}
+
+function handleReference(msgId: string) {
+  const msg = messages.value.find(m => m.id === msgId)
+  if (msg) {
+    inputValue.value += `\n\n> 引用：${msg.content.slice(0, 200)}...`
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已引用到输入框'))
+  }
+}
+
+function handleEdit(msg: ChatMessage) {
+  if (msg.role === 'user') {
+    inputValue.value = msg.content
+    const idx = messages.value.findIndex(m => m.id === msg.id)
+    if (idx !== -1) messages.value.splice(idx, 1)
+  }
+}
+
+function handleResend(msg: ChatMessage) {
+  handleEdit(msg)
+  handleSend()
+}
+
+function onConfigChange(val: number) {
+  activeConfigId.value = val
+  aiConfigStore.setActiveConfigId(val)
+}
+
+function fillInput(text: string) {
+  inputValue.value = text
+}
+
+function clearHistory() {
+  import('tdesign-vue-next').then(({ DialogPlugin }) => {
+    DialogPlugin.warning({
+      title: '清空对话历史',
+      content: '确定要清空当前对话历史吗？此操作不可恢复。',
+      positiveText: '清空',
+      negativeText: '取消',
+      onPositiveAction: () => {
+        messages.value = []
+        import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已清空'))
+      }
+    })
+  })
+}
+
+function toggleCompact() {
+  isCompact.value = !isCompact.value
+}
+
+function insertTemplate() {
+  import('tdesign-vue-next').then(({ DialogPlugin }) => {
+    DialogPlugin.info({
+      title: '快速模板',
+      content: () => h('div', { style: 'display:flex;flex-direction:column;gap:8px' }, [
+        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('分析 {{stockCode}} 的基本面、技术面、资金面、消息面'); DialogPlugin.close() }}, { default: () => '📊 全维度个股分析' }),
+        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('对比 {{stockCode1}} 和 {{stockCode2}} 的优劣势'); DialogPlugin.close() }}, { default: () => '⚖️ 两只股票对比分析' }),
+        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('筛选市盈率<15、股息率>3%、ROE>15% 的股票'); DialogPlugin.close() }}, { default: () => '🔍 价值型选股筛选' }),
+        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('回测 双均线策略 MA5/MA20 最近 1 年'); DialogPlugin.close() }}, { default: () => '📉 策略回测' }),
+        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('解释 MACD、RSI、布林带 的实战用法'); DialogPlugin.close() }}, { default: () => '📚 技术指标教学' }),
+      ]),
+      positiveText: '关闭',
+      onPositiveAction: () => {},
+    })
+  })
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    const container = document.querySelector('.chat-messages')
+    if (container) {
+      container.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  })
+}
+
+// 监听滚动显示/隐藏底部按钮
+function handleScroll() {
+  const container = document.querySelector('.chat-messages')
+  if (container) {
+    showScrollBottom.value = container.scrollTop > 200
+  }
+}
+
+onMounted(() => {
+  const container = document.querySelector('.chat-messages')
+  container?.addEventListener('scroll', handleScroll)
+})
+
+onBeforeUnmount(() => {
+  const container = document.querySelector('.chat-messages')
+  container?.removeEventListener('scroll', handleScroll)
+})
+</script>
+
+<style scoped lang="less">
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--td-bg-color-container);
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container);
+  flex-shrink: 0;
+
+  .header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .chat-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--td-text-color-primary);
+  }
+
+  .chat-subtitle {
+    margin: 0;
+    font-size: 12px;
+    color: var(--td-text-color-disabled);
+  }
+
+  .header-right {
     display: flex;
     align-items: center;
-    justify-content: center;
-    .t-icon {
-      font-size: 24px;
-    }
+    gap: 8px;
   }
 }
 
-.model-select {
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
   display: flex;
+  flex-direction: column-reverse; // 最新消息在上
+  position: relative;
+
+  /* 滚动条美化 */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--td-border-level-2-color);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--td-border-level-3-color);
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  .t-select {
-    width: 112px;
-    height: 32px;
-    margin-right: 8px;
-    .t-input {
-      border-radius: 32px;
-      padding: 0 15px;
-    }
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  text-align: center;
+  color: var(--td-text-color-disabled);
+
+  .empty-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.5;
   }
-  .check-box {
-    width: 112px;
-    height: 32px;
-    border-radius: 32px;
-    border: 0;
-    background: #e7e7e7;
-    color: rgba(0, 0, 0, 0.9);
-    box-sizing: border-box;
-    flex: 0 0 auto;
-    .t-button__text {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      span {
-        margin-left: 4px;
-      }
-    }
+
+  h3 {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--td-text-color-secondary);
   }
-  .check-box.is-active {
-    border: 1px solid #d9e1ff;
-    background: #f2f3ff;
+
+  p {
+    margin: 0 0 20px;
+    font-size: 14px;
+  }
+}
+
+.empty-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 400px;
+}
+
+.suggestion-tag {
+  cursor: pointer;
+  transition: all 0.2s;
+  &:hover {
+    background: var(--td-brand-color-light);
+    border-color: var(--td-brand-color);
     color: var(--td-brand-color);
   }
 }
 
-
-.chat-sender {
-  .btn {
-    color: var(--td-text-color-disabled);
-    border: none;
-    &:hover {
-      color: var(--td-brand-color-hover);
-      border: none;
-      background: none;
-    }
-  }
-  .btn.t-button {
-    height: var(--td-comp-size-m);
-    padding: 0;
-  }
-  .model-select {
-    display: flex;
-    align-items: center;
-    .t-select {
-      width: 112px;
-      height: var(--td-comp-size-m);
-      margin-right: var(--td-comp-margin-s);
-      .t-input {
-        border-radius: 32px;
-        padding: 0 15px;
-      }
-      .t-input.t-is-focused {
-        box-shadow: none;
-      }
-    }
-    .check-box {
-      width: 112px;
-      height: var(--td-comp-size-m);
-      border-radius: 32px;
-      border: 0;
-      background: var(--td-bg-color-component);
-      color: var(--td-text-color-primary);
-      box-sizing: border-box;
-      flex: 0 0 auto;
-      .t-button__text {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        span {
-          margin-left: var(--td-comp-margin-s);
-        }
-      }
-    }
-    .check-box.is-active {
-      border: 1px solid var(--td-brand-color-focus);
-      background: var(--td-brand-color-light);
-      color: var(--td-text-color-brand);
-    }
-  }
-}
-
-.agent-steps {
-  margin-bottom: 8px;
-  border: 1px solid var(--td-component-border);
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--td-bg-color-container-hover);
-}
-.agent-steps-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--td-text-color-secondary);
-  background: linear-gradient(135deg, rgba(56, 173, 169, 0.06) 0%, rgba(46, 139, 87, 0.06) 100%);
-  border-bottom: 1px solid var(--td-component-border);
-}
-.agent-steps-badge {
-  font-size: 11px;
-  background: var(--td-brand-color);
-  color: #fff;
-  border-radius: 10px;
-  padding: 0 6px;
-  line-height: 18px;
-  min-width: 18px;
-  text-align: center;
-}
-.agent-steps-list {
-  padding: 8px 10px 8px 14px;
-  max-height: 250px;
-  overflow-y: auto;
-}
-.agent-step-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 3px 0;
-  position: relative;
-  font-size: 12px;
-  color: var(--td-text-color-secondary);
-  line-height: 1.5;
-}
-.agent-step-item:not(:last-child)::before {
-  content: '';
+.scroll-bottom-btn {
   position: absolute;
-  left: 4px;
-  top: 16px;
-  bottom: -3px;
-  width: 1px;
-  background: var(--td-component-border);
+  right: 20px;
+  bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  z-index: 10;
 }
-.agent-step-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--td-text-color-disabled);
+
+.chat-input-area {
+  padding: 12px 16px;
+  border-top: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container);
   flex-shrink: 0;
-  margin-top: 4px;
-  position: relative;
-  z-index: 1;
-}
-.agent-step-dot.step-active {
-  background: #e6a23c;
-  box-shadow: 0 0 4px rgba(230, 162, 60, 0.4);
-}
-.agent-step-dot.step-tool {
-  background: #409eff;
-  box-shadow: 0 0 4px rgba(64, 158, 255, 0.4);
-}
-.agent-step-dot.step-done {
-  background: #67c23a;
-  box-shadow: 0 0 4px rgba(103, 194, 58, 0.4);
-}
-.agent-step-text {
-  flex: 1;
-  min-width: 0;
-  word-break: break-all;
-  text-align: left;
+
+  .input-prefix {
+    margin-right: 8px;
+  }
+
+  .config-hint {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #fff3d4;
+    border: 1px solid #ffe58f;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #ad6800;
+    a { color: var(--td-brand-color); }
+  }
 }
 
-.agent-json-md {
-  margin-bottom: 8px;
-  border: 1px solid var(--td-component-border);
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--td-bg-color-container-hover);
-}
-.agent-json-md-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  cursor: pointer;
-  user-select: none;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--td-text-color-secondary);
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(5, 150, 105, 0.06) 100%);
-  border-bottom: 1px solid var(--td-component-border);
-  transition: background 0.2s;
-}
-.agent-json-md-header:hover {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(5, 150, 105, 0.12) 100%);
-}
-.agent-json-md-arrow {
-  transition: transform 0.2s;
-  flex-shrink: 0;
-}
-.agent-json-md-arrow-expanded {
-  transform: rotate(90deg);
-}
-.agent-json-md-title {
-  font-size: 13px;
-  font-weight: 500;
-}
-.agent-json-md-content {
-  padding: 10px;
-  max-height: 500px;
-  overflow-y: auto;
-  text-align: left;
-}
-
-.agent-steps {
-  margin-bottom: 8px;
-  border: 1px solid var(--td-component-border);
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--td-bg-color-container-hover);
-}
-.agent-steps-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--td-text-color-secondary);
-  background: var(--td-bg-color-component);
-  border-bottom: 1px solid var(--td-component-border);
-}
-.agent-steps-badge {
-  background: var(--td-brand-color);
-  color: #fff;
-  border-radius: 10px;
-  padding: 0 6px;
-  font-size: 11px;
-  line-height: 18px;
-  min-width: 18px;
-  text-align: center;
-}
-.agent-steps-list {
-  padding: 6px 10px;
-}
-.agent-step-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 2px 0;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.agent-step-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-top: 5px;
-  flex-shrink: 0;
-}
-.agent-step-dot.step-done { background: #22c55e; }
-.agent-step-dot.step-tool { background: #3b82f6; }
-.agent-step-dot.step-active { background: #f59e0b; animation: agent-dot-pulse 1.2s infinite; }
-@keyframes agent-dot-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-.agent-step-text { word-break: break-all; color: var(--td-text-color-secondary); }
-.agent-status {
-  background: var(--td-brand-color-light, #e8f5e9);
-  border-radius: 6px;
-  padding: 6px 12px;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.agent-status::before {
-  content: '';
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--td-brand-color, #0052d9);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: agent-status-spin 0.8s linear infinite;
-}
-.agent-status-text {
-  font-size: 13px;
-  color: var(--td-brand-color, #0052d9);
-}
-
-.agent-metrics-capsule {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 3px 10px;
-  background: var(--td-bg-color-secondarycontainer, rgba(140, 140, 140, 0.08));
-  border: 1px solid var(--td-border-level-1-color, rgba(140, 140, 140, 0.15));
-  border-radius: 12px;
-  font-size: 11px;
-  color: var(--td-text-color-secondary);
-  user-select: none;
-}
-
-.agent-metrics-capsule .metrics-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-weight: 500;
-}
-
-.agent-metrics-capsule .metrics-warning {
-  color: #f59e0b;
-  font-weight: 600;
-}
-@keyframes agent-status-spin {
-  to { transform: rotate(360deg); }
+:deep(.t-chat-sender) {
+  .t-chat-sender__textarea {
+    border-radius: 8px !important;
+    border: 1px solid var(--td-component-border) !important;
+    background: var(--td-bg-color-container) !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+  }
 }
 </style>
