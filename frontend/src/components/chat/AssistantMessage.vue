@@ -129,18 +129,16 @@ const emit = defineEmits<{
 const registerElement = inject<Function>('registerMessageElement')
 const unregisterElement = inject<Function>('unregisterMessageElement')
 
-// 从 message 解构，提供响应式默认值
-const {
-  content,
-  reasoning,
-  rawReasoning,
-  rawContent,
-  jsonMarkdown,
-  steps,
-  toolCalls,
-  metrics,
-  datetime,
-} = props.message
+// 响应式提取消息字段
+const content = computed(() => props.message.content || '')
+const reasoning = computed(() => props.message.reasoning || '')
+const rawReasoning = computed(() => props.message.rawReasoning || '')
+const rawContent = computed(() => props.message.rawContent || '')
+const jsonMarkdown = computed(() => props.message.jsonMarkdown || '')
+const steps = computed(() => props.message.steps || [])
+const toolCalls = computed(() => props.message.toolCalls || [])
+const metrics = computed(() => props.message.metrics)
+const datetime = computed(() => props.message.datetime)
 
 // 展开状态（默认全折叠）
 const expandedReasoning = ref(false)
@@ -150,8 +148,10 @@ const expandedReport = ref(false)
 
 // 如果正在流式，自动展开思考过程
 watch(() => props.isStreaming, (val) => {
-  if (val) expandedReasoning.value = true
-})
+  if (val) {
+    expandedReasoning.value = true
+  }
+}, { immediate: true })
 
 // 锚点 ID（用于深度链接）
 const anchorId = computed(() => `msg-${props.message.id}`)
@@ -168,9 +168,10 @@ onUnmounted(() => {
 
 // 预估行数（用于骨架屏）
 const estimatedLines = computed(() => {
-  if (!rawContent.value) return 5
+  const text = rawContent.value
+  if (!text) return 4
   const charsPerLine = 40
-  return Math.min(12, Math.max(3, Math.ceil(rawContent.value.length / charsPerLine)))
+  return Math.min(12, Math.max(3, Math.ceil(text.length / charsPerLine)))
 })
 
 function formatTime(dt: string): string {

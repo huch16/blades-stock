@@ -1,473 +1,808 @@
 <template>
   <div class="chat-container">
-    <div class="chat-header" v-if="!isCompact">
+    <!-- 顶部 HUD 控制中枢 -->
+    <header class="chat-header">
       <div class="header-left">
-        <h2 class="chat-title">💬 AI 投研助手</h2>
-        <span class="chat-subtitle">基于多模型协作的智能股票分析</span>
-      </div>
-      <div class="header-right">
-        <n-select
-          v-model:value="activeConfigId"
-          :options="configOptions"
-          :placeholder="configOptions.length ? '' : '请先在设置中添加 AI 配置'"
+        <n-button
+          quaternary
           size="small"
-          style="width: 220px;"
-          clearable
-          @update:value="onConfigChange"
-        />
-        <n-space vertical-align="center" size="small">
-          <n-select
-            v-model:value="agentMode"
-            :options="agentModeOptions"
-            size="small"
-            style="width: 110px;"
-          />
-          <n-button
-            variant="text"
-            size="small"
-            @click="toggleCompact"
-            :circle="true"
-          >
-            <template v-if="isCompact">
-              <FullscreenIcon />
-            </template>
-            <template v-else>
-              <FullscreenExitIcon />
-            </template>
-          </n-button>
-          <n-button
-            variant="text"
-            size="small"
-            @click="clearHistory"
-            :circle="true"
-          >
-            <DeleteIcon />
-          </n-button>
-        </n-space>
+          class="session-drawer-btn"
+          @click="showSessionDrawer = true"
+          title="会话历史管理"
+        >
+          <template #icon>
+            <ChatIcon />
+          </template>
+          <span class="session-title-text">{{ currentSessionTitle }}</span>
+          <span class="session-badge">{{ messages.length }}</span>
+        </n-button>
+        <n-button
+          quaternary
+          circle
+          size="tiny"
+          @click="createNewSession"
+          title="新建对话"
+        >
+          <AddIcon />
+        </n-button>
       </div>
-    </div>
 
-    <div class="chat-messages" ref="messagesContainer">
-      <!-- 消息锚点导航（右侧边栏） -->
-      <MessageAnchorNav
-        :items="anchorNavItems"
-        :show="messages.length > 0"
-        @scroll="scrollToMessage"
-      />
-
-      <ChatMessage
-        v-for="msg in messages"
-        :key="msg.id"
-        :message="msg"
-        :is-streaming="isStreaming && msg.id === streamingMsgId"
-        :current-user-avatar="userAvatar"
-        :current-user-name="userName"
-        @copy="handleCopy"
-        @retry="handleRetry"
-        @reference="handleReference"
-        @edit="handleEdit"
-        @resend="handleResend"
-      />
-
-      <!-- 流式占位消息 -->
-      <ChatMessage
-        v-if="isStreaming && streamingPlaceholder"
-        :key="streamingPlaceholder.id"
-        :message="streamingPlaceholder"
-        :is-streaming="true"
-        :current-user-avatar="userAvatar"
-        :current-user-name="userName"
-      />
-
-      <!-- 空状态 -->
-      <div v-if="messages.length === 0 && !isStreaming" class="empty-state">
-        <div class="empty-icon">💬</div>
-        <h3>开始你的投研对话</h3>
-        <p>输入股票代码、名称或投资问题，AI 将为你提供专业分析</p>
-        <div class="empty-suggestions">
-          <n-tag
-            v-for="s in suggestions"
-            :key="s"
-            size="small"
-            @click="fillInput(s)"
-            class="suggestion-tag"
+      <div class="header-center">
+        <!-- 模式快捷胶囊 -->
+        <div class="mode-capsule-group">
+          <button
+            v-for="opt in agentModeOptions"
+            :key="opt.value"
+            class="mode-capsule-btn"
+            :class="{ active: agentMode === opt.value }"
+            @click="agentMode = opt.value"
+            :title="opt.description"
           >
-            {{ s }}
-          </n-tag>
+            {{ opt.label }}
+          </button>
         </div>
       </div>
 
-      <!-- 滚动到底部按钮 -->
-      <n-button
-        v-show="showScrollBottom"
-        class="scroll-bottom-btn"
-        variant="text"
-        circle
-        @click="scrollToBottom"
-      >
-        <ArrowDownIcon />
-      </n-button>
-    </div>
+      <div class="header-right">
+        <!-- 模型选择 -->
+        <n-select
+          v-model:value="activeConfigId"
+          :options="configOptions"
+          :placeholder="configOptions.length ? '选择 AI 模型配置' : '请先在设置中添加 AI'"
+          size="small"
+          class="model-selector"
+          clearable
+          @update:value="onConfigChange"
+        />
 
-    <!-- 输入区域 -->
-    <div class="chat-input-area">
-      <t-chat-sender
-        ref="chatSenderRef"
-        v-model="inputValue"
-        :textarea-props="{
-          placeholder: configOptions.length ? '请输入消息... (Shift+Enter 换行)' : '请先在设置中配置 AI 模型',
-          rows: 1,
-          autosize: { minRows: 1, maxRows: 6 },
-        }"
-        :loading="isStreaming"
-        :stop-disabled="isStreaming"
-        @send="handleSend"
-        @stop="handleStop"
-      >
-        <template #prefix v-if="!isCompact">
-          <n-space vertical-align="center" size="small" class="input-prefix">
-            <n-tooltip placement="top" :content="'选择 AI 配置'">
-              <n-select
-                v-model:value="activeConfigId"
-                :options="configOptions"
-                :placeholder="configOptions.length ? '' : '无可用配置'"
-                size="small"
-                style="width: 200px;"
-                clearable
-                @update:value="onConfigChange"
-              />
-            </n-tooltip>
-            <n-tooltip placement="top" :content="'对话模式'">
-              <n-select
-                v-model:value="agentMode"
-                :options="agentModeOptions"
-                size="small"
-                style="width: 110px;"
-              />
-            </n-tooltip>
-          </n-space>
-        </template>
-        <template #suffix>
-          <n-space vertical-align="center" size="small">
-            <n-button
-              v-if="!isCompact"
-              variant="text"
-              size="small"
-              @click="insertTemplate"
-            >
-              📝 模板
-            </n-button>
-            <n-button
-              theme="primary"
-              :loading="isStreaming"
-              @click="handleSend"
-            >
-              {{ isStreaming ? '停止' : '发送' }}
-            </n-button>
-          </n-space>
-        </template>
-      </t-chat-sender>
+        <n-tooltip placement="bottom" content="投研场景库">
+          <n-button
+            quaternary
+            circle
+            size="small"
+            @click="showScenarioModal = true"
+          >
+            <ViewListIcon />
+          </n-button>
+        </n-tooltip>
 
-      <div v-if="!configOptions.length" class="config-hint">
-        ⚠️ 未检测到 AI 配置，请前往 <router-link to="/settings">设置页面</router-link> 添加配置后再使用
+        <n-tooltip placement="bottom" content="清空当前对话">
+          <n-button
+            quaternary
+            circle
+            size="small"
+            @click="clearCurrentHistory"
+          >
+            <DeleteIcon />
+          </n-button>
+        </n-tooltip>
+
+        <n-tooltip placement="bottom" :content="isCompact ? '标准视图' : '紧凑视图'">
+          <n-button
+            quaternary
+            circle
+            size="small"
+            @click="isCompact = !isCompact"
+          >
+            <FullscreenExitIcon v-if="!isCompact" />
+            <FullscreenIcon v-else />
+          </n-button>
+        </n-tooltip>
       </div>
-    </div>
+    </header>
+
+    <!-- 主体聊天消息滚动区域 (自然时间线：旧消息在上，新消息在下) -->
+    <main
+      class="chat-messages-viewport"
+      ref="messagesContainer"
+      @scroll="handleScroll"
+    >
+      <!-- 消息锚点导航（折叠式微型右侧指示器） -->
+      <MessageAnchorNav
+        :items="anchorNavItems"
+        :show="messages.length > 2"
+        @scroll="scrollToMessage"
+      />
+
+      <!-- 空白欢迎态：专业投研引导工作台 -->
+      <section v-if="messages.length === 0" class="welcome-workspace">
+        <div class="welcome-hero">
+          <div class="hero-icon-glow">💬</div>
+          <h2 class="hero-title">Blades AI 智能投研中枢</h2>
+          <p class="hero-desc">
+            融合多源实时行情、本地量化指标引擎、ETF动量轮动与网络搜索的多智能体协作系统
+          </p>
+        </div>
+
+        <div class="scenario-grid">
+          <div
+            v-for="(card, idx) in scenarioCards"
+            :key="idx"
+            class="scenario-card"
+            @click="applyScenario(card.prompt)"
+          >
+            <div class="card-header">
+              <span class="card-icon">{{ card.icon }}</span>
+              <span class="card-badge">{{ card.badge }}</span>
+            </div>
+            <h4 class="card-title">{{ card.title }}</h4>
+            <p class="card-desc">{{ card.desc }}</p>
+            <div class="card-prompt-hint">
+              <span>试一试：{{ card.example }}</span>
+              <span class="arrow-hint">→</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="quick-keywords-bar">
+          <span class="keywords-label">快速联想：</span>
+          <div class="keywords-list">
+            <span
+              v-for="kw in quickKeywords"
+              :key="kw"
+              class="keyword-chip"
+              @click="applyScenario(kw)"
+            >
+              {{ kw }}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 消息列表渲染 (严格单次渲染，杜绝重复占位) -->
+      <div v-else class="messages-flow">
+        <ChatMessageComp
+          v-for="msg in messages"
+          :key="msg.id"
+          :message="msg"
+          :is-streaming="isStreaming && msg.id === streamingMsgId"
+          :current-user-avatar="userAvatar"
+          :current-user-name="userName"
+          @copy="handleCopy"
+          @retry="handleRetry"
+          @reference="handleReference"
+          @edit="handleEdit"
+          @resend="handleResend"
+        />
+      </div>
+
+      <!-- 滚动回底部悬浮球 -->
+      <Transition name="fade">
+        <button
+          v-if="showScrollBottom"
+          class="fab-scroll-bottom"
+          @click="scrollToBottom(true)"
+          title="回到底部最新消息"
+        >
+          <ArrowDownIcon />
+          <span class="fab-text">最新</span>
+        </button>
+      </Transition>
+    </main>
+
+    <!-- 底部输入与操作中枢 -->
+    <footer class="chat-input-cockpit" :class="{ compact: isCompact }">
+      <!-- 快捷指令横条 (芯片式工具条) -->
+      <div class="input-quick-bar" v-if="!isCompact">
+        <div class="quick-chips">
+          <button
+            v-for="chip in quickChips"
+            :key="chip.label"
+            class="quick-chip-btn"
+            @click="fillInput(chip.text)"
+            :title="chip.tip"
+          >
+            <span class="chip-icon">{{ chip.icon }}</span>
+            <span class="chip-label">{{ chip.label }}</span>
+          </button>
+        </div>
+
+        <div class="status-summary" v-if="isStreaming">
+          <span class="live-dot"></span>
+          <span class="live-text">{{ currentStreamStatus || '正在智能推理分析中...' }}</span>
+        </div>
+      </div>
+
+      <!-- 输入框主体 -->
+      <div class="input-sender-box">
+        <t-chat-sender
+          ref="chatSenderRef"
+          v-model="inputValue"
+          :textarea-props="{
+            placeholder: configOptions.length ? '输入个股代码/名称、ETF轮动需求或选股策略... (Enter发送，Shift+Enter换行)' : '⚠️ 请先选择或在设置中添加 AI 模型配置',
+            rows: 1,
+            autosize: { minRows: 1, maxRows: 6 },
+          }"
+          :loading="isStreaming"
+          :stop-disabled="false"
+          @send="handleSend"
+          @stop="handleStop"
+        >
+          <template #suffix>
+            <div class="sender-actions">
+              <t-button
+                v-if="isStreaming"
+                theme="danger"
+                variant="base"
+                size="medium"
+                class="stop-btn"
+                @click="handleStop"
+              >
+                ⏹️ 停止生成
+              </t-button>
+              <t-button
+                v-else
+                theme="primary"
+                variant="base"
+                size="medium"
+                :disabled="!inputValue.trim() || !activeConfigId"
+                @click="handleSend"
+              >
+                发送
+              </t-button>
+            </div>
+          </template>
+        </t-chat-sender>
+      </div>
+
+      <!-- 缺少配置引导 -->
+      <div v-if="!configOptions.length" class="config-alert-banner">
+        ⚠️ 未检测到有效 AI 模型配置，请前往 <router-link to="/settings">设置中心</router-link> 选配 Ollama / DeepSeek / 硅基流动 等模型。
+      </div>
+    </footer>
+
+    <!-- 左侧会话历史抽屉 -->
+    <n-drawer
+      v-model:show="showSessionDrawer"
+      :width="320"
+      placement="left"
+    >
+      <n-drawer-content title="💬 投研会话记录" closable>
+        <div class="session-drawer-content">
+          <n-button
+            type="primary"
+            dashed
+            block
+            class="btn-new-chat"
+            @click="createNewSession"
+          >
+            ➕ 新建投研对话
+          </n-button>
+
+          <div class="session-list">
+            <div
+              v-for="s in sessions"
+              :key="s.id"
+              class="session-item"
+              :class="{ active: s.id === currentSessionId }"
+              @click="switchSession(s.id)"
+            >
+              <div class="session-info">
+                <span class="session-name" :title="s.title">{{ s.title }}</span>
+                <span class="session-meta">
+                  {{ formatSessionTime(s.updatedAt) }} · {{ s.messages.length }}条
+                </span>
+              </div>
+              <div class="session-actions" @click.stop>
+                <n-button
+                  quaternary
+                  circle
+                  size="tiny"
+                  @click="deleteSession(s.id)"
+                  title="删除此会话"
+                >
+                  <DeleteIcon />
+                </n-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </n-drawer-content>
+    </n-drawer>
+
+    <!-- 投研场景库弹窗 -->
+    <n-modal
+      v-model:show="showScenarioModal"
+      preset="card"
+      title="💡 专业投研场景库"
+      style="width: 720px; max-width: 90vw;"
+    >
+      <div class="modal-scenarios-list">
+        <div
+          v-for="(item, idx) in allScenarios"
+          :key="idx"
+          class="scenario-modal-item"
+          @click="selectModalScenario(item.prompt)"
+        >
+          <div class="item-head">
+            <span class="item-tag">{{ item.category }}</span>
+            <span class="item-title">{{ item.title }}</span>
+          </div>
+          <p class="item-desc">{{ item.prompt }}</p>
+        </div>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, provide, h, type VNode } from 'vue'
-import { NSelect, NSpace, NButton, NTag, NTooltip, NImage } from 'naive-ui'
-import { ArrowDownIcon, DeleteIcon, FullscreenIcon, FullscreenExitIcon } from 'tdesign-icons-vue-next'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, provide } from 'vue'
+import {
+  NSelect,
+  NButton,
+  NTooltip,
+  NDrawer,
+  NDrawerContent,
+  NModal
+} from 'naive-ui'
+import {
+  ArrowDownIcon,
+  DeleteIcon,
+  FullscreenIcon,
+  FullscreenExitIcon,
+  ChatIcon,
+  AddIcon,
+  ViewListIcon
+} from 'tdesign-icons-vue-next'
 import { ChatWithAgent, GetConfig, GetVersionInfo } from '../../wailsjs/go/main/App'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { cleanFinalContent } from '@/utils/cleanText'
 import {
-  useChatStream,
   useMessageAnchor,
-  type ChatMessage as ChatMessageType,
+  type ChatMessage,
   type StreamChunk,
-  genMsgId,
-  formatDuration
+  genMsgId
 } from './chat'
 import ChatMessageComp from './chat/ChatMessage.vue'
 import MessageAnchorNav from './chat/MessageAnchorNav.vue'
 
-// ========== 状态 ==========
+// ========== 数据接口与持久化类型 ==========
+interface ChatSession {
+  id: string
+  title: string
+  updatedAt: number
+  messages: ChatMessage[]
+}
+
+const STORAGE_KEY = 'blades_stock_chat_sessions_v2'
+const ACTIVE_SESSION_KEY = 'blades_stock_active_session_id_v2'
+
+// ========== 核心状态 ==========
 const aiConfigStore = useAiConfigStore()
-const messages = ref<ChatMessage[]>([])
+const sessions = ref<ChatSession[]>([])
+const currentSessionId = ref<string>('')
 const inputValue = ref('')
 const isStreaming = ref(false)
 const streamingMsgId = ref<string | null>(null)
-const streamingPlaceholder = ref<ChatMessage | null>(null)
+const currentStreamStatus = ref<string>('')
 const showScrollBottom = ref(false)
 const isCompact = ref(false)
+const showSessionDrawer = ref(false)
+const showScenarioModal = ref(false)
 const agentMode = ref<'auto' | 'react' | 'plan_execute'>('auto')
 const userAvatar = ref('https://tdesign.gtimg.com/site/avatar.jpg')
 const userName = ref('用户')
+const messagesContainer = ref<HTMLElement | null>(null)
 
+// 响应式消息列表：直接绑定当前激活会话的 messages
+const messages = computed<ChatMessage[]>({
+  get() {
+    const s = sessions.value.find(item => item.id === currentSessionId.value)
+    return s ? s.messages : []
+  },
+  set(val: ChatMessage[]) {
+    const s = sessions.value.find(item => item.id === currentSessionId.value)
+    if (s) {
+      s.messages = val
+      s.updatedAt = Date.now()
+      saveSessionsToStorage()
+    }
+  }
+})
+
+const currentSessionTitle = computed(() => {
+  const s = sessions.value.find(item => item.id === currentSessionId.value)
+  return s ? s.title : '默认对话'
+})
+
+// ========== AI 配置计算 ==========
 const activeConfigId = computed({
   get: () => aiConfigStore.activeConfigId,
   set: (val) => { aiConfigStore.setActiveConfigId(val) }
 })
 
 const configOptions = computed(() => aiConfigStore.configs.map(c => ({
-  label: c.name || `配置 #${c.ID}`,
+  label: `${c.name || '配置' + c.ID} (${c.modelName || '默认模型'})`,
   value: c.ID,
-  description: c.modelName ? `模型: ${c.modelName}` : '',
 })))
 
 const agentModeOptions = [
-  { label: '🤖 自动', value: 'auto', description: '根据问题复杂度自动选择策略' },
-  { label: '⚡ 快速', value: 'react', description: 'ReAct 单步推理，适合简单问答' },
-  { label: '🧠 规划', value: 'plan_execute', description: 'Plan-and-Execute 多步规划，适合复杂分析' },
+  { label: '🤖 自动模式', value: 'auto' as const, description: '根据问题复杂度自动选择单步或多步执行策略' },
+  { label: '⚡ 极速诊断', value: 'react' as const, description: 'ReAct 单步即时调用，响应更快，适合快速行情问答' },
+  { label: '🧠 深度规划', value: 'plan_execute' as const, description: 'Plan-and-Execute 深度多步拆解，适合全维度复杂分析' },
 ]
 
-const suggestions = [
+// ========== 投研场景库数据 ==========
+const scenarioCards = [
+  {
+    icon: '🎯',
+    badge: '个股体检',
+    title: '全维度深度诊断',
+    desc: '综合基本面、技术面均线、大资金动向与近期研报给出综合评级。',
+    example: '深度分析 600519 贵州茅台',
+    prompt: '请对 600519 贵州茅台 进行全维度深度诊断，涵盖：1. 估值与基本面指标；2. 近期日K线量价与支撑阻力；3. 主力资金动向；4. 核心催化与潜在风险。',
+  },
+  {
+    icon: '🚀',
+    badge: '主线战法',
+    title: 'ETF 加权动量轮动',
+    desc: '计算全市场核心宽基与行业 ETF 21日加权动量评分，捕捉进攻主线。',
+    example: '计算当前 ETF 动量排名',
+    prompt: '请调用 GetETFMomentumRanking 工具获取当前场内核心 ETF 21日加权动量排名，并根据动量数值分析当前最强进攻板块与防御配置建议。',
+  },
+  {
+    icon: '📈',
+    badge: '技术选股',
+    title: '量化指标战法选股',
+    desc: '基于均线多头排列、MACD金叉或放量突破，执行本地策略筛选。',
+    example: '筛选均线多头放量突破个股',
+    prompt: '请帮我筛选当前市场上呈现均线多头排列且成交量放量突破的个股，并给出具体技术面评分和选股理由。',
+  },
+  {
+    icon: '⚖️',
+    badge: '横向对比',
+    title: '龙头双股深度PK',
+    desc: '对比同行业两只核心龙头的商业模式、估值弹性与技术面强弱。',
+    example: '对比 宁德时代 vs 比亚迪',
+    prompt: '请对比分析 300750 宁德时代 与 002594 比亚迪：比较两者的估值水平、盈利质量、近期资金流入以及当前K线走势强弱。',
+  },
+]
+
+const quickKeywords = [
   '分析 000001 平安银行',
-  '对比 贵州茅台 vs 五粮液',
-  '筛选 低估值高分红股票',
-  '解释 什么是 PE TTM',
-  '回测 双均线策略 最近一年',
+  '计算 场内ETF动量排名',
+  '筛选 低估值高股息股票',
+  '半导体产业链最新热点',
+  '贵州茅台 vs 五粮液',
+  '回测 双均线策略',
 ]
 
-// ========== 流式状态机 ==========
-const {
-  isStreaming: streamIsStreaming,
-  startStream,
-  feedChunk,
-  finalize,
-  cancel,
-  getSessionId,
-} = useChatStream()
+const quickChips = [
+  { icon: '📊', label: '个股诊断', text: '请全面分析股票 ', tip: '输入代码或名称' },
+  { icon: '🚀', label: 'ETF动量', text: '请计算当前场内主流ETF的21日加权动量排名并解读', tip: '动量轮动分析' },
+  { icon: '🔍', label: '多头选股', text: '请筛选近期均线多头排列且量比大于1.5的强势股', tip: '技术指标选股' },
+  { icon: '📰', label: '热点资讯', text: '检索今天A股市场最核心的概念热点与资金流向', tip: '市场情绪与风口' },
+  { icon: '⚖️', label: '双股PK', text: '对比分析 与 的估值与走势差异', tip: '同赛道对比' },
+]
+
+const allScenarios = [
+  { category: '个股研究', title: '全维度深度诊断', prompt: '请对 [股票代码/名称] 进行全方位诊断，包括基本面财务、K线趋势技术形态、资金进出动向及未来投资建议。' },
+  { category: '个股研究', title: '支撑位与阻力位测算', prompt: '请分析 [股票代码] 的近期日K线走势，测算关键支撑位、压力位与止损参考点位。' },
+  { category: '量化策略', title: 'ETF 加权动量轮动', prompt: '请获取主流场内ETF的21日加权动量排名表，按动量评分排序并给出当前轮动调仓建议。' },
+  { category: '量化选股', title: '价值防守型选股', prompt: '请筛选市盈率PE<15、近三年股息率>3.5%、ROE>12%的高股息稳健型股票。' },
+  { category: '量化选股', title: '强势突破型选股', prompt: '请利用量化策略筛选突破近期整理平台且放量上涨的标的。' },
+  { category: '行业宏观', title: '产业链景气度研判', prompt: '请深入分析当前半导体及算力产业链的行业景气度、产业政策催化与核心受益龙头。' },
+]
 
 // ========== 锚点导航 ==========
 const {
-  activeAnchor,
   anchorNavItems,
   registerElement,
   unregisterElement,
   scrollToMessage,
-  scrollToNext,
-  scrollToPrev,
-  scrollToLatest,
-  scrollToOldest,
 } = useMessageAnchor(messages)
 
-// 同步流式状态到组件
-watch(streamIsStreaming, (val) => { isStreaming.value = val })
-
-// 暴露注册函数供子组件使用
 provide('registerMessageElement', registerElement)
 provide('unregisterMessageElement', unregisterElement)
 
-// ========== 事件处理 ==========
+// ========== 本地会话持久化逻辑 ==========
+function loadSessionsFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      sessions.value = JSON.parse(raw)
+    }
+  } catch (e) {
+    console.error('Failed to parse sessions from localStorage', e)
+  }
+
+  if (!sessions.value || sessions.value.length === 0) {
+    const defaultSession: ChatSession = {
+      id: genMsgId('session'),
+      title: '新对话',
+      updatedAt: Date.now(),
+      messages: [],
+    }
+    sessions.value = [defaultSession]
+    currentSessionId.value = defaultSession.id
+  } else {
+    const savedActive = localStorage.getItem(ACTIVE_SESSION_KEY)
+    const exists = sessions.value.find(s => s.id === savedActive)
+    currentSessionId.value = exists ? exists.id : sessions.value[0].id
+  }
+}
+
+function saveSessionsToStorage() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions.value))
+    localStorage.setItem(ACTIVE_SESSION_KEY, currentSessionId.value)
+  } catch (e) {
+    console.error('Failed to save sessions to localStorage', e)
+  }
+}
+
+function createNewSession() {
+  const newSession: ChatSession = {
+    id: genMsgId('session'),
+    title: '新对话',
+    updatedAt: Date.now(),
+    messages: [],
+  }
+  sessions.value.unshift(newSession)
+  currentSessionId.value = newSession.id
+  saveSessionsToStorage()
+  showSessionDrawer.value = false
+}
+
+function switchSession(id: string) {
+  currentSessionId.value = id
+  saveSessionsToStorage()
+  showSessionDrawer.value = false
+  nextTick(() => {
+    scrollToBottom(false)
+  })
+}
+
+function deleteSession(id: string) {
+  if (sessions.value.length <= 1) {
+    const s = sessions.value[0]
+    s.title = '新对话'
+    s.messages = []
+    s.updatedAt = Date.now()
+    saveSessionsToStorage()
+    return
+  }
+  sessions.value = sessions.value.filter(s => s.id !== id)
+  if (currentSessionId.value === id) {
+    currentSessionId.value = sessions.value[0].id
+  }
+  saveSessionsToStorage()
+}
+
+function formatSessionTime(ts: number): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
+
+// ========== Agent 流式通信监听 ==========
 function handleAgentMessage(data: StreamChunk) {
-  // 会话过滤
-  if (data.sessionId && data.sessionId !== getSessionId()) return
+  if (!isStreaming.value) return
+
+  const curList = messages.value
+  const targetMsg = curList.find(m => m.id === streamingMsgId.value)
+  if (!targetMsg) return
 
   if (data.role === 'assistant') {
-    if (!streamingPlaceholder.value) return
-
+    // 状态更新
     if (data.reasoning_content) {
       const rc = data.reasoning_content
       if (rc.startsWith('[STATUS]')) {
-        streamingPlaceholder.value.statusText = rc.replace(/^\[STATUS\]/, '').trim()
+        const st = rc.replace(/^\[STATUS\]/, '').trim()
+        targetMsg.statusText = st
+        currentStreamStatus.value = st
       } else if (rc.startsWith('[STEP]')) {
         const stepText = rc.replace(/^\[STEP\]/, '').trim()
         if (stepText) {
-          if (!streamingPlaceholder.value.steps) streamingPlaceholder.value.steps = []
-          const parsed = parseStepText(stepText)
-          streamingPlaceholder.value.steps.push(...parsed)
+          if (!targetMsg.steps) targetMsg.steps = []
+          targetMsg.steps.push(stepText)
         }
       } else {
-        streamingPlaceholder.value.rawReasoning = (streamingPlaceholder.value.rawReasoning || '') + rc
+        targetMsg.rawReasoning = (targetMsg.rawReasoning || '') + rc
+        targetMsg.reasoning = targetMsg.rawReasoning
       }
     }
 
+    // 正文流式追加
     if (data.content) {
       if (data.content === 'agent-DONE') {
-        if (data.metrics) streamingPlaceholder.value.metrics = data.metrics
+        if (data.metrics) targetMsg.metrics = data.metrics
       } else {
-        streamingPlaceholder.value.rawContent = (streamingPlaceholder.value.rawContent || '') + data.content
+        targetMsg.rawContent = (targetMsg.rawContent || '') + data.content
+        targetMsg.content = targetMsg.rawContent
       }
     }
 
-    if (data.tool_calls?.length) {
-      if (!streamingPlaceholder.value.toolCalls) streamingPlaceholder.value.toolCalls = []
-      streamingPlaceholder.value.toolCalls.push(...data.tool_calls)
+    // 工具调用追踪
+    if (data.tool_calls && data.tool_calls.length > 0) {
+      if (!targetMsg.toolCalls) targetMsg.toolCalls = []
+      targetMsg.toolCalls.push(...data.tool_calls)
     }
 
+    if (data.metrics) {
+      targetMsg.metrics = data.metrics
+    }
+
+    // 智能滚动吸底
+    autoScrollIfNearBottom()
+
+    // 结束处理
     if (data.response_meta?.finish_reason === 'stop') {
-      const finalMsg = finalize()
-      if (finalMsg) {
-        messages.value.unshift(finalMsg)
-        streamingPlaceholder.value = null
-        streamingMsgId.value = null
-      }
+      finalizeStream(targetMsg)
     }
   }
 }
 
-// 解析步骤文本
-function parseStepText(text: string): string[] {
-  const trimmed = text.trim()
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return [text]
-  try {
-    const obj = JSON.parse(trimmed)
-    if (Array.isArray(obj)) {
-      return obj.map((item, i) => `${i + 1}. ${typeof item === 'string' ? item : JSON.stringify(item)}`)
+function finalizeStream(targetMsg?: ChatMessage) {
+  isStreaming.value = false
+  streamingMsgId.value = null
+  currentStreamStatus.value = ''
+
+  if (targetMsg) {
+    if (targetMsg.rawContent) {
+      targetMsg.content = cleanFinalContent(targetMsg.rawContent)
     }
-    if (typeof obj === 'object' && obj !== null) {
-      const steps = obj.steps || obj.step || obj.plan || obj.items || obj.list
-      if (Array.isArray(steps)) {
-        return steps.map((item, i) => `${i + 1}. ${typeof item === 'string' ? item : JSON.stringify(item)}`)
-      }
-      return Object.entries(obj).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-    }
-    return [text]
-  } catch {
-    return [text]
+  }
+  saveSessionsToStorage()
+}
+
+// ========== 滚动控制 ==========
+let userIsScrolledUp = false
+
+function handleScroll() {
+  const el = messagesContainer.value
+  if (!el) return
+  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  userIsScrolledUp = distanceFromBottom > 150
+  showScrollBottom.value = userIsScrolledUp
+}
+
+function autoScrollIfNearBottom() {
+  if (!userIsScrolledUp) {
+    scrollToBottom(false)
   }
 }
 
-// ========== 生命周期 ==========
-onBeforeMount(() => {
-  EventsOff('agent-message', handleAgentMessage)
-  EventsOn('agent-message', handleAgentMessage)
-})
-
-onMounted(async () => {
-  await aiConfigStore.loadConfigs()
-
-  GetConfig().then((res) => {
-    if (res.darkTheme) {
-      document.documentElement.setAttribute('theme-mode', 'dark')
-    } else {
-      document.documentElement.removeAttribute('theme-mode')
-    }
-  }).catch(() => {})
-
-  GetVersionInfo().then((res) => {
-    if (res.icon) {
-      // 更新 AI 头像
-      messages.value.forEach(m => {
-        if (m.role === 'assistant') m.avatar = res.icon
+function scrollToBottom(smooth = true) {
+  nextTick(() => {
+    const el = messagesContainer.value
+    if (el) {
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: smooth ? 'smooth' : 'auto',
       })
     }
-  }).catch(() => {})
-})
+  })
+}
 
-onBeforeUnmount(() => {
-  EventsOff('agent-message', handleAgentMessage)
-})
-
-// ========== 交互方法 ==========
+// ========== 发送与停止 ==========
 function handleSend() {
   if (isStreaming.value) {
     handleStop()
     return
   }
-  if (!inputValue.value.trim()) return
+
+  const text = inputValue.value.trim()
+  if (!text) return
 
   const configId = activeConfigId.value
-  if (!configId || configId <= 0 || !aiConfigStore.activeConfig) {
+  if (!configId || configId <= 0) {
     import('tdesign-vue-next').then(({ MessagePlugin }) => {
-      MessagePlugin.warning('请先选择或创建 AI 配置')
+      MessagePlugin.warning('请先选择有效的 AI 模型配置')
     })
     return
   }
 
-  // 用户消息
+  // 1. 用户消息放入列表末尾 (正序)
   const userMsg: ChatMessage = {
-    id: genMsgId(),
+    id: genMsgId('user'),
     avatar: userAvatar.value,
     name: userName.value,
     datetime: new Date().toISOString(),
-    content: inputValue.value,
+    content: text,
     role: 'user',
   }
-  messages.value.unshift(userMsg)
 
-  // AI 占位消息
-  const assistantId = genMsgId()
+  // 2. AI 占位消息放入列表末尾
+  const assistantId = genMsgId('assistant')
   const assistantMsg: ChatMessage = {
     id: assistantId,
     avatar: '',
-    name: 'AI 助手',
+    name: 'Blades 投研 Agent',
     datetime: new Date().toISOString(),
     content: '',
     rawContent: '',
     reasoning: '',
     rawReasoning: '',
-    jsonMarkdown: '',
     role: 'assistant',
     steps: [],
-    statusText: '',
+    statusText: '思考中...',
     toolCalls: [],
   }
+
+  const s = sessions.value.find(item => item.id === currentSessionId.value)
+  if (s) {
+    s.messages.push(userMsg, assistantMsg)
+    // 自动重命名默认会话标题
+    if (s.title === '新对话' && text.length > 0) {
+      s.title = text.slice(0, 18) + (text.length > 18 ? '…' : '')
+    }
+    s.updatedAt = Date.now()
+    saveSessionsToStorage()
+  }
+
   streamingMsgId.value = assistantId
-  streamingPlaceholder.value = assistantMsg
-  messages.value.unshift(assistantMsg) // 先加入列表，组件会根据 isStreaming 渲染骨架屏
-
-  // 开始流式
-  startStream(assistantMsg)
-
-  nextTick(() => {
-    scrollToBottom()
-    ChatWithAgent(
-      inputValue.value,
-      configId,
-      0,
-      false,
-      0,
-      false,
-      agentMode.value === 'auto' ? '' : agentMode.value,
-      ''
-    ).catch((err: any) => {
-      console.error('ChatWithAgent error', err)
-      cancel()
-      const errMsg: ChatMessage = {
-        id: genMsgId(),
-        avatar: '',
-        name: 'AI 助手',
-        datetime: new Date().toISOString(),
-        content: `❌ 调用失败：${err?.message || err}`,
-        role: 'assistant',
-      }
-      messages.value.unshift(errMsg)
-    })
-  })
+  isStreaming.value = true
+  currentStreamStatus.value = '正在思考并解析意图...'
+  userIsScrolledUp = false
 
   inputValue.value = ''
+  scrollToBottom(true)
+
+  ChatWithAgent(
+    text,
+    configId,
+    0,
+    false,
+    0,
+    false,
+    agentMode.value === 'auto' ? '' : agentMode.value,
+    ''
+  ).catch((err: any) => {
+    console.error('ChatWithAgent error', err)
+    assistantMsg.content = `❌ 服务调用失败：${err?.message || err}`
+    finalizeStream(assistantMsg)
+  })
 }
 
 function handleStop() {
-  cancel()
-  if (streamingPlaceholder.value) {
-    messages.value = messages.value.filter(m => m.id !== streamingPlaceholder.value!.id)
-    streamingPlaceholder.value = null
-    streamingMsgId.value = null
-  }
+  isStreaming.value = false
+  streamingMsgId.value = null
+  currentStreamStatus.value = ''
+  saveSessionsToStorage()
+  import('tdesign-vue-next').then(({ MessagePlugin }) => {
+    MessagePlugin.info('已停止响应')
+  })
+}
+
+// ========== 场景交互辅助 ==========
+function applyScenario(promptText: string) {
+  inputValue.value = promptText
+  nextTick(() => {
+    handleSend()
+  })
+}
+
+function fillInput(text: string) {
+  inputValue.value = text
+  const textarea = document.querySelector('.chat-input-cockpit textarea') as HTMLTextAreaElement
+  if (textarea) textarea.focus()
+}
+
+function selectModalScenario(prompt: string) {
+  inputValue.value = prompt
+  showScenarioModal.value = false
+  const textarea = document.querySelector('.chat-input-cockpit textarea') as HTMLTextAreaElement
+  if (textarea) textarea.focus()
 }
 
 function handleCopy(content: string) {
   navigator.clipboard.writeText(content).then(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已复制'))
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('内容已复制到剪贴板'))
   }).catch(() => {
     import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
   })
 }
 
 function handleRetry(msgId: string) {
-  const idx = messages.value.findIndex(m => m.id === msgId)
+  const curList = messages.value
+  const idx = curList.findIndex(m => m.id === msgId)
   if (idx === -1) return
-  const msg = messages.value[idx]
+  const msg = curList[idx]
   if (msg.role === 'user') {
-    // 重发用户消息
     inputValue.value = msg.content
-    messages.value = messages.value.slice(0, idx) // 移除该消息及之后的回复
+    messages.value = curList.slice(0, idx)
     handleSend()
   }
 }
@@ -475,7 +810,8 @@ function handleRetry(msgId: string) {
 function handleReference(msgId: string) {
   const msg = messages.value.find(m => m.id === msgId)
   if (msg) {
-    inputValue.value += `\n\n> 引用：${msg.content.slice(0, 200)}...`
+    const quote = msg.content.slice(0, 150)
+    inputValue.value += `\n> 引用：${quote}...\n`
     import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已引用到输入框'))
   }
 }
@@ -483,8 +819,7 @@ function handleReference(msgId: string) {
 function handleEdit(msg: ChatMessage) {
   if (msg.role === 'user') {
     inputValue.value = msg.content
-    const idx = messages.value.findIndex(m => m.id === msg.id)
-    if (idx !== -1) messages.value.splice(idx, 1)
+    messages.value = messages.value.filter(m => m.id !== msg.id)
   }
 }
 
@@ -498,71 +833,55 @@ function onConfigChange(val: number) {
   aiConfigStore.setActiveConfigId(val)
 }
 
-function fillInput(text: string) {
-  inputValue.value = text
-}
-
-function clearHistory() {
+function clearCurrentHistory() {
   import('tdesign-vue-next').then(({ DialogPlugin }) => {
-    DialogPlugin.warning({
-      title: '清空对话历史',
-      content: '确定要清空当前对话历史吗？此操作不可恢复。',
-      positiveText: '清空',
-      negativeText: '取消',
-      onPositiveAction: () => {
+    DialogPlugin.confirm({
+      header: '清空当前对话',
+      body: '确定要清空当前会话的全部消息历史吗？此操作不可恢复。',
+      confirmBtn: '确认清空',
+      cancelBtn: '取消',
+      onConfirm: () => {
         messages.value = []
-        import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已清空'))
+        saveSessionsToStorage()
+        import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('会话已清空'))
       }
     })
   })
 }
 
-function toggleCompact() {
-  isCompact.value = !isCompact.value
-}
+// ========== 生命周期 ==========
+onBeforeMount(() => {
+  EventsOff('agent-message')
+  EventsOn('agent-message', handleAgentMessage)
+})
 
-function insertTemplate() {
-  import('tdesign-vue-next').then(({ DialogPlugin }) => {
-    DialogPlugin.info({
-      title: '快速模板',
-      content: () => h('div', { style: 'display:flex;flex-direction:column;gap:8px' }, [
-        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('分析 {{stockCode}} 的基本面、技术面、资金面、消息面'); DialogPlugin.close() }}, { default: () => '📊 全维度个股分析' }),
-        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('对比 {{stockCode1}} 和 {{stockCode2}} 的优劣势'); DialogPlugin.close() }}, { default: () => '⚖️ 两只股票对比分析' }),
-        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('筛选市盈率<15、股息率>3%、ROE>15% 的股票'); DialogPlugin.close() }}, { default: () => '🔍 价值型选股筛选' }),
-        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('回测 双均线策略 MA5/MA20 最近 1 年'); DialogPlugin.close() }}, { default: () => '📉 策略回测' }),
-        h(NButton, { size: 'small', block: true, onClick: () => { fillInput('解释 MACD、RSI、布林带 的实战用法'); DialogPlugin.close() }}, { default: () => '📚 技术指标教学' }),
-      ]),
-      positiveText: '关闭',
-      onPositiveAction: () => {},
-    })
-  })
-}
+onMounted(async () => {
+  loadSessionsFromStorage()
+  await aiConfigStore.loadConfigs()
 
-function scrollToBottom() {
-  nextTick(() => {
-    const container = document.querySelector('.chat-messages')
-    if (container) {
-      container.scrollTo({ top: 0, behavior: 'smooth' })
+  GetConfig().then((res) => {
+    if (res.darkTheme) {
+      document.documentElement.setAttribute('theme-mode', 'dark')
+    } else {
+      document.documentElement.removeAttribute('theme-mode')
     }
+  }).catch(() => {})
+
+  GetVersionInfo().then((res) => {
+    if (res.icon) {
+      messages.value.forEach(m => {
+        if (m.role === 'assistant') m.avatar = res.icon
+      })
+    }
+  }).catch(() => {})
+
+  nextTick(() => {
+    scrollToBottom(false)
   })
-}
-
-// 监听滚动显示/隐藏底部按钮
-function handleScroll() {
-  const container = document.querySelector('.chat-messages')
-  if (container) {
-    showScrollBottom.value = container.scrollTop > 200
-  }
-}
-
-onMounted(() => {
-  const container = document.querySelector('.chat-messages')
-  container?.addEventListener('scroll', handleScroll)
 })
 
 onBeforeUnmount(() => {
-  const container = document.querySelector('.chat-messages')
-  container?.removeEventListener('scroll', handleScroll)
+  EventsOff('agent-message')
 })
 </script>
 
@@ -571,152 +890,553 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--td-bg-color-container);
+  width: 100%;
+  background: var(--td-bg-color-page, #f8f9fa);
+  color: var(--td-text-color-primary, #1d2129);
+  position: relative;
+  overflow: hidden;
 }
 
+/* 顶部 HUD 控制面板 */
 .chat-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--td-component-border);
-  background: var(--td-bg-color-container);
-  flex-shrink: 0;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--td-bg-color-container, #ffffff);
+  border-bottom: 1px solid var(--td-border-level-1-color, #e5e6eb);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  z-index: 10;
+  gap: 12px;
 
   .header-left {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    gap: 8px;
+
+    .session-drawer-btn {
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 200px;
+
+      .session-title-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-badge {
+        font-size: 11px;
+        background: var(--td-bg-color-secondarycontainer, #f2f3f5);
+        color: var(--td-text-color-secondary, #4e5969);
+        padding: 1px 6px;
+        border-radius: 10px;
+      }
+    }
   }
 
-  .chat-title {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--td-text-color-primary);
-  }
+  .header-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
 
-  .chat-subtitle {
-    margin: 0;
-    font-size: 12px;
-    color: var(--td-text-color-disabled);
+    .mode-capsule-group {
+      display: inline-flex;
+      background: var(--td-bg-color-secondarycontainer, #f2f3f5);
+      padding: 3px;
+      border-radius: 20px;
+      gap: 2px;
+
+      .mode-capsule-btn {
+        border: none;
+        background: transparent;
+        padding: 4px 12px;
+        font-size: 12px;
+        border-radius: 16px;
+        cursor: pointer;
+        color: var(--td-text-color-secondary, #4e5969);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        font-weight: 500;
+
+        &:hover {
+          color: var(--td-text-color-primary, #1d2129);
+        }
+
+        &.active {
+          background: var(--td-bg-color-container, #ffffff);
+          color: var(--td-brand-color, #0052d9);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+          font-weight: 600;
+        }
+      }
+    }
   }
 
   .header-right {
     display: flex;
     align-items: center;
     gap: 8px;
+
+    .model-selector {
+      width: 240px;
+    }
   }
 }
 
-.chat-messages {
+/* 主体消息滚动视图 (正序) */
+.chat-messages-viewport {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column-reverse; // 最新消息在上
+  padding: 20px 24px 30px;
   position: relative;
+  scroll-behavior: smooth;
 
-  /* 滚动条美化 */
-  ::-webkit-scrollbar {
+  &::-webkit-scrollbar {
     width: 6px;
   }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: var(--td-border-level-2-color);
+  &::-webkit-scrollbar-thumb {
+    background: var(--td-border-level-2-color, #c9cdd4);
     border-radius: 3px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: var(--td-border-level-3-color);
   }
 }
 
-.empty-state {
+/* 欢迎页卡片矩阵 */
+.welcome-workspace {
+  max-width: 900px;
+  margin: 20px auto 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 300px;
-  text-align: center;
-  color: var(--td-text-color-disabled);
 
-  .empty-icon {
-    font-size: 48px;
-    margin-bottom: 12px;
-    opacity: 0.5;
+  .welcome-hero {
+    text-align: center;
+    margin-bottom: 28px;
+
+    .hero-icon-glow {
+      font-size: 40px;
+      margin-bottom: 8px;
+      animation: float-glow 3s ease-in-out infinite;
+    }
+
+    .hero-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      background: linear-gradient(135deg, var(--td-brand-color, #0052d9), #2ba471);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+      font-size: 13px;
+      color: var(--td-text-color-secondary, #86909c);
+      max-width: 600px;
+      line-height: 1.6;
+      margin: 0 auto;
+    }
   }
 
-  h3 {
-    margin: 0 0 8px;
-    font-size: 18px;
-    font-weight: 500;
-    color: var(--td-text-color-secondary);
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    width: 100%;
+    margin-bottom: 24px;
+
+    @media (max-width: 768px) {
+      grid-template-columns: 1fr;
+    }
   }
 
-  p {
-    margin: 0 0 20px;
-    font-size: 14px;
+  .scenario-card {
+    background: var(--td-bg-color-container, #ffffff);
+    border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+    border-radius: 12px;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+
+    &:hover {
+      border-color: var(--td-brand-color, #0052d9);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(0, 82, 217, 0.08);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+
+      .card-icon {
+        font-size: 20px;
+      }
+
+      .card-badge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: var(--td-brand-color-light, #ecf2fe);
+        color: var(--td-brand-color, #0052d9);
+        font-weight: 600;
+      }
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0 0 6px;
+      color: var(--td-text-color-primary, #1d2129);
+    }
+
+    .card-desc {
+      font-size: 12px;
+      color: var(--td-text-color-secondary, #4e5969);
+      margin: 0 0 12px;
+      line-height: 1.5;
+    }
+
+    .card-prompt-hint {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--td-text-color-placeholder, #86909c);
+      padding-top: 8px;
+      border-top: 1px dashed var(--td-border-level-1-color, #f2f3f5);
+
+      .arrow-hint {
+        color: var(--td-brand-color, #0052d9);
+        font-weight: bold;
+      }
+    }
+  }
+
+  .quick-keywords-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    width: 100%;
+    padding: 0 8px;
+
+    .keywords-label {
+      color: var(--td-text-color-secondary, #86909c);
+    }
+
+    .keywords-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .keyword-chip {
+      background: var(--td-bg-color-container, #ffffff);
+      border: 1px solid var(--td-border-level-2-color, #e5e6eb);
+      padding: 3px 10px;
+      border-radius: 14px;
+      cursor: pointer;
+      color: var(--td-text-color-secondary, #4e5969);
+      transition: all 0.2s;
+
+      &:hover {
+        background: var(--td-brand-color-light, #ecf2fe);
+        color: var(--td-brand-color, #0052d9);
+        border-color: var(--td-brand-color, #0052d9);
+      }
+    }
   }
 }
 
-.empty-suggestions {
+/* 消息流布局 */
+.messages-flow {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  max-width: 400px;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 980px;
+  margin: 0 auto;
 }
 
-.suggestion-tag {
+/* 回到底部悬浮球 */
+.fab-scroll-bottom {
+  position: fixed;
+  right: 28px;
+  bottom: 120px;
+  background: var(--td-bg-color-container, #ffffff);
+  border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  border-radius: 20px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
+  color: var(--td-brand-color, #0052d9);
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 50;
   transition: all 0.2s;
+
   &:hover {
-    background: var(--td-brand-color-light);
-    border-color: var(--td-brand-color);
-    color: var(--td-brand-color);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 82, 217, 0.2);
   }
 }
 
-.scroll-bottom-btn {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  z-index: 10;
-}
-
-.chat-input-area {
-  padding: 12px 16px;
-  border-top: 1px solid var(--td-component-border);
-  background: var(--td-bg-color-container);
+/* 底部输入中枢 */
+.chat-input-cockpit {
+  padding: 10px 20px 16px;
+  background: var(--td-bg-color-container, #ffffff);
+  border-top: 1px solid var(--td-border-level-1-color, #e5e6eb);
   flex-shrink: 0;
+  z-index: 20;
 
-  .input-prefix {
-    margin-right: 8px;
+  &.compact {
+    padding: 8px 16px 10px;
   }
 
-  .config-hint {
-    margin-top: 8px;
-    padding: 8px 12px;
-    background: #fff3d4;
+  .input-quick-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 12px;
+
+    .quick-chips {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+
+      &::-webkit-scrollbar {
+        height: 0;
+      }
+    }
+
+    .quick-chip-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--td-bg-color-secondarycontainer, #f2f3f5);
+      border: 1px solid transparent;
+      padding: 3px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--td-text-color-secondary, #4e5969);
+      white-space: nowrap;
+      transition: all 0.2s;
+
+      &:hover {
+        background: var(--td-brand-color-light, #ecf2fe);
+        color: var(--td-brand-color, #0052d9);
+      }
+    }
+
+    .status-summary {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--td-brand-color, #0052d9);
+      font-size: 12px;
+      white-space: nowrap;
+
+      .live-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--td-brand-color, #0052d9);
+        animation: pulse-dot 1.5s infinite;
+      }
+    }
+  }
+
+  .input-sender-box {
+    max-width: 980px;
+    margin: 0 auto;
+
+    :deep(.t-chat-sender) {
+      .t-chat-sender__textarea {
+        border-radius: 10px !important;
+        border: 1px solid var(--td-border-level-2-color, #dcdcdc) !important;
+        background: var(--td-bg-color-container, #ffffff) !important;
+        font-size: 14px !important;
+        line-height: 1.6 !important;
+        padding: 8px 12px !important;
+        transition: border-color 0.2s;
+
+        &:focus {
+          border-color: var(--td-brand-color, #0052d9) !important;
+          box-shadow: 0 0 0 2px var(--td-brand-color-focus, rgba(0, 82, 217, 0.15)) !important;
+        }
+      }
+    }
+
+    .sender-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .stop-btn {
+        font-weight: 600;
+        animation: pulse-warning 2s infinite;
+      }
+    }
+  }
+
+  .config-alert-banner {
+    max-width: 980px;
+    margin: 8px auto 0;
+    padding: 6px 12px;
+    background: #fffbe6;
     border: 1px solid #ffe58f;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: 12px;
     color: #ad6800;
-    a { color: var(--td-brand-color); }
+
+    a {
+      color: var(--td-brand-color, #0052d9);
+      font-weight: bold;
+    }
   }
 }
 
-:deep(.t-chat-sender) {
-  .t-chat-sender__textarea {
-    border-radius: 8px !important;
-    border: 1px solid var(--td-component-border) !important;
-    background: var(--td-bg-color-container) !important;
-    font-size: 14px !important;
-    line-height: 1.6 !important;
+/* 抽屉样式 */
+.session-drawer-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+
+  .btn-new-chat {
+    border-radius: 8px;
+    font-weight: 600;
   }
+
+  .session-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .session-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background: var(--td-bg-color-secondarycontainer, #f2f3f5);
+      transition: all 0.2s;
+
+      &:hover {
+        background: var(--td-bg-color-container, #ffffff);
+        border-color: var(--td-border-level-2-color, #dcdcdc);
+      }
+
+      &.active {
+        background: var(--td-brand-color-light, #ecf2fe);
+        border-color: var(--td-brand-color, #0052d9);
+
+        .session-name {
+          color: var(--td-brand-color, #0052d9);
+          font-weight: 600;
+        }
+      }
+
+      .session-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        overflow: hidden;
+
+        .session-name {
+          font-size: 13px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .session-meta {
+          font-size: 11px;
+          color: var(--td-text-color-placeholder, #86909c);
+        }
+      }
+    }
+  }
+}
+
+/* 弹窗场景列表 */
+.modal-scenarios-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  max-height: 480px;
+  overflow-y: auto;
+
+  .scenario-modal-item {
+    padding: 12px 14px;
+    background: var(--td-bg-color-secondarycontainer, #f8f9fa);
+    border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      border-color: var(--td-brand-color, #0052d9);
+      background: var(--td-brand-color-light, #ecf2fe);
+    }
+
+    .item-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+
+      .item-tag {
+        font-size: 11px;
+        background: var(--td-brand-color, #0052d9);
+        color: #ffffff;
+        padding: 1px 6px;
+        border-radius: 4px;
+      }
+
+      .item-title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+    }
+
+    .item-desc {
+      font-size: 12px;
+      color: var(--td-text-color-secondary, #4e5969);
+      margin: 0;
+      line-height: 1.5;
+    }
+  }
+}
+
+/* 动画定义 */
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); opacity: 0.6; }
+  50% { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.6; }
+}
+
+@keyframes float-glow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
 }
 </style>

@@ -106,8 +106,8 @@ const emit = defineEmits<{
   toggle: [collapsed: boolean]
 }>()
 
-// 折叠状态
-const collapsed = ref(false)
+// 折叠状态（默认折叠，保持主界面清爽清空）
+const collapsed = ref(true)
 const hoveredId = ref<string | null>(null)
 
 // 移动端自动折叠
