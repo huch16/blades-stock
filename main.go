@@ -244,8 +244,6 @@ func main() {
 		defer shutdownMetrics(context.Background())
 	}
 
-	// Start admin HTTP server (dev-only) for skill hot-reload
-	agent.StartAdminServer(context.Background())
 
 	// Create application with options
 	err = wails.Run(&options.App{
