@@ -29,7 +29,7 @@ function Build-Go {
     try {
         # P3.4: build-time 自动重建 graph manifest
         Rebuild-Graph
-        go build -tags "desktop,production" -ldflags "-s -w -H=windowsgui" -o build/bin/blades-stock.exe .
+        go build  -ldflags "-s -w -H=windowsgui" -o build/bin/blades-stock.exe .
         if ($LASTEXITCODE -ne 0) { throw "go build failed" }
         Write-Host "Go build OK: build/bin/blades-stock.exe" -ForegroundColor Green
     } finally {
@@ -82,7 +82,7 @@ function Build-Wails {
     Push-Location $Root
     try {
         $env:GOTOOLCHAIN = "go1.26.4"
-        wails build -skipbindings -skipembedcreate -tags "desktop,production"
+        wails build -skipbindings -skipembedcreate 
         if ($LASTEXITCODE -ne 0) { throw "wails build failed" }
         Copy-DataDir
         Write-Host "Wails build OK" -ForegroundColor Green

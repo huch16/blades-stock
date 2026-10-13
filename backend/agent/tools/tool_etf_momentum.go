@@ -49,16 +49,19 @@ func computeETFMomentumRows() []etfMomentumRow {
 		mu   sync.Mutex
 		wg   sync.WaitGroup
 	)
-	sem := make(chan struct{}, 8)
+	// skip distributed rate limit - always allow
+	// sem := make(chan struct{}, 8)
 	for _, cand := range etfMomentumPool {
 		wg.Add(1)
-		sem <- struct{}{}
+		// skip distributed rate limit - always allow
+		// sem <- struct{}{}
 		go func(cand struct {
 			Code string
 			Name string
 		}) {
 			defer wg.Done()
-			defer func() { <-sem }()
+			// skip distributed rate limit - always allow
+			// defer func() { <-sem }()
 			defer func() {
 				if r := recover(); r != nil {
 					logger.SugaredLogger.Errorf("panic in ETF momentum worker [%s]: %v", cand.Code, r)

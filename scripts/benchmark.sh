@@ -16,7 +16,7 @@ echo ""
 # Check if binary exists
 if [[ ! -f "$BINARY" ]]; then
     echo "Binary not found. Building..."
-    go build -tags "desktop,production" -ldflags "-w -s" -o "$BINARY" .
+    go build  -ldflags "-w -s" -o "$BINARY" .
 fi
 
 # 1. Startup time
@@ -50,7 +50,7 @@ ls -lh "$BINARY"
 echo ""
 echo "5. Build time measurement..."
 start=$(date +%s%3N)
-go build -tags "desktop,production" -ldflags "-w -s" -o "$BINARY.tmp" . 2>/dev/null
+go build  -ldflags "-w -s" -o "$BINARY.tmp" . 2>/dev/null
 end=$(date +%s%3N)
 build_time=$((end - start))
 rm -f "$BINARY.tmp"

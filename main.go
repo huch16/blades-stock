@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"blades-stock/backend/agent"
+	"blades-stock/backend/agent/evaluator"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	log "blades-stock/backend/logger"
@@ -138,7 +139,8 @@ func main() {
 		}
 	}
 	data.InitAnalyzeSentiment()
-	// 初始化交易日历改为后台异步执行，防止网络超时阻塞GUI启动
+	// Initialize embedding service for semantic memory search
+	agent.InitEmbeddingService()
 	go data.InitTradingCalendar()
 	AutoMigrate()
 	if err := db.RunVersionedMigrations(db.Dao); err != nil {
@@ -156,11 +158,6 @@ func main() {
 				result.Processed, result.Accurate, result.AccuracyRate*100)
 		}
 	}()
-
-	//db.Dao.Model(&data.Group{}).Where("id = ?", 0).FirstOrCreate(&data.Group{
-	//	Name: "默认分组",
-	//	Sort: 0,
-	//})
 
 	log.SugaredLogger.Info("starting...")
 	log.SugaredLogger.Infof("version: %s  commit: %s", Version, VersionCommit)
@@ -246,6 +243,9 @@ func main() {
 	if shutdownMetrics != nil {
 		defer shutdownMetrics(context.Background())
 	}
+
+	// Start admin HTTP server (dev-only) for skill hot-reload
+	agent.StartAdminServer(context.Background())
 
 	// Create application with options
 	err = wails.Run(&options.App{
@@ -352,6 +352,8 @@ func AutoMigrate() {
 		db.Dao.AutoMigrate(&models.MCPServer{})
 		db.Dao.AutoMigrate(&models.MCPServerTool{})
 		db.Dao.AutoMigrate(&models.Skill{})
+		db.Dao.AutoMigrate(&agent.PlanTrace{})
+		db.Dao.AutoMigrate(&evaluator.EvaluatorReport{})
 		SeedDefaultSkills()
 		db.Dao.AutoMigrate(&models.CustomStrategy{})
 		db.Dao.AutoMigrate(&models.BKFundFlow{})
@@ -437,6 +439,10 @@ func SeedDefaultSkills() {
 			Examples: "用户：今天ETF开盘前有什么建议？我持有159915和512660\n助手：必须输出完整的ETF轮动分析报告结构，从动量筛选开始逐步分析到最终决策，包含持仓评审。",
 			Enable: true, SortOrder: 1,
 			ToolGroups: "money_flow,news_research,stock_analysis,market",
+			Version: "1.0.0",
+			Status: "active",
+			InputSchema: "{}",
+			OutputSchema: "{}",
 		},
 		{
 			Name: "Serenity式产业分析",
@@ -468,6 +474,10 @@ func SeedDefaultSkills() {
 			Examples: "用户：分析华阳集团在汽车电子产业链中的位置\n助手：必须输出Serenity报告结构：产业链全景图→稀缺层识别→优先级排序→证据链→证伪条件",
 			Enable: true, SortOrder: 2,
 			ToolGroups: "stock_analysis,market,news_research,screening",
+			Version: "1.0.0",
+			Status: "active",
+			InputSchema: "{}",
+			OutputSchema: "{}",
 		},
 	}
 	for _, s := range skills {

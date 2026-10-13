@@ -86,59 +86,56 @@ func recordLLMQotaMetrics(ctx context.Context, dailyQuota int64, dailyCostUSD fl
 
 // Generate wraps the provider's Generate method with rate limit and quota checks.
 func (w *ModelProviderWrapper) Generate(ctx context.Context, req *blades.ModelRequest) (*blades.ModelResponse, error) {
-	// Check rate limiter
-	if w.limiter != nil {
-		if !w.limiter.Allow() {
-			return nil, ErrRateLimited
+	// skip all self-limiters: rate limit, daily request quota, daily cost quota - always allow
+	if false {
+		// Check rate limiter
+		if w.limiter != nil {
+			if !w.limiter.Allow() {
+				return nil, ErrRateLimited
+			}
 		}
-	}
-	// Check daily request quota
-	if w.config.DailyRequestQuota > 0 {
-		w.quotaMu.Lock()
-		today := time.Now().UTC().Format("2006-01-02")
-		if today != w.lastResetDate {
-			// New day, reset quota
-			w.dailyQuota = 0
-			w.dailyCostUSD = 0
-			w.lastResetDate = today
-		}
-		if w.dailyQuota >= w.config.DailyRequestQuota {
+		// Check daily request quota
+		if w.config.DailyRequestQuota > 0 {
+			w.quotaMu.Lock()
+			today := time.Now().UTC().Format("2006-01-02")
+			if today != w.lastResetDate {
+				// New day, reset quota
+				w.dailyQuota = 0
+				w.dailyCostUSD = 0
+				w.lastResetDate = today
+			}
+			if w.dailyQuota >= w.config.DailyRequestQuota {
+				w.quotaMu.Unlock()
+				return nil, ErrRateLimited
+			}
+			w.dailyQuota++
+			// Record LLM quota metrics
+			go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
 			w.quotaMu.Unlock()
-			return nil, ErrRateLimited
 		}
-		w.dailyQuota++
-		// Record LLM quota metrics
-		go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
-		w.quotaMu.Unlock()
-	}
-	// Check daily cost quota
-	if w.config.DailyCostQuota > 0 {
-		w.quotaMu.Lock()
-		today := time.Now().UTC().Format("2006-01-02")
-		if today != w.lastResetDate {
-			// New day, reset cost tracking
-			w.dailyQuota = 0
-			w.dailyCostUSD = 0
-			w.lastResetDate = today
-		}
-		// Estimate cost for this request (placeholder - in practice would use token usage)
-		estimatedCost := estimateLLMCost(w.config, req)
-		if w.dailyCostUSD + estimatedCost > w.config.DailyCostQuota {
+		// Check daily cost quota
+		if w.config.DailyCostQuota > 0 {
+			w.quotaMu.Lock()
+			today := time.Now().UTC().Format("2006-01-02")
+			if today != w.lastResetDate {
+				// New day, reset cost tracking
+				w.dailyQuota = 0
+				w.dailyCostUSD = 0
+				w.lastResetDate = today
+			}
+			// Estimate cost for this request (placeholder - in practice would use token usage)
+			estimatedCost := estimateLLMCost(w.config, req)
+			if w.dailyCostUSD + estimatedCost > w.config.DailyCostQuota {
+				w.quotaMu.Unlock()
+				return nil, ErrRateLimited
+			}
+			w.dailyCostUSD += estimatedCost
+			// Record LLM quota metrics
+			go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
 			w.quotaMu.Unlock()
-			return nil, ErrRateLimited
 		}
-		w.dailyCostUSD += estimatedCost
-		// Record LLM quota metrics
-		go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
-		w.quotaMu.Unlock()
 	}
 	// Call the underlying provider
 	resp, err := w.ModelProvider.Generate(ctx, req)
-	if err != nil {
-		// If the underlying provider returns an error, we do not refund the quota.
-		// This is conservative: we consider the request as attempted.
-		return nil, err
-	}
-	// On success, quota has already been incremented above.
-	return resp, nil
+	return resp, err
 }

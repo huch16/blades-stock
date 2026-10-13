@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/data"
 	"strings"
+	"sort"
 	"sync"
 	"time"
 )
@@ -30,6 +32,7 @@ type MemoryManager struct {
 	ch     chan workingDBEntry
 	stopCh chan struct{}
 	wg     sync.WaitGroup
+	embSvc *EmbeddingService
 }
 
 type workingEntry struct {
@@ -59,6 +62,11 @@ func NewMemoryManager(maxWorking int) *MemoryManager {
 	return m
 }
 
+// SetEmbeddingService sets the embedding service for semantic memory search
+func (m *MemoryManager) SetEmbeddingService(svc *EmbeddingService) {
+	m.embSvc = svc
+}
+
 func (m *MemoryManager) flushLoop() {
 	defer m.wg.Done()
 	batch := make([]AgentMemory, 0, 10)
@@ -71,13 +79,14 @@ func (m *MemoryManager) flushLoop() {
 				m.flushBatch(batch)
 				return
 			}
-			batch = append(batch, AgentMemory{
+			mem := AgentMemory{
 				SessionID: entry.SessionID,
 				Role:      entry.Role,
 				Content:   entry.Content,
 				Category:  "working",
 				CreatedAt: time.Now(),
-			})
+			}
+			batch = append(batch, mem)
 			if len(batch) >= 10 {
 				m.flushBatch(batch)
 				batch = batch[:0]
@@ -111,6 +120,7 @@ func (m *MemoryManager) Add(sessionID, role, content string) {
 		Time:    time.Now().UnixMilli(),
 	})
 	if len(m.workingMem) > m.maxWorking {
+		// Keep the most recent entries
 		m.workingMem = m.workingMem[len(m.workingMem)-m.maxWorking:]
 	}
 	m.mu.Unlock()
@@ -248,6 +258,7 @@ func (m *MemoryManager) RetrieveReflections(sessionID string, limit int) []Fact 
 	return refs
 }
 
+// RetrieveFacts returns fact memories for a session.
 func (m *MemoryManager) RetrieveFacts(sessionID string, limit int) []Fact {
 	if limit <= 0 {
 		limit = 10
@@ -267,6 +278,7 @@ func (m *MemoryManager) RetrieveFacts(sessionID string, limit int) []Fact {
 	return facts
 }
 
+// DeleteFact removes a fact memory by ID.
 func (m *MemoryManager) DeleteFact(id uint) error {
 	return m.DeleteMemory(id)
 }
@@ -297,6 +309,67 @@ func (m *MemoryManager) RetrieveEvolutions(sessionID string, limit int) []Fact {
 	return evos
 }
 
+// SemanticSearchMemory searches memories by semantic similarity using embeddings
+// MemoryPrompt returns a formatted string of long-term memories for a session
+func (m *MemoryManager) SemanticSearchMemory(sessionID, query string, category string, limit int) ([]AgentMemory, error) {
+	if m.embSvc == nil || !m.embSvc.IsConfigured() {
+		return nil, fmt.Errorf("embedding service not configured")
+	}
+	if limit <= 0 {
+		limit = 5
+	}
+
+	// Generate embedding for query
+	queryEmbedding, err := m.embSvc.Embed(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to embed query: %w", err)
+	}
+
+	// Retrieve memories from DB (filtered by session and category if specified)
+	var mems []AgentMemory
+	queryDB := db.Dao.Model(&AgentMemory{}).Where("session_id = ?", sessionID)
+	if category != "" {
+		queryDB = queryDB.Where("category = ?", category)
+	}
+	if err := queryDB.Order("id desc").Find(&mems).Error; err != nil {
+		return nil, fmt.Errorf("failed to retrieve memories: %w", err)
+	}
+
+	// Score memories by cosine similarity
+	type scoredMemory struct {
+		mem    AgentMemory
+		score  float32
+	}
+	var scored []scoredMemory
+
+	for _, mem := range mems {
+		// Get embedding from cache (this will compute and cache if not present)
+		memEmbedding, err := m.embSvc.Embed(mem.Content)
+		if err != nil {
+			logger.SugaredLogger.Warnf("failed to embed memory %d: %v", mem.ID, err)
+			continue
+		}
+
+		// Compute cosine similarity
+		score := CosineSimilarity(queryEmbedding, memEmbedding)
+		scored = append(scored, scoredMemory{mem: mem, score: score})
+	}
+
+	// Sort by score descending
+	sort.Slice(scored, func(i, j int) bool {
+		return scored[i].score > scored[j].score
+	})
+
+	// Return top results
+	if limit > len(scored) {
+		limit = len(scored)
+	}
+	result := make([]AgentMemory, 0, limit)
+	for i := 0; i < limit; i++ {
+		result = append(result, scored[i].mem)
+	}
+	return result, nil
+}
 func (m *MemoryManager) MemoryPrompt(sessionID string) string {
 	facts := m.RetrieveFacts(sessionID, 10)
 	refs := m.RetrieveReflections(sessionID, 5)
@@ -324,6 +397,7 @@ func (m *MemoryManager) MemoryPrompt(sessionID string) string {
 	return b.String()
 }
 
+// GetAllSessions returns recent sessions
 func (m *MemoryManager) GetAllSessions(limit int) []AgentSession {
 	if limit <= 0 {
 		limit = 20
@@ -333,6 +407,7 @@ func (m *MemoryManager) GetAllSessions(limit int) []AgentSession {
 	return sessions
 }
 
+// GetSession returns a session by ID
 func (m *MemoryManager) GetSession(sessionID string) *AgentSession {
 	var session AgentSession
 	err := db.Dao.Where("session_id = ?", sessionID).First(&session).Error
@@ -342,6 +417,7 @@ func (m *MemoryManager) GetSession(sessionID string) *AgentSession {
 	return &session
 }
 
+// GetSessionMemories returns memories for a session
 func (m *MemoryManager) GetSessionMemories(sessionID string, limit int) []AgentMemory {
 	if limit <= 0 {
 		limit = 50
@@ -351,6 +427,7 @@ func (m *MemoryManager) GetSessionMemories(sessionID string, limit int) []AgentM
 	return mems
 }
 
+// CleanupOldSessions removes sessions older than specified days
 func (m *MemoryManager) CleanupOldSessions(days int) (int, error) {
 	cutoff := time.Now().AddDate(0, 0, -days)
 	r := db.Dao.Where("created_at < ?", cutoff).Delete(&AgentSession{})
@@ -370,3 +447,23 @@ func truncateText(s string, maxLen int) string {
 }
 
 var _ = json.Marshal
+
+// InitEmbeddingService initializes the embedding service for the default memory manager
+// using settings from the configuration. Should be called during application startup.
+func InitEmbeddingService() {
+	if setting := data.GetSettingConfig(); setting != nil {
+		memoryManager := DefaultMemoryManager()
+		if memoryManager != nil && setting.EmbeddingEnabled &&
+			strings.TrimSpace(setting.EmbeddingModelName) != "" &&
+			strings.TrimSpace(setting.EmbeddingBaseUrl) != "" {
+			
+			embSvc := NewEmbeddingService(
+				setting.EmbeddingBaseUrl,
+				setting.EmbeddingApiKey,
+				setting.EmbeddingModelName,
+			)
+			memoryManager.SetEmbeddingService(embSvc)
+			logger.SugaredLogger.Infof("Embedding service initialized for memory manager: %s", embSvc.Describe())
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -26,11 +27,12 @@ type SkillEmbedding struct {
 func (SkillEmbedding) TableName() string { return "skill_embeddings" }
 
 type SkillEmbeddingService struct {
-	es      *EmbeddingService
-	enabled bool
-	mu      sync.RWMutex
+	retr     Retriever // optional external retriever for RAG
+	es       *EmbeddingService
+	enabled  bool
+	mu       sync.RWMutex
 	// skillID → embedding vector
-	embeddings map[uint][]float32
+	embeddings    map[uint][]float32
 	// skillID → content hash
 	contentHashes map[uint]string
 }
@@ -40,7 +42,7 @@ var (
 	skillEmbedMu  sync.Mutex
 )
 
-func GetSkillEmbeddingService(es *EmbeddingService) *SkillEmbeddingService {
+func GetSkillEmbeddingService(es *EmbeddingService, retr Retriever) *SkillEmbeddingService {
 	enabled := es != nil && es.IsConfigured()
 
 	skillEmbedMu.Lock()
@@ -52,6 +54,7 @@ func GetSkillEmbeddingService(es *EmbeddingService) *SkillEmbeddingService {
 
 	skillEmbedSvc = &SkillEmbeddingService{
 		es:            es,
+		retr:          retr,
 		embeddings:    make(map[uint][]float32),
 		contentHashes: make(map[uint]string),
 	}
@@ -79,8 +82,6 @@ func (s *SkillEmbeddingService) embeddingCount() int {
 	defer s.mu.RUnlock()
 	return len(s.embeddings)
 }
-
-
 
 func (s *SkillEmbeddingService) loadFromDB() error {
 	// Ensure the table exists before querying. The package-level init() runs
@@ -215,8 +216,12 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 		return kwMatched
 	}
 
-	// Semantic matching only when keywords miss and embeddings are available.
+	// Semantic matching via internal skill embeddings
 	if !s.enabled || s.es == nil {
+		// Fallback to external retriever if available
+		if s.retr != nil && s.retr.IsReady() {
+			return s.matchSkillsViaRetriever(question, topK)
+		}
 		return nil
 	}
 
@@ -224,6 +229,10 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 	embCount := len(s.embeddings)
 	s.mu.RUnlock()
 	if embCount == 0 {
+		// Fallback to external retriever if available
+		if s.retr != nil && s.retr.IsReady() {
+			return s.matchSkillsViaRetriever(question, topK)
+		}
 		logger.SugaredLogger.Warnf("question %q 关键词未命中且无skill embedding可用（刷新失败），无技能匹配", truncateQuestion(question))
 		return nil
 	}
@@ -232,6 +241,10 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 	vec, err := s.es.Embed(question)
 	if err != nil {
 		logger.SugaredLogger.Warnf("question embedding失败，关键词未命中，无技能匹配: %v", err)
+		// Fallback to external retriever if available
+		if s.retr != nil && s.retr.IsReady() {
+			return s.matchSkillsViaRetriever(question, topK)
+		}
 		return nil
 	}
 
@@ -267,6 +280,51 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 	var matched []models.Skill
 	for _, sc := range scoredSkills {
 		matched = append(matched, sc.skill)
+	}
+	return matched
+}
+
+// matchSkillsViaRetriever uses the external retriever to find relevant skills
+func (s *SkillEmbeddingService) matchSkillsViaRetriever(question string, topK int) []models.Skill {
+	skills := data.NewSkillApi().GetEnabledSkills()
+	if len(skills) == 0 {
+		return nil
+	}
+
+	ctx := context.Background()
+	vec, err := s.retr.EmbedText(ctx, question)
+	if err != nil {
+		logger.SugaredLogger.Warnf("retriever EmbedText failed: %v", err)
+		return nil
+	}
+
+	docs, err := s.retr.Search(ctx, vec, topK)
+	if err != nil {
+		logger.SugaredLogger.Warnf("retriever Search failed: %v", err)
+		return nil
+	}
+
+	// Map retrieved documents back to skills by source/id
+	var matched []models.Skill
+	skillMap := make(map[uint]models.Skill)
+	for _, sk := range skills {
+		skillMap[sk.ID] = sk
+	}
+
+	for _, doc := range docs {
+		if doc.Source == "skill" {
+			if idStr, ok := doc.Meta["skill_id"]; ok {
+				var id uint
+				fmt.Sscanf(idStr, "%d", &id)
+				if skill, ok := skillMap[id]; ok {
+					matched = append(matched, skill)
+				}
+			}
+		}
+	}
+
+	if len(matched) > topK {
+		matched = matched[:topK]
 	}
 	return matched
 }
@@ -375,5 +433,3 @@ func init() {
 		db.Dao.AutoMigrate(&SkillEmbedding{})
 	}
 }
-
-

@@ -263,7 +263,7 @@ func matchSkills(question string, embedSvc *EmbeddingService) []models.Skill {
 	if len(data.NewSkillApi().GetEnabledSkills()) == 0 {
 		return nil
 	}
-	skillEmbedSvc := GetSkillEmbeddingService(embedSvc)
+	skillEmbedSvc := GetSkillEmbeddingService(embedSvc, nil)
 	matched := skillEmbedSvc.MatchSkills(question, 2)
 	if len(matched) == 0 {
 		return nil

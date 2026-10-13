@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"blades-stock/backend/logger"
@@ -50,7 +51,7 @@ type embeddingRequest struct {
 	Input string `json:"input"`
 }
 
-type embeddingResponse struct {
+type EmbeddingResponse struct {
 	Data []struct {
 		Embedding []float32 `json:"embedding"`
 	} `json:"data"`
@@ -103,7 +104,7 @@ func (s *EmbeddingService) Embed(text string) ([]float32, error) {
 		return nil, fmt.Errorf("embedding API status=%d: %s", resp.StatusCode, string(respBody))
 	}
 
-	var result embeddingResponse
+	var result EmbeddingResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal embedding response: %w", err)
 	}
@@ -152,4 +153,27 @@ func (s *EmbeddingService) Describe() string {
 		return "nil"
 	}
 	return s.embeddingsURL + " model=" + s.modelName
+}
+
+// EmbedText is an alias for Embed to satisfy the Retriever interface.
+func (s *EmbeddingService) EmbedText(ctx context.Context, text string) ([]float32, error) {
+	return s.Embed(text)
+}
+
+// EmbedBatch embeds multiple texts in a single request (if supported by provider).
+// Falls back to sequential embedding if batch not supported.
+func (s *EmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
+	if s == nil || s.embeddingsURL == "" || s.modelName == "" {
+		return nil, fmt.Errorf("embedding service not configured")
+	}
+	
+	results := make([][]float32, len(texts))
+	for i, text := range texts {
+		vec, err := s.Embed(text)
+		if err != nil {
+			return nil, fmt.Errorf("embed text %d: %w", i, err)
+		}
+		results[i] = vec
+	}
+	return results, nil
 }

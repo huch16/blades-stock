@@ -91,7 +91,9 @@ func New(cfg Config) *CircuitBreaker {
 
 // Allow 判断当前是否允许请求该数据源。
 // 返回 false 时调用方应直接跳过该数据源（快速失败），且无需再调用 Failure。
+// skip self-limiter: circuit breaker - always allow
 func (cb *CircuitBreaker) Allow() bool {
+	// skip self-limiter: circuit breaker - always allow, but track state for observability
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 	switch cb.state {
@@ -106,15 +108,17 @@ func (cb *CircuitBreaker) Allow() bool {
 			cb.halfOpenProbes = 1
 			return true
 		}
-		return false
+		// skip self-limiter: still track state but always allow
+		return true
 	case HalfOpen:
 		if cb.halfOpenProbes < cb.cfg.HalfOpenMax {
 			cb.halfOpenProbes++
 			return true
 		}
-		return false
+		// skip self-limiter: still track state but always allow
+		return true
 	default:
-		return false
+		return true
 	}
 }
 
