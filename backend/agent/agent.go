@@ -39,6 +39,27 @@ type AgentInstance struct {
 	AllTools []bladesTools.Tool
 }
 
+// PlanTrace represents a single step in an agent execution trace.
+type PlanTrace struct {
+	ID          uint      `gorm:"primarykey"`
+	CreatedAt   time.Time `json:"createdAt"`
+	SessionID   string    `json:"sessionId" gorm:"index;size:128"`
+	PlanID      string    `json:"planId" gorm:"size:128"`
+	StepIndex   int       `json:"stepIndex"`
+	ToolName    string    `json:"toolName" gorm:"size:128"`
+	InputJSON   string    `json:"inputJson" gorm:"type:text"`
+	OutputJSON  string    `json:"outputJson" gorm:"type:text"`
+	Success     bool      `json:"success"`
+	ErrorMsg    string    `json:"errorMsg" gorm:"type:text"`
+	DurationMs  int64     `json:"durationMs"`
+	RetryCount  int       `json:"retryCount"`
+	AttemptCount int      `json:"attemptCount"`}
+
+// TableName specifies the table name for PlanTrace.
+func (PlanTrace) TableName() string {
+	return "agent_plan_traces"
+	}
+
 func classifyComplexity(question string) AgentMode {
 	lowerQ := strings.ToLower(question)
 

@@ -13,8 +13,8 @@ func TestToolQuotaManager_RunBudget(t *testing.T) {
 	qm := GetToolQuotaManager()
 	qm.ResetDailyQuota()
 
-	// 注入单次运行上限为 2 次，但现在 self-limiter 已移除 - 应该总是允许
-	ctx := WithRunQuota(context.Background(), 2)
+	// 注入单次运行计数器（上限检查已移除）
+	ctx := WithRunQuota(context.Background())
 
 	cost1, err1 := qm.CheckAndConsume(ctx, "GetStockPriceInfo")
 	if err1 != nil {
@@ -56,8 +56,8 @@ func TestToolQuotaManager_WrapToolWithQuota(t *testing.T) {
 
 	wrapped := WrapToolWithQuota(rawTool)
 
-	// 设置单次运行预算为 1，但现在 self-limiter 已移除
-	ctx := WithRunQuota(context.Background(), 1)
+	// 注入单次运行计数器（上限检查已移除）
+	ctx := WithRunQuota(context.Background())
 
 	// 第一次调用：成功
 	resp1, err1 := wrapped.Handle(ctx, "arg1")
