@@ -874,15 +874,15 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
-/* 核心摘要卡片 */
+/* 核心摘要卡片 - 柔和舒适护眼 */
 .summary-card {
-  padding: 12px 16px;
-  background: rgba(24, 160, 88, 0.08);
-  border-left: 4px solid #18a058;
+  padding: 10px 14px;
+  background: rgba(14, 165, 233, 0.05);
+  border-left: 3px solid #0ea5e9;
   border-radius: 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .summary-header {
@@ -891,45 +891,157 @@ onBeforeUnmount(() => {
 }
 
 .summary-badge {
-  font-size: 12px;
-  font-weight: 700;
-  color: #18a058;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #0284c7;
 }
 
 .summary-content {
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.6;
-  font-weight: 500;
-  color: var(--n-text-color, #2d3748);
+  font-weight: 450;
+  color: #334155;
 }
 
 /* 伴随联动操作 */
 .report-actions-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 14px;
-  background: rgba(128, 128, 128, 0.06);
-  border: 1px dashed var(--n-border-color, rgba(128, 128, 128, 0.2));
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(128, 128, 128, 0.04);
+  border: 1px dashed var(--n-border-color, rgba(128, 128, 128, 0.18));
   border-radius: 6px;
 }
 
 .report-actions-title {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  color: var(--n-text-color, #4a5568);
+  color: var(--n-text-color, #475569);
 }
 
 .report-actions-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
-/* Markdown 预览区 */
+/* Markdown 预览区 - 精美舒适投研排版，杜绝字体过大刺眼 */
 .markdown-preview-container {
-  margin-top: 4px;
-  padding: 4px 2px;
+  margin-top: 2px;
+  padding: 2px;
+}
+
+/* 全局限制 Markdown 默认过大的标题与正文 */
+:deep(.md-editor-preview) {
+  font-size: 13px !important;
+  line-height: 1.65 !important;
+  color: #334155 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif !important;
+}
+
+:deep(.md-editor-preview h1) {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.4 !important;
+  margin-top: 14px !important;
+  margin-bottom: 10px !important;
+  padding-bottom: 6px !important;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.16) !important;
+  color: #0f172a !important;
+}
+
+:deep(.md-editor-preview h2) {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+  margin-top: 12px !important;
+  margin-bottom: 8px !important;
+  padding-bottom: 4px !important;
+  border-bottom: 1px dashed rgba(128, 128, 128, 0.14) !important;
+  color: #1e293b !important;
+}
+
+:deep(.md-editor-preview h3) {
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  margin-top: 10px !important;
+  margin-bottom: 6px !important;
+  color: #334155 !important;
+}
+
+:deep(.md-editor-preview h4),
+:deep(.md-editor-preview h5),
+:deep(.md-editor-preview h6) {
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  margin-top: 8px !important;
+  margin-bottom: 4px !important;
+  color: #475569 !important;
+}
+
+:deep(.md-editor-preview p) {
+  font-size: 13px !important;
+  line-height: 1.65 !important;
+  margin-bottom: 8px !important;
+  color: #334155 !important;
+}
+
+:deep(.md-editor-preview ul),
+:deep(.md-editor-preview ol) {
+  padding-left: 18px !important;
+  margin-bottom: 8px !important;
+}
+
+:deep(.md-editor-preview li) {
+  font-size: 12.5px !important;
+  line-height: 1.6 !important;
+  margin-bottom: 3px !important;
+  color: #334155 !important;
+}
+
+:deep(.md-editor-preview strong) {
+  font-weight: 600 !important;
+  color: #0f172a !important;
+}
+
+:deep(.md-editor-preview table) {
+  font-size: 12px !important;
+  border-collapse: collapse !important;
+  margin: 10px 0 !important;
+  width: 100% !important;
+}
+
+:deep(.md-editor-preview table th) {
+  background: rgba(128, 128, 128, 0.06) !important;
+  font-weight: 600 !important;
+  padding: 6px 10px !important;
+  border: 1px solid rgba(128, 128, 128, 0.16) !important;
+  color: #1e293b !important;
+}
+
+:deep(.md-editor-preview table td) {
+  padding: 5px 10px !important;
+  border: 1px solid rgba(128, 128, 128, 0.14) !important;
+  color: #334155 !important;
+}
+
+:deep(.md-editor-preview blockquote) {
+  font-size: 12.5px !important;
+  padding: 6px 12px !important;
+  margin: 8px 0 !important;
+  border-left: 3px solid #0ea5e9 !important;
+  background: rgba(14, 165, 233, 0.04) !important;
+  color: #475569 !important;
+  border-radius: 0 4px 4px 0 !important;
+}
+
+:deep(.md-editor-preview code) {
+  font-size: 11.5px !important;
+  padding: 2px 5px !important;
+  background: rgba(128, 128, 128, 0.08) !important;
+  border-radius: 4px !important;
+  font-family: monospace !important;
 }
 
 .empty-report-view {
@@ -1038,16 +1150,16 @@ onBeforeUnmount(() => {
 }
 
 .is-dark .summary-card {
-  background: rgba(99, 226, 183, 0.12);
-  border-left-color: #63e2b7;
+  background: rgba(56, 189, 248, 0.08);
+  border-left-color: #38bdf8;
 }
 
 .is-dark .summary-badge {
-  color: #63e2b7;
+  color: #38bdf8;
 }
 
 .is-dark .summary-content {
-  color: #f1f5f9;
+  color: #cbd5e1;
 }
 
 .is-dark .empty-report-view {
@@ -1059,58 +1171,71 @@ onBeforeUnmount(() => {
   color: #94a3b8;
 }
 
-/* 保证 Markdown 在深色模式下所有文字和表格的明亮度 */
+/* 深色模式下 Markdown 排版：柔和降反差、护眼防眩目 */
 .is-dark :deep(.md-editor-preview) {
-  color: #e2e8f0;
+  color: #cbd5e1 !important;
 }
 
 .is-dark :deep(.md-editor-preview p),
 .is-dark :deep(.md-editor-preview li),
 .is-dark :deep(.md-editor-preview span),
-.is-dark :deep(.md-editor-preview td),
+.is-dark :deep(.md-editor-preview td) {
+  color: #cbd5e1 !important;
+}
+
 .is-dark :deep(.md-editor-preview th) {
-  color: #e2e8f0;
+  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .is-dark :deep(.md-editor-preview h1),
 .is-dark :deep(.md-editor-preview h2),
 .is-dark :deep(.md-editor-preview h3),
 .is-dark :deep(.md-editor-preview h4) {
-  color: #f8fafc;
-  border-bottom-color: rgba(255, 255, 255, 0.15);
+  color: #e2e8f0 !important;
+  border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.is-dark :deep(.md-editor-preview strong) {
+  color: #f1f5f9 !important;
 }
 
 .is-dark :deep(.md-editor-preview table) {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 .is-dark :deep(.md-editor-preview table tr) {
-  background-color: transparent;
-  border-top-color: rgba(255, 255, 255, 0.15);
+  background-color: transparent !important;
+  border-top-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .is-dark :deep(.md-editor-preview table tr:nth-child(2n)) {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: rgba(255, 255, 255, 0.02) !important;
 }
 
 .is-dark :deep(.md-editor-preview table th),
 .is-dark :deep(.md-editor-preview table td) {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .is-dark :deep(.md-editor-preview blockquote) {
-  border-left-color: #63e2b7;
-  color: #cbd5e1;
-  background: rgba(255, 255, 255, 0.03);
+  border-left-color: #38bdf8 !important;
+  color: #94a3b8 !important;
+  background: rgba(56, 189, 248, 0.05) !important;
+}
+
+.is-dark :deep(.md-editor-preview code) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #7dd3fc !important;
 }
 
 .is-dark :deep(details) {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border-left-color: #63e2b7 !important;
-  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-left-color: #38bdf8 !important;
+  color: #cbd5e1 !important;
 }
 
 .is-dark :deep(details summary) {
-  color: #f1f5f9 !important;
+  color: #e2e8f0 !important;
 }
 </style>
