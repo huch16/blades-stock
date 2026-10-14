@@ -143,6 +143,9 @@ go.mod.with-replaces
 # Knowledge graph
 .graph/
 
+# Vendor blades
+vendor-blades/
+
 # Stray root files (temp artifacts that must not be committed)
 /probe_tushare_perms.exe
 /blades-stock.exe

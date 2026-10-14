@@ -1592,7 +1592,10 @@ onMounted(() => {
     if (text) {
       inputValue.value = text
       setTimeout(() => {
-        if (!isStreamLoad.value && inputValue.value.trim()) {
+        if (inputValue.value.trim()) {
+          if (isStreamLoad.value) {
+            abortStream(false)
+          }
           sendMessage()
         }
       }, 150)

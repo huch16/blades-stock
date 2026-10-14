@@ -911,23 +911,6 @@ const menuOptions = ref([
           key: 'settings',
           icon: renderIcon(SettingsOutline),
         },
-        {
-          label: () =>
-              h(
-                  RouterLink,
-                  {
-                    to: {
-                      name: 'vectorbt',
-                      onClick: () => {
-                        activeKey.value = 'vectorbt'
-                      },
-                    }
-                  },
-                  {default: () => '回测引擎'}
-              ),
-          key: 'vectorbt',
-          icon: renderIcon(StatsChartOutline),
-        },
   {
     show:false,
     label: () => h("a", {

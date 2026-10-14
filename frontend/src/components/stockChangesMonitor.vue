@@ -343,50 +343,89 @@ function triggerAiAnomalyAnalysis(row) {
   message.success(`已发起 [${name}] 异动 AI 归因排雷推演！`)
 }
 
-function triggerAiMarketAnomalySummary() {
-  if (!dataRef.value || dataRef.value.length === 0) {
-    message.warning('当前暂无异动数据，无法生成全景透视')
+async function triggerAiMarketAnomalySummary() {
+  let list = dataRef.value || []
+  let modeDesc = viewMode.value === 'realtime' ? '盘中实时' : '历史回溯'
+  let totalCount = paginationReactive.itemCount
+
+  // 如果当前数据为空（如非交易时段、或实时接口尚未返回），自动拉取最新异动兜底数据
+  if (!list.length) {
+    loadingRef.value = true
+    const loadingMsg = message.loading('当前暂无实时异动，正在提取最新交易日异动数据...', { duration: 0 })
+    try {
+      // 1. 先尝试获取当天全部异动数据
+      const allRes = await GetAllStockChangesWithPaging(100)
+      if (allRes && allRes.data && allRes.data.length > 0) {
+        list = allRes.data
+        totalCount = allRes.totalCount || list.length
+        dataRef.value = list
+        paginationReactive.itemCount = totalCount
+        modeDesc = '当日异动归档'
+      } else {
+        // 2. 若当日接口无数据（如周末休市），从本地历史异动库获取最新记录
+        const histRes = await GetStockChangeHistory({ page: 1, pageSize: 50 })
+        if (histRes && histRes.list && histRes.list.length > 0) {
+          list = histRes.list
+          totalCount = histRes.total || list.length
+          dataRef.value = list
+          paginationReactive.itemCount = totalCount
+          const sampleDate = list[0]?.changeDate || list[0]?.ChangeDate || '最新'
+          modeDesc = `历史交易日 (${sampleDate})`
+        }
+      }
+    } catch (e) {
+      console.warn('获取兜底异动数据失败:', e)
+    } finally {
+      loadingMsg.destroy()
+      loadingRef.value = false
+    }
+  }
+
+  if (!list.length) {
+    message.warning('未能获取到异动样本数据，请稍后重试或切换至历史数据模式查询。')
     return
   }
+
   const bullishList = []
   const bearishList = []
   const industryCount = {}
 
-  for (const item of dataRef.value.slice(0, 50)) {
+  for (const item of list.slice(0, 60)) {
     const name = item.stockName || item.StockName || item.name || ''
+    const code = item.stockCode || item.StockCode || item.code || ''
     const typeName = item.typeName || item.TypeName || ''
     const ind = item.industry || item.Industry || ''
-    if (ind) {
+    if (ind && ind !== '-') {
       industryCount[ind] = (industryCount[ind] || 0) + 1
     }
-    const isBull = ['火箭发射', '快速反弹', '大笔买入', '封涨停板', '60日新高'].includes(typeName)
-    if (isBull && bullishList.length < 5) {
-      bullishList.push(`${name}(${typeName})`)
-    } else if (!isBull && bearishList.length < 5) {
-      bearishList.push(`${name}(${typeName})`)
+    const isBull = ['火箭发射', '快速反弹', '大笔买入', '封涨停板', '60日新高', '有大买盘', '竞价上涨', '高开5日线'].includes(typeName)
+    const label = `${name}${code ? '(' + code + ')' : ''} [${typeName}]`
+    if (isBull && bullishList.length < 6) {
+      bullishList.push(label)
+    } else if (!isBull && bearishList.length < 6) {
+      bearishList.push(label)
     }
   }
 
   const hotIndustries = Object.entries(industryCount)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
+    .slice(0, 4)
     .map(([k, v]) => `${k}(${v}次)`)
-    .join('、') || '暂无集中行业'
+    .join('、') || '暂无高度集中行业'
 
   const prompt = `【日内异动大盘资金全景透视】
-当前监控模式：${viewMode.value === 'realtime' ? '盘中实时' : '历史回溯'}
-异动记录总数：${paginationReactive.itemCount} 条
-异动高频聚焦行业：${hotIndustries}
-典型异动进攻代表：${bullishList.join('、') || '无'}
-典型异动承压代表：${bearishList.join('、') || '无'}
+数据状态：${modeDesc}（异动样本总数：${totalCount} 条）
+异动聚焦行业：${hotIndustries}
+典型异动进攻代表：${bullishList.join('、') || '无明显进攻信号'}
+典型异动承压代表：${bearishList.join('、') || '无明显跳水抛压'}
 
-请根据当前大面积盘中异动结构，用通俗干练的 3 点回答（150字以内）：
-1. 【主力资金动向】：日内主力大单是在快速建仓哪个赛道，还是借利好拉高出货？
-2. 【虚实辨析】：当前异动进攻的持续性如何？哪些容易是脉冲式一日游？
-3. 【散户避坑提醒】：当前盘面切忌什么样的追涨杀跌行为？给出实操风控忠告。`
+请结合以上盘面集中异动特征，从短线主力与游资博弈视角，输出结构化全景透视（包含以下 3 个维度）：
+1. 【主力资金与行业主线】：主力大单主要在攻坚哪个赛道？属于真金白银建仓还是拉高诱多？
+2. 【虚实辨析与持续性】：进攻型异动标的是否具备板块共振？哪些容易是脉冲式一日游/飞刀？
+3. 【散户避坑与实操风控】：针对当前异动结构，给出明确的防追高点位策略与防套纪律。`
 
   EventsEmit('openFloatingAgentWithQuestion', prompt)
-  message.success('已发起异动大盘全景 AI 透视！')
+  message.success('已提炼盘面异动，正在右侧 AI 助手展开全景透视...', { duration: 3500 })
 }
 
 function checkTradingTime() {
@@ -438,9 +477,16 @@ async function fetchRealtimeData() {
   try {
     const types = selectedTypes.value.map(t => parseInt(t))
     const result = await GetStockChanges(types, 0, paginationReactive.pageSize)
-    if (result) {
+    if (result && result.data && result.data.length > 0) {
       dataRef.value = result.data || []
       paginationReactive.itemCount = result.totalCount || 0
+    } else if (!isTrading.value) {
+      // 非交易时间实时推送为空时，自动加载历史库最新记录填充表格，避免用户打开页面空空如也
+      const histResult = await GetStockChangeHistory({ page: 1, pageSize: paginationReactive.pageSize })
+      if (histResult && histResult.list && histResult.list.length > 0) {
+        dataRef.value = histResult.list
+        paginationReactive.itemCount = histResult.total || 0
+      }
     }
   } catch (e) {
     console.error('获取异动数据失败:', e)
@@ -758,7 +804,7 @@ onBeforeUnmount(() => {
               type="warning"
               secondary
               size="small"
-              :disabled="loadingRef || !dataRef.length"
+              :loading="loadingRef"
               @click="triggerAiMarketAnomalySummary"
             >
               ⚡ AI 异动大盘全景透视
