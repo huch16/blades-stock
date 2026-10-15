@@ -173,14 +173,14 @@ func NewWebSearchApi(timeout int) *WebSearchApi {
 	return &WebSearchApi{timeout: timeout}
 }
 
-const defaultSearxngURL = "https://search.whohai.cfd"
+const defaultSearxngURL = "https://search.woha.men"
 
 func getSearXNGEndpoints() []string {
 	var endpoints []string
 	if custom := os.Getenv("SEARXNG_URL"); custom != "" {
 		endpoints = append(endpoints, strings.TrimRight(custom, "/"))
 	}
-	endpoints = append(endpoints, defaultSearxngURL, "https://searx.be", "https://search.sapti.me")
+	endpoints = append(endpoints, defaultSearxngURL, "https://search.sapti.me", "https://searx.be")
 	return endpoints
 }
 
@@ -216,7 +216,7 @@ func (s *WebSearchApi) Search(query string, maxResults int) []WebSearchResult {
 }
 
 func (s *WebSearchApi) searchSearXNG(query string, maxResults int) []WebSearchResult {
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 8 * time.Second}
 	endpoints := getSearXNGEndpoints()
 
 	for _, endpoint := range endpoints {

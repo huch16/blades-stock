@@ -62,7 +62,7 @@ Detected by baseURL pattern matching in `detectChatModelProvider()`.
 - **East Money** (push2his/push2.eastmoney.com) — K-line, real-time quotes, money flow
 - **TDX** (TdxKLineApi) — stock basic info sync, extended market data
 - **CLS / Sina / TradingView** — news feeds
-- **SearXNG** (search.whohai.cfd) — web search
+- **SearXNG** (https://search.woha.men) — web search
 - **Tushare** — historical (optional API key)
 - Static files: `backend/data/stock_basic.json`, `build/*.json` from remote server `http://8.134.249.145:18080` (configurable via `BLADES_STOCK_STATIC_DATA_URL`)
 
