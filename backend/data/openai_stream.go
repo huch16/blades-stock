@@ -226,6 +226,11 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewSummaryStockNewsStream ClsCalendar worker panic: %v", r)
+				}
+			}()
 			md := strings.Builder{}
 			res := NewMarketNewsApi().ClsCalendar()
 			for _, a := range res {
@@ -256,6 +261,11 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewSummaryStockNewsStream InteractiveAnswer worker panic: %v", r)
+				}
+			}()
 			datas := NewMarketNewsApi().InteractiveAnswer(1, 100, "")
 			content := util.MarkdownTableWithTitle("当前最新投资者互动数据", datas.Results)
 			msgMu.Lock()
@@ -272,6 +282,11 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewSummaryStockNewsStream HotStrategy worker panic: %v", r)
+				}
+			}()
 			markdownTable := ""
 			res := NewSearchStockApi("").HotStrategy()
 			bytes, _ := json.Marshal(res)
@@ -420,6 +435,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewChatStream InteractiveAnswer panic: %v", r)
+				}
+			}()
 			datas := NewMarketNewsApi().InteractiveAnswer(1, 100, stock)
 			content := util.MarkdownTableWithTitle("当前最新投资者互动数据", datas.Results)
 			msgMu.Lock()
@@ -437,6 +457,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewChatStream MacroData panic: %v", r)
+				}
+			}()
 			var market strings.Builder
 			res := NewMarketNewsApi().GetGDP()
 			md := util.MarkdownTableWithTitle("国内生产总值(GDP)", res.GDPResult.Data)
@@ -466,6 +491,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewChatStream ClsCalendar panic: %v", r)
+				}
+			}()
 			md := strings.Builder{}
 			res := NewMarketNewsApi().ClsCalendar()
 			for _, a := range res {
@@ -496,6 +526,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewChatStream KlineData panic: %v", r)
+				}
+			}()
 			//logger.SugaredLogger.Infof("NewChatStream getKLineData stock:%s stockCode:%s", stock, stockCode)
 			if strutil.HasPrefixAny(stockCode, []string{"sz", "sh", "hk", "us", "gb_"}) {
 				K := &[]KLineData{}
@@ -534,6 +569,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewChatStream SearchStockPriceInfo panic: %v", r)
+				}
+			}()
 			messages := SearchStockPriceInfo(stock, stockCode, o.CrawlTimeOut)
 			if messages == nil || len(*messages) == 0 {
 				//logger.SugaredLogger.Error("获取股票价格失败")
@@ -563,6 +603,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewChatStream FinancialReports panic: %v", r)
+				}
+			}()
 			if len(tools) > 0 {
 				return
 			}
@@ -596,6 +641,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewChatStream MarketNews panic: %v", r)
+				}
+			}()
 			messages := NewMarketNewsApi().GetNews24HoursList("", random.RandInt(80, 200))
 			if messages == nil || len(*messages) == 0 {
 				//logger.SugaredLogger.Error("获取市场资讯失败")
@@ -620,6 +670,11 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("NewChatStream SearchStockInfo panic: %v", r)
+				}
+			}()
 			messages := SearchStockInfo(stock, "telegram", o.CrawlTimeOut)
 			if messages == nil || len(*messages) == 0 {
 				//logger.SugaredLogger.Error("获取股票电报资讯失败")

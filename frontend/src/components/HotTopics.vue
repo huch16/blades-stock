@@ -7,7 +7,7 @@ const task =ref()
 
 onBeforeMount(async () => {
   list.value = await HotTopic(10)
-  setInterval(async ()=>{
+  task.value = setInterval(async ()=>{
     list.value = await HotTopic(10)
   }, 1000*10)
 })

@@ -1325,6 +1325,16 @@ func (a *App) shutdown(ctx context.Context) {
 	// 窗口大小已在 beforeClose 中保存（app_windows.go / app_linux.go）。
 	// 这里不再调用 runtime.WindowGetSize —— 在 Wails 内部控件销毁阶段调用
 	// 会在 winc.ScaleToDefaultDPI 触发 panic，导致关窗卡死 / 进程残留。
+	if a.cron != nil {
+		a.cron.Stop()
+	}
+	if db.Dao != nil {
+		if err := db.Dao.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
+			logger.SugaredLogger.Warnf("shutdown WAL checkpoint error: %v", err)
+		} else {
+			logger.SugaredLogger.Info("shutdown WAL checkpoint ok")
+		}
+	}
 }
 
 // BatchGreet returns stock info for multiple stock codes in a single call

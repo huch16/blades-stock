@@ -4,29 +4,14 @@
 package data
 
 import (
-	"blades-stock/backend/logger"
 	"testing"
-
-	"github.com/go-toast/toast"
 )
 
-// @Author 2lovecode
-// @Date 2025/02/06 17:50
-// @Desc
-// -----------------------------------------------------------------------------------
-
-func TestAlert(t *testing.T) {
-	notification := toast.Notification{
-		AppID:    "blades-stock",
-		Title:    "Hello, World!",
-		Message:  "This is a toast notification.",
-		Icon:     "../../build/appicon.png",
-		Duration: "short",
-		Audio:    toast.Default,
+func TestAlertDarwin(t *testing.T) {
+	alert := NewAlertWindowsApi("blades-stock", "Hello, World!", "This is a notification.", "")
+	if alert == nil {
+		t.Fatal("expected non-nil alert")
 	}
-	err := notification.Push()
-	if err != nil {
-		logger.SugaredLogger.Error(err)
-		return
-	}
+	// SendNotification delegates to osascript in macOS desktop environment
+	_ = alert.SendNotification()
 }

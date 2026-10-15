@@ -12,7 +12,7 @@
 - `go test -run TestName ./backend/agent/` — focused single test
 - Wails flags `-skipbindings -skipembedcreate` required for Go 1.26.x compatibility (handled automatically in build.ps1)
 
-> Legacy build scripts (`*.bat`, `clean_build*.ps1`, `do_build.ps1`) remain for reference but `.\build.ps1` is the unified entry point.
+> Note: `.\build.ps1` is the unified entry point. Standard helper scripts (`build_frontend.bat`, `go_build.bat`, `wails_build.bat`) cleanly wrap `build.ps1`.
 
 ## Database Canonical Source (READ FIRST — 避免改错库)
 - **唯一权威库 = 仓库根 `<repo-root>/data/stock.db`**（当前实际路径 `D:\blades-stock\data\stock.db`）。运行时 `paths.BaseDir()` 规则：exe 位于 `<仓库>/build/bin/` 且仓库根存在 `go.mod` + `data/stock.db` → 一律使用仓库根 `data/stock.db`（开发与本地发布共用）。

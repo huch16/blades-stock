@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import {
   formatDuration,
@@ -129,6 +129,7 @@ function isStreaming(call: ToolCall): boolean {
 
 // 进度条宽度（模拟）
 const progressMap = ref<Record<string | number, number>>({})
+const activeTimers = new Map<string | number, ReturnType<typeof setInterval>>()
 
 function progressWidth(call: ToolCall): number {
   const key = call.id || props.calls.indexOf(call)
@@ -146,14 +147,18 @@ onMounted(() => {
         if (progress >= 100) {
           progress = 100
           clearInterval(interval)
+          activeTimers.delete(key)
         }
         progressMap.value[key] = progress
       }, 200)
-      // 保存定时器引用以便清理
-      ;(progressMap as any)._timers = (progressMap as any)._timers || {}
-      ;(progressMap as any)._timers[key] = interval
+      activeTimers.set(key, interval)
     }
   })
+})
+
+onBeforeUnmount(() => {
+  activeTimers.forEach((timer) => clearInterval(timer))
+  activeTimers.clear()
 })
 
 function formatArgs(args: string): string {

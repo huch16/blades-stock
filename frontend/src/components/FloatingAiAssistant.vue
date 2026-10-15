@@ -898,6 +898,7 @@ function ensureSummaryEvent() {
 
 onBeforeUnmount(() => {
   EventsOff(AI_ASSISTANT_EVENT)
+  EventsOff(PROMPT_TEMPLATES_CHANGED)
   hasSummaryEvent = false
 })
 

@@ -156,6 +156,7 @@ onBeforeUnmount(() => {
   EventsOff("changeMarketTab")
   EventsOff("newTelegraph")
   EventsOff("newSinaNews")
+  EventsOff("tradingViewNews")
   EventsOff("summaryStockNews")
   stopTradingTimers()
   if (tradingCheckInterval.value) {

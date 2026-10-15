@@ -1,5 +1,3 @@
 @echo off
-set "GOPATH=G:\stock\Go"
-set "PATH=G:\stock\Go\bin;C:\Users\huch\go\bin;%PATH%"
-cd /d G:\stock\blades-stock
-wails build 2>&1
+chcp 65001 >nul
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0build.ps1" wails
