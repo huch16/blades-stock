@@ -60,7 +60,7 @@ const filteredData = computed(() => {
 
 function onSearchKeywordChange(kw) {
   if (searchTimer) clearTimeout(searchTimer)
-  const trimmed = kw.trim()
+  const trimmed = (kw || '').trim()
   if (!trimmed) {
     searchCodes.value = null
     return

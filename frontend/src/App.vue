@@ -1141,9 +1141,9 @@ onMounted(() => {
     updateMarketStatus()
   }, 60000)
   if (!isWails()) {
-    contentStyle.value = "height: calc(100dvh - 64px); max-height: calc(100dvh - 64px); overflow-y: auto;"
+    contentStyle.value = "height: calc(100dvh - 64px); max-height: calc(100dvh - 64px); overflow-y: auto; padding-bottom: 72px;"
   } else {
-    contentStyle.value = "max-height: calc(92vh); overflow: hidden"
+    contentStyle.value = "max-height: calc(92vh); overflow: hidden; padding-bottom: 72px;"
   }
   GetConfig().then((res) => {
     if (res.enableNews) {
