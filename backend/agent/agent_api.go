@@ -559,7 +559,9 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 			errMsg := fmt.Sprintf("❌ Agent 调用失败：%v", agentErr)
 			lowerErr := strings.ToLower(agentErr.Error())
-			if _, ok := agentErr.(data.DegenerateOutputError); ok {
+			if strings.Contains(lowerErr, "401") || strings.Contains(lowerErr, "403") || strings.Contains(lowerErr, "token_rejected") || strings.Contains(lowerErr, "invalid token") || strings.Contains(lowerErr, "unauthorized") || strings.Contains(lowerErr, "invalid_api_key") {
+				errMsg = fmt.Sprintf("❌ AI服务鉴权失败 (HTTP 401/403)：API Key 无效或已过期。\n\n**可能原因**：当前所选大模型（配置ID：%d）的 API Key 未授权、余额不足或被平台拒绝 (token_rejected)。\n**解决方案**：请前往「系统设置 -> AI配置」检查并更新该模型的有效 API Key，或切换为可用模型（如 MiniMax-M3 / Nemotron 等）。\n\n(底层详情: %v)", aiConfigId, agentErr)
+			} else if _, ok := agentErr.(data.DegenerateOutputError); ok {
 				errMsg = "❌ 模型输出异常：检测到乱码(<unk>)流，已自动重试仍失败。\n\n**建议**：请重试一次；若反复出现，请切换 AI 配置中的模型。"
 			} else if strings.Contains(lowerErr, "unexpected end of json input") || lowerErr == "eof" || strings.Contains(lowerErr, "unexpected eof") {
 				errMsg = "❌ 模型服务响应中断：模型服务端返回了空响应或流式传输被意外切断 (unexpected end of JSON input)。\n\n**可能原因**：\n1. 当前大模型服务商（如 MiniMax/DeepSeek）瞬时过载、限流或网络握手重置\n2. 上下文或搜索内容较长触发了网关传输截断\n\n**解决方案**：\n1. 系统已尝试自动重试，请直接重新点击发送或换一个问题重试\n2. 建议在「AI配置」中配置备用模型，或开启 Fallback 多模型自动降级机制"

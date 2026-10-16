@@ -1491,7 +1491,13 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 	if preFetchCtx != "" {
 		analysisQuestion += "\n\n【预采集参考数据】以下数据由系统预先采集，是真实数据，可直接引用分析：\n" + preFetchCtx + "\n\n【重要】严禁编造或推算PE/PB/ROE/毛利率/营收/利润/资金流向/均线等任何数字指标。所有数据须来自预采集数据或工具返回结果。不确定的指标请明确说'数据不可得'，不要自行估算。"
 	}
-	for msg := range agent.NewStockAiAgentApi().ChatWithContext(a.ctx, analysisQuestion, aiConfigId, sysPromptId, true, 5, think, "plan_execute") {
+
+	agentMode := string(agent.AgentModePlanExecute)
+	if !enableTools {
+		agentMode = string(agent.AgentModeDirect)
+	}
+
+	for msg := range agent.NewStockAiAgentApi().ChatWithContext(a.ctx, analysisQuestion, aiConfigId, sysPromptId, true, 5, think, agentMode) {
 		if msg == nil {
 			continue
 		}

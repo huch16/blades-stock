@@ -530,6 +530,68 @@ func (s *AgentService) AbortSummaryStockNews() {
 	// 优雅中止
 }
 
+// IsETFRecommendQuestion 判断用户问题是否属于 ETF/基金推荐、轮动、板块资金类问询。
+func IsETFRecommendQuestion(q string) bool {
+	if strings.TrimSpace(q) == "" {
+		return false
+	}
+	lower := strings.ToLower(q)
+	etfHints := []string{"ETF", "etf", "基金", "板块", "轮动", "北向资金", "资金流向", "热点", "大盘", "指数"}
+	for _, hint := range etfHints {
+		if strings.Contains(lower, hint) {
+			return true
+		}
+	}
+	return false
+}
+
+// PreFetchStockAnalysisData 预采集目标个股的实时行情、财务、估值分位及机构预测等数据
+func PreFetchStockAnalysisData(stockCode string) string {
+	if stockCode == "" {
+		return ""
+	}
+	api := data.NewStockDataApi()
+	var parts []string
+
+	// 1. 实时行情与最新价
+	if info, err := api.GetStockCodeRealTimeData(stockCode); err == nil && info != nil && len(*info) > 0 {
+		s := (*info)[0]
+		changePercent := s.ChangePercent
+		changePrice := s.ChangePrice
+		parts = append(parts, fmt.Sprintf("【实时行情】%s(%s) 当前价:%s 涨跌幅:%.2f%% 涨跌额:%.2f 开盘:%s 最高:%s 最低:%s 昨收:%s 成交量:%s 成交额:%s",
+			s.Name, s.Code, s.Price, changePercent, changePrice, s.Open, s.High, s.Low, s.PreClose, s.Volume, s.Amount))
+	}
+
+	// 2. 最新财务指标
+	financeMd := api.GetStockLatestFinanceToMarkdown(stockCode)
+	if financeMd != "" && !strings.HasPrefix(financeMd, "获取") {
+		parts = append(parts, financeMd)
+	}
+
+	// 3. 季度财务表现 (ROE, 毛利率等)
+	qtrMd := api.GetStockQtrMainFinanceToMarkdown(stockCode)
+	if qtrMd != "" && !strings.HasPrefix(qtrMd, "获取") {
+		parts = append(parts, qtrMd)
+	}
+
+	// 4. 估值分位点 (PE/PB 历史百分位)
+	valMd := api.GetStockValuationPercentileToMarkdown(stockCode)
+	if valMd != "" && !strings.HasPrefix(valMd, "获取") {
+		parts = append(parts, valMd)
+	}
+
+	// 5. 机构一致性盈利预测
+	predMd := api.GetStockPredictSummaryToMarkdown(stockCode)
+	if predMd != "" && !strings.HasPrefix(predMd, "获取") {
+		parts = append(parts, predMd)
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n\n")
+}
+
 // NewChatStream AI 交互对话流式推流
 func (s *AgentService) NewChatStream(stock, stockCode, question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool) {
 	s.NewChatStreamCustom(s.defaultEmitter, stock, stockCode, question, aiConfigId, sysPromptId, enableTools, think)
@@ -539,12 +601,48 @@ func (s *AgentService) NewChatStream(stock, stockCode, question string, aiConfig
 func (s *AgentService) NewChatStreamCustom(emitter MessageEmitter, stock, stockCode, question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool) {
 	go func() {
 		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("NewChatStreamCustom panic: %v", r)
+				if emitter != nil {
+					emitter("newChatStream", map[string]any{
+						"content": fmt.Sprintf("❌ 智能分析运行异常: %v", r),
+					})
+				}
+			}
 			if emitter != nil {
 				emitter("newChatStream", "DONE")
 			}
 		}()
 
-		for msg := range agent.NewStockAiAgentApi().ChatWithContext(context.Background(), question, aiConfigId, sysPromptId, false, 0, think, "plan_execute") {
+		analysisQuestion := strings.TrimSpace(question)
+		isETFOriented := IsETFRecommendQuestion(analysisQuestion)
+
+		// 预采集真实盘面与财务数据注入 Prompt 上下文
+		var preFetchCtx string
+		if !isETFOriented && stockCode != "" {
+			preFetchCtx = PreFetchStockAnalysisData(stockCode)
+		}
+
+		if analysisQuestion == "" {
+			displayName := stock
+			if displayName == "" {
+				displayName = stockCode
+			}
+			analysisQuestion = fmt.Sprintf("请对%s(%s)进行全方位深度分析，从技术面、基本面、消息面、资金面四个维度综合研判，给出明确的多空判断和操作建议。", displayName, stockCode)
+		}
+		if preFetchCtx != "" {
+			analysisQuestion += "\n\n【预采集参考数据】以下数据由系统预先采集，是真实数据，可直接引用分析：\n" + preFetchCtx + "\n\n【重要】严禁编造或推算PE/PB/ROE/毛利率/营收/利润/资金流向/均线等任何数字指标。所有数据须来自预采集数据或工具返回结果。不确定的指标请明确说'数据不可得'，不要自行估算。"
+		}
+
+		// 根据工具启用状态动态决策 Agent 推演模式：
+		// 1. 若用户关闭函数工具调用，或已预注入详尽数据且不需要外部搜索，采用 direct 极速合成，15-25秒内出结果；
+		// 2. 若用户开启工具调用，采用 plan_execute 进行工具探索。
+		agentMode := string(agent.AgentModePlanExecute)
+		if !enableTools {
+			agentMode = string(agent.AgentModeDirect)
+		}
+
+		for msg := range agent.NewStockAiAgentApi().ChatWithContext(context.Background(), analysisQuestion, aiConfigId, sysPromptId, false, 0, think, agentMode) {
 			if msg == nil || msg.Content == "agent-DONE" {
 				continue
 			}
