@@ -37,6 +37,33 @@ export const clearAuthToken = (): void => {
   localStorage.removeItem(AUTH_TOKEN_KEY)
 }
 
+export const getAuthStatus = (): { authenticated: boolean; token: string; isWeb: boolean } => {
+  const token = getAuthToken()
+  return {
+    authenticated: Boolean(token),
+    token,
+    isWeb: !isWails(),
+  }
+}
+
+/**
+ * 唤起安全鉴权弹窗（支持用户在设置或顶部主动打开管理口令）
+ */
+export const openAuthModal = (mode: 'login' | 'manage' = 'manage'): void => {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent('blades:open-auth-modal', { detail: { mode } }))
+}
+
+/**
+ * 注销当前 Web 访问口令并清理环境
+ */
+export const logoutWebAuth = (): void => {
+  clearAuthToken()
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('blades:unauthorized'))
+  }
+}
+
 // 3. Web 模式下的全局事件总线（完全对齐 Wails Events 语义）
 interface ListenerWrapper {
   callback: Function
@@ -162,6 +189,7 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
     })
 
     if (response.status === 401) {
+      clearAuthToken()
       window.dispatchEvent(new CustomEvent('blades:unauthorized'))
       throw new Error('未授权访问：请先输入有效访问口令')
     }
@@ -289,19 +317,42 @@ export function initUniversalBridge(): void {
         window.close()
       },
 
-      // 剪贴板支持
+      // 剪贴板支持（兼容非 HTTPS/HTTP 裸 IP 访问）
       ClipboardGetText: async () => {
         try {
-          return await navigator.clipboard.readText()
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            return await navigator.clipboard.readText()
+          }
         } catch {
-          return ''
+          // 非安全上下文或权限被拒
         }
+        return ''
       },
       ClipboardSetText: async (text: string) => {
         try {
-          await navigator.clipboard.writeText(text)
-          return true
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text)
+            return true
+          }
         } catch {
+          // 降级兜底
+        }
+
+        // 非 HTTPS (如 http://<ip>:8080) 降级方案：创建隐藏 textarea 复制
+        try {
+          const textArea = document.createElement('textarea')
+          textArea.value = text
+          textArea.style.position = 'fixed'
+          textArea.style.left = '-9999px'
+          textArea.style.top = '-9999px'
+          textArea.setAttribute('readonly', '')
+          document.body.appendChild(textArea)
+          textArea.select()
+          const successful = document.execCommand('copy')
+          document.body.removeChild(textArea)
+          return successful
+        } catch (e) {
+          console.error('[UniversalBridge] Clipboard fallback failed:', e)
           return false
         }
       },

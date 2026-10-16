@@ -30,6 +30,7 @@ import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime
 import FloatingAiAssistant from "./components/FloatingAiAssistant.vue";
 import FloatingAgentAssistant from "./components/FloatingAgentAssistant.vue";
 import WebAuthModal from "./components/WebAuthModal.vue";
+import { isWails } from "./api/bridge";
 import MarketIntelligenceDrawer from "./components/MarketIntelligenceDrawer.vue";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
 import StockLightweightKlineChart from "./components/StockLightweightKlineChart.vue";
@@ -64,6 +65,30 @@ const showMarketIntelligenceDrawer = ref(false)
 const marketIntelligenceType = ref('pre_market_briefing')
 const marketIntelligenceSerenityTarget = ref('')
 let marketStatusTimer = null
+
+// Web 浏览器原生桌面推送通知辅助
+function sendBrowserNotification(title, body) {
+  if (typeof window === 'undefined' || isWails() || !('Notification' in window)) return
+  if (Notification.permission === 'granted') {
+    try {
+      new Notification(title, {
+        body: body || '',
+        icon: '/favicon.ico',
+      })
+    } catch (e) {}
+  } else if (Notification.permission === 'default') {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        try {
+          new Notification(title, {
+            body: body || '',
+            icon: '/favicon.ico',
+          })
+        } catch (e) {}
+      }
+    }).catch(() => {})
+  }
+}
 
 // Agent 全局控制总线状态
 const { dialog: globalDialog, message: globalMessage } = createDiscreteApi(['dialog', 'message'])
@@ -1115,7 +1140,11 @@ onMounted(() => {
     refreshMotto()
     updateMarketStatus()
   }, 60000)
-  contentStyle.value = "max-height: calc(92vh);overflow: hidden"
+  if (!isWails()) {
+    contentStyle.value = "height: calc(100dvh - 64px); max-height: calc(100dvh - 64px); overflow-y: auto;"
+  } else {
+    contentStyle.value = "max-height: calc(92vh); overflow: hidden"
+  }
   GetConfig().then((res) => {
     if (res.enableNews) {
       enableNews.value = true
@@ -1131,6 +1160,7 @@ onMounted(() => {
     EventsOn("newsPush", (data) => {
       //console.log(data)
       if(data.isRed){
+        sendBrowserNotification(`🔥 突发快讯 [${data.time}]`, data.content)
         notification.create({
           //type:"error",
          // avatar: () => h(NIcon,{component:Notifications,color:"red"}),
@@ -1161,6 +1191,7 @@ onMounted(() => {
 
     // 监听价格预警触发及 Agent 智能归因推送
     EventsOn("stockPriceAlertTriggered", (data) => {
+      sendBrowserNotification(`🚨 价格预警: ${data.name} (${data.code})`, `${data.reason}\n${data.aiAnalysis || ''}`)
       notification.warning({
         title: `🚨 价格预警: ${data.name} (${data.code})`,
         content: () => h('div', { style: { 'text-align': 'left', 'font-size': '13px' } }, [
@@ -1178,6 +1209,7 @@ onMounted(() => {
     EventsOn("marketIntelligenceReport", (data) => {
       if (!data) return
       const isBrief = data.type === 'pre_market_briefing'
+      sendBrowserNotification(data.title || (isBrief ? '🌅 盘前智能早报' : '🌆 收盘全景复盘'), data.summary || '')
       notification.success({
         title: isBrief ? `🌅 ${data.title}` : `🌆 ${data.title}`,
         content: () => h('div', { style: { 'text-align': 'left', 'font-size': '13px' } }, [
@@ -1294,6 +1326,8 @@ body.is-web-mode {
   user-select: auto !important;
   -webkit-user-select: auto !important;
   overflow-x: hidden;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body.is-web-mode [style*="--wails-draggable:drag"] {
@@ -1301,10 +1335,22 @@ body.is-web-mode [style*="--wails-draggable:drag"] {
   -webkit-app-region: no-drag !important;
 }
 
-/* 消除小屏与 iPad 移动端横向溢出 */
+/* 消除小屏与 iPad 移动端横向溢出及浮动悬浮球避让 */
 @media screen and (max-width: 768px) {
   body.is-web-mode .n-layout-sider {
     min-width: 0 !important;
+  }
+  body.is-web-mode .edge-trigger {
+    bottom: 74px !important;
+    right: 14px !important;
+  }
+  body.is-web-mode .drawer-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+  body.is-web-mode .market-intelligence-drawer {
+    width: 100vw !important;
+    max-width: 100vw !important;
   }
 }
 </style>

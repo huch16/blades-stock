@@ -19,10 +19,51 @@ import type { AIConfig } from "../../wailsjs/go/models";
 import {EventsEmit} from "../../wailsjs/runtime";
 import {HelpCircleFilledIcon, HelpIcon} from "tdesign-icons-vue-next";
 import {useAiConfigStore} from "../stores/aiConfig";
+import {isWails, getAuthToken, openAuthModal, logoutWebAuth} from "../api/bridge";
 
 const message = useMessage()
 const dialog = useDialog()
 const aiConfigStore = useAiConfigStore()
+
+// 双模环境感知与 Web 安全态势
+const isWebMode = computed(() => !isWails())
+const currentAuthToken = ref('')
+const serverPing = ref<number | null>(null)
+const serverStatus = ref<'checking' | 'healthy' | 'error'>('checking')
+
+function checkServerPing() {
+  serverStatus.value = 'checking'
+  const t0 = Date.now()
+  fetch('/health', { method: 'GET', cache: 'no-store' })
+    .then(res => {
+      if (res.ok) {
+        serverPing.value = Math.max(1, Date.now() - t0)
+        serverStatus.value = 'healthy'
+      } else {
+        serverStatus.value = 'error'
+      }
+    })
+    .catch(() => {
+      serverStatus.value = 'error'
+    })
+}
+
+function handleOpenAuthManage() {
+  openAuthModal('manage')
+}
+
+function handleWebLogout() {
+  dialog.warning({
+    title: '确认退出登录？',
+    content: '退出后将清除当前浏览器保存的授权凭据，再次访问需重新输入口令。',
+    positiveText: '确认退出',
+    negativeText: '取消',
+    onPositiveAction: () => {
+      logoutWebAuth()
+      message.info('已清除授权凭证')
+    }
+  })
+}
 
 const formRef = ref(null)
 const basicExpanded = ref(['basic', 'datasource', 'notify', 'ai'])
@@ -611,6 +652,11 @@ onMounted(() => {
     formValue.value.embeddingBaseUrl = res.embeddingBaseUrl || '';
     formValue.value.embeddingApiKey = res.embeddingApiKey || '';
     markClean()
+
+    if (!isWails()) {
+      currentAuthToken.value = getAuthToken()
+      checkServerPing()
+    }
   }).catch(err => {
     message.error('加载配置失败: ' + (err?.message || err))
   })
@@ -718,6 +764,23 @@ function sendTestNotice() {
 
 function exportConfig() {
   ExportConfig().then(res => {
+    if (!isWails()) {
+      try {
+        const blob = new Blob([res], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `blades-stock-config-${new Date().toISOString().slice(0, 10)}.json`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        message.success('配置文件已成功导出并触发下载')
+        return
+      } catch (e) {
+        // fallback
+      }
+    }
     message.info(res)
   }).catch(err => {
     message.error('导出失败: ' + (err?.message || err))
@@ -895,7 +958,48 @@ function importConfig() {
 </script>
 
 <template>
-  <n-flex justify="left" style="text-align: left; --wails-draggable:no-drag">
+  <n-flex vertical justify="left" style="text-align: left; --wails-draggable:no-drag; width: 100%;">
+    <!-- 运行环境与双模中台态势卡片 -->
+    <n-card
+      size="small"
+      style="margin-bottom: 14px; border-radius: 8px; width: 100%; border: 1px solid var(--n-border-color);"
+      :bordered="false"
+    >
+      <n-flex justify="space-between" align="center" wrap>
+        <n-space align="center">
+          <n-tag v-if="!isWebMode" type="success" size="medium" :bordered="false">
+            🖥️ 本地桌面客户端模式 (Wails v2)
+          </n-tag>
+          <n-tag v-else type="info" size="medium" :bordered="false">
+            ☁️ 云原生 Web 容器模式 (Docker / VPS)
+          </n-tag>
+          <n-text depth="3" style="font-size: 13px;">
+            {{ isWebMode ? '运行于云端无头容器，通信由 Universal Bridge 桥接与 RPC/SSE 调度。' : '运行于本地客户端进程，数据保存在本地 SQLite 数据库，由宿主机直接驱动。' }}
+          </n-text>
+        </n-space>
+
+        <n-space align="center" v-if="isWebMode">
+          <n-tag v-if="serverStatus === 'healthy'" size="small" :bordered="false" type="success">
+            🟢 中台连通 ({{ serverPing }}ms)
+          </n-tag>
+          <n-tag v-else-if="serverStatus === 'checking'" size="small" :bordered="false" type="warning">
+            🔄 检测中...
+          </n-tag>
+          <n-tag v-else size="small" :bordered="false" type="error">
+            🔴 连接异常
+          </n-tag>
+          <n-button size="tiny" quaternary type="primary" @click="checkServerPing">刷新延迟</n-button>
+          <n-divider vertical />
+          <n-button size="small" type="primary" ghost @click="handleOpenAuthManage">
+            🛡️ 访问凭证管理
+          </n-button>
+          <n-button size="small" quaternary type="error" @click="handleWebLogout">
+            退出登录
+          </n-button>
+        </n-space>
+      </n-flex>
+    </n-card>
+
     <n-form ref="formRef" :rules="formRules" :label-placement="'left'" :label-align="'left'">
       <n-collapse v-model:expanded-names="basicExpanded" accordion>
         <n-collapse-item name="basic">
@@ -933,9 +1037,25 @@ function importConfig() {
               </template>
             </n-form-item-gi>
             <n-form-item-gi :span="10" label="浏览器安装路径：" path="browserPath">
-              <n-input type="text" placeholder="浏览器安装路径, 如 C:\Program Files\Google\Chrome\Application\chrome.exe" v-model:value="formValue.browserPath" clearable/>
+              <n-input
+                type="text"
+                :placeholder="isWebMode ? '云端 Web 模式无需配置，由当前客户端浏览器直接打开' : '浏览器安装路径, 如 C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'"
+                v-model:value="formValue.browserPath"
+                :disabled="isWebMode"
+                clearable
+              />
               <template #feedback>
-                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>本地浏览器可执行文件路径，用于爬虫/搜索功能</template></n-tooltip>
+                <n-space align="center" :size="4">
+                  <n-tag v-if="isWebMode" size="tiny" type="warning" :bordered="false">仅桌面端生效</n-tag>
+                  <n-tooltip placement="top">
+                    <template #trigger>
+                      <n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon>
+                    </template>
+                    <template #default>
+                      {{ isWebMode ? '云端 Web 模式下所有超链接与研报外链由当前客户端浏览器直接安全打开，无需配置宿主机路径。' : '本地浏览器可执行文件路径，用于爬虫/搜索功能' }}
+                    </template>
+                  </n-tooltip>
+                </n-space>
               </template>
             </n-form-item-gi>
            <n-form-item-gi :span="3" label="指数基金：" path="enableFund">
@@ -1059,7 +1179,17 @@ function importConfig() {
             <n-form-item-gi :span="3" label="本地推送：" path="localPush.enable">
               <n-switch v-model:value="formValue.localPush.enable"/>
               <template #feedback>
-                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>启用系统原生通知，无需钉钉也能收到提醒</template></n-tooltip>
+                <n-space align="center" :size="4">
+                  <n-tag v-if="isWebMode" size="tiny" type="warning" :bordered="false">桌面端专用</n-tag>
+                  <n-tooltip placement="top">
+                    <template #trigger>
+                      <n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon>
+                    </template>
+                    <template #default>
+                      {{ isWebMode ? '云端容器无本地桌面环境。Web 模式下建议开启浏览器通知权限或配置钉钉机器人推送。' : '启用系统原生通知，无需钉钉也能收到提醒' }}
+                    </template>
+                  </n-tooltip>
+                </n-space>
               </template>
             </n-form-item-gi>
             <n-form-item-gi :span="3" label="弹幕功能：" path="enableDanmu">
