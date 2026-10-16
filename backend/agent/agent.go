@@ -68,6 +68,11 @@ func classifyComplexity(question string) AgentMode {
 		strings.Contains(question, "【AI 选股策略共振推演与实战指导报告】") ||
 		strings.Contains(question, "【个股量价形态 AI 实战推演】") ||
 		strings.Contains(question, "【个股指标筛选 AI 信号推演与有效性诊断】") ||
+		strings.Contains(question, "【A股盘前智能前瞻与ETF轮动内参】") ||
+		strings.Contains(question, "【A股全景收盘复盘与次日推演报告】") ||
+		strings.Contains(question, "【ETF轮动多Agent决策与投委会打分表】") ||
+		strings.Contains(question, "【Serenity式产业分析框架】") ||
+		strings.Contains(question, "【全市场核心ETF池实时监测】") ||
 		strings.Contains(question, "【预采集参考数据】") {
 		return AgentModeDirect
 	}

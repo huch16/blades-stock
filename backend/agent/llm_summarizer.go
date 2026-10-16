@@ -129,26 +129,46 @@ func LLMSummarize(ctx context.Context, turns []Turn, summaryModel string) (strin
 	return formatSummaryResult(result), nil
 }
 
-// getSummaryModelConfig 获取摘要模型配置（从 settings 读取）
+// getSummaryModelConfig 获取摘要模型配置（优先使用当前激活的 AI 配置，避免失效配置报错）
 func getSummaryModelConfig(modelName string) *LLMConfig {
-	if modelName == "" {
-		modelName = defaultSummaryModel
-	}
 	setting := data.GetSettingConfig()
-	for _, cfg := range setting.AiConfigs {
-		if cfg != nil && (cfg.Name == modelName || cfg.ModelName == modelName) {
-			return &LLMConfig{
-				BaseURL:     cfg.BaseUrl,
-				APIKey:      cfg.ApiKey,
-				Model:       cfg.ModelName,
-				MaxTokens:   500,
-				Temperature: 0.1,
+	if setting == nil {
+		return nil
+	}
+
+	// 1. 若指定了具体的特定模型名称，优先精准匹配
+	if modelName != "" && modelName != defaultSummaryModel {
+		for _, cfg := range setting.AiConfigs {
+			if cfg != nil && (cfg.Name == modelName || cfg.ModelName == modelName) && strings.TrimSpace(cfg.ApiKey) != "" {
+				return &LLMConfig{
+					BaseURL:     cfg.BaseUrl,
+					APIKey:      cfg.ApiKey,
+					Model:       cfg.ModelName,
+					MaxTokens:   500,
+					Temperature: 0.1,
+				}
 			}
 		}
 	}
-	// 兜底：使用第一个可用配置
+
+	// 2. 优先使用全局当前激活/选中的 AIConfigID
+	if setting.AiConfigID > 0 {
+		for _, cfg := range setting.AiConfigs {
+			if cfg != nil && cfg.ID == setting.AiConfigID && strings.TrimSpace(cfg.ApiKey) != "" {
+				return &LLMConfig{
+					BaseURL:     cfg.BaseUrl,
+					APIKey:      cfg.ApiKey,
+					Model:       cfg.ModelName,
+					MaxTokens:   500,
+					Temperature: 0.1,
+				}
+			}
+		}
+	}
+
+	// 3. 兜底：使用第一个配置了有效 APIKey 与 BaseURL 的可用配置
 	for _, cfg := range setting.AiConfigs {
-		if cfg != nil && cfg.BaseUrl != "" && cfg.ApiKey != "" {
+		if cfg != nil && cfg.BaseUrl != "" && strings.TrimSpace(cfg.ApiKey) != "" {
 			return &LLMConfig{
 				BaseURL:     cfg.BaseUrl,
 				APIKey:      cfg.ApiKey,

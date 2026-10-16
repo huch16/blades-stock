@@ -30,6 +30,9 @@ var globalWatcher *PriceAlertAgentWatcher
 var watcherOnce sync.Once
 var watcherRunningAgentCount int32 // 当前正在运行的 Agent 数量
 
+// PriceAlertBroadcastHook 价格告警与 AI 异动分析跨端广播钩子（Web / SSE 兼容）
+var PriceAlertBroadcastHook func(event string, data any)
+
 // GetPriceAlertWatcher 获取单例
 func GetPriceAlertWatcher() *PriceAlertAgentWatcher {
 	watcherOnce.Do(func() {
@@ -156,16 +159,26 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 	prompt := fmt.Sprintf("【突发价格预警】股票 %s(%s) 刚刚触发了价格告警：%s。当前最新价: %.2f，今日涨跌幅: %.2f%%。请调用相关工具，分析本次异动的主要驱动因素（最新突发消息、资金流入或盘口大单），并给出简明操作建议。",
 		name, code, reason, price, changePercent)
 
-	// 获取默认启用的 AI 配置
+	// 获取当前激活的 AI 配置（优先使用用户设置的当前活动配置，避免失效配置报错）
 	settingConfig := data.GetSettingConfig()
 	if settingConfig == nil || len(settingConfig.AiConfigs) == 0 {
 		return
 	}
 	var mainConfig data.AIConfig
-	for _, cfgPtr := range settingConfig.AiConfigs {
-		if cfgPtr != nil && strings.TrimSpace(cfgPtr.ApiKey) != "" {
-			mainConfig = *cfgPtr
-			break
+	if settingConfig.AiConfigID > 0 {
+		for _, cfgPtr := range settingConfig.AiConfigs {
+			if cfgPtr != nil && cfgPtr.ID == settingConfig.AiConfigID && strings.TrimSpace(cfgPtr.ApiKey) != "" {
+				mainConfig = *cfgPtr
+				break
+			}
+		}
+	}
+	if mainConfig.ID == 0 {
+		for _, cfgPtr := range settingConfig.AiConfigs {
+			if cfgPtr != nil && strings.TrimSpace(cfgPtr.ApiKey) != "" {
+				mainConfig = *cfgPtr
+				break
+			}
 		}
 	}
 	if mainConfig.ID == 0 {
@@ -203,17 +216,24 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 	// ⚠️ 注意：不要在后台监控中直接 EventsEmit "agent:action"，否则会导致用户正在正常使用时
 	// 界面不时突然弹出全屏 K线图或诊断抽屉！Action 应该放在 stockPriceAlertTriggered 载荷中供用户在通知里点击！
 
-	// 将告警事件以及 Agent 推理结果广播给前端 UI（仅在 Wails 原生桌面上下文有效）
+	alertPayload := map[string]any{
+		"code":          code,
+		"name":          name,
+		"reason":        reason,
+		"price":         price,
+		"changePercent": changePercent,
+		"time":          time.Now().Format("15:04:05"),
+		"aiAnalysis":    cleanedAnalysis,
+		"actions":       actions,
+	}
+
+	// 1. 将告警事件以及 Agent 推理结果广播给前端 UI（仅在 Wails 原生桌面上下文有效）
 	if w.wailsCtx != nil && w.wailsCtx.Value("events") != nil {
-		runtime.EventsEmit(w.wailsCtx, "stockPriceAlertTriggered", map[string]any{
-			"code":          code,
-			"name":          name,
-			"reason":        reason,
-			"price":         price,
-			"changePercent": changePercent,
-			"time":          time.Now().Format("15:04:05"),
-			"aiAnalysis":    cleanedAnalysis,
-			"actions":       actions,
-		})
+		runtime.EventsEmit(w.wailsCtx, "stockPriceAlertTriggered", alertPayload)
+	}
+
+	// 2. 将告警事件广播至 Web SSE 客户端
+	if PriceAlertBroadcastHook != nil {
+		PriceAlertBroadcastHook("stockPriceAlertTriggered", alertPayload)
 	}
 }

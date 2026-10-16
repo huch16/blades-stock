@@ -600,6 +600,27 @@ func (s *AgentService) NewChatStream(stock, stockCode, question string, aiConfig
 // NewChatStreamCustom 自定义发射器 AI 交互对话流式推流
 func (s *AgentService) NewChatStreamCustom(emitter MessageEmitter, stock, stockCode, question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool) {
 	go func() {
+		cleanCode := models.CleanStockCode(stockCode)
+		sessKey := fmt.Sprintf("stock_analysis_%s", cleanCode)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		s.sessionsMu.Lock()
+		if s.sessions == nil {
+			s.sessions = make(map[string]context.CancelFunc)
+		}
+		if oldCancel, exists := s.sessions[sessKey]; exists && oldCancel != nil {
+			oldCancel()
+		}
+		s.sessions[sessKey] = cancel
+		s.sessionsMu.Unlock()
+
+		defer func() {
+			s.sessionsMu.Lock()
+			delete(s.sessions, sessKey)
+			s.sessionsMu.Unlock()
+		}()
+
 		defer func() {
 			if r := recover(); r != nil {
 				logger.SugaredLogger.Errorf("NewChatStreamCustom panic: %v", r)
@@ -647,7 +668,7 @@ func (s *AgentService) NewChatStreamCustom(emitter MessageEmitter, stock, stockC
 			sysPrompt = "你现在是顶级证券投资顾问与量化宏观专家“财智”。所有核心客观盘面数据、估值百分位与详尽财务指标已在用户输入中完整提供，无需额外调用外部工具。请直接基于输入中的真实数据，从技术面、基本面、消息面、资金面四个维度输出结构清晰、多空判断明确的深度研报，严禁在正文中生成任何伪造的工具调用标签。"
 		}
 
-		for msg := range agent.NewStockAiAgentApi().ChatWithContext(context.Background(), analysisQuestion, aiConfigId, sysPromptId, false, 0, think, agentMode, sysPrompt) {
+		for msg := range agent.NewStockAiAgentApi().ChatWithContext(ctx, analysisQuestion, aiConfigId, sysPromptId, false, 0, think, agentMode, sysPrompt) {
 			if msg == nil || msg.Content == "agent-DONE" {
 				continue
 			}
