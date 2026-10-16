@@ -27,16 +27,17 @@ WORKDIR /build
 # 安装基础构建工具与 Git
 RUN apk add --no-cache git build-base
 
-# 缓存 Go 依赖
+# 缓存 Go 依赖（自动规范化 go 版本声明，确保兼容标准 Go 1.23 运行时环境）
 COPY go.mod go.sum ./
-RUN go mod download
+RUN sed -i 's/go 1\.[0-9]\+\(\.[0-9]\+\)\?/go 1.23.0/' go.mod && go mod download
 
 # 拷贝后端与服务源码
 COPY backend/ ./backend/
 COPY cmd/ ./cmd/
 
 # 静态编译纯 Go Web 服务端程序（禁用 CGO，移除调试符号，极致压缩体积）
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /blades-stock-server ./cmd/server
+RUN sed -i 's/go 1\.[0-9]\+\(\.[0-9]\+\)\?/go 1.23.0/' go.mod && \
+    CGO_ENABLED=0 GOOS=linux go build -mod=mod -ldflags="-s -w" -o /blades-stock-server ./cmd/server
 
 # ------------------------------------------------------------------------------
 # 阶段 3：超轻量生产运行时镜像
