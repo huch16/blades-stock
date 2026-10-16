@@ -53,6 +53,9 @@ func main() {
 	agentService := services.NewAgentService()
 	settingsService := services.NewSettingsService()
 
+	// 挂载云端 SSE 广播作为 Agent 默认流式消息发射器
+	agentService.SetDefaultEmitter(globalSSEHub.Broadcast)
+
 	// 5. 初始化通用 RPC 反射分发器
 	dispatcher := NewRPCDispatcher(marketService, quantService, agentService, settingsService)
 

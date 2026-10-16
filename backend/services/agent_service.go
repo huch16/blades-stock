@@ -2,14 +2,19 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"blades-stock/backend/agent"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 )
+
+// MessageEmitter 抽象的消息/事件发射器接口
+type MessageEmitter func(event string, payload any)
 
 // PromptTemplateItem 提示词模板返回项
 type PromptTemplateItem struct {
@@ -19,11 +24,89 @@ type PromptTemplateItem struct {
 }
 
 // AgentService AI 智能体推演、技能库、MCP 与市场智能研报服务
-type AgentService struct{}
+type AgentService struct {
+	agentMu        sync.Mutex
+	agentCancel    context.CancelFunc
+	defaultEmitter MessageEmitter
+}
 
 // NewAgentService 创建 Agent 服务实例
 func NewAgentService() *AgentService {
 	return &AgentService{}
+}
+
+// SetDefaultEmitter 设置默认的流式推流发射器（在 Server 模式下由 SSE 挂载）
+func (s *AgentService) SetDefaultEmitter(emitter MessageEmitter) {
+	s.defaultEmitter = emitter
+}
+
+// ChatWithAgent 执行 AI Agent 智能会话推演（使用默认发射器向外推流）
+func (s *AgentService) ChatWithAgent(question string, aiConfigId int, sysPromptId *int, memoryMode bool, memoryCount int, thinkingMode bool, agentMode string, sessionId string) {
+	s.ChatWithAgentCustom(s.defaultEmitter, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, sessionId)
+}
+
+// ChatWithAgentCustom 执行 AI Agent 会话并支持自定义发射器（桌面模式使用 Wails EventsEmit）
+func (s *AgentService) ChatWithAgentCustom(emitter MessageEmitter, question string, aiConfigId int, sysPromptId *int, memoryMode bool, memoryCount int, thinkingMode bool, agentMode string, sessionId string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Errorf("AgentService.ChatWithAgent panic: %v", r)
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s.agentMu.Lock()
+	if s.agentCancel != nil {
+		s.agentCancel()
+	}
+	s.agentCancel = cancel
+	s.agentMu.Unlock()
+
+	defer func() {
+		s.agentMu.Lock()
+		s.agentCancel = nil
+		s.agentMu.Unlock()
+	}()
+
+	ch := agent.NewStockAiAgentApi().ChatWithContext(ctx, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, sessionId)
+	for msg := range ch {
+		if emitter != nil {
+			emitter("agent-message", AgentMessageToFrontendMap(msg))
+		}
+	}
+}
+
+// AbortChatWithAgent 打断或终止当前正在进行的 Agent 推理
+func (s *AgentService) AbortChatWithAgent() {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	if s.agentCancel != nil {
+		s.agentCancel()
+		s.agentCancel = nil
+	}
+}
+
+// AgentMessageToFrontendMap 将流式消息序列化为前端友好的 Map 结构
+func AgentMessageToFrontendMap(msg *agent.StreamMessage) map[string]any {
+	if msg == nil {
+		return map[string]any{}
+	}
+	b, err := json.Marshal(msg)
+	if err != nil {
+		return map[string]any{
+			"role":              msg.Role,
+			"content":           msg.Content,
+			"reasoning_content": msg.ReasoningContent,
+		}
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return map[string]any{
+			"role":              msg.Role,
+			"content":           msg.Content,
+			"reasoning_content": msg.ReasoningContent,
+		}
+	}
+	return m
 }
 
 // GetAiAssistantSession 获取 AI 助手会话消息列表

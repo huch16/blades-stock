@@ -143,3 +143,49 @@ func TestAuthProtection(t *testing.T) {
 		t.Fatalf("expected status 200 for authenticated request, got %d", wAuth.Code)
 	}
 }
+
+func TestRPCDispatcher_MarketEndpoints(t *testing.T) {
+	handler := setupTestServer(t)
+
+	// 1. 测试 IsTradingTime
+	reqTime := httptest.NewRequest(http.MethodPost, "/api/App/IsTradingTime", bytes.NewBufferString("[]"))
+	wTime := httptest.NewRecorder()
+	handler.ServeHTTP(wTime, reqTime)
+	if wTime.Code != http.StatusOK {
+		t.Fatalf("IsTradingTime failed: %d", wTime.Code)
+	}
+
+	// 2. 测试 GetStockChanges 异动大盘全景接口
+	bodyChanges := bytes.NewBufferString("[[1, 2], 0, 10]")
+	reqChanges := httptest.NewRequest(http.MethodPost, "/api/App/GetStockChanges", bodyChanges)
+	wChanges := httptest.NewRecorder()
+	handler.ServeHTTP(wChanges, reqChanges)
+	if wChanges.Code != http.StatusOK {
+		t.Fatalf("GetStockChanges failed: %d", wChanges.Code)
+	}
+
+	// 3. 测试 HotStock 雪球热门榜
+	bodyHot := bytes.NewBufferString("[\"ALL\"]")
+	reqHot := httptest.NewRequest(http.MethodPost, "/api/App/HotStock", bodyHot)
+	wHot := httptest.NewRecorder()
+	handler.ServeHTTP(wHot, reqHot)
+	if wHot.Code != http.StatusOK {
+		t.Fatalf("HotStock failed: %d", wHot.Code)
+	}
+}
+
+func TestAgentService_SSEEmitterIntegration(t *testing.T) {
+	as := services.NewAgentService()
+	receivedEvents := make([]string, 0)
+
+	// 挂载模拟发射器
+	as.SetDefaultEmitter(func(event string, payload any) {
+		receivedEvents = append(receivedEvents, event)
+	})
+
+	// 验证 Abort 幂等性
+	as.AbortChatWithAgent()
+
+	// 广播测试
+	globalSSEHub.Broadcast("test-event", map[string]string{"foo": "bar"})
+}

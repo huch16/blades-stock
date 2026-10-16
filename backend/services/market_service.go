@@ -543,3 +543,518 @@ func (s *MarketService) SearchFundCodes(keyword string) []data.FundSearchItem {
 func (s *MarketService) GetFollowedFundPaged(pageIndex, pageSize int, keyword string) *data.FollowedFundPagedResult {
 	return data.NewFundApi().GetFollowedFundPaged(pageIndex, pageSize, keyword)
 }
+
+// ----------------- 交易时钟与日历 -----------------
+
+var shanghaiZone = time.FixedZone("CST", 8*60*60)
+
+// GetTimezone 获取系统时区配置
+func (s *MarketService) GetTimezone() map[string]any {
+	return map[string]any{
+		"offset":   8 * 60 * 60,
+		"location": "Asia/Shanghai",
+	}
+}
+
+// IsTradingTime 判断当前是否处于 A 股交易时间
+func (s *MarketService) IsTradingTime() bool {
+	now := time.Now().In(shanghaiZone)
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return false
+	}
+	hour, minute, _ := now.Clock()
+	if (hour == 9 && minute >= 15) || (hour == 10) || (hour == 11 && minute <= 30) {
+		return true
+	}
+	if (hour == 13) || (hour == 14) || (hour == 15 && minute <= 0) {
+		return true
+	}
+	return false
+}
+
+// IsHKTradingTime 判断当前是否处于港股交易时间
+func (s *MarketService) IsHKTradingTime() bool {
+	now := time.Now().In(shanghaiZone)
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return false
+	}
+	hour, minute, _ := now.Clock()
+	if (hour == 9 && minute >= 0) || (hour >= 10 && hour < 12) || (hour == 12 && minute == 0) {
+		return true
+	}
+	if (hour >= 13 && hour < 16) || (hour == 16 && minute <= 10) {
+		return true
+	}
+	return false
+}
+
+// IsUSTradingTime 判断当前是否处于美股交易时间
+func (s *MarketService) IsUSTradingTime() bool {
+	est, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return false
+	}
+	now := time.Now().In(est)
+	if now.Weekday() == time.Saturday || now.Weekday() == time.Sunday {
+		return false
+	}
+	hour, minute, _ := now.Clock()
+	// 盘前 4:00 - 9:30, 盘中 9:30 - 16:00, 盘后 16:00 - 20:00
+	return (hour >= 4 && hour < 20) || (hour == 20 && minute == 0)
+}
+
+// IsTradingDay 判断指定 yyyy-MM-dd 是否为交易日
+func (s *MarketService) IsTradingDay(date string) bool {
+	date = strings.TrimSpace(date)
+	if date == "" {
+		return false
+	}
+	t, err := time.ParseInLocation("2006-01-02", date, shanghaiZone)
+	if err != nil {
+		return false
+	}
+	return t.Weekday() != time.Saturday && t.Weekday() != time.Sunday
+}
+
+// GetLatestTradingDay 获取最近一个已完成或进行中的交易日
+func (s *MarketService) GetLatestTradingDay() string {
+	now := time.Now().In(shanghaiZone)
+	if now.Weekday() != time.Saturday && now.Weekday() != time.Sunday {
+		hour, minute, _ := now.Clock()
+		if hour < 15 || (hour == 15 && minute == 0) {
+			return now.AddDate(0, 0, -1).Format("2006-01-02")
+		}
+		return now.Format("2006-01-02")
+	}
+	for i := 1; i <= 7; i++ {
+		d := now.AddDate(0, 0, -i)
+		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+			return d.Format("2006-01-02")
+		}
+	}
+	return now.Format("2006-01-02")
+}
+
+// ----------------- 热榜、日历与资讯 -----------------
+
+// HotStock 获取雪球热门股票排行
+func (s *MarketService) HotStock(marketType string) *[]models.HotItem {
+	return data.NewMarketNewsApi().XUEQIUHotStock(100, marketType)
+}
+
+// HotEvent 获取当前市场热点事件
+func (s *MarketService) HotEvent(size int) *[]models.HotEvent {
+	if size <= 0 {
+		size = 10
+	}
+	return data.NewMarketNewsApi().HotEvent(size)
+}
+
+// HotTopic 获取热门话题
+func (s *MarketService) HotTopic(size int) []any {
+	if size <= 0 {
+		size = 10
+	}
+	return data.NewMarketNewsApi().HotTopic(size)
+}
+
+// ClsCalendar 获取财联社投资日历
+func (s *MarketService) ClsCalendar() []any {
+	return data.NewMarketNewsApi().ClsCalendar()
+}
+
+// InvestCalendarTimeLine 获取指定年月的投资日历时间线
+func (s *MarketService) InvestCalendarTimeLine(yearMonth string) []any {
+	return data.NewMarketNewsApi().InvestCalendar(yearMonth)
+}
+
+// GetUplimitHot 获取涨停复盘与题材热度
+func (s *MarketService) GetUplimitHot(date string, limit int) map[string]any {
+	return data.NewMarketNewsApi().GetUplimitHot(date, limit)
+}
+
+// LongTigerRank 获取龙虎榜数据
+func (s *MarketService) LongTigerRank(date string) *[]models.LongTigerRankData {
+	return data.NewMarketNewsApi().LongTiger(date)
+}
+
+// StockResearchReport 获取个股近期券商研报
+func (s *MarketService) StockResearchReport(stockCode string) []any {
+	return data.NewMarketNewsApi().StockResearchReport(stockCode, 7)
+}
+
+// StockNotice 获取个股最新重要公告
+func (s *MarketService) StockNotice(stockCode string) []any {
+	return data.NewMarketNewsApi().StockNotice(stockCode)
+}
+
+// IndustryResearchReport 获取行业近期研报
+func (s *MarketService) IndustryResearchReport(industryCode string) []any {
+	return data.NewMarketNewsApi().IndustryResearchReport(industryCode, 7)
+}
+
+// EMDictCode 获取东财行业/概念字典码
+func (s *MarketService) EMDictCode(code string) []any {
+	return data.NewMarketNewsApi().EMDictCode(code, nil)
+}
+
+// ----------------- 板块资金流向 -----------------
+
+// GetBKFundFlowList 获取板块资金流向历史数据（折线图用）
+func (s *MarketService) GetBKFundFlowList(code string, limit int) []models.BKFundFlowPoint {
+	return data.NewBKFundFlowApi().GetBKFundFlowList(code, limit)
+}
+
+// GetBKFundFlowListByDate 获取板块指定日期的资金流向历史数据
+func (s *MarketService) GetBKFundFlowListByDate(code string, date string) []models.BKFundFlowPoint {
+	return data.NewBKFundFlowApi().GetBKFundFlowListByDate(code, date)
+}
+
+// GetBKFundFlowTopList 获取最新板块资金排名
+func (s *MarketService) GetBKFundFlowTopList(topN int) []models.BKFundFlow {
+	return data.NewBKFundFlowApi().GetBKFundFlowTopList(topN)
+}
+
+// GetBKFundFlowTopListByDate 获取指定日期的板块资金排名
+func (s *MarketService) GetBKFundFlowTopListByDate(date string, topN int) []models.BKFundFlow {
+	return data.NewBKFundFlowApi().GetBKFundFlowTopListByDate(date, topN)
+}
+
+// GetAllBKCodes 获取所有已记录的板块代码
+func (s *MarketService) GetAllBKCodes() []map[string]string {
+	return data.NewBKFundFlowApi().GetAllBKCodes()
+}
+
+// GetConceptFundFlowList 获取概念资金流向历史数据（折线图用）
+func (s *MarketService) GetConceptFundFlowList(code string, limit int) []models.ConceptFundFlowPoint {
+	return data.NewConceptFundFlowApi().GetConceptFundFlowList(code, limit)
+}
+
+// GetConceptFundFlowListByDate 获取概念指定日期的资金流向历史数据
+func (s *MarketService) GetConceptFundFlowListByDate(code string, date string) []models.ConceptFundFlowPoint {
+	return data.NewConceptFundFlowApi().GetConceptFundFlowListByDate(code, date)
+}
+
+// GetConceptFundFlowTopList 获取最新概念资金排名
+func (s *MarketService) GetConceptFundFlowTopList(topN int) []models.ConceptFundFlow {
+	return data.NewConceptFundFlowApi().GetConceptFundFlowTopList(topN)
+}
+
+// GetConceptFundFlowTopListByDate 获取指定日期的概念资金排名
+func (s *MarketService) GetConceptFundFlowTopListByDate(date string, topN int) []models.ConceptFundFlow {
+	return data.NewConceptFundFlowApi().GetConceptFundFlowTopListByDate(date, topN)
+}
+
+// GetAllConceptCodes 获取所有概念代码
+func (s *MarketService) GetAllConceptCodes() []map[string]string {
+	return data.NewConceptFundFlowApi().GetAllConceptCodes()
+}
+
+// ----------------- 全市场选股、策略与情绪 -----------------
+
+// GetAllStocks 分页获取全市场股票列表及技术指标
+func (s *MarketService) GetAllStocks(page int, pageSize int, name string, technicalIndicators models.TechnicalIndicators) *models.AllStocksResp {
+	return data.NewStockDataApi().GetAllStocks(page, pageSize, name, technicalIndicators)
+}
+
+// AnalyzeSentiment 分析单条财经文本情绪
+func (s *MarketService) AnalyzeSentiment(text string) models.SentimentResult {
+	return data.AnalyzeSentiment(text)
+}
+
+// AnalyzeSentimentWithFreqWeight 结合词频权重的深度情绪分析
+func (s *MarketService) AnalyzeSentimentWithFreqWeight(text string) map[string]any {
+	result, cleanFrequencies := data.NewsAnalyze(text, false)
+	return map[string]any{
+		"result":      result,
+		"frequencies": cleanFrequencies,
+	}
+}
+
+// SearchStock 全网与本地股票搜索联想
+func (s *MarketService) SearchStock(words string) map[string]any {
+	return data.NewSearchStockApi(words).SearchStock(5000)
+}
+
+// GetHotStrategy 获取当前热门选股策略
+func (s *MarketService) GetHotStrategy() map[string]any {
+	return data.NewSearchStockApi("").HotStrategy()
+}
+
+// GetCustomStrategyList 获取自定义选股策略列表
+func (s *MarketService) GetCustomStrategyList(query models.CustomStrategyQuery) *models.CustomStrategyPageData {
+	page, err := data.NewCustomStrategyApi().GetCustomStrategyList(&query)
+	if err != nil {
+		return &models.CustomStrategyPageData{}
+	}
+	return page
+}
+
+// GetAllCustomStrategies 获取所有自定义策略
+func (s *MarketService) GetAllCustomStrategies() *[]models.CustomStrategy {
+	return data.NewCustomStrategyApi().GetAllCustomStrategies()
+}
+
+// SaveCustomStrategy 保存自定义选股策略
+func (s *MarketService) SaveCustomStrategy(strategy models.CustomStrategy) string {
+	return data.NewCustomStrategyApi().SaveCustomStrategy(strategy)
+}
+
+// DeleteCustomStrategy 删除自定义选股策略
+func (s *MarketService) DeleteCustomStrategy(id uint) string {
+	return data.NewCustomStrategyApi().DeleteCustomStrategy(id)
+}
+
+// ----------------- 异动大盘与全景透视 -----------------
+
+// GetStockChanges 获取盘口异动列表
+func (s *MarketService) GetStockChanges(changeTypes []int, pageIndex, pageSize int) *data.StockChangesResponse {
+	return data.NewStockChangesApi().GetStockChanges(changeTypes, pageIndex, pageSize)
+}
+
+// GetAllStockChangesWithPaging 分页获取所有异动并自动去重归档
+func (s *MarketService) GetAllStockChangesWithPaging(pageSize int) *data.StockChangesResponse {
+	all := data.NewStockChangesApi().GetAllStockChangesWithPaging(pageSize)
+	historyService := data.NewStockChangeHistoryService()
+	if all != nil && len(all.Data) > 0 {
+		_, _ = historyService.SaveStockChangesWithDedup(all.Data)
+	}
+	return all
+}
+
+// GetStockChangeHistory 查询异动历史归档
+func (s *MarketService) GetStockChangeHistory(query models.StockChangeHistoryQuery) *models.StockChangeHistoryPageData {
+	result, err := data.NewStockChangeHistoryService().GetHistoryList(query)
+	if err != nil {
+		return &models.StockChangeHistoryPageData{}
+	}
+	return result
+}
+
+// SaveStockChangesToHistory 将异动记录手动保存至历史库
+func (s *MarketService) SaveStockChangesToHistory(changeTypes []int) string {
+	api := data.NewStockChangesApi()
+	result := api.GetStockChanges(changeTypes, 0, 500)
+	if result == nil || len(result.Data) == 0 {
+		return "没有获取到异动数据"
+	}
+
+	err := data.NewStockChangeHistoryService().SaveStockChanges(result.Data)
+	if err != nil {
+		return "保存失败: " + err.Error()
+	}
+	return fmt.Sprintf("成功保存 %d 条异动数据", len(result.Data))
+}
+
+// DeleteStockChangeHistory 清理指定天数前的异动历史
+func (s *MarketService) DeleteStockChangeHistory(days int) string {
+	err := data.NewStockChangeHistoryService().DeleteOldData(days)
+	if err != nil {
+		return "删除失败: " + err.Error()
+	}
+	return fmt.Sprintf("已删除 %d 天前的历史数据", days)
+}
+
+// GetDailyChangeStats 统计每日异动数量趋势
+func (s *MarketService) GetDailyChangeStats(days int) []data.DailyChangeStats {
+	result, err := data.NewStockChangeHistoryService().GetDailyChangeStats(days)
+	if err != nil {
+		return []data.DailyChangeStats{}
+	}
+	return result
+}
+
+// GetChangeTypeDailyStats 按异动类型统计每日分布
+func (s *MarketService) GetChangeTypeDailyStats(days int) []data.ChangeTypeDailyStats {
+	result, err := data.NewStockChangeHistoryService().GetChangeTypeDailyStats(days)
+	if err != nil {
+		return []data.ChangeTypeDailyStats{}
+	}
+	return result
+}
+
+// GetChangeRank 获取异动频次个股排行榜
+func (s *MarketService) GetChangeRank(days int, topN int) *data.ChangeRankResult {
+	result, err := data.NewStockChangeHistoryService().GetChangeRank(days, topN)
+	if err != nil {
+		return &data.ChangeRankResult{}
+	}
+	return result
+}
+
+// GetDailyDimensionStats 获取指定维度的异动聚合
+func (s *MarketService) GetDailyDimensionStats(dimension string, name string, days int) []data.DailyDimensionStats {
+	result, err := data.NewStockChangeHistoryService().GetDailyDimensionStats(dimension, name, days)
+	if err != nil {
+		return []data.DailyDimensionStats{}
+	}
+	return result
+}
+
+// GetTypeStatsByDate 获取指定日期各类型异动总量
+func (s *MarketService) GetTypeStatsByDate(date string) []data.TypeCountStats {
+	result, err := data.NewStockChangeHistoryService().GetTypeStatsByDate(date)
+	if err != nil {
+		return []data.TypeCountStats{}
+	}
+	return result
+}
+
+// ----------------- 推荐股票与股票基础全库 -----------------
+
+// GetAiRecommendStocksList 获取 AI 推荐自选股票列表
+func (s *MarketService) GetAiRecommendStocksList(query models.AiRecommendStocksQuery) *models.AiRecommendStocksPageData {
+	page, err := data.NewAiRecommendStocksService().GetAiRecommendStocksList(&query)
+	if err != nil {
+		return &models.AiRecommendStocksPageData{}
+	}
+	return page
+}
+
+// DeleteAiRecommendStocks 删除 AI 推荐自选股
+func (s *MarketService) DeleteAiRecommendStocks(id uint) string {
+	err := data.NewAiRecommendStocksService().DeleteAiRecommendStocks(id)
+	if err != nil {
+		return "删除失败"
+	}
+	return "删除成功"
+}
+
+// UpdateAiRecommendStocksAlert 更新 AI 推荐股票预警状态
+func (s *MarketService) UpdateAiRecommendStocksAlert(id uint, enableAlert bool) string {
+	err := data.NewAiRecommendStocksService().UpdateAiRecommendStocksAlert(id, enableAlert)
+	if err != nil {
+		return "更新预警状态失败"
+	}
+	return "更新预警状态成功"
+}
+
+// GetAllStockInfoList 分页获取全量基础股票库
+func (s *MarketService) GetAllStockInfoList(query data.AllStockInfoQuery) *data.AllStockInfoPageData {
+	page, err := data.NewStockDataApi().GetAllStockInfoList(&query)
+	if err != nil {
+		return &data.AllStockInfoPageData{}
+	}
+	return page
+}
+
+// GetAllStockInfoById 获取单只基础股票详情
+func (s *MarketService) GetAllStockInfoById(id uint) *models.AllStockInfo {
+	stock, err := data.NewStockDataApi().GetAllStockInfoById(id)
+	if err != nil {
+		return &models.AllStockInfo{}
+	}
+	return stock
+}
+
+// AddAllStockInfo 添加基础股票条目
+func (s *MarketService) AddAllStockInfo(stock models.AllStockInfo) string {
+	err := data.NewStockDataApi().AddAllStockInfo(stock)
+	if err != nil {
+		return "操作失败: " + err.Error()
+	}
+	return "操作成功"
+}
+
+// DeleteAllStockInfo 删除基础股票条目
+func (s *MarketService) DeleteAllStockInfo(id uint) string {
+	err := data.NewStockDataApi().DeleteAllStockInfo(id)
+	if err != nil {
+		return "删除失败: " + err.Error()
+	}
+	return "删除成功"
+}
+
+// BatchDeleteAllStockInfo 批量删除基础股票条目
+func (s *MarketService) BatchDeleteAllStockInfo(ids []uint) string {
+	err := data.NewStockDataApi().BatchDeleteAllStockInfo(ids)
+	if err != nil {
+		return "批量删除失败: " + err.Error()
+	}
+	return "批量删除成功"
+}
+
+// GetAllMarkets 获取全量市场标签
+func (s *MarketService) GetAllMarkets() []string {
+	markets, err := data.NewStockDataApi().GetAllMarkets()
+	if err != nil {
+		return []string{}
+	}
+	return markets
+}
+
+// GetAllIndustries 获取全量行业分类
+func (s *MarketService) GetAllIndustries() []string {
+	industries, err := data.NewStockDataApi().GetAllIndustries()
+	if err != nil {
+		return []string{}
+	}
+	return industries
+}
+
+// GetAllConcepts 获取全量概念板块标签
+func (s *MarketService) GetAllConcepts() []string {
+	concepts, err := data.NewStockDataApi().GetAllConcepts()
+	if err != nil {
+		return []string{}
+	}
+	return concepts
+}
+
+// GetStockRealTimePrice 获取股票当前最新快照价格
+func (s *MarketService) GetStockRealTimePrice(stockCode string) map[string]any {
+	stockDatas, err := data.NewStockDataApi().GetStockCodeRealTimeData(stockCode)
+	if err != nil || stockDatas == nil || len(*stockDatas) == 0 {
+		return map[string]any{
+			"code":    -1,
+			"message": "获取股票价格失败",
+			"price":   0,
+		}
+	}
+	stock := (*stockDatas)[0]
+	price, _ := convertor.ToFloat(stock.Price)
+	if price == 0 {
+		price, _ = convertor.ToFloat(stock.A1P)
+	}
+	if price == 0 {
+		price, _ = convertor.ToFloat(stock.B1P)
+	}
+	if price == 0 {
+		price, _ = convertor.ToFloat(stock.PreClose)
+	}
+	return map[string]any{
+		"code":    0,
+		"message": "success",
+		"price":   price,
+		"name":    stock.Name,
+	}
+}
+
+// ----------------- 研报历史记录管理 -----------------
+
+// GetAIResponseResultList 获取 AI 研报历史生成记录
+func (s *MarketService) GetAIResponseResultList(query models.AIResponseResultQuery) *models.AIResponseResultPageData {
+	page, err := data.NewAIResponseResultService().GetAIResponseResultList(query)
+	if err != nil {
+		return &models.AIResponseResultPageData{}
+	}
+	return page
+}
+
+// DeleteAIResponseResult 删除指定研报历史
+func (s *MarketService) DeleteAIResponseResult(id uint) string {
+	err := data.NewAIResponseResultService().DeleteAIResponseResult(id)
+	if err != nil {
+		return "删除失败: " + err.Error()
+	}
+	return "删除成功"
+}
+
+// BatchDeleteAIResponseResult 批量删除研报历史
+func (s *MarketService) BatchDeleteAIResponseResult(ids []uint) string {
+	err := data.NewAIResponseResultService().BatchDeleteAIResponseResult(ids)
+	if err != nil {
+		return "删除失败: " + err.Error()
+	}
+	return "删除成功"
+}

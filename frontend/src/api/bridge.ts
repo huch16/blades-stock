@@ -2,18 +2,21 @@
  * Universal Bridge (通用通信适配桥接层)
  *
  * 核心职责：
- * 1. 自动探测当前运行环境（Wails 桌面客户端 VS 浏览器 Web 模式）；
- * 2. 在 Web 模式下，动态通过 Proxy 托管 window.go.main.App 与 window.runtime；
- * 3. 将原先的 Wails IPC 零侵入透明转化为标准 HTTP POST 请求与 SSE 流式推流；
- * 4. 统一处理公网鉴权 Header（Authorization Bearer Token）。
+ * 1. 自动探测运行环境（Wails 桌面客户端 VS 浏览器 Web 模式）；
+ * 2. 在 Web 模式下通过 Proxy 托管 window.go.main.App 与 window.runtime；
+ * 3. 完整实现 Wails Runtime 运行时的全套事件接口（EventsOnMultiple、EventsOffAll、全屏控制、剪贴板等）；
+ * 4. 透明将 Wails IPC 转化为 HTTP RPC 与 Server-Sent Events (SSE) 长连接；
+ * 5. 统一公网安全令牌鉴权与 401 拦截处理。
  */
 
 // 1. 环境感知
 export const isWails = (): boolean => {
-  return typeof window !== 'undefined' &&
+  return (
+    typeof window !== 'undefined' &&
     typeof (window as any).runtime !== 'undefined' &&
     typeof (window as any).go !== 'undefined' &&
     Boolean((window as any).go?.main?.App)
+  )
 }
 
 // 2. 鉴权 Token 管理
@@ -34,44 +37,66 @@ export const clearAuthToken = (): void => {
   localStorage.removeItem(AUTH_TOKEN_KEY)
 }
 
-// 3. Web 模式下的全局简易事件总线与 SSE 监听器
+// 3. Web 模式下的全局事件总线（完全对齐 Wails Events 语义）
+interface ListenerWrapper {
+  callback: Function
+  maxCallbacks: number
+  calledCount: number
+}
+
 class WebEventBus {
-  private listeners: Map<string, Set<Function>> = new Map()
+  private listeners: Map<string, ListenerWrapper[]> = new Map()
   private sseSource: EventSource | null = null
   private sseConnected: boolean = false
+  private retryTimer: any = null
 
-  public on(event: string, callback: Function): void {
+  public onMultiple(event: string, callback: Function, maxCallbacks: number = -1): void {
     if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set())
+      this.listeners.set(event, [])
     }
-    this.listeners.get(event)!.add(callback)
+    this.listeners.get(event)!.push({
+      callback,
+      maxCallbacks,
+      calledCount: 0,
+    })
     this.ensureSSEConnection()
   }
 
-  public off(event: string, callback?: Function): void {
-    if (!callback) {
-      this.listeners.delete(event)
-      return
-    }
-    const set = this.listeners.get(event)
-    if (set) {
-      set.delete(callback)
-      if (set.size === 0) {
-        this.listeners.delete(event)
-      }
+  public off(eventName: string, ...additionalEventNames: string[]): void {
+    const targets = [eventName, ...additionalEventNames]
+    for (const name of targets) {
+      this.listeners.delete(name)
     }
   }
 
+  public offAll(): void {
+    this.listeners.clear()
+  }
+
   public emit(event: string, ...args: any[]): void {
-    const callbacks = this.listeners.get(event)
-    if (callbacks) {
-      callbacks.forEach((cb) => {
-        try {
-          cb(...args)
-        } catch (e) {
-          console.error(`[WebEventBus] Callback error on event "${event}":`, e)
+    const list = this.listeners.get(event)
+    if (!list || list.length === 0) return
+
+    // 复制数组防止遍历中修改自身
+    const toExecute = [...list]
+    for (let i = 0; i < toExecute.length; i++) {
+      const item = toExecute[i]
+      try {
+        item.callback(...args)
+      } catch (e) {
+        console.error(`[WebEventBus] Callback error on event "${event}":`, e)
+      }
+      item.calledCount++
+      if (item.maxCallbacks > 0 && item.calledCount >= item.maxCallbacks) {
+        // 从原始列表中移除
+        const origList = this.listeners.get(event)
+        if (origList) {
+          const idx = origList.indexOf(item)
+          if (idx !== -1) {
+            origList.splice(idx, 1)
+          }
         }
-      })
+      }
     }
   }
 
@@ -92,20 +117,22 @@ class WebEventBus {
             this.emit(payload.event, payload.data)
           }
         } catch (err) {
-          // 普通文本推流直接透传
           this.emit('message', e.data)
         }
       }
 
       this.sseSource.onerror = () => {
-        // 网络异常或 401 断开
         this.sseConnected = false
         if (this.sseSource) {
           this.sseSource.close()
           this.sseSource = null
         }
-        // 5秒后尝试自动重连
-        setTimeout(() => this.ensureSSEConnection(), 5000)
+        if (!this.retryTimer) {
+          this.retryTimer = setTimeout(() => {
+            this.retryTimer = null
+            this.ensureSSEConnection()
+          }, 4000)
+        }
       }
     } catch (e) {
       this.sseConnected = false
@@ -135,9 +162,8 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
     })
 
     if (response.status === 401) {
-      // 广播 401 未授权通知，供前端弹出授权输入弹窗
       window.dispatchEvent(new CustomEvent('blades:unauthorized'))
-      throw new Error('未授权访问或访问口令已失效，请重新输入口令')
+      throw new Error('未授权访问：请先输入有效访问口令')
     }
 
     if (!response.ok) {
@@ -148,7 +174,6 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
     const contentType = response.headers.get('content-type') || ''
     if (contentType.includes('application/json')) {
       const json = await response.json()
-      // 后端统一约定的 { code, data, error } 或直出数据结构
       if (json && typeof json === 'object' && 'code' in json && 'data' in json) {
         if (json.code !== 0) {
           throw new Error(json.error || json.message || '请求失败')
@@ -165,11 +190,11 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
   }
 }
 
-// 5. 全局运行时桩注入（必须在最早时刻执行）
+// 5. 全局运行时桩注入（最早时刻执行）
 export function initUniversalBridge(): void {
   if (typeof window === 'undefined') return
 
-  // 如果处于真实 Wails 桌面端，直接使用原生机制，无需额外代理
+  // 原生 Wails 桌面环境直接放行
   if (isWails()) {
     console.log('[UniversalBridge] Running in Native Wails Desktop mode.')
     return
@@ -177,11 +202,11 @@ export function initUniversalBridge(): void {
 
   console.log('[UniversalBridge] Running in Cloud-Native Web/Browser mode. Installing proxy stubs...')
 
-  // 注入 window.go.main.App 的动态代理
   const win = window as any
   win.go = win.go || {}
   win.go.main = win.go.main || {}
 
+  // 1) 注入 window.go.main.App 的动态代理
   if (!win.go.main.App) {
     win.go.main.App = new Proxy({}, {
       get(_target, propKey: string) {
@@ -192,45 +217,111 @@ export function initUniversalBridge(): void {
     })
   }
 
-  // 注入 window.runtime 的动态代理
+  // 2) 注入 window.runtime 的完整方法桩（完全对齐 wailsjs/runtime/runtime.js）
   if (!win.runtime) {
     win.runtime = {
-      EventsOn: (event: string, callback: Function) => webEventBus.on(event, callback),
-      EventsOff: (event: string, callback?: Function) => webEventBus.off(event, callback),
-      EventsOnce: (event: string, callback: Function) => {
-        const onceWrapper = (...args: any[]) => {
-          webEventBus.off(event, onceWrapper)
-          callback(...args)
-        }
-        webEventBus.on(event, onceWrapper)
+      // 事件系统
+      EventsOnMultiple: (eventName: string, callback: Function, maxCallbacks: number) => {
+        webEventBus.onMultiple(eventName, callback, maxCallbacks)
       },
-      EventsEmit: (event: string, ...args: any[]) => webEventBus.emit(event, ...args),
+      EventsOn: (eventName: string, callback: Function) => {
+        webEventBus.onMultiple(eventName, callback, -1)
+      },
+      EventsOnce: (eventName: string, callback: Function) => {
+        webEventBus.onMultiple(eventName, callback, 1)
+      },
+      EventsOff: (eventName: string, ...additionalEventNames: string[]) => {
+        webEventBus.off(eventName, ...additionalEventNames)
+      },
+      EventsOffAll: () => {
+        webEventBus.offAll()
+      },
+      EventsEmit: (eventName: string, ...args: any[]) => {
+        webEventBus.emit(eventName, ...args)
+      },
+
+      // 浏览器与外链
       BrowserOpenURL: (url: string) => {
         window.open(url, '_blank')
       },
-      WindowMinimise: () => {
-        console.log('[Web stub] WindowMinimise ignored in browser.')
+
+      // 窗口与全屏控制（利用 HTML5 规范 API 实现）
+      WindowFullscreen: () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {})
+        }
       },
-      WindowMaximise: () => {
-        console.log('[Web stub] WindowMaximise ignored in browser.')
+      WindowUnfullscreen: () => {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {})
+        }
       },
-      WindowToggleMaximise: () => {
-        console.log('[Web stub] WindowToggleMaximise ignored in browser.')
+      WindowIsFullscreen: async () => {
+        return Boolean(document.fullscreenElement)
+      },
+      WindowReload: () => {
+        window.location.reload()
+      },
+      WindowReloadApp: () => {
+        window.location.reload()
       },
       WindowSetTitle: (title: string) => {
         document.title = title
       },
+      WindowMinimise: () => {
+        console.log('[Web stub] WindowMinimise ignored.')
+      },
+      WindowMaximise: () => {
+        console.log('[Web stub] WindowMaximise ignored.')
+      },
+      WindowToggleMaximise: () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {})
+        } else {
+          document.exitFullscreen().catch(() => {})
+        }
+      },
+      WindowSetSize: (_w: number, _h: number) => {},
+      WindowGetSize: async () => {
+        return { w: window.innerWidth, h: window.innerHeight }
+      },
       Quit: () => {
         window.close()
       },
+
+      // 剪贴板支持
+      ClipboardGetText: async () => {
+        try {
+          return await navigator.clipboard.readText()
+        } catch {
+          return ''
+        }
+      },
+      ClipboardSetText: async (text: string) => {
+        try {
+          await navigator.clipboard.writeText(text)
+          return true
+        } catch {
+          return false
+        }
+      },
+
+      // 日志系统
+      LogPrint: (msg: string) => console.log('[Backend]', msg),
+      LogTrace: (msg: string) => console.trace('[Backend]', msg),
+      LogDebug: (msg: string) => console.debug('[Backend]', msg),
+      LogInfo: (msg: string) => console.info('[Backend]', msg),
+      LogWarning: (msg: string) => console.warn('[Backend]', msg),
+      LogError: (msg: string) => console.error('[Backend]', msg),
+      LogFatal: (msg: string) => console.error('[Backend FATAL]', msg),
+
+      // 保存文件对话框 Web 降级
       SaveFileDialog: async (_options: any) => {
-        // Web 模式下 SaveFileDialog 直接提示由浏览器下载流接管
         return 'browser_download'
       },
     }
   }
 
-  // 为 body 添加 web 模式特定 class，方便样式优雅隐藏无边框窗体控制按钮
   if (typeof document !== 'undefined' && document.body) {
     document.body.classList.add('is-web-mode')
   }
