@@ -44,6 +44,9 @@ func main() {
 	logger.SugaredLogger.Infof("[Database] Initializing SQLite at: %s", dbPath)
 	db.Init(dbPath)
 
+	// 执行全量数据表自动迁移与默认种子数据初始化 (确保全新安装具备完整表结构)
+	services.AutoMigrateAll()
+
 	// 3. 初始化安全鉴权
 	initAuth()
 

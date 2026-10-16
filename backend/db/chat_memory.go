@@ -107,6 +107,13 @@ func AutoMigrate() {
 	Dao.AutoMigrate(&ChatMemorySummary{})
 	Dao.AutoMigrate(&models.StockChangeHistory{})
 	Dao.AutoMigrate(&models.MarketStatistic{})
+	Dao.AutoMigrate(&models.Skill{})
+	Dao.AutoMigrate(&models.MCPServer{})
+	Dao.AutoMigrate(&models.MCPServerTool{})
+	Dao.AutoMigrate(&models.ProjectAnalysis{})
+	Dao.AutoMigrate(&models.CodeChunk{})
+	Dao.AutoMigrate(&models.BacktestResult{})
+	Dao.AutoMigrate(&models.AuditLog{})
 	for _, m := range AutoMigrateList {
 		Dao.AutoMigrate(m)
 	}
