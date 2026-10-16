@@ -590,6 +590,7 @@ function startAutoRefresh() {
   stopAutoRefresh()
   countdown.value = refreshSeconds.value
   refreshInterval.value = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return
     checkTradingTime()
     countdown.value--
     if (countdown.value <= 0) {

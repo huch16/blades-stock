@@ -19,6 +19,7 @@ const loading = ref(false)
 const errorMsg = ref('')
 
 async function fetchHotStock() {
+  if (typeof document !== 'undefined' && document.hidden) return
   try {
     loading.value = true
     errorMsg.value = ''

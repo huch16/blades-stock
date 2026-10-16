@@ -287,11 +287,14 @@ const onUnauthorized = async () => {
   if (isWails()) return
   clearAuthToken()
   currentSavedToken.value = ''
+  const wasForced = isForced.value && showModal.value
   isForced.value = true
   showModal.value = true
   errorMsg.value = '访问凭据未提供或已失效，请输入有效密码'
-  await fetchAuthStatus()
-  checkServerHealth()
+  if (!wasForced) {
+    await fetchAuthStatus()
+    checkServerHealth()
+  }
 }
 
 const onOpenAuthModal = async (e: any) => {
@@ -419,6 +422,7 @@ const handleInitPassword = async () => {
       showModal.value = false
       initPwd.value = ''
       confirmPwd.value = ''
+      window.dispatchEvent(new CustomEvent('blades:authenticated'))
       setTimeout(() => {
         window.location.reload()
       }, 400)
@@ -455,6 +459,7 @@ const handleLogin = async () => {
       message.success('验证成功，已连接投研中台！')
       showModal.value = false
       tokenInput.value = ''
+      window.dispatchEvent(new CustomEvent('blades:authenticated'))
       setTimeout(() => {
         window.location.reload()
       }, 400)

@@ -30,7 +30,7 @@ import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime
 import FloatingAiAssistant from "./components/FloatingAiAssistant.vue";
 import FloatingAgentAssistant from "./components/FloatingAgentAssistant.vue";
 import WebAuthModal from "./components/WebAuthModal.vue";
-import { isWails } from "./api/bridge";
+import { isWails, getAuthToken, webEventBus } from "./api/bridge";
 import MarketIntelligenceDrawer from "./components/MarketIntelligenceDrawer.vue";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
 import StockLightweightKlineChart from "./components/StockLightweightKlineChart.vue";
@@ -45,6 +45,7 @@ import {FireFilled, MoneyCollectOutlined, NotificationFilled, StockOutlined} fro
 
 
 const router = useRouter()
+const isAuthenticated = ref(isWails() || Boolean(getAuthToken()))
 const loading = ref(true)
 const loadingMsg = ref("加载数据中...")
 const enableNews = ref(false)
@@ -1149,17 +1150,28 @@ function applyThemeMode(isDark) {
   }
 }
 
-onMounted(() => {
+let appInitialized = false
+
+function initApp() {
+  if (appInitialized) return
+  appInitialized = true
+
   updateMarketStatus()
-  marketStatusTimer = setInterval(() => {
-    refreshMotto()
-    updateMarketStatus()
-  }, 60000)
+  if (!marketStatusTimer) {
+    marketStatusTimer = setInterval(() => {
+      refreshMotto()
+      updateMarketStatus()
+    }, 60000)
+  }
   if (!isWails()) {
     contentStyle.value = "height: calc(100dvh - 64px); max-height: calc(100dvh - 64px); overflow-y: auto; padding-bottom: 72px;"
   } else {
     contentStyle.value = "max-height: calc(92vh); overflow: hidden; padding-bottom: 72px;"
   }
+
+  // 确保 SSE 连接就绪
+  webEventBus.reconnectSSE()
+
   GetConfig().then((res) => {
     if (res.enableNews) {
       enableNews.value = true
@@ -1241,6 +1253,22 @@ onMounted(() => {
   }).catch(err => {
     console.error("GetConfig(onMounted) error:", err)
   })
+}
+
+onMounted(() => {
+  window.addEventListener('blades:authenticated', () => {
+    isAuthenticated.value = true
+    initApp()
+  })
+  window.addEventListener('blades:unauthorized', () => {
+    if (!isWails()) {
+      isAuthenticated.value = false
+    }
+  })
+
+  if (isAuthenticated.value) {
+    initApp()
+  }
 })
 </script>
 <template>
@@ -1255,66 +1283,68 @@ onMounted(() => {
         <n-modal-provider>
           <n-dialog-provider>
             <WebAuthModal />
-            <FloatingAgentAssistant @open-market-intelligence="onOpenMarketIntelligence" />
-            <MarketIntelligenceDrawer
-              v-model:show="showMarketIntelligenceDrawer"
-              :report-type="marketIntelligenceType"
-              :initial-serenity-target="marketIntelligenceSerenityTarget"
-            />
-            <!-- 全局 Agent 控制抽屉 -->
-            <StockDiagnosisDrawer
-              v-model:show="showAgentDiagnosisDrawer"
-              :stock-code="agentDiagnosisStockCode"
-              :stock-name="agentDiagnosisStockName"
-            />
-            <n-flex>
-              <n-grid
-                x-gap="12"
-                :cols="1"
-              >
-                <n-gi>
-                  <n-spin :show="loading">
-                    <template #description>
-                      {{ loadingMsg }}
-                    </template>
-                    <n-marquee
-                      v-if="(telegraph.length>0)&&(enableNews)"
-                      :speed="100"
-                      style="position: relative;top:0;z-index: 19;width: 100%"
-                    >
-                      <n-tag
-                        v-for="item in telegraph"
-                        type="warning"
-                        style="margin-right: 10px"
+            <template v-if="isAuthenticated">
+              <FloatingAgentAssistant @open-market-intelligence="onOpenMarketIntelligence" />
+              <MarketIntelligenceDrawer
+                v-model:show="showMarketIntelligenceDrawer"
+                :report-type="marketIntelligenceType"
+                :initial-serenity-target="marketIntelligenceSerenityTarget"
+              />
+              <!-- 全局 Agent 控制抽屉 -->
+              <StockDiagnosisDrawer
+                v-model:show="showAgentDiagnosisDrawer"
+                :stock-code="agentDiagnosisStockCode"
+                :stock-name="agentDiagnosisStockName"
+              />
+              <n-flex>
+                <n-grid
+                  x-gap="12"
+                  :cols="1"
+                >
+                  <n-gi>
+                    <n-spin :show="loading">
+                      <template #description>
+                        {{ loadingMsg }}
+                      </template>
+                      <n-marquee
+                        v-if="(telegraph.length>0)&&(enableNews)"
+                        :speed="100"
+                        style="position: relative;top:0;z-index: 19;width: 100%"
                       >
-                        {{ item }}
-                      </n-tag>
-                    </n-marquee>
-                    <n-scrollbar :style="contentStyle">
-                      <n-skeleton
-                        v-if="loading"
-                        height="calc(100vh)"
+                        <n-tag
+                          v-for="item in telegraph"
+                          type="warning"
+                          style="margin-right: 10px"
+                        >
+                          {{ item }}
+                        </n-tag>
+                      </n-marquee>
+                      <n-scrollbar :style="contentStyle">
+                        <n-skeleton
+                          v-if="loading"
+                          height="calc(100vh)"
+                        />
+                        <RouterView />
+                      </n-scrollbar>
+                    </n-spin>
+                  </n-gi>
+                  <n-gi style="position: fixed;bottom:0;z-index: 9;width: 100%;">
+                    <n-card
+                      size="small"
+                      style="--wails-draggable:no-drag"
+                    >
+                      <n-menu
+                        v-model:value="activeKey"
+                        style="font-size: 18px;"
+                        mode="horizontal"
+                        :options="menuOptions"
+                        responsive
                       />
-                      <RouterView />
-                    </n-scrollbar>
-                  </n-spin>
-                </n-gi>
-                <n-gi style="position: fixed;bottom:0;z-index: 9;width: 100%;">
-                  <n-card
-                    size="small"
-                    style="--wails-draggable:no-drag"
-                  >
-                    <n-menu
-                      v-model:value="activeKey"
-                      style="font-size: 18px;"
-                      mode="horizontal"
-                      :options="menuOptions"
-                      responsive
-                    />
-                  </n-card>
-                </n-gi>
-              </n-grid>
-            </n-flex>
+                    </n-card>
+                  </n-gi>
+                </n-grid>
+              </n-flex>
+            </template>
           </n-dialog-provider>
         </n-modal-provider>
       </n-notification-provider>

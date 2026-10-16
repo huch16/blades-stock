@@ -42,7 +42,7 @@ func main() {
 		dataDir = envData
 	}
 	_ = os.MkdirAll(dataDir, 0o755)
-	dbPath := filepath.Join(dataDir, "stock.db")
+	dbPath := filepath.Join(dataDir, "stock.db?_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-64000")
 	logger.SugaredLogger.Infof("[Database] Initializing SQLite at: %s", dbPath)
 	db.Init(dbPath)
 
@@ -207,11 +207,12 @@ func main() {
 	handler := AuthMiddleware(mux)
 
 	server := &http.Server{
-		Addr:         addr,
-		Handler:      handler,
-		ReadTimeout:  60 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  120 * time.Second,
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 15 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		// WriteTimeout 设置为 0，防止 SSE 长连接与慢速大模型推演被 net/http 强制切断
+		WriteTimeout: 0,
 	}
 
 	// 优雅停机信号捕获

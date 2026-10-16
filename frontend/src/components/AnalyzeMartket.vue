@@ -67,10 +67,12 @@ onMounted(() => {
   handleChangeRank()
   getIndex()
   handleChartInterval=setInterval(function () {
+    if (typeof document !== 'undefined' && document.hidden) return
     handleChart()
   }, 1000 * 60)
 
   handleIndexInterval=setInterval(function () {
+    if (typeof document !== 'undefined' && document.hidden) return
     getIndex()
     if (showTreemap.value) {
       handleTreemap()

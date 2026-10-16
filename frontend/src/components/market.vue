@@ -185,9 +185,11 @@ onBeforeUnmount(() => {
 function startTradingTimers() {
   stopTradingTimers()
   indexInterval.value = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return
     getIndex()
   }, 3000)
   indexIndustryRank.value = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return
     industryRank()
     ReFlesh("财联社电报")
     ReFlesh("新浪财经")

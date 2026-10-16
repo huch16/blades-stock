@@ -31,7 +31,7 @@ func Init(sqlitePath string) {
 	var openDb *gorm.DB
 	var err error
 	if sqlitePath == "" {
-		sqlitePath = filepath.Join(paths.DataDir(), "stock.db?_busy_timeout=10000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-524288")
+		sqlitePath = filepath.Join(paths.DataDir(), "stock.db?_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-64000")
 	}
 	openDb, err = gorm.Open(sqlite.Open(sqlitePath), &gorm.Config{
 		Logger:                                   dbLogger,
@@ -44,8 +44,8 @@ func Init(sqlitePath string) {
 		log.Fatalf("db connection error is %s", err.Error())
 	}
 
-	// 兜底：确保 busy_timeout / WAL / synchronous 生效（不同驱动/DSN 参数支持可能存在差异）
-	if err := openDb.Exec("PRAGMA busy_timeout=10000").Error; err != nil {
+	// 兜底：确保 busy_timeout / WAL / synchronous / cache_size 生效（保证多用户高并发读与30秒等待容错）
+	if err := openDb.Exec("PRAGMA busy_timeout=30000").Error; err != nil {
 		log.Printf("warn: set busy_timeout failed: %v", err)
 	}
 	if err := openDb.Exec("PRAGMA journal_mode=WAL").Error; err != nil {
@@ -54,14 +54,18 @@ func Init(sqlitePath string) {
 	if err := openDb.Exec("PRAGMA synchronous=NORMAL").Error; err != nil {
 		log.Printf("warn: set synchronous failed: %v", err)
 	}
+	if err := openDb.Exec("PRAGMA cache_size=-64000").Error; err != nil {
+		log.Printf("warn: set cache_size failed: %v", err)
+	}
 
 	dbCon, err := openDb.DB()
 	if err != nil {
 		log.Fatalf("openDb.DB error is  %s", err.Error())
 	}
-	// SQLite 写入是单写入者并发模型：设置 MaxOpenConns(1) 能彻底消除应用层不同连接争用锁造成的 SQLITE_BUSY
-	dbCon.SetMaxIdleConns(1)
-	dbCon.SetMaxOpenConns(1)
+	// 在 WAL 模式下，SQLite 支持多连接并发读取且读写互不阻塞。
+	// 设置连接池 MaxOpenConns(25) + MaxIdleConns(10)，配合 30 秒 busy_timeout，彻底消除多用户排队造成的阻塞死锁
+	dbCon.SetMaxIdleConns(10)
+	dbCon.SetMaxOpenConns(25)
 	dbCon.SetConnMaxLifetime(time.Hour)
 	Dao = openDb
 

@@ -132,9 +132,13 @@ class WebEventBus {
   }
 
   // 保证与后端的 SSE 长连接连通
-  private ensureSSEConnection(): void {
+  public ensureSSEConnection(): void {
     if (this.sseConnected || typeof window === 'undefined') return
     const token = getAuthToken()
+    // 在 Web 模式下，未提供访问 Token 前严禁盲目建立 SSE 连接，避免引发 401 死循环与服务器长连接雪崩
+    if (!token && !isWails()) {
+      return
+    }
     const url = `/api/events/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`
 
     try {
@@ -162,16 +166,32 @@ class WebEventBus {
           this.retryTimer = setTimeout(() => {
             this.retryTimer = null
             this.ensureSSEConnection()
-          }, 4000)
+          }, 5000)
         }
       }
     } catch (e) {
       this.sseConnected = false
     }
   }
+
+  // 认证成功后强制重连 SSE
+  public reconnectSSE(): void {
+    if (this.sseSource) {
+      this.sseSource.close()
+      this.sseSource = null
+    }
+    this.sseConnected = false
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
+    this.ensureSSEConnection()
+  }
 }
 
 export const webEventBus = new WebEventBus()
+
+let lastUnauthorizedDispatch = 0
 
 // 4. Web 模式下的通用 HTTP RPC 发起器
 export async function callWebApi(method: string, ...args: any[]): Promise<any> {
@@ -194,7 +214,12 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
 
     if (response.status === 401) {
       clearAuthToken()
-      window.dispatchEvent(new CustomEvent('blades:unauthorized'))
+      const now = Date.now()
+      // 节流派发 blades:unauthorized 事件，防止数十个并发请求瞬间引爆事件总线
+      if (now - lastUnauthorizedDispatch > 2000) {
+        lastUnauthorizedDispatch = now
+        window.dispatchEvent(new CustomEvent('blades:unauthorized'))
+      }
       throw new Error('未授权访问：请先输入有效访问口令')
     }
 

@@ -28,13 +28,16 @@ type PromptTemplateItem struct {
 // AgentService AI 智能体推演、技能库、MCP 与市场智能研报服务
 type AgentService struct {
 	agentMu        sync.Mutex
-	agentCancel    context.CancelFunc
+	sessionsMu     sync.Mutex
+	sessions       map[string]context.CancelFunc
 	defaultEmitter MessageEmitter
 }
 
 // NewAgentService 创建 Agent 服务实例
 func NewAgentService() *AgentService {
-	return &AgentService{}
+	return &AgentService{
+		sessions: make(map[string]context.CancelFunc),
+	}
 }
 
 // SetDefaultEmitter 设置默认的流式推流发射器（在 Server 模式下由 SSE 挂载）
@@ -55,18 +58,28 @@ func (s *AgentService) ChatWithAgentCustom(emitter MessageEmitter, question stri
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	s.agentMu.Lock()
-	if s.agentCancel != nil {
-		s.agentCancel()
+	sessKey := strings.TrimSpace(sessionId)
+	if sessKey == "" {
+		sessKey = "default"
 	}
-	s.agentCancel = cancel
-	s.agentMu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// 会话级隔离：仅取消同一 session 的前次未完成调用，多用户彼此完全并发独立
+	s.sessionsMu.Lock()
+	if s.sessions == nil {
+		s.sessions = make(map[string]context.CancelFunc)
+	}
+	if oldCancel, exists := s.sessions[sessKey]; exists && oldCancel != nil {
+		oldCancel()
+	}
+	s.sessions[sessKey] = cancel
+	s.sessionsMu.Unlock()
 
 	defer func() {
-		s.agentMu.Lock()
-		s.agentCancel = nil
-		s.agentMu.Unlock()
+		s.sessionsMu.Lock()
+		delete(s.sessions, sessKey)
+		s.sessionsMu.Unlock()
 	}()
 
 	ch := agent.NewStockAiAgentApi().ChatWithContext(ctx, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, sessionId)
@@ -77,13 +90,15 @@ func (s *AgentService) ChatWithAgentCustom(emitter MessageEmitter, question stri
 	}
 }
 
-// AbortChatWithAgent 打断或终止当前正在进行的 Agent 推理
+// AbortChatWithAgent 打断或终止当前正在进行的 Agent 推理（支持多会话隔离）
 func (s *AgentService) AbortChatWithAgent() {
-	s.agentMu.Lock()
-	defer s.agentMu.Unlock()
-	if s.agentCancel != nil {
-		s.agentCancel()
-		s.agentCancel = nil
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	for k, cancel := range s.sessions {
+		if cancel != nil {
+			cancel()
+		}
+		delete(s.sessions, k)
 	}
 }
 

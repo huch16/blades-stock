@@ -102,6 +102,10 @@ func HandleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 禁用此长连接上的任何写超时限制（Go 1.20+ ResponseController）
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -113,7 +117,9 @@ func HandleSSE(w http.ResponseWriter, r *http.Request) {
 	defer globalSSEHub.removeClient(clientChan)
 
 	// 握手确认
-	w.Write([]byte("event: ready\ndata: {\"status\":\"connected\"}\n\n"))
+	if _, err := w.Write([]byte("event: ready\ndata: {\"status\":\"connected\"}\n\n")); err != nil {
+		return
+	}
 	flusher.Flush()
 
 	notify := r.Context().Done()
@@ -125,7 +131,10 @@ func HandleSSE(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			w.Write(msg)
+			if _, err := w.Write(msg); err != nil {
+				// 客户端断开连接或网络写入失败，立即退出释放连接
+				return
+			}
 			flusher.Flush()
 		}
 	}

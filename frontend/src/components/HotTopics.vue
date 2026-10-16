@@ -8,6 +8,7 @@ const task =ref()
 onBeforeMount(async () => {
   list.value = await HotTopic(10)
   task.value = setInterval(async ()=>{
+    if (typeof document !== 'undefined' && document.hidden) return
     list.value = await HotTopic(10)
   }, 1000*10)
 })
