@@ -114,7 +114,7 @@ if [ "$HEALTHY" = true ]; then
     if [ -n "$AUTH_TOKEN" ]; then
         echo -e " 🔐 专属访问口令:     ${YELLOW}${AUTH_TOKEN}${NC}"
     else
-        echo -e " 🔐 访问安全模式:     ${YELLOW}首次访问引导设置密码 (可直接在网页设置 535386)${NC}"
+        echo -e " 🔐 访问安全模式:     ${YELLOW}首次访问引导设置密码 (请在首次打开网页时自行设置)${NC}"
     fi
     echo -e "${BLUE}------------------------------------------------------------------${NC}"
     echo -e " 💡 Nginx 反向代理提示：若使用 Nginx 反代，请将 proxy_pass 指向 http://127.0.0.1:${APP_PORT};"

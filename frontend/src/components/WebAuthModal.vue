@@ -17,13 +17,13 @@
           </div>
         </div>
 
-        <!-- 场景 A：首次访问引导设置密码 (例如 535386) -->
+        <!-- 场景 A：首次访问引导设置密码 -->
         <template v-if="needInit">
           <n-alert type="warning" :show-icon="true" class="auth-alert">
             <template #header>
               ✨ 首次使用初始化向导
             </template>
-            检测到当前工作站尚未设定访问密码。为确保量化策略与资产数据安全，请立即设置管理员密码（例如 <strong>535386</strong>）。
+            检测到当前工作站尚未设定访问密码。为确保量化策略与资产数据安全，请立即设置管理员密码。
           </n-alert>
 
           <div class="form-body">
@@ -33,7 +33,7 @@
                 type="password"
                 show-password-on="click"
                 size="large"
-                placeholder="请输入新密码 (例如: 535386)"
+                placeholder="请输入新密码 (不少于6位)"
                 :disabled="loading"
                 autofocus
                 @keyup.enter="focusConfirmPwd"
@@ -83,7 +83,7 @@
                 type="password"
                 show-password-on="click"
                 size="large"
-                placeholder="请输入访问密码 (例如: 535386)"
+                placeholder="请输入访问口令 / 管理员密码"
                 :disabled="loading"
                 autofocus
                 @keyup.enter="handleLogin"

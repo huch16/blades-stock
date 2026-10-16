@@ -205,8 +205,8 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 		t.Fatalf("expected needInit=true before init, got %+v", resStatus)
 	}
 
-	// 2. 初始化密码：设置初始密码为 535386
-	bodyInit := bytes.NewBufferString(`{"password":"535386"}`)
+	// 2. 初始化密码：设置初始密码为 test-suite-pass-2026
+	bodyInit := bytes.NewBufferString(`{"password":"test-suite-pass-2026"}`)
 	reqInit := httptest.NewRequest(http.MethodPost, "/api/auth/init", bodyInit)
 	wInit := httptest.NewRecorder()
 	handler.ServeHTTP(wInit, reqInit)
@@ -223,8 +223,8 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 		t.Fatalf("expected 401 for wrong password, got %d", wWrong.Code)
 	}
 
-	// 4. 正确密码登录：应当成功 200 并返回 token 535386
-	bodyCorrect := bytes.NewBufferString(`{"password":"535386"}`)
+	// 4. 正确密码登录：应当成功 200 并返回 token test-suite-pass-2026
+	bodyCorrect := bytes.NewBufferString(`{"password":"test-suite-pass-2026"}`)
 	reqCorrect := httptest.NewRequest(http.MethodPost, "/api/auth/login", bodyCorrect)
 	wCorrect := httptest.NewRecorder()
 	handler.ServeHTTP(wCorrect, reqCorrect)
@@ -232,9 +232,9 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 		t.Fatalf("expected 200 for correct login, got %d", wCorrect.Code)
 	}
 
-	// 5. 再次请求业务接口：携带 535386 应当放行 200
+	// 5. 再次请求业务接口：携带 test-suite-pass-2026 应当放行 200
 	reqApp := httptest.NewRequest(http.MethodPost, "/api/App/GetConfig", bytes.NewBufferString("[]"))
-	reqApp.Header.Set("Authorization", "Bearer 535386")
+	reqApp.Header.Set("Authorization", "Bearer test-suite-pass-2026")
 	wApp := httptest.NewRecorder()
 	handler.ServeHTTP(wApp, reqApp)
 	if wApp.Code != http.StatusOK {
