@@ -748,15 +748,15 @@ func isTransientModelError(err error) bool {
 
 // Precompiled regexes used across request hot paths (avoid MustCompile per call).
 var (
-	stockCodeRe = regexp.MustCompile(`(?:sh|SH|sz|SZ)?\d{6}`)
+	stockCodeRe = regexp.MustCompile(`(?:^|[^\d])((?:sh|SH|sz|SZ)?(?:[036849]\d{5}|51\d{4}|58\d{4}|15\d{4}))(?:[^\d]|$)`)
 	stockNameRe = regexp.MustCompile(`([\p{Han}]{2,4})(?:股票|股价|行情|走势|代码)`)
 )
 
 // extractStockInfo 从用户问题中提取股票代码/名称（增强启发式 + 数据库对照匹配）
 func extractStockInfo(question string) (stockCode, stockName string) {
-	// 匹配股票代码: 6 位数字（A股），或 sh/SH/sz/SZ 前缀
-	if m := stockCodeRe.FindString(question); m != "" {
-		stockCode = m
+	// 匹配股票代码: 独立 6 位数字（A股），或 sh/SH/sz/SZ 前缀
+	if m := stockCodeRe.FindStringSubmatch(question); len(m) > 1 {
+		stockCode = m[1]
 	}
 	// 匹配常见股票名称关键词（中文 2-4 字）
 	if m := stockNameRe.FindStringSubmatch(question); len(m) > 1 {

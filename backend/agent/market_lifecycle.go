@@ -3,6 +3,9 @@ package agent
 import (
 	"context"
 	"fmt"
+	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +79,38 @@ func cacheReport(report *MarketIntelligenceReport) {
 	if MarketReportBroadcastHook != nil {
 		MarketReportBroadcastHook("marketIntelligenceReport", report)
 	}
+}
+
+func formatYuanAmount(raw string) string {
+	val, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return raw
+	}
+	prefix := ""
+	if val > 0 {
+		prefix = "+"
+	}
+	absVal := math.Abs(val)
+	if absVal >= 1e8 {
+		return fmt.Sprintf("%s%.2f 亿元", prefix, val/1e8)
+	} else if absVal >= 1e4 {
+		return fmt.Sprintf("%s%.2f 万元", prefix, val/1e4)
+	}
+	return fmt.Sprintf("%s%.2f 元", prefix, val)
+}
+
+// safeRuntimeEventsEmit 安全推流 Wails 桌面事件，避免在 Web / Server 模式或非 Wails 上下文下
+// 调用 runtime.EventsEmit 触发 Wails 内部 log.Fatalf("An invalid context was passed...") 导致进程被 os.Exit(1) 强制杀死。
+func safeRuntimeEventsEmit(ctx context.Context, event string, optionalData ...any) {
+	if ctx == nil || ctx.Value("events") == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Warnf("safeRuntimeEventsEmit recover: %v", r)
+		}
+	}()
+	runtime.EventsEmit(ctx, event, optionalData...)
 }
 
 // MarketLifecycleService 市场全流程生命周期智能服务
@@ -307,8 +342,13 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
-	if strings.TrimSpace(finalReport) == "" || strings.HasPrefix(strings.TrimSpace(finalReport), "❌") {
-		return nil, fmt.Errorf("AI 生成盘前晨报失败: %s", finalReport)
+	rawContent := strings.TrimSpace(contentBuilder.String())
+	if rawContent == "" || strings.HasPrefix(rawContent, "❌") {
+		errMsg := rawContent
+		if errMsg == "" {
+			errMsg = "模型未返回任何有效内容，请检查大模型配置或网络"
+		}
+		return nil, fmt.Errorf("AI 生成盘前晨报失败: %s", errMsg)
 	}
 
 	title := fmt.Sprintf("🌅 A股盘前智能前瞻与ETF轮动内参 (%s)", todayStr)
@@ -332,21 +372,91 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	cacheReport(report)
 
 	// 桌面事件与 Windows 通知提醒
-	if s.ctx != nil {
-		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
-	}
+	safeRuntimeEventsEmit(s.ctx, "marketIntelligenceReport", report)
 
 	return report, nil
 }
 
 // TriggerSectorAnomalySerenityAnalysis 当盘中出现资金大额流入或异动突发时，自动触发 Serenity 产业链深度拆解
 func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx context.Context, sectorOrStockName string, code string, reason string, aiConfigId int) (*MarketIntelligenceReport, error) {
+	sectorOrStockName = strings.TrimSpace(sectorOrStockName)
+	if sectorOrStockName == "" {
+		sectorOrStockName = "半导体核心赛道"
+	}
+	code = strings.TrimSpace(code)
+	if reason == "" {
+		reason = "用户主动发起的Serenity深度产业链调研"
+	}
 	logger.SugaredLogger.Warnf("🔥 【Serenity异动拆解】检测到异动 %s(%s): %s，触发Serenity产业链分析", sectorOrStockName, code, reason)
 	todayStr := time.Now().Format("2006-01-02")
 
-	prompt := fmt.Sprintf(`你是专注于产业链瓶颈与卡脖子技术的研究专家“财智”。
-盘中检测到板块/标的【%s (%s)】出现强异动：%s。
+	if aiConfigId <= 0 {
+		settingConfig := data.GetSettingConfig()
+		if settingConfig != nil && settingConfig.AiConfigID > 0 {
+			aiConfigId = int(settingConfig.AiConfigID)
+		}
+	}
 
+	// 预提取个股或板块真实数据，消除模型幻觉并极大加速研报合成
+	var realDataCtx strings.Builder
+	var targetStockCode = code
+	if targetStockCode == "" {
+		if m := regexp.MustCompile(`[036]\d{5}|51\d{4}|58\d{4}|15\d{4}`).FindString(sectorOrStockName); m != "" {
+			targetStockCode = m
+		}
+	}
+
+	stockAPI := data.NewStockDataApi()
+	if targetStockCode != "" {
+		// 若为指定个股，注入其最新行情与财务估值
+		if quotes, err := stockAPI.GetStockCodeRealTimeData(targetStockCode); err == nil && quotes != nil && len(*quotes) > 0 {
+			q := (*quotes)[0]
+			realDataCtx.WriteString(fmt.Sprintf("【目标标的真实盘面】%s(%s): 现价:%s 涨跌幅:%.2f%% 昨收:%s 最高:%s 最低:%s 成交额:%s\n",
+				q.Name, q.Code, q.Price, q.ChangePercent, q.PreClose, q.High, q.Low, q.Amount))
+		}
+		if finMd := stockAPI.GetStockLatestFinanceToMarkdown(targetStockCode); finMd != "" && !strings.HasPrefix(finMd, "获取") {
+			realDataCtx.WriteString("【最新财务指标】\n" + finMd + "\n\n")
+		}
+		if valMd := stockAPI.GetStockValuationPercentileToMarkdown(targetStockCode); valMd != "" && !strings.HasPrefix(valMd, "获取") {
+			realDataCtx.WriteString("【估值分位参考】\n" + valMd + "\n\n")
+		}
+	} else {
+		// 若为行业或赛道板块，注入行业板块资金流向以及相关宏观要闻
+		industryRanks := data.NewMarketNewsApi().GetIndustryMoneyRankSina("0", "netamount")
+		if len(industryRanks) > 0 {
+			var rankLines []string
+			for i, r := range industryRanks {
+				if i >= 6 {
+					break
+				}
+				name, _ := r["name"].(string)
+				netAmount, _ := r["netamount"].(string)
+				rankLines = append(rankLines, fmt.Sprintf("- %s: 主力净额 %s", name, formatYuanAmount(netAmount)))
+			}
+			if len(rankLines) > 0 {
+				realDataCtx.WriteString("【今日行业板块主力资金流向参考】:\n" + strings.Join(rankLines, "\n") + "\n\n")
+			}
+		}
+
+		telegraphs := data.NewMarketNewsApi().TelegraphList(15)
+		if telegraphs != nil {
+			var matchedNews []string
+			for _, n := range *telegraphs {
+				if strings.Contains(n.Content, sectorOrStockName) || strings.Contains(n.Title, sectorOrStockName) {
+					matchedNews = append(matchedNews, fmt.Sprintf("- [%s] %s", n.Time, n.Content))
+				}
+			}
+			if len(matchedNews) > 0 {
+				realDataCtx.WriteString("【相关产业链要闻脉冲】:\n" + strings.Join(matchedNews, "\n") + "\n\n")
+			}
+		}
+	}
+
+	prompt := fmt.Sprintf(`你是专注于产业链瓶颈与卡脖子技术的研究专家“财智”。今天是 %s。
+目标研判赛道/标的：【%s (%s)】
+触发动因：%s。
+
+%s
 请严格遵守【Serenity式产业分析框架】（Skill 4）：
 1. 【产业链全景拆解】：梳理%s在产业链中的位置（上中下游与核心参与者）；
 2. 【稀缺层识别】：识别其中技术壁垒最高、国产替代率<30%%或CR5>60%%的绝对稀缺环节；
@@ -354,7 +464,8 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 4. 【证据链验证】：列出营收增速、毛利率或重要客户支撑；
 5. 【证伪条件】：列出结论失效的触发条件。
 
-输出结构清晰的 Markdown 产业链深度拆解报告。`, sectorOrStockName, code, reason, sectorOrStockName)
+【数据注入说明】：请直接基于上述一手真实数据及专业产业认知进行深度量化推演，无需额外调用外部工具。
+输出结构清晰、带有深度洞见的 Markdown 产业链深度拆解报告。`, todayStr, sectorOrStockName, code, reason, realDataCtx.String(), sectorOrStockName)
 
 	sysPrompt := "你现在是专注于产业链瓶颈与卡脖子技术的研究专家“财智”。请直接根据输入中详实的一手异动与赛道信息，按照 Serenity 式产业研究框架输出深度结构化的 Markdown 产业链拆解研报。"
 	reasoningBuilder := strings.Builder{}
@@ -373,8 +484,13 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
-	if strings.TrimSpace(finalReport) == "" || strings.HasPrefix(strings.TrimSpace(finalReport), "❌") {
-		return nil, fmt.Errorf("Serenity 产业链拆解生成失败: %s", finalReport)
+	rawContent := strings.TrimSpace(contentBuilder.String())
+	if rawContent == "" || strings.HasPrefix(rawContent, "❌") {
+		errMsg := rawContent
+		if errMsg == "" {
+			errMsg = "模型未返回任何有效内容，请检查大模型配置或网络"
+		}
+		return nil, fmt.Errorf("Serenity 产业链拆解生成失败: %s", errMsg)
 	}
 
 	title := fmt.Sprintf("🔍 Serenity产业链深度拆解 — %s (%s)", sectorOrStockName, todayStr)
@@ -391,14 +507,17 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 		Source:      "Serenity产业链引擎",
 	}
 
-	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult(code, "Serenity产业链分析", finalReport, "serenity_"+code, prompt)
+	saveCode := targetStockCode
+	if saveCode == "" {
+		saveCode = "serenity"
+	}
+	saveName := fmt.Sprintf("Serenity-%s", sectorOrStockName)
+	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult(saveCode, saveName, finalReport, "serenity_"+todayStr+"_"+saveCode, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
 
 	cacheReport(report)
 
-	if s.ctx != nil {
-		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
-	}
+	safeRuntimeEventsEmit(s.ctx, "marketIntelligenceReport", report)
 
 	return report, nil
 }
@@ -507,9 +626,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	cacheReport(report)
 
 	// 桌面事件推送
-	if s.ctx != nil {
-		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
-	}
+	safeRuntimeEventsEmit(s.ctx, "marketIntelligenceReport", report)
 
 	return report, nil
 }
@@ -561,8 +678,13 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
-	if strings.TrimSpace(finalReport) == "" || strings.HasPrefix(strings.TrimSpace(finalReport), "❌") {
-		return nil, fmt.Errorf("生成ETF轮动分析报告失败: %s", finalReport)
+	rawContent := strings.TrimSpace(contentBuilder.String())
+	if rawContent == "" || strings.HasPrefix(rawContent, "❌") {
+		errMsg := rawContent
+		if errMsg == "" {
+			errMsg = "模型未返回任何有效内容，请检查大模型配置或网络"
+		}
+		return nil, fmt.Errorf("生成ETF轮动分析报告失败: %s", errMsg)
 	}
 
 	title := fmt.Sprintf("📈 ETF轮动多Agent决策与投委会打分表 (%s)", todayStr)
@@ -584,9 +706,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 
 	cacheReport(report)
 
-	if s.ctx != nil {
-		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
-	}
+	safeRuntimeEventsEmit(s.ctx, "marketIntelligenceReport", report)
 
 	return report, nil
 }

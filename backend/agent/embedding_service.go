@@ -61,6 +61,10 @@ type EmbeddingResponse struct {
 }
 
 func (s *EmbeddingService) Embed(text string) ([]float32, error) {
+	return s.EmbedWithContext(context.Background(), text)
+}
+
+func (s *EmbeddingService) EmbedWithContext(ctx context.Context, text string) ([]float32, error) {
 	if s == nil || s.embeddingsURL == "" || s.modelName == "" {
 		return nil, fmt.Errorf("embedding service not configured")
 	}
@@ -80,7 +84,7 @@ func (s *EmbeddingService) Embed(text string) ([]float32, error) {
 		return nil, fmt.Errorf("marshal embedding request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", s.embeddingsURL, bytes.NewReader(data))
+	req, err := http.NewRequestWithContext(ctx, "POST", s.embeddingsURL, bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("create embedding request: %w", err)
 	}
@@ -141,9 +145,11 @@ func (s *EmbeddingService) IsConfigured() bool {
 	return s != nil && s.embeddingsURL != "" && s.modelName != ""
 }
 
-// Ping health-checks the endpoint with a minimal embedding call.
+// Ping health-checks the endpoint with a minimal embedding call and a strict 3-second timeout.
 func (s *EmbeddingService) Ping() error {
-	_, err := s.Embed("ping")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_, err := s.EmbedWithContext(ctx, "ping")
 	return err
 }
 

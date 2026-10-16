@@ -582,7 +582,9 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 					"question":     question,
 					"extraContent": "***❗获取股票价格失败,分析结果可能不准确***<hr>",
 				}
-				go runtime.EventsEmit(o.ctx, "warnMsg", "❗获取股票价格失败,分析结果可能不准确")
+				if o.ctx != nil && o.ctx.Value("events") != nil {
+					go runtime.EventsEmit(o.ctx, "warnMsg", "❗获取股票价格失败,分析结果可能不准确")
+				}
 				return
 			}
 			price := ""
@@ -622,7 +624,9 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 					"question":     question,
 					"extraContent": "***❗获取股票财报失败,分析结果可能不准确***<hr>",
 				}
-				go runtime.EventsEmit(o.ctx, "warnMsg", "❗获取股票财报失败,分析结果可能不准确")
+				if o.ctx != nil && o.ctx.Value("events") != nil {
+					go runtime.EventsEmit(o.ctx, "warnMsg", "❗获取股票财报失败,分析结果可能不准确")
+				}
 				return
 			}
 			msgMu.Lock()

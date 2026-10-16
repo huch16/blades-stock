@@ -203,8 +203,8 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 	// ⚠️ 注意：不要在后台监控中直接 EventsEmit "agent:action"，否则会导致用户正在正常使用时
 	// 界面不时突然弹出全屏 K线图或诊断抽屉！Action 应该放在 stockPriceAlertTriggered 载荷中供用户在通知里点击！
 
-	// 将告警事件以及 Agent 推理结果广播给前端 UI
-	if w.wailsCtx != nil {
+	// 将告警事件以及 Agent 推理结果广播给前端 UI（仅在 Wails 原生桌面上下文有效）
+	if w.wailsCtx != nil && w.wailsCtx.Value("events") != nil {
 		runtime.EventsEmit(w.wailsCtx, "stockPriceAlertTriggered", map[string]any{
 			"code":          code,
 			"name":          name,
