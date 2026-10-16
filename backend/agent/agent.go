@@ -63,6 +63,15 @@ func (PlanTrace) TableName() string {
 	}
 
 func classifyComplexity(question string) AgentMode {
+	// 针对已完整注入客观数据/样本列表的共振推演与专项研报，直接采用 Direct 模式快速合成，避免漫长无效的外部工具循环
+	if strings.Contains(question, "【AI 形态选股列表共振推演与操盘计划】") ||
+		strings.Contains(question, "【AI 选股策略共振推演与实战指导报告】") ||
+		strings.Contains(question, "【个股量价形态 AI 实战推演】") ||
+		strings.Contains(question, "【个股指标筛选 AI 信号推演与有效性诊断】") ||
+		strings.Contains(question, "【预采集参考数据】") {
+		return AgentModeDirect
+	}
+
 	lowerQ := strings.ToLower(question)
 
 	simplePatterns := []string{
@@ -151,9 +160,17 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		allTools = WrapToolsWithQuota(allTools)
 	default:
 		mode = classifyComplexity(question)
-		allTools = getToolsByQuestion(question, matchedSkills)
-		allTools = append(allTools, extraTools...)
-		allTools = WrapToolsWithQuota(allTools)
+		if mode == AgentModeDirect {
+			allTools = []bladesTools.Tool{}
+		} else {
+			allTools = getToolsByQuestion(question, matchedSkills)
+			allTools = append(allTools, extraTools...)
+			allTools = WrapToolsWithQuota(allTools)
+		}
+	}
+
+	if mode == AgentModeDirect {
+		allTools = []bladesTools.Tool{}
 	}
 
 	logger.SugaredLogger.Infof("Agent mode selected: %s (user=%q), question=%q, tools=%d", mode, agentMode, question, len(allTools))

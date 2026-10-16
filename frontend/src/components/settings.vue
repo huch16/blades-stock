@@ -1172,7 +1172,7 @@ function importConfig() {
           <template #header>
             <n-flex justify="space-between" align="center">
               <n-text><NTag type="primary" bordered="false">通知设置</NTag></n-text>
-              <n-text depth="3" style="font-size: 12px;">钉钉/本地推送、弹幕、快讯、仅红字提醒</n-text>
+              <n-text depth="3" style="font-size: 12px;">钉钉/本地推送、快讯、红字提醒</n-text>
             </n-flex>
           </template>
           <n-grid :cols="24" :x-gap="24" style="text-align: left">
@@ -1196,12 +1196,6 @@ function importConfig() {
                     </template>
                   </n-tooltip>
                 </n-space>
-              </template>
-            </n-form-item-gi>
-            <n-form-item-gi :span="3" label="弹幕功能：" path="enableDanmu">
-              <n-switch v-model:value="formValue.enableDanmu"/>
-              <template #feedback>
-                <n-tooltip placement="top"><template #trigger><n-icon color="#0e7a0d" size="16"><HelpCircleFilledIcon /></n-icon></template><template #default>在 K 线图上显示弹幕式实时资讯/异动提示</template></n-tooltip>
               </template>
             </n-form-item-gi>
             <n-form-item-gi :span="3" label="显示滚动快讯：" path="enableNews">

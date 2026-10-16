@@ -1181,7 +1181,7 @@ function handleQuickChip(prefix) {
   }
 }
 
-function sendMessage() {
+function sendMessage(overrideAgentMode = '') {
   if (isStreamLoad.value) {
     abortStream(false)
   }
@@ -1231,7 +1231,8 @@ function sendMessage() {
     }
     scrollToBottom()
   })
-  ChatWithAgent(text, configId, null, memoryMode.value, memoryCount.value, thinkingMode.value, agentMode.value === 'auto' ? '' : agentMode.value, sessionId.value || "")
+  const modeToUse = overrideAgentMode || (agentMode.value === 'auto' ? '' : agentMode.value)
+  ChatWithAgent(text, configId, null, memoryMode.value, memoryCount.value, thinkingMode.value, modeToUse, sessionId.value || "")
 }
 
 function startNewChat() {
@@ -1589,6 +1590,7 @@ onMounted(() => {
   EventsOn('openFloatingAgentWithQuestion', (payload) => {
     panelVisible.value = true
     const text = typeof payload === 'string' ? payload : (payload?.question || '')
+    const targetAgentMode = typeof payload === 'object' && payload?.agentMode ? payload.agentMode : ''
     if (text) {
       inputValue.value = text
       setTimeout(() => {
@@ -1596,7 +1598,7 @@ onMounted(() => {
           if (isStreamLoad.value) {
             abortStream(false)
           }
-          sendMessage()
+          sendMessage(targetAgentMode)
         }
       }, 150)
     }

@@ -173,7 +173,7 @@ class WebEventBus {
       for (const evt of this.listeners.keys()) {
         this.attachSSEListener(evt)
       }
-      const defaultEvents = ['newChatStream', 'marketIntelligenceReport', 'stockPriceAlertTriggered', 'refreshFollowList', 'loadingDone']
+      const defaultEvents = ['newChatStream', 'agent-message', 'marketIntelligenceReport', 'stockPriceAlertTriggered', 'refreshFollowList', 'loadingDone']
       for (const evt of defaultEvents) {
         this.attachSSEListener(evt)
       }

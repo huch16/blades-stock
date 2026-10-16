@@ -148,6 +148,19 @@ func (f *FundApi) crawlFundBasicViaHTML(fundCode string) (*FundBasic, error) {
 	fund := &FundBasic{Code: fundCode}
 
 	name := doc.Find(".merchandiseDetail .fundDetail-tit").First().Text()
+	if name == "" {
+		name = doc.Find(".detailTit-tit").First().Text()
+	}
+	if name == "" {
+		name = doc.Find(".fix_fname").First().Text()
+	}
+	if name == "" {
+		// 从 title 标签提取，如 沪深300ETF华泰柏瑞(510300)基金净值...
+		titleText := doc.Find("title").First().Text()
+		if m := regexp.MustCompile(`^([^(（]+)[(（]`).FindStringSubmatch(titleText); len(m) > 1 {
+			name = strings.TrimSpace(m[1])
+		}
+	}
 	fund.Name = strings.TrimSpace(strutil.ReplaceWithMap(name, map[string]string{
 		"查看相关ETF联接>": "",
 		"查看相关ETF>":   "",
@@ -295,6 +308,10 @@ var (
 	rePerformance = regexp.MustCompile(`var\s+Data_performance\s*=\s*(\{.+?\});`)
 	reFundManager = regexp.MustCompile(`var\s+Data_currentFundManager\s*=\s*(\[.+?\]);`)
 	reFluctuation = regexp.MustCompile(`var\s+Data_fluctuationScale\s*=\s*(\{.+?\});`)
+	reSyl1y       = regexp.MustCompile(`var\s+syl_1y\s*=\s*"([^"]*)"`)
+	reSyl3y       = regexp.MustCompile(`var\s+syl_3y\s*=\s*"([^"]*)"`)
+	reSyl6y       = regexp.MustCompile(`var\s+syl_6y\s*=\s*"([^"]*)"`)
+	reSyl1n       = regexp.MustCompile(`var\s+syl_1n\s*=\s*"([^"]*)"`)
 )
 
 func (f *FundApi) crawlFundBasicViaPingZhongData(fundCode string) (*FundBasic, error) {
@@ -314,11 +331,41 @@ func (f *FundApi) crawlFundBasicViaPingZhongData(fundCode string) (*FundBasic, e
 	fund := &FundBasic{Code: fundCode}
 
 	if m := reFSName.FindStringSubmatch(body); len(m) > 1 {
-		fund.Name = m[1]
+		fund.Name = strings.TrimSpace(m[1])
 	}
 
 	if m := rePerformance.FindStringSubmatch(body); len(m) > 1 {
 		f.parsePerformanceJSON(fund, m[1])
+	}
+
+	// 针对场内 ETF pingzhongdata 采用独立 syl_ 变量收益率的适配
+	if fund.NetGrowth1 == nil {
+		if m := reSyl1y.FindStringSubmatch(body); len(m) > 1 && m[1] != "" && m[1] != "--" {
+			if v, err := convertor.ToFloat(m[1]); err == nil {
+				fund.NetGrowth1 = &v
+			}
+		}
+	}
+	if fund.NetGrowth3 == nil {
+		if m := reSyl3y.FindStringSubmatch(body); len(m) > 1 && m[1] != "" && m[1] != "--" {
+			if v, err := convertor.ToFloat(m[1]); err == nil {
+				fund.NetGrowth3 = &v
+			}
+		}
+	}
+	if fund.NetGrowth6 == nil {
+		if m := reSyl6y.FindStringSubmatch(body); len(m) > 1 && m[1] != "" && m[1] != "--" {
+			if v, err := convertor.ToFloat(m[1]); err == nil {
+				fund.NetGrowth6 = &v
+			}
+		}
+	}
+	if fund.NetGrowth12 == nil {
+		if m := reSyl1n.FindStringSubmatch(body); len(m) > 1 && m[1] != "" && m[1] != "--" {
+			if v, err := convertor.ToFloat(m[1]); err == nil {
+				fund.NetGrowth12 = &v
+			}
+		}
 	}
 
 	if m := reFundManager.FindStringSubmatch(body); len(m) > 1 {
@@ -452,35 +499,78 @@ func (f *FundApi) GetFundList(key string) []FundBasic {
 }
 
 func (f *FundApi) searchFundOnline(key string) {
-	url := fmt.Sprintf("https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?callback=&m=1&key=%s", key)
-	resp, err := f.client.SetTimeout(time.Duration(f.config.CrawlTimeOut)*time.Second).R().
-		SetHeader("User-Agent", getRandomUA()).
-		SetHeader("Referer", "https://fund.eastmoney.com/").
-		Get(url)
-	if err != nil || resp.StatusCode() != 200 {
+	cleanKey := strings.TrimSpace(key)
+	if cleanKey == "" {
 		return
 	}
-	var result struct {
-		Datas []struct {
-			Code string `json:"Code"`
-			Name string `json:"Name"`
-			Type string `json:"FundBaseInfo"`
-		} `json:"Datas"`
+
+	// 先尝试 m=1（开放式基金/ETF），若未找到再尝试 m=0（全品类包含场内ETF）
+	urls := []string{
+		fmt.Sprintf("https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?callback=&m=1&key=%s", cleanKey),
+		fmt.Sprintf("https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?callback=&m=0&key=%s", cleanKey),
 	}
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		return
+
+	type onlineFundItem struct {
+		Code      string `json:"CODE"`
+		CodeLower string `json:"Code"`
+		Name      string `json:"NAME"`
+		NameLower string `json:"Name"`
+		FundBaseInfo struct {
+			FType string `json:"FTYPE"`
+			JJGS  string `json:"JJGS"`
+		} `json:"FundBaseInfo"`
 	}
-	for _, item := range result.Datas {
-		var count int64
-		db.Dao.Model(&FundBasic{}).Where("code=?", item.Code).Count(&count)
-		if count == 0 {
-			fund := &FundBasic{
-				Code: item.Code,
-				Name: item.Name,
-				Type: item.Type,
-			}
-			db.Dao.Create(fund)
+
+	foundCount := 0
+	for _, u := range urls {
+		resp, err := f.client.SetTimeout(time.Duration(f.config.CrawlTimeOut)*time.Second).R().
+			SetHeader("User-Agent", getRandomUA()).
+			SetHeader("Referer", "https://fund.eastmoney.com/").
+			Get(u)
+		if err != nil || resp.StatusCode() != 200 {
+			continue
 		}
+		var result struct {
+			Datas []onlineFundItem `json:"Datas"`
+		}
+		if err := json.Unmarshal(resp.Body(), &result); err != nil {
+			continue
+		}
+		for _, item := range result.Datas {
+			c := strings.TrimSpace(item.Code)
+			if c == "" {
+				c = strings.TrimSpace(item.CodeLower)
+			}
+			n := strings.TrimSpace(item.Name)
+			if n == "" {
+				n = strings.TrimSpace(item.NameLower)
+			}
+			if c == "" {
+				continue
+			}
+			var count int64
+			db.Dao.Model(&FundBasic{}).Where("code=?", c).Count(&count)
+			if count == 0 {
+				fund := &FundBasic{
+					Code:    c,
+					Name:    n,
+					Type:    item.FundBaseInfo.FType,
+					Company: item.FundBaseInfo.JJGS,
+				}
+				db.Dao.Create(fund)
+				foundCount++
+			} else {
+				foundCount++
+			}
+		}
+		if foundCount > 0 {
+			break
+		}
+	}
+
+	// 若未搜出且输入为 6 位数字，直接尝试爬取基本信息（场内 ETF / 场外基金自愈抓取）
+	if foundCount == 0 && regexp.MustCompile(`^\d{6}$`).MatchString(cleanKey) {
+		_, _ = f.CrawlFundBasic(cleanKey)
 	}
 }
 
@@ -915,12 +1005,42 @@ func (f *FundApi) GetFollowedFundPaged(pageIndex, pageSize int, keyword string) 
 }
 
 func (f *FundApi) FollowFund(fundCode string) string {
+	fundCode = strings.TrimSpace(fundCode)
+	if fundCode == "" {
+		return "基金代码不能为空"
+	}
 	var fund FundBasic
 	db.Dao.Where("code=?", fundCode).First(&fund)
-	if fund.Code == "" || fund.Company == "" {
+	if fund.Code == "" || fund.Name == "" {
 		crawled, err := f.CrawlFundBasic(fundCode)
-		if err != nil || crawled == nil {
-			if fund.Code == "" {
+		if err != nil || crawled == nil || crawled.Name == "" {
+			// 若依然为空且为场内 ETF，尝试通过 Sina 行情快速拿到名称保底
+			if IsOnExchangeFund(fundCode) {
+				var listStr string
+				if fundCode[0] == '5' || fundCode[0] == '6' {
+					listStr = "sh" + fundCode
+				} else {
+					listStr = "sz" + fundCode
+				}
+				reqURL := fmt.Sprintf("http://hq.sinajs.cn/rn=%d&list=%s", time.Now().UnixMilli(), listStr)
+				resp, errSina := f.client.SetTimeout(5 * time.Second).R().
+					SetHeader("Host", "hq.sinajs.cn").
+					SetHeader("Referer", "https://finance.sina.com.cn").
+					Get(reqURL)
+				if errSina == nil && resp.StatusCode() == 200 {
+					body := string(GB18030ToUTF8(resp.Body()))
+					reName := regexp.MustCompile(`var\s+hq_str_\w+="([^,]+),`)
+					if m := reName.FindStringSubmatch(body); len(m) > 1 && m[1] != "" {
+						fund = FundBasic{
+							Code: fundCode,
+							Name: strings.TrimSpace(m[1]),
+							Type: "场内ETF",
+						}
+						db.Dao.Create(&fund)
+					}
+				}
+			}
+			if fund.Code == "" || fund.Name == "" {
 				return "基金信息不存在或获取失败"
 			}
 		} else {
@@ -1362,7 +1482,7 @@ func IsOnExchangeFund(code string) bool {
 	}
 	prefix := code[:2]
 	switch prefix {
-	case "15", "16", "50", "51", "52":
+	case "15", "16", "18", "50", "51", "52", "56", "58":
 		return true
 	default:
 		return false

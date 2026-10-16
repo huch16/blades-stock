@@ -72,7 +72,6 @@ import '@vavt/v3-extension/lib/asset/ExportPDF.css';
 import html2canvas from "html2canvas";
 import {asBlob} from 'html-docx-js-typescript';
 
-import vueDanmaku from 'vue3-danmaku'
 import {keys, padStart} from "lodash";
 import {useRoute, useRouter} from 'vue-router'
 import MoneyTrend from "./moneyTrend.vue";
@@ -85,8 +84,6 @@ const router = useRouter()
 // Pinia Store - AI 配置全局管理
 const aiConfigStore = useAiConfigStore()
 
-const danmus = ref([])
-const ws = ref(null)
 const dialog = useDialog()
 const toolbars = [0];
 
@@ -532,22 +529,6 @@ onMounted(() => {
   GetVersionInfo().then((res) => {
     icon.value = res.icon
   })
-  // 创建 WebSocket 连接 (兼容 HTTPS 环境安全降级)
-  try {
-    ws.value = new WebSocket('ws://8.134.249.145:16688/ws');
-    ws.value.onopen = () => {};
-    ws.value.onmessage = (event) => {
-      if (data.enableDanmu) {
-        danmus.value.push(event.data);
-      }
-    };
-    ws.value.onerror = (error) => {
-      console.warn('[Danmu] WebSocket 连接异常:', error);
-    };
-    ws.value.onclose = () => {};
-  } catch (e) {
-    console.warn('[Danmu] WebSocket 初始化跳过:', e);
-  }
 })
 // 清理拖拽事件监听器
 // 清理拖拽事件监听器
@@ -601,7 +582,6 @@ function initDraggableTabs() {
 onBeforeUnmount(() => {
   // //console.log(`the component is now unmounted.`)
   //clearInterval(ticker.value)
-  ws.value.close()
   message.destroyAll()
   notify.destroyAll()
   clearInterval(feishiInterval.value)
@@ -779,21 +759,7 @@ function removeMonitor(code, name, key) {
 }
 
 
-function SendDanmu() {
-  if (!data.name || !data.name.trim()) return
-  const text = data.name.trim()
-  danmus.value.push(text)
-  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-    try {
-      ws.value.send(text)
-    } catch (e) {
-      console.warn('[Danmu] send error:', e)
-    }
-  }
-  message.info("弹幕已发送: " + text)
-  data.name = ""
-  data.code = ""
-}
+
 
 function getStockList(value) {
   if (!value || !value.trim()) {
@@ -2463,15 +2429,6 @@ watch(modalShow6, (newVal) => {
 </script>
 
 <template>
-  <vue-danmaku v-model:danmus="danmus" useSlot
-               style="height:100px; width:100%;z-index: 9;position:absolute; top: 400px; pointer-events: none;">
-    <template v-slot:dm="{ index, danmu }">
-      <n-gradient-text type="info">
-        <n-icon :component="ChatboxOutline"/>
-        {{ danmu }}
-      </n-gradient-text>
-    </template>
-  </vue-danmaku>
   <n-tabs type="card" style="--wails-draggable:no-drag" animated addable :data-currentGroupId="currentGroupId"
           :value="String(currentGroupId)" @add="addTab" @update:value="updateTab" placement="top" @close="(key)=>{delTab(key)}">
 
@@ -2533,7 +2490,7 @@ watch(modalShow6, (newVal) => {
                                 autocomplete: 'disabled',
                               }"
                        :options="options"
-                       placeholder="股票指数名称/代码/弹幕"
+                       placeholder="输入股票代码/名称添加自选"
                        clearable
                        @update:value="getStockList"
                        @input="getStockList(data.name)"
@@ -2547,12 +2504,8 @@ watch(modalShow6, (newVal) => {
             </n-button>
           </n-dropdown>
         </template>
-        <span>输入股票名称/代码关键词开始吧~~~</span>
+        <span>输入股票名称/代码关键词开始添加自选</span>
       </n-popover>
-
-      <n-button type="info" @click="SendDanmu" v-if="data.enableDanmu">
-        <n-icon :component="ChatboxOutline"/> &nbsp;发送弹幕
-      </n-button>
     </n-input-group>
   </div>
   <n-modal transform-origin="center" size="small" v-model:show="modalShow" :title="formModel.name" style="width: 800px;max-width: calc(100vw - 32px);"

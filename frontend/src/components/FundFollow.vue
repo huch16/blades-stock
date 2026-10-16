@@ -1,6 +1,6 @@
 <script setup>
 import {h, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, computed} from "vue";
-import {Add, ChatboxOutline, RefreshOutline} from "@vicons/ionicons5";
+import {Add, RefreshOutline} from "@vicons/ionicons5";
 import {NButton, NEllipsis, NText, useMessage, NTag, NModal, NDataTable, NPopover, NIcon} from "naive-ui";
 import {
   FollowFund,
@@ -14,11 +14,8 @@ import {
   GetFundTop10Holdings
 } from "../../wailsjs/go/main/App";
 import {Environment} from "../../wailsjs/runtime";
-import vueDanmaku from 'vue3-danmaku'
 import FundKlineChart from "./FundKlineChart.vue";
 
-const danmus = ref([])
-const ws = ref(null)
 const icon = ref(null)
 const message = useMessage()
 const chartModalShow = ref(false)
@@ -39,7 +36,6 @@ const data = reactive({
   airesult: "",
   openAiEnable: false,
   loading: true,
-  enableDanmu: false,
 })
 
 const followList = ref([])
@@ -123,7 +119,6 @@ const netValueColumns = computed(() => {
 onBeforeMount(() => {
   GetConfig().then(result => {
     if (result.openAiEnable) data.openAiEnable = true
-    if (result.enableDanmu) data.enableDanmu = true
     if (result.darkTheme) darkTheme.value = true
   })
   loadFollowedFunds()
@@ -133,18 +128,6 @@ onMounted(() => {
   GetVersionInfo().then((res) => {
     icon.value = res.icon
   })
-
-  try {
-    ws.value = new WebSocket('ws://8.134.249.145:16688/ws');
-    ws.value.onopen = () => {}
-    ws.value.onmessage = (event) => {
-      if (data.enableDanmu) danmus.value.push(event.data)
-    }
-    ws.value.onerror = (error) => { console.warn('[Danmu] WebSocket 连接异常:', error) }
-    ws.value.onclose = () => {}
-  } catch (e) {
-    console.warn('[Danmu] WebSocket 初始化跳过:', e)
-  }
 
   ticker.value = setInterval(() => {
     refreshAllFunds()
@@ -160,7 +143,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearInterval(ticker.value)
   clearInterval(countdownTimer.value)
-  if (ws.value) ws.value.close()
   message.destroyAll()
 })
 
@@ -178,22 +160,6 @@ function manualRefresh() {
 
 function preloadHoldings() {
   loadCurrentPageHoldings()
-}
-
-function SendDanmu() {
-  if (!data.name || !data.name.trim()) return
-  const text = data.name.trim()
-  danmus.value.push(text)
-  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
-    try {
-      ws.value.send(text)
-    } catch (e) {
-      console.warn('[Danmu] send error:', e)
-    }
-  }
-  message.info("弹幕已发送: " + text)
-  data.name = ""
-  data.code = ""
 }
 
 async function AddFund() {
@@ -221,12 +187,18 @@ async function AddFund() {
   }
   FollowFund(code).then(result => {
     if (result) {
-      message.success("关注成功: " + code)
+      if (result.includes("成功")) {
+        message.success(result + ": " + code)
+      } else {
+        message.info(result)
+      }
       data.name = ""
       data.code = ""
       options.value = []
       loadFollowedFunds()
     }
+  }).catch(err => {
+    message.error("关注失败: " + (err?.message || err))
   })
 }
 
@@ -317,7 +289,7 @@ function loadNetValueHistory(code) {
 
 function isOnExchangeFund(code) {
   const p = code?.substring(0, 2)
-  return ['15', '16', '50', '51', '52'].includes(p)
+  return ['15', '16', '18', '50', '51', '52', '56', '58'].includes(p)
 }
 
 function rateType(rate) {
@@ -368,18 +340,6 @@ function blinkBorder(findId) {
 </script>
 
 <template>
-  <vue-danmaku
-    v-model:danmus="danmus"
-    use-slot
-    style="height:100px; width:100%;z-index: 9;position:absolute; top: 400px; pointer-events: none;"
-  >
-    <template #dm="{ danmu }">
-      <n-gradient-text type="info">
-        <n-icon :component="ChatboxOutline" />{{ danmu }}
-      </n-gradient-text>
-    </template>
-  </vue-danmaku>
-
   <n-divider style="margin: 4px 0 8px 0" />
 
   <n-input
@@ -766,17 +726,18 @@ function blinkBorder(findId) {
     />
   </n-modal>
 
-  <div style="position: fixed;bottom: 64px;right:20px;z-index: 100;width: 420px;max-width: calc(100vw - 40px);">
+  <div style="position: fixed;bottom: 64px;right:20px;z-index: 100;width: 360px;max-width: calc(100vw - 40px);">
     <n-input-group style="box-shadow: 0 4px 18px rgba(0,0,0,0.22); border-radius: 8px; overflow: hidden; background: var(--n-color, #fff);">
       <n-auto-complete
         v-model:value="data.name"
         :input-props="{ autocomplete: 'disabled' }"
         :options="options"
-        placeholder="基金名称/代码/弹幕"
+        placeholder="输入基金/ETF名称或6位代码"
         clearable
         :on-select="onSelectFund"
         @update:value="getFundList"
         @input="getFundList(data.name)"
+        @keyup.enter="AddFund"
       />
       <n-popover
         trigger="manual"
@@ -790,14 +751,8 @@ function blinkBorder(findId) {
             <n-icon :component="Add" />&nbsp;关注
           </n-button>
         </template>
-        <span>输入基金名称/代码关键词开始吧~~~</span>
+        <span>输入基金或ETF名称/代码关键词开始关注</span>
       </n-popover>
-      <n-button
-        type="info"
-        @click="SendDanmu"
-      >
-        <n-icon :component="ChatboxOutline" />&nbsp;发送弹幕
-      </n-button>
     </n-input-group>
   </div>
 </template>

@@ -52,7 +52,7 @@ function triggerAiStockAnalysis(row: StockRow) {
 2. 【买卖点与盈亏比】：若次日入场，合理的低吸/确认买点在哪里？关键防守支撑与失效止损位设在何处？
 3. 【操作纪律锦囊】：给出 1 条针对该形态的核心避坑提醒。`
 
-  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  EventsEmit('openFloatingAgentWithQuestion', { question: prompt, agentMode: 'direct' })
   message.success(`已发起 [${stockName}] AI 信号推演！`)
 }
 
@@ -80,7 +80,7 @@ function triggerAiStrategySummary() {
 2. 【指标胜率与主力陷阱防范】：在当前市场阶段，此类指标形态通常胜率如何？最容易遇到哪些主力骗线套路？
 3. 【精选标的与实操买卖纪律】：从该股票池中优选标的的标准是什么？给出严格的仓位管理与止损纪律。`
 
-  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  EventsEmit('openFloatingAgentWithQuestion', { question: prompt, agentMode: 'direct' })
   message.success('已发起选股策略 AI 共振推演！')
 }
 const saveForm = reactive({
