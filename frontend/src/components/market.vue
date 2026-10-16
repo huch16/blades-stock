@@ -94,13 +94,14 @@ let treemapchart =null;
 
 function getIndex() {
   GlobalStockIndexes().then((res) => {
+    if (!res) return
     globalStockIndexes.value = res
-    common.value = res["common"]
-    america.value = res["america"]
-    europe.value = res["europe"]
-    asia.value = res["asia"]
-    other.value = res["other"]
-  })
+    common.value = Array.isArray(res["common"]) ? res["common"] : []
+    america.value = Array.isArray(res["america"]) ? res["america"] : []
+    europe.value = Array.isArray(res["europe"]) ? res["europe"] : []
+    asia.value = Array.isArray(res["asia"]) ? res["asia"] : []
+    other.value = Array.isArray(res["other"]) ? res["other"] : []
+  }).catch(() => {})
 }
 
 onBeforeMount(() => {
@@ -633,22 +634,19 @@ function openMarketIntelligence(type) {
                       :y-gap="0"
                     >
                       <n-gi>
-                        <n-text :type="item.zdf>0?'error':'success'">
-                          <n-image
-                            :src="item.img"
-                            width="20"
-                          /> &nbsp;{{ item.name }}
+                        <n-text :type="Number(item.zdf)>=0?'error':'success'">
+                          {{ item.name }}
                         </n-text>
                       </n-gi>
                       <n-gi>
-                        <n-text :type="item.zdf>0?'error':'success'">
+                        <n-text :type="Number(item.zdf)>=0?'error':'success'">
                           {{ item.zxj }}
                         </n-text>&nbsp;
-                        <n-text :type="item.zdf>0?'error':'success'">
+                        <n-text :type="Number(item.zdf)>=0?'error':'success'">
                           <n-number-animation
                             :precision="2"
                             :from="0"
-                            :to="item.zdf"
+                            :to="Number(item.zdf) || 0"
                           />
                           %
                         </n-text>
@@ -1547,7 +1545,7 @@ function openMarketIntelligence(type) {
 
   <div
     v-if="summaryBTN"
-    style="position: fixed;bottom: 18px;right:25px;z-index: 10;"
+    style="position: fixed;bottom: 64px;right:25px;z-index: 99;"
   >
     <n-input-group>
       <n-button

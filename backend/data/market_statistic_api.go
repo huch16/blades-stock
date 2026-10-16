@@ -165,7 +165,22 @@ func (a *MarketStatisticApi) GetTodayData() []models.MarketStatistic {
 	var latest models.MarketStatistic
 	if err := db.Dao.Order("data_date DESC, data_time DESC").First(&latest).Error; err == nil {
 		db.Dao.Where("data_date = ?", latest.DataDate).Order("data_time ASC").Find(&data)
+		if len(data) > 0 {
+			return data
+		}
 	}
+
+	// 关键自愈：如果数据库完全无数据（如全新安装），立即在线采集一次最新盘面统计
+	if err := a.FetchAndSave(); err == nil {
+		db.Dao.Where("data_date = ?", today).Order("data_time ASC").Find(&data)
+		if len(data) > 0 {
+			return data
+		}
+		if err := db.Dao.Order("data_date DESC, data_time DESC").First(&latest).Error; err == nil {
+			db.Dao.Where("data_date = ?", latest.DataDate).Order("data_time ASC").Find(&data)
+		}
+	}
+
 	return data
 }
 

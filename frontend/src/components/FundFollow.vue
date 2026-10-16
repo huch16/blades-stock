@@ -134,13 +134,17 @@ onMounted(() => {
     icon.value = res.icon
   })
 
-  ws.value = new WebSocket('ws://8.134.249.145:16688/ws');
-  ws.value.onopen = () => {}
-  ws.value.onmessage = (event) => {
-    if (data.enableDanmu) danmus.value.push(event.data)
+  try {
+    ws.value = new WebSocket('ws://8.134.249.145:16688/ws');
+    ws.value.onopen = () => {}
+    ws.value.onmessage = (event) => {
+      if (data.enableDanmu) danmus.value.push(event.data)
+    }
+    ws.value.onerror = (error) => { console.warn('[Danmu] WebSocket 连接异常:', error) }
+    ws.value.onclose = () => {}
+  } catch (e) {
+    console.warn('[Danmu] WebSocket 初始化跳过:', e)
   }
-  ws.value.onerror = (error) => { console.error('WebSocket 错误:', error) }
-  ws.value.onclose = () => {}
 
   ticker.value = setInterval(() => {
     refreshAllFunds()
@@ -177,18 +181,50 @@ function preloadHoldings() {
 }
 
 function SendDanmu() {
-  ws.value.send(data.name)
+  if (!data.name || !data.name.trim()) return
+  const text = data.name.trim()
+  danmus.value.push(text)
+  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+    try {
+      ws.value.send(text)
+    } catch (e) {
+      console.warn('[Danmu] send error:', e)
+    }
+  }
+  message.info("弹幕已发送: " + text)
+  data.name = ""
+  data.code = ""
 }
 
-function AddFund() {
-  if (!data.code) {
+async function AddFund() {
+  let code = data.code
+  if (!code && data.name) {
+    const raw = data.name.trim()
+    const match = raw.match(/\b\d{6}\b/)
+    if (match) {
+      code = match[0]
+    } else if (options.value.length > 0) {
+      code = options.value[0].value
+    } else {
+      try {
+        const res = await GetfundList(raw)
+        if (res && res.length > 0) {
+          code = res[0].code
+        }
+      } catch (e) {}
+    }
+  }
+  if (!code) {
     showPopover.value = true
     setTimeout(() => { showPopover.value = false }, 3000)
     return
   }
-  FollowFund(data.code).then(result => {
+  FollowFund(code).then(result => {
     if (result) {
-      message.success("关注成功")
+      message.success("关注成功: " + code)
+      data.name = ""
+      data.code = ""
+      options.value = []
       loadFollowedFunds()
     }
   })
@@ -207,19 +243,33 @@ function unFollow(code) {
 }
 
 function getFundList(value) {
-  GetfundList(value).then(result => {
+  if (!value || !value.trim()) {
     options.value = []
-    result.forEach(item => {
-      options.value.push({
-        label: item.name + " [" + item.code + "]",
-        value: item.code,
+    return
+  }
+  GetfundList(value.trim()).then(result => {
+    options.value = []
+    if (Array.isArray(result)) {
+      result.forEach(item => {
+        options.value.push({
+          label: (item.name || item.fullName || '') + " [" + item.code + "]",
+          value: item.code,
+        })
       })
-    })
+    }
+  }).catch(() => {
+    options.value = []
   })
 }
 
 function onSelectFund(value) {
   data.code = value
+  const found = options.value.find(item => item.value === value)
+  if (found) {
+    data.name = found.label
+  } else {
+    data.name = value
+  }
   blinkBorder(value)
 }
 
@@ -716,8 +766,8 @@ function blinkBorder(findId) {
     />
   </n-modal>
 
-  <div style="position: fixed;bottom: 18px;right:5px;z-index: 10;width: 400px">
-    <n-input-group>
+  <div style="position: fixed;bottom: 64px;right:20px;z-index: 100;width: 420px;max-width: calc(100vw - 40px);">
+    <n-input-group style="box-shadow: 0 4px 18px rgba(0,0,0,0.22); border-radius: 8px; overflow: hidden; background: var(--n-color, #fff);">
       <n-auto-complete
         v-model:value="data.name"
         :input-props="{ autocomplete: 'disabled' }"
@@ -725,7 +775,8 @@ function blinkBorder(findId) {
         placeholder="基金名称/代码/弹幕"
         clearable
         :on-select="onSelectFund"
-        @update-value="getFundList"
+        @update:value="getFundList"
+        @input="getFundList(data.name)"
       />
       <n-popover
         trigger="manual"
@@ -742,7 +793,6 @@ function blinkBorder(findId) {
         <span>输入基金名称/代码关键词开始吧~~~</span>
       </n-popover>
       <n-button
-        v-if="data.enableDanmu"
         type="info"
         @click="SendDanmu"
       >

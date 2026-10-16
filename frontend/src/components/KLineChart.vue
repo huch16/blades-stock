@@ -2,7 +2,7 @@
 
 import {GetStockKLine} from "../../wailsjs/go/main/App";
 import * as echarts from "../utils/echarts";
-import {onMounted, ref} from "vue";
+import {onMounted, onUnmounted, ref} from "vue";
 import _ from "lodash";
 const { code,stockName,darkTheme,kDays ,chartHeight} = defineProps({
   code: {
@@ -32,22 +32,50 @@ const downColor = '#00da3c';
 const downBorderColor = '';
 const kLineChartRef = ref(null);
 
+let resizeHandler = null
+
 onMounted(() => {
   handleKLine(code,stockName)
+  resizeHandler = () => {
+    if (kLineChartRef.value) {
+      echarts.getInstanceByDom(kLineChartRef.value)?.resize()
+    }
+  }
+  window.addEventListener('resize', resizeHandler)
 })
 
-function  handleKLine(code,stockName){
-  console.log("handleKLine",code,stockName)
-  const chart = echarts.init(kLineChartRef.value);
+onUnmounted(() => {
+  if (resizeHandler) {
+    window.removeEventListener('resize', resizeHandler)
+  }
+})
+
+function handleKLine(code,stockName){
+  if (!kLineChartRef.value) return
+  const chart = echarts.getInstanceByDom(kLineChartRef.value) || echarts.init(kLineChartRef.value);
   chart.showLoading()
   GetStockKLine(code,stockName,365).then(result => {
-    //console.log("GetStockKLine",result)
+    chart.hideLoading()
+    if (!result || !Array.isArray(result) || result.length < 2) {
+      chart.setOption({
+        darkMode: darkTheme,
+        title: {
+          text: (stockName || code) + ' 暂无日K线历史数据',
+          left: 'center',
+          top: 'middle',
+          textStyle: {
+            color: darkTheme ? '#aaa' : '#888',
+            fontSize: 14
+          }
+        }
+      })
+      return
+    }
     const categoryData = [];
     const values = [];
     const volumns=[];
     for (let i = 0; i < result.length; i++) {
       let resultElement=result[i]
-      //console.log("resultElement:{}",resultElement)
       categoryData.push(resultElement.day)
       let flag=Number(resultElement.close)>Number(resultElement.open)?1:-1
       if(i>0){
@@ -61,14 +89,15 @@ function  handleKLine(code,stockName){
       ])
       volumns.push([i,Number(resultElement.volume)/10000,flag])
     }
-    ////console.log("categoryData",categoryData)
-    ////console.log("values",values)
+    const lastClose = Number(values[values.length-1][1])
+    const prevClose = Number(values[values.length-2][1])
+    const changeRate = prevClose > 0 ? (((lastClose - prevClose) / prevClose) * 100).toFixed(2) : '0.00'
     let option = {
       title: {
-        text: stockName+" "+categoryData[values.length-1]+"  "+values[values.length-1][1]+" "+((values[values.length-1][1]-values[values.length-2][1])/values[values.length-2][1]*100).toFixed(2)+"%",
+        text: `${stockName || code} ${categoryData[values.length-1]}  ${lastClose} (${changeRate}%)`,
         left: '0px',
         textStyle: {
-          color: Number(values[values.length-1][1])>Number(values[values.length-2][1])?'red':'green',
+          color: lastClose >= prevClose ? '#ef4444' : '#22c55e',
           fontSize: 14
         },
       },
@@ -365,6 +394,18 @@ function  handleKLine(code,stockName){
     };
     chart.setOption(option);
     chart.hideLoading()
+  }).catch(err => {
+    console.warn('GetStockKLine error:', err)
+    chart.hideLoading()
+    chart.setOption({
+      darkMode: darkTheme,
+      title: {
+        text: (stockName || code) + ' K线加载超时或异常',
+        left: 'center',
+        top: 'middle',
+        textStyle: { color: darkTheme ? '#aaa' : '#888', fontSize: 13 }
+      }
+    })
   })
 }
 function calculateMA(dayCount,values) {

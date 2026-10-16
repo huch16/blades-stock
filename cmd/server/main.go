@@ -79,10 +79,37 @@ func main() {
 		}
 	}()
 
-	// 5. 初始化安全鉴权
+	// 5. 启动盘面多空统计、板块资金流向、概念热度后台定时采集与自愈
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Warnf("[MarketStatsCron] recovered from panic: %v", r)
+			}
+		}()
+		// 启动时立即主动抓取一次，确保全新部署开箱即有盘面图表数据
+		go func() {
+			_ = data.NewMarketStatisticApi().FetchAndSave()
+			_, _ = data.NewBKFundFlowApi().FetchAndSave()
+			_, _ = data.NewConceptFundFlowApi().FetchAndSave()
+			if changes := data.NewStockChangesApi().GetStockAllChanges(0, 100); changes != nil && len(changes.Data) > 0 {
+				_, _ = data.NewStockChangeHistoryService().SaveStockChangesWithDedup(changes.Data)
+			}
+		}()
+
+		// 每 3 分钟定时轮询更新盘面统计与资金流向
+		statTicker := time.NewTicker(3 * time.Minute)
+		defer statTicker.Stop()
+		for range statTicker.C {
+			_ = data.NewMarketStatisticApi().FetchAndSave()
+			_, _ = data.NewBKFundFlowApi().FetchAndSave()
+			_, _ = data.NewConceptFundFlowApi().FetchAndSave()
+		}
+	}()
+
+	// 6. 初始化安全鉴权
 	initAuth(dataDir)
 
-	// 6. 初始化核心业务微服务
+	// 7. 初始化核心业务微服务
 	marketService := services.NewMarketService()
 	quantService := services.NewQuantService()
 	agentService := services.NewAgentService()

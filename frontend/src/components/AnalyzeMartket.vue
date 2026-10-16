@@ -75,12 +75,24 @@ onMounted(() => {
     getIndex()
     handleTreemap()
   }, 1000 * 10)
+
+  window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(()=>{
   clearInterval(handleChartInterval)
   clearInterval(handleIndexInterval)
+  window.removeEventListener('resize', handleResize)
 })
+
+function handleResize() {
+  if (chartRef.value) echarts.getInstanceByDom(chartRef.value)?.resize()
+  if (limitChartRef.value) echarts.getInstanceByDom(limitChartRef.value)?.resize()
+  if (changeRankConceptRef.value) echarts.getInstanceByDom(changeRankConceptRef.value)?.resize()
+  if (treemapRef.value) echarts.getInstanceByDom(treemapRef.value)?.resize()
+  if (dailyUpDownChartRef.value) echarts.getInstanceByDom(dailyUpDownChartRef.value)?.resize()
+  if (dailyLimitChartRef.value) echarts.getInstanceByDom(dailyLimitChartRef.value)?.resize()
+}
 
 watch(showTreemap, (newVal) => {
   if (newVal) {
@@ -140,22 +152,22 @@ watch(showDimensionModal, (newVal) => {
 
 function getIndex() {
   GlobalStockIndexes().then((res) => {
+    if (!res) return
     globalStockIndexes.value = res
-    common.value = res["common"]
-    america.value = res["america"]
-    europe.value = res["europe"]
-    asia.value = res["asia"]
-    other.value = res["other"]
-    mainIndex.value=asia.value.filter(function (item) {
-      return ['上海',"深圳","香港","台湾","北京","东京","首尔","纽约","纳斯达克"].includes(item.location)
-    }).concat(america.value.filter(function (item) {
-      return ['上海',"深圳","香港","台湾","北京","东京","首尔","纽约","纳斯达克"].includes(item.location)
-    }))
+    common.value = Array.isArray(res["common"]) ? res["common"] : []
+    america.value = Array.isArray(res["america"]) ? res["america"] : []
+    europe.value = Array.isArray(res["europe"]) ? res["europe"] : []
+    asia.value = Array.isArray(res["asia"]) ? res["asia"] : []
+    other.value = Array.isArray(res["other"]) ? res["other"] : []
 
-    chinaIndex.value=asia.value.filter(function (item) {
-      return ['上海',"深圳","香港","台湾","北京"].includes(item.location)
-    })
+    const validLocations = ['上海', '深圳', '香港', '台湾', '北京', '东京', '首尔', '纽约', '纳斯达克']
+    const filteredAsia = asia.value.filter(item => item && validLocations.includes(item.location))
+    const filteredAmerica = america.value.filter(item => item && validLocations.includes(item.location))
+    mainIndex.value = filteredAsia.concat(filteredAmerica)
 
+    chinaIndex.value = asia.value.filter(item => item && ['上海', '深圳', '香港', '台湾', '北京'].includes(item.location))
+  }).catch(err => {
+    console.warn('GlobalStockIndexes error:', err)
   })
 }
 
@@ -165,16 +177,69 @@ async function handleChart(){
     if (data && data.length > 0) {
       renderUpDownChart(data)
       renderLimitChart(data)
+    } else {
+      renderEmptyUpDownChart()
+      renderEmptyLimitChart()
     }
   } catch (error) {
     console.error('获取市场统计数据失败:', error)
+    renderEmptyUpDownChart()
+    renderEmptyLimitChart()
   }
+}
+
+function renderEmptyUpDownChart() {
+  if (!chartRef.value) return
+  const chart = echarts.getInstanceByDom(chartRef.value) || echarts.init(chartRef.value)
+  chart.setOption({
+    darkMode: darkTheme,
+    title: {
+      text: '涨跌家数比 (盘中自动刷新)',
+      left: 'center',
+      top: 15,
+      textStyle: { color: darkTheme ? '#aaa' : '#666', fontSize: 14 }
+    },
+    graphic: {
+      type: 'text',
+      left: 'center',
+      top: 'middle',
+      style: {
+        text: '📊 正在采集今日盘面涨跌统计数据...',
+        fill: darkTheme ? '#777' : '#999',
+        fontSize: 13
+      }
+    }
+  })
+}
+
+function renderEmptyLimitChart() {
+  if (!limitChartRef.value) return
+  const chart = echarts.getInstanceByDom(limitChartRef.value) || echarts.init(limitChartRef.value)
+  chart.setOption({
+    darkMode: darkTheme,
+    title: {
+      text: '涨跌停家数比 (盘中自动刷新)',
+      left: 'center',
+      top: 15,
+      textStyle: { color: darkTheme ? '#aaa' : '#666', fontSize: 14 }
+    },
+    graphic: {
+      type: 'text',
+      left: 'center',
+      top: 'middle',
+      style: {
+        text: '⚡ 正在采集今日涨跌停分布数据...',
+        fill: darkTheme ? '#777' : '#999',
+        fontSize: 13
+      }
+    }
+  })
 }
 
 function renderUpDownChart(data) {
   if (!chartRef.value || !data || data.length === 0) return
   
-  const chart = echarts.init(chartRef.value)
+  const chart = echarts.getInstanceByDom(chartRef.value) || echarts.init(chartRef.value)
   
   const times = data.map(d => d.dataTime)
   const upCounts = data.map(d => d.upCount)
@@ -370,7 +435,7 @@ function renderUpDownChart(data) {
 function renderLimitChart(data) {
   if (!limitChartRef.value || !data || data.length === 0) return
   
-  const chart = echarts.init(limitChartRef.value)
+  const chart = echarts.getInstanceByDom(limitChartRef.value) || echarts.init(limitChartRef.value)
   
   const times = data.map(d => d.dataTime)
   const limitUps = data.map(d => d.limitUp)
@@ -1474,6 +1539,26 @@ async function handleChangeRank() {
       }
       if (result.topConcepts && result.topConcepts.length > 0) {
         renderRankChart(changeRankConceptRef, `${periodLabel}异动次数最多的概念`, result.topConcepts, 'concept')
+      } else if (changeRankConceptRef.value) {
+        const chart = echarts.getInstanceByDom(changeRankConceptRef.value) || echarts.init(changeRankConceptRef.value)
+        chart.setOption({
+          darkMode: darkTheme,
+          title: {
+            text: `${periodLabel}异动次数最多的概念`,
+            left: 'center',
+            textStyle: { color: darkTheme ? '#ccc' : '#333', fontSize: 14 }
+          },
+          graphic: {
+            type: 'text',
+            left: 'center',
+            top: 'middle',
+            style: {
+              text: '🔍 暂无概念板块异动统计数据',
+              fill: darkTheme ? '#777' : '#999',
+              fontSize: 13
+            }
+          }
+        })
       }
     }
   } catch (error) {
@@ -1484,7 +1569,7 @@ async function handleChangeRank() {
 function renderRankChart(chartRef, title, items, dimension) {
   if (!chartRef.value || !items || items.length === 0) return
 
-  const chart = echarts.init(chartRef.value)
+  const chart = echarts.getInstanceByDom(chartRef.value) || echarts.init(chartRef.value)
 
   const names = items.map(d => d.name).reverse()
   const upValues = items.map(d => d.upCount).reverse()
@@ -1904,33 +1989,30 @@ function handleTreemap() {
   >
     <n-collapse-item name="1">
       <template #header>
-        <n-flex>
+        <n-flex align="center" :size="6" :wrap="true">
           <n-tag
             v-for="(item, index) in mainIndex"
+            :key="item.code || index"
             size="small"
             :bordered="false"
-            :type="item.zdf>0?'error':'success'"
+            :type="Number(item.zdf) >= 0 ? 'error' : 'success'"
           >
-            <n-flex>
-              <n-image
-                :width="20"
-                :src="item.img"
-              />
+            <n-flex align="center" :size="4">
               <n-text
-                style="font-size: 14px"
-                :type="item.zdf>0?'error':'success'"
+                style="font-size: 13px; font-weight: 600"
+                :type="Number(item.zdf) >= 0 ? 'error' : 'success'"
               >
                 {{ item.name }}&nbsp;{{ item.zxj }}
               </n-text>
               <n-number-animation
                 :precision="2"
                 :from="0"
-                :to="item.zdf"
-                style="font-size: 14px"
+                :to="Number(item.zdf) || 0"
+                style="font-size: 13px; font-weight: 600"
               />
               <n-text
-                style="margin-left: -12px;font-size: 14px"
-                :type="item.zdf>0?'error':'success'"
+                style="font-size: 13px"
+                :type="Number(item.zdf) >= 0 ? 'error' : 'success'"
               >
                 %
               </n-text>

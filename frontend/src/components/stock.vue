@@ -528,27 +528,22 @@ onMounted(() => {
   GetVersionInfo().then((res) => {
     icon.value = res.icon
   })
-  // 创建 WebSocket 连接
-  ws.value = new WebSocket('ws://8.134.249.145:16688/ws'); // 替换为你的 WebSocket 服务器地址
-  //ws.value = new WebSocket('ws://localhost:16688/ws'); // 替换为你的 WebSocket 服务器地址
-
-  ws.value.onopen = () => {
-    //console.log('WebSocket 连接已打开');
-  };
-
-  ws.value.onmessage = (event) => {
-    if (data.enableDanmu) {
-      danmus.value.push(event.data);
-    }
-  };
-
-  ws.value.onerror = (error) => {
-    console.error('WebSocket 错误:', error);
-  };
-
-  ws.value.onclose = () => {
-    //console.log('WebSocket 连接已关闭');
-  };
+  // 创建 WebSocket 连接 (兼容 HTTPS 环境安全降级)
+  try {
+    ws.value = new WebSocket('ws://8.134.249.145:16688/ws');
+    ws.value.onopen = () => {};
+    ws.value.onmessage = (event) => {
+      if (data.enableDanmu) {
+        danmus.value.push(event.data);
+      }
+    };
+    ws.value.onerror = (error) => {
+      console.warn('[Danmu] WebSocket 连接异常:', error);
+    };
+    ws.value.onclose = () => {};
+  } catch (e) {
+    console.warn('[Danmu] WebSocket 初始化跳过:', e);
+  }
 })
 // 清理拖拽事件监听器
 // 清理拖拽事件监听器
@@ -701,8 +696,34 @@ function handleFollowSelect(key) {
   doFollowStock(Number(key))
 }
 
+function resolveStockCode() {
+  if (data?.code) return data.code
+  if (!data?.name) return ''
+  const trimmed = data.name.trim()
+  const match = trimmed.match(/\b\d{6}\b/)
+  if (match) {
+    const d = match[0][0]
+    const prefix = (d === '6' || d === '5') ? 'sh' : 'sz'
+    data.code = prefix + match[0]
+    return data.code
+  }
+  if (options.value.length > 0) {
+    const opt = options.value[0].value
+    if (opt.indexOf(".") > 0) {
+      data.code = opt.split(".")[1].toLowerCase() + opt.split(".")[0]
+    } else {
+      data.code = opt
+    }
+    return data.code
+  }
+  return ''
+}
+
 // 关注并加入分组（groupId=0 表示不分组），参考形态选股 doFollow
 function doFollowStock(groupId) {
+  if (!data?.code) {
+    resolveStockCode()
+  }
   if (!data?.code) {
     message.error("请输入有效股票代码")
     showPopover.value = true
@@ -755,18 +776,45 @@ function removeMonitor(code, name, key) {
 
 
 function SendDanmu() {
-  //danmus.value.push(data.name)
-  //console.log("SendDanmu",data.name)
-  //console.log("SendDanmu-readyState", ws.value.readyState)
-  ws.value.send(data.name)
+  if (!data.name || !data.name.trim()) return
+  const text = data.name.trim()
+  danmus.value.push(text)
+  if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+    try {
+      ws.value.send(text)
+    } catch (e) {
+      console.warn('[Danmu] send error:', e)
+    }
+  }
+  message.info("弹幕已发送: " + text)
+  data.name = ""
+  data.code = ""
 }
 
 function getStockList(value) {
+  if (!value || !value.trim()) {
+    options.value = []
+    return
+  }
+  const q = value.trim().toLowerCase()
+  let result = stockList.value.filter(item =>
+    (item.name && item.name.toLowerCase().includes(q)) ||
+    (item.ts_code && item.ts_code.toLowerCase().includes(q)) ||
+    (item.symbol && item.symbol.toLowerCase().includes(q)) ||
+    (item.cnspell && item.cnspell.toLowerCase().includes(q))
+  ).slice(0, 30)
 
+  if (result.length === 0) {
+    GetStockList(value.trim()).then(remote => {
+      if (Array.isArray(remote) && remote.length > 0) {
+        options.value = remote.slice(0, 30).map(item => ({
+          label: item.name + " - " + item.ts_code,
+          value: item.ts_code
+        }))
+      }
+    }).catch(() => {})
+  }
 
-  // //console.log("getStockList",value)
-  let result;
-  result = stockList.value.filter(item => item.name.includes(value) || item.ts_code.includes(value))
   options.value = result.map(item => {
     return {
       label: item.name + " - " + item.ts_code,
@@ -777,8 +825,6 @@ function getStockList(value) {
     data.code = value
   }
 
-  //console.log("getStockList-options",data.code)
-
   if (data.code) {
     let findId = data.code
     if (findId.startsWith("us")) {
@@ -786,8 +832,6 @@ function getStockList(value) {
     }
     blinkBorder(findId)
   }
-
-
 }
 
 function blinkBorder(findId) {
@@ -2478,18 +2522,18 @@ watch(modalShow6, (newVal) => {
     </n-tab-pane>
   </n-tabs>
 
-  <div style="position: fixed;bottom: 18px;right:5px;z-index: 10;width: 400px">
-    <!--    <n-card :bordered="false">-->
-    <n-input-group>
-      <!--        <n-button  type="error" @click="addBTN=!addBTN" > <n-icon :component="Search"/>&nbsp;<n-text  v-if="addBTN">隐藏</n-text></n-button>-->
-
+  <div style="position: fixed;bottom: 64px;right:20px;z-index: 100;width: 420px;max-width: calc(100vw - 40px);">
+    <n-input-group style="box-shadow: 0 4px 18px rgba(0,0,0,0.22); border-radius: 8px; overflow: hidden; background: var(--n-color, #fff);">
       <n-auto-complete v-model:value="data.name" v-if="addBTN"
                        :input-props="{
                                 autocomplete: 'disabled',
                               }"
                        :options="options"
                        placeholder="股票指数名称/代码/弹幕"
-                       clearable @update-value="getStockList" :on-select="onSelect"/>
+                       clearable
+                       @update:value="getStockList"
+                       @input="getStockList(data.name)"
+                       :on-select="onSelect"/>
 
       <n-popover trigger="manual" :show="showPopover">
         <template #trigger>
@@ -2506,7 +2550,6 @@ watch(modalShow6, (newVal) => {
         <n-icon :component="ChatboxOutline"/> &nbsp;发送弹幕
       </n-button>
     </n-input-group>
-    <!--    </n-card>-->
   </div>
   <n-modal transform-origin="center" size="small" v-model:show="modalShow" :title="formModel.name" style="width: 800px;max-width: calc(100vw - 32px);"
            :preset="'card'">

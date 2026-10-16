@@ -481,6 +481,32 @@ func TestRPCDispatcher_MethodParityAudit(t *testing.T) {
 	}
 }
 
+func TestGetStockKLineProbe(t *testing.T) {
+	handler := setupTestServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/App/GetStockKLine", bytes.NewBufferString(`["sh000001", "上证指数", 365]`))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	t.Logf("GetStockKLine sh000001: status=%d, bodyLen=%d", w.Code, w.Body.Len())
+	if w.Body.Len() < 200 {
+		t.Logf("body: %s", w.Body.String())
+	}
+}
+
+func TestFundListProbe(t *testing.T) {
+	handler := setupTestServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/App/GetfundList", bytes.NewBufferString(`["110011"]`))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	t.Logf("GetfundList 110011: status=%d, body=%s", w.Code, w.Body.String())
+
+	reqName := httptest.NewRequest(http.MethodPost, "/api/App/GetfundList", bytes.NewBufferString(`["易方达"]`))
+	wName := httptest.NewRecorder()
+	handler.ServeHTTP(wName, reqName)
+	t.Logf("GetfundList 易方达: status=%d, body=%s", wName.Code, wName.Body.String())
+}
+
 func TestMarketNewsAndStockSearch(t *testing.T) {
 	handler := setupTestServer(t)
 
