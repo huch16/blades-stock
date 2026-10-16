@@ -30,6 +30,7 @@ type AgentMode string
 const (
 	AgentModeReact       AgentMode = "react"
 	AgentModePlanExecute AgentMode = "plan_execute"
+	AgentModeDirect      AgentMode = "direct"
 )
 
 type AgentInstance struct {
@@ -131,18 +132,27 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		modelProvider = NewFallbackModelProvider(modelProvider, aiConfig.ModelName, fallbacks, fbNames)
 	}
 
-	allTools := getToolsByQuestion(question, matchedSkills)
-	allTools = append(allTools, extraTools...)
-	allTools = WrapToolsWithQuota(allTools)
-
+	var allTools []bladesTools.Tool
 	var mode AgentMode
 	switch AgentMode(agentMode) {
+	case AgentModeDirect:
+		mode = AgentModeDirect
+		allTools = []bladesTools.Tool{} // direct 模式：纯研报推演，无需挂载外部工具与 MCP，杜绝额外超时
 	case AgentModeReact:
 		mode = AgentModeReact
+		allTools = getToolsByQuestion(question, matchedSkills)
+		allTools = append(allTools, extraTools...)
+		allTools = WrapToolsWithQuota(allTools)
 	case AgentModePlanExecute:
 		mode = AgentModePlanExecute
+		allTools = getToolsByQuestion(question, matchedSkills)
+		allTools = append(allTools, extraTools...)
+		allTools = WrapToolsWithQuota(allTools)
 	default:
 		mode = classifyComplexity(question)
+		allTools = getToolsByQuestion(question, matchedSkills)
+		allTools = append(allTools, extraTools...)
+		allTools = WrapToolsWithQuota(allTools)
 	}
 
 	logger.SugaredLogger.Infof("Agent mode selected: %s (user=%q), question=%q, tools=%d", mode, agentMode, question, len(allTools))
@@ -190,10 +200,12 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 
 		var thinkingPrompt string
 		tpls := GetPromptTemplates()
-		if mode == "plan_execute" {
+		if mode == string(AgentModePlanExecute) {
 			thinkingPrompt = tpls.PlanExecuteThinking
 			thinkingPrompt = renderAvailableTools(thinkingPrompt, availableTools)
 			thinkingPrompt = renderTaskTemplate(thinkingPrompt, question)
+		} else if mode == string(AgentModeDirect) {
+			thinkingPrompt = "请直接根据输入中详实的一手数据进行专业深度量化分析，严格按照结构输出高质量 Markdown 研报。"
 		} else {
 			thinkingPrompt = tpls.ReactThinking
 		}

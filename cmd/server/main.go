@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"blades-stock/backend/agent"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
@@ -115,8 +116,9 @@ func main() {
 	agentService := services.NewAgentService()
 	settingsService := services.NewSettingsService()
 
-	// 挂载云端 SSE 广播作为 Agent 默认流式消息发射器
+	// 挂载云端 SSE 广播作为 Agent 默认流式消息发射器与智能研报广播钩子
 	agentService.SetDefaultEmitter(globalSSEHub.Broadcast)
+	agent.MarketReportBroadcastHook = globalSSEHub.Broadcast
 
 	// 5. 初始化通用 RPC 反射分发器
 	dispatcher := NewRPCDispatcher(marketService, quantService, agentService, settingsService)

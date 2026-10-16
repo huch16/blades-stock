@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 
 	"blades-stock/backend/data"
 	"blades-stock/backend/models"
@@ -133,29 +134,38 @@ func CalculateETFMomentum(code, name string, closes []float64) (*ETFMomentumScor
 	}, nil
 }
 
-// BatchCalculateETFMomentum 批量拉取核心 ETF 池历史K线，计算纯数学动量排名与硬风控指标
+// BatchCalculateETFMomentum 并发批量拉取核心 ETF 池历史K线，计算纯数学动量排名与硬风控指标
 func BatchCalculateETFMomentum(codes []string) ([]*ETFMomentumScoreResult, error) {
 	loader := NewStockDataLoader()
 	results := make([]*ETFMomentumScoreResult, 0, len(codes))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
 	for _, code := range codes {
-		clean := models.CleanStockCode(code)
-		closes, _, _, _, _, _, err := loader.LoadKLineData(clean, 40)
-		if err != nil || len(closes) < 21 {
-			continue
-		}
+		wg.Add(1)
+		go func(c string) {
+			defer wg.Done()
+			clean := models.CleanStockCode(c)
+			closes, _, _, _, _, _, err := loader.LoadKLineData(clean, 40)
+			if err != nil || len(closes) < 21 {
+				return
+			}
 
-		name := code
-		quotes, err := data.NewStockDataApi().GetStockCodeRealTimeData(code)
-		if err == nil && quotes != nil && len(*quotes) > 0 {
-			name = (*quotes)[0].Name
-		}
+			name := c
+			quotes, err := data.NewStockDataApi().GetStockCodeRealTimeData(c)
+			if err == nil && quotes != nil && len(*quotes) > 0 {
+				name = (*quotes)[0].Name
+			}
 
-		res, err := CalculateETFMomentum(code, name, closes)
-		if err == nil {
-			results = append(results, res)
-		}
+			res, err := CalculateETFMomentum(c, name, closes)
+			if err == nil && res != nil {
+				mu.Lock()
+				results = append(results, res)
+				mu.Unlock()
+			}
+		}(code)
 	}
+	wg.Wait()
 
 	// 按动量 Score 降序排序
 	sort.Slice(results, func(i, j int) bool {

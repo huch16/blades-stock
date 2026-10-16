@@ -23,6 +23,7 @@ import {
   GenerateETFRotationReport,
   GenerateSerenityResearchReport,
   GetLatestMarketIntelligenceReport,
+  GetLatestMarketIntelligenceReportByType,
   GetMarketLifecycleStatus,
   GetAiConfigs,
   GetConfig
@@ -243,12 +244,21 @@ async function refreshAll() {
 
 async function loadLatestForTab(tabKey) {
   try {
-    const latest = await GetLatestMarketIntelligenceReport()
-    if (latest && latest.type === tabKey) {
-      reports.value[tabKey] = latest
+    let report = null
+    if (typeof GetLatestMarketIntelligenceReportByType === 'function') {
+      report = await GetLatestMarketIntelligenceReportByType(tabKey)
+    }
+    if (!report) {
+      const latest = await GetLatestMarketIntelligenceReport()
+      if (latest && latest.type === tabKey) {
+        report = latest
+      }
+    }
+    if (report) {
+      reports.value[tabKey] = report
     }
   } catch (e) {
-    console.error('GetLatestMarketIntelligenceReport error:', e)
+    console.warn('loadLatestForTab error:', e)
   }
 }
 
@@ -300,11 +310,11 @@ async function generate() {
       reports.value[currentTab.value] = res
       message.success(`【${currentTitle.value}】生成成功！`)
     } else {
-      message.warning('生成完成，暂无内容返回')
+      message.warning('生成完成，暂无内容返回，请检查所选大模型的 API Key 及配额是否有效。')
     }
   } catch (err) {
     console.error('generate error:', err)
-    message.error(`生成失败: ${err?.message || err}`)
+    message.error(`研报生成失败: ${err?.message || err}。请检查 AI 配置是否有效，或切换其他大模型重试。`)
   } finally {
     loading.value = false
   }

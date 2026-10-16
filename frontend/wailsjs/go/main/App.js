@@ -818,6 +818,10 @@ export function GetLatestMarketIntelligenceReport() {
   return window['go']['main']['App']['GetLatestMarketIntelligenceReport']();
 }
 
+export function GetLatestMarketIntelligenceReportByType(arg1) {
+  return window['go']['main']['App']['GetLatestMarketIntelligenceReportByType'](arg1);
+}
+
 export function GetMarketLifecycleStatus() {
   return window['go']['main']['App']['GetMarketLifecycleStatus']();
 }

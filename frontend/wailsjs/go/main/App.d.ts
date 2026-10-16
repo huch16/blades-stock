@@ -414,6 +414,8 @@ export function GenerateSerenityResearchReport(arg1:string,arg2:string,arg3:numb
 
 export function GetLatestMarketIntelligenceReport():Promise<any>;
 
+export function GetLatestMarketIntelligenceReportByType(arg1:string):Promise<any>;
+
 export function GetMarketLifecycleStatus():Promise<any>;
 
 export function GetSystemStateSnapshot():Promise<any>;

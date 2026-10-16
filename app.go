@@ -2595,6 +2595,11 @@ func (a *App) GetLatestMarketIntelligenceReport() *agent.MarketIntelligenceRepor
 	return a.agentService.GetLatestMarketIntelligenceReport(a.ctx)
 }
 
+// GetLatestMarketIntelligenceReportByType 获取指定类型的最新研报
+func (a *App) GetLatestMarketIntelligenceReportByType(reportType string) *agent.MarketIntelligenceReport {
+	return a.agentService.GetLatestMarketIntelligenceReportByType(a.ctx, reportType)
+}
+
 // SearchCronTasks
 //
 //	@Description: 搜索定时任务

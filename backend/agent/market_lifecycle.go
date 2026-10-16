@@ -7,13 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"blades-stock/backend/agent/types"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
-	"blades-stock/backend/agent/types"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"gorm.io/gorm"
 )
 
 // MarketPhase 表示市场所处的时段
@@ -54,9 +55,28 @@ type MarketIntelligenceReport struct {
 }
 
 var (
-	lifecycleReportCacheMu sync.RWMutex
-	lifecycleLatestReport  *MarketIntelligenceReport
+	lifecycleReportCacheMu    sync.RWMutex
+	lifecycleLatestReport     *MarketIntelligenceReport
+	lifecycleReportsByType    = make(map[string]*MarketIntelligenceReport)
+	MarketReportBroadcastHook func(event string, data any)
 )
+
+func cacheReport(report *MarketIntelligenceReport) {
+	if report == nil {
+		return
+	}
+	lifecycleReportCacheMu.Lock()
+	lifecycleLatestReport = report
+	if lifecycleReportsByType == nil {
+		lifecycleReportsByType = make(map[string]*MarketIntelligenceReport)
+	}
+	lifecycleReportsByType[report.Type] = report
+	lifecycleReportCacheMu.Unlock()
+
+	if MarketReportBroadcastHook != nil {
+		MarketReportBroadcastHook("marketIntelligenceReport", report)
+	}
+}
 
 // MarketLifecycleService 市场全流程生命周期智能服务
 type MarketLifecycleService struct {
@@ -267,11 +287,13 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 - 给出明确的仓位建议（买入/持有/观望/减仓），并制定防守止损位；
 - 如遇风控拦截（回撤冷却或盈亏比不足），则明确给出观望或等待回调的建议；
 
+【数据注入说明】：隔夜外盘行情、核心关注ETF池最新状态、纯数学动量矩阵（21日加权对数回归）以及隔夜宏观核心要闻已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。
 全文请使用专业券商内参语气，数据引用请保持客观，避免过度解读。`, todayStr, globalBrief, etfSummary.String(), momentumTable, newsText.String())
 
+	sysPrompt := "你现在是顶级券商首席策略分析师兼量化宏观专家“财智”。所有核心客观数据（隔夜外盘、ETF行情与纯数学动量矩阵、隔夜财经要闻）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的五维体系输出深度结构化的专业 Markdown 研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, "")
+	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -285,8 +307,8 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
-	if strings.TrimSpace(finalReport) == "" {
-		return nil, fmt.Errorf("AI 生成盘前晨报内容为空")
+	if strings.TrimSpace(finalReport) == "" || strings.HasPrefix(strings.TrimSpace(finalReport), "❌") {
+		return nil, fmt.Errorf("AI 生成盘前晨报失败: %s", finalReport)
 	}
 
 	title := fmt.Sprintf("🌅 A股盘前智能前瞻与ETF轮动内参 (%s)", todayStr)
@@ -307,9 +329,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动盘前内参", finalReport, "pre_market_etf_"+todayStr, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
 
-	lifecycleReportCacheMu.Lock()
-	lifecycleLatestReport = report
-	lifecycleReportCacheMu.Unlock()
+	cacheReport(report)
 
 	// 桌面事件与 Windows 通知提醒
 	if s.ctx != nil {
@@ -336,9 +356,10 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 
 输出结构清晰的 Markdown 产业链深度拆解报告。`, sectorOrStockName, code, reason, sectorOrStockName)
 
+	sysPrompt := "你现在是专注于产业链瓶颈与卡脖子技术的研究专家“财智”。请直接根据输入中详实的一手异动与赛道信息，按照 Serenity 式产业研究框架输出深度结构化的 Markdown 产业链拆解研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, "")
+	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -352,8 +373,8 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
-	if strings.TrimSpace(finalReport) == "" {
-		return nil, fmt.Errorf("Serenity 产业链拆解生成失败")
+	if strings.TrimSpace(finalReport) == "" || strings.HasPrefix(strings.TrimSpace(finalReport), "❌") {
+		return nil, fmt.Errorf("Serenity 产业链拆解生成失败: %s", finalReport)
 	}
 
 	title := fmt.Sprintf("🔍 Serenity产业链深度拆解 — %s (%s)", sectorOrStockName, todayStr)
@@ -372,6 +393,8 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult(code, "Serenity产业链分析", finalReport, "serenity_"+code, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
+
+	cacheReport(report)
 
 	if s.ctx != nil {
 		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
@@ -438,11 +461,14 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 
 ### 🔮 四、明日走势推演与操作锦囊
 - 明日开盘剧本推演（高开冲高/低开探底/平开震荡）；
-- 应对方案与持仓风控金句。`, todayStr, statSummary.String(), uplimitJSON, btSummary)
+- 应对方案与持仓风控金句。
 
+【数据注入说明】：全天市场涨跌与量能分布、涨停连板与题材热度概要以及AI预测回测跟踪数据已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。`, todayStr, statSummary.String(), uplimitJSON, btSummary)
+
+	sysPrompt := "你现在是拥有20年实战经验的顶级A股量化私募投资总监“财智”。所有核心盘面客观数据（涨跌家数比、量能分布、涨停连板题材、AI回测胜率）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的结构输出深度复盘与次日推演报告。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, "")
+	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -456,8 +482,8 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
-	if strings.TrimSpace(finalReport) == "" {
-		return nil, fmt.Errorf("AI 生成收盘复盘内容为空")
+	if strings.TrimSpace(finalReport) == "" || strings.HasPrefix(strings.TrimSpace(finalReport), "❌") {
+		return nil, fmt.Errorf("AI 生成收盘复盘失败: %s", finalReport)
 	}
 
 	title := fmt.Sprintf("🌆 A股全景收盘复盘与次日推演 (%s)", todayStr)
@@ -478,9 +504,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("收盘复盘", "盘后复盘", finalReport, "post_market_"+todayStr, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
 
-	lifecycleReportCacheMu.Lock()
-	lifecycleLatestReport = report
-	lifecycleReportCacheMu.Unlock()
+	cacheReport(report)
 
 	// 桌面事件推送
 	if s.ctx != nil {
@@ -516,11 +540,14 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 1. 【动量池概览与筛选】：基于21日加权动量对上述ETF进行排序，并剔除近期回撤过深或盈亏比不佳的弱势标的；
 2. 【6路因子并发分析】：对前4只优选ETF，从技术面、主力资金流、消息舆情、外围联动、宏观行业周期、溢价率多维度进行诊断；
 3. 【投委会5视角加权评分表】：制作投委会打分矩阵（趋势30%%、风控20%%、价值15%%、筹码20%%、情绪15%%）；
-4. 【最终交易决策】：给出明确的仓位建议（买入/持有/观望/减仓），并制定防守止损位。`, todayStr, etfSummary.String())
+4. 【最终交易决策】：给出明确的仓位建议（买入/持有/观望/减仓），并制定防守止损位。
 
+【数据注入说明】：核心关注ETF池最新状态已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。`, todayStr, etfSummary.String())
+
+	sysPrompt := "你现在是专注于量化对冲与ETF配置的首席基金经理“财智”。所有核心关注ETF池行情已在用户输入中提供，无需额外调用外部工具。请直接基于输入数据，按照 ETF 轮动决策流程输出完整的量化研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, "")
+	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -534,8 +561,8 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
-	if strings.TrimSpace(finalReport) == "" {
-		return nil, fmt.Errorf("生成ETF轮动分析报告失败")
+	if strings.TrimSpace(finalReport) == "" || strings.HasPrefix(strings.TrimSpace(finalReport), "❌") {
+		return nil, fmt.Errorf("生成ETF轮动分析报告失败: %s", finalReport)
 	}
 
 	title := fmt.Sprintf("📈 ETF轮动多Agent决策与投委会打分表 (%s)", todayStr)
@@ -555,9 +582,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动量化决策", finalReport, "etf_rotation_"+todayStr, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
 
-	lifecycleReportCacheMu.Lock()
-	lifecycleLatestReport = report
-	lifecycleReportCacheMu.Unlock()
+	cacheReport(report)
 
 	if s.ctx != nil {
 		runtime.EventsEmit(s.ctx, "marketIntelligenceReport", report)
@@ -574,21 +599,46 @@ func (s *MarketLifecycleService) GenerateSerenityResearchReport(ctx context.Cont
 // GetLatestReport 获取最新生成的智能研报（盘前或盘后）
 func (s *MarketLifecycleService) GetLatestReport() *MarketIntelligenceReport {
 	lifecycleReportCacheMu.RLock()
-	defer lifecycleReportCacheMu.RUnlock()
-	if lifecycleLatestReport != nil {
-		return lifecycleLatestReport
+	latest := lifecycleLatestReport
+	lifecycleReportCacheMu.RUnlock()
+	if latest != nil {
+		return latest
+	}
+	return s.GetLatestReportByType("pre_market_briefing")
+}
+
+// GetLatestReportByType 获取指定类型（盘前/盘后/ETF轮动/Serenity）的最新一份智能研报
+func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *MarketIntelligenceReport {
+	lifecycleReportCacheMu.RLock()
+	if lifecycleReportsByType != nil {
+		if r, ok := lifecycleReportsByType[reportType]; ok && r != nil {
+			lifecycleReportCacheMu.RUnlock()
+			return r
+		}
+	}
+	lifecycleReportCacheMu.RUnlock()
+
+	if db.Dao == nil {
+		return nil
 	}
 
-	// 若内存无缓存，尝试从 DB 读取最新一条盘前或盘后记录
 	var item models.AIResponseResult
-	err := db.Dao.Where("stock_code IN (?, ?)", "盘前前瞻", "收盘复盘").
-		Order("created_at DESC").
-		First(&item).Error
+	var query *gorm.DB
+	switch reportType {
+	case "pre_market_briefing":
+		query = db.Dao.Where("classify LIKE ? OR stock_name LIKE ?", "%pre_market%", "%盘前%")
+	case "post_market_review":
+		query = db.Dao.Where("classify LIKE ? OR stock_name LIKE ? OR stock_code = ?", "%post_market%", "%收盘复盘%", "收盘复盘")
+	case "etf_rotation_decision":
+		query = db.Dao.Where("classify LIKE ? OR stock_name LIKE ?", "%etf_rotation%", "%ETF轮动%")
+	case "serenity_industry_analysis":
+		query = db.Dao.Where("classify LIKE ? OR stock_name LIKE ?", "%serenity%", "%Serenity%")
+	default:
+		query = db.Dao.Where("stock_code IN (?, ?) OR classify LIKE ?", "盘前前瞻", "收盘复盘", "%market%")
+	}
+
+	err := query.Order("created_at DESC").First(&item).Error
 	if err == nil && item.ID > 0 {
-		reportType := "pre_market_briefing"
-		if item.StockCode == "收盘复盘" {
-			reportType = "post_market_review"
-		}
 		return &MarketIntelligenceReport{
 			Type:        reportType,
 			Title:       fmt.Sprintf("%s (%s)", item.StockName, item.CreatedAt.Format("2006-01-02")),

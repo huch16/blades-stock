@@ -382,6 +382,7 @@ func TestRPCDispatcher_MethodParityAudit(t *testing.T) {
 		"GetIndustryMoneyRankSina",
 		"GetIndustryRank",
 		"GetLatestMarketIntelligenceReport",
+		"GetLatestMarketIntelligenceReportByType",
 		"GetLatestTradingDay",
 		"GetMCPServerByID",
 		"GetMCPServerList",
@@ -478,6 +479,26 @@ func TestRPCDispatcher_MethodParityAudit(t *testing.T) {
 		t.Errorf("Found %d methods missing in RPCDispatcher: %v", len(missing), missing)
 	} else {
 		t.Logf("100%% method parity verified! All %d frontend methods exist in RPCDispatcher.", len(frontendMethods))
+	}
+}
+
+func TestPreMarketBriefingProbe(t *testing.T) {
+	handler := setupTestServer(t)
+
+	// 测试按类型获取最新智能研报 (离线/回退测试)
+	req := httptest.NewRequest(http.MethodPost, "/api/App/GetLatestMarketIntelligenceReportByType", bytes.NewBufferString(`["pre_market_briefing"]`))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GetLatestMarketIntelligenceReportByType failed: status %d", w.Code)
+	}
+
+	// 测试获取市场生命周期时钟
+	reqLifecycle := httptest.NewRequest(http.MethodPost, "/api/App/GetMarketLifecycleStatus", bytes.NewBufferString(`[]`))
+	wLifecycle := httptest.NewRecorder()
+	handler.ServeHTTP(wLifecycle, reqLifecycle)
+	if wLifecycle.Code != http.StatusOK {
+		t.Fatalf("GetMarketLifecycleStatus failed: status %d", wLifecycle.Code)
 	}
 }
 

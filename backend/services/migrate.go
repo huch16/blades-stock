@@ -73,7 +73,80 @@ func AutoMigrateAll() {
 	// 6. 播种股票基础信息基准库（A 股、港股、美股）
 	SeedStockBasicsIfEmpty()
 
+	// 7. 播种系统默认开箱即用 AI 大模型服务配置
+	SeedDefaultAIConfigsIfEmpty()
+
 	logger.SugaredLogger.Info("[Database] All tables migrated and initialized successfully.")
+}
+
+// SeedDefaultAIConfigsIfEmpty 当全新安装且 AI 模型配置为空时，自动播种主流模型配置
+func SeedDefaultAIConfigsIfEmpty() {
+	if db.Dao == nil {
+		return
+	}
+	var count int64
+	db.Dao.Model(&data.AIConfig{}).Count(&count)
+	if count > 0 {
+		return
+	}
+
+	deepseekKey := os.Getenv("DEEPSEEK_API_KEY")
+	if deepseekKey == "" {
+		deepseekKey = os.Getenv("AI_API_KEY")
+	}
+	openaiKey := os.Getenv("OPENAI_API_KEY")
+
+	defaultConfigs := []*data.AIConfig{
+		{
+			Name:                "DeepSeek 官方 API",
+			BaseUrl:             "https://api.deepseek.com",
+			ApiKey:              deepseekKey,
+			ModelName:           "deepseek-chat",
+			MaxTokens:           8192,
+			Temperature:         0.3,
+			TimeOut:             300,
+			LLMConcurrencyLimit: 2,
+			SubAgentTimeout:     60,
+		},
+		{
+			Name:                "硅基流动 (SiliconFlow)",
+			BaseUrl:             "https://api.siliconflow.cn/v1",
+			ApiKey:              "",
+			ModelName:           "Qwen/Qwen2.5-7B-Instruct",
+			MaxTokens:           8192,
+			Temperature:         0.3,
+			TimeOut:             300,
+			LLMConcurrencyLimit: 2,
+			SubAgentTimeout:     60,
+		},
+		{
+			Name:                "Ollama 本地/局域网",
+			BaseUrl:             "http://localhost:11434/v1",
+			ApiKey:              "none",
+			ModelName:           "qwen2.5:7b",
+			MaxTokens:           4096,
+			Temperature:         0.3,
+			TimeOut:             300,
+			LLMConcurrencyLimit: 2,
+			SubAgentTimeout:     60,
+		},
+	}
+	if openaiKey != "" {
+		defaultConfigs = append(defaultConfigs, &data.AIConfig{
+			Name:                "OpenAI 官方",
+			BaseUrl:             "https://api.openai.com/v1",
+			ApiKey:              openaiKey,
+			ModelName:           "gpt-4o-mini",
+			MaxTokens:           8192,
+			Temperature:         0.3,
+			TimeOut:             300,
+			LLMConcurrencyLimit: 2,
+			SubAgentTimeout:     60,
+		})
+	}
+	if err := db.Dao.CreateInBatches(defaultConfigs, len(defaultConfigs)).Error; err == nil {
+		logger.SugaredLogger.Infof("[Database] 成功播种 %d 个默认 AI 模型服务配置", len(defaultConfigs))
+	}
 }
 
 // SeedStockBasicsIfEmpty 当全新安装且股票基础信息库为空时，自动从自带基准快照导入

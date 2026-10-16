@@ -175,6 +175,11 @@ func (s *AgentService) GetLatestMarketIntelligenceReport(ctx context.Context) *a
 	return agent.NewMarketLifecycleService(ctx).GetLatestReport()
 }
 
+// GetLatestMarketIntelligenceReportByType 获取指定类型的最新研报
+func (s *AgentService) GetLatestMarketIntelligenceReportByType(ctx context.Context, reportType string) *agent.MarketIntelligenceReport {
+	return agent.NewMarketLifecycleService(ctx).GetLatestReportByType(reportType)
+}
+
 // GenerateETFRotationReport 触发全市场 ETF 动量轮动决策分析研报
 func (s *AgentService) GenerateETFRotationReport(ctx context.Context, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
 	service := agent.NewMarketLifecycleService(ctx)
