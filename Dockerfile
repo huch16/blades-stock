@@ -9,6 +9,9 @@
 FROM node:20-alpine AS frontend-builder
 WORKDIR /build/frontend
 
+# 提升 Node 内存上限至 6GB（宿主机有 12GB 物理内存，解除 V8 默认 2GB 导致的 OOM）
+ENV NODE_OPTIONS="--max-old-space-size=6144"
+
 # 先拷贝 package.json 利用 Docker 缓存层
 COPY frontend/package*.json ./
 RUN npm install
