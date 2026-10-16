@@ -5,18 +5,16 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/go-resty/resty/v2"
 	"blades-stock/backend/agent"
 	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
-	"blades-stock/backend/machineid"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
+	"blades-stock/backend/services"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +49,12 @@ type App struct {
 	memoryMgr          *agent.MemoryManager
 	evaluator          *agent.Evaluator
 	evolver            *agent.Evolver
+
+	// [阶段 1 解耦服务委托层]
+	marketService   *services.MarketService
+	quantService    *services.QuantService
+	agentService    *services.AgentService
+	settingsService *services.SettingsService
 }
 
 // NewApp creates a new App application struct
@@ -71,6 +75,10 @@ func NewApp() *App {
 		memoryMgr:          agent.NewMemoryManager(20),
 		evaluator:          agent.NewEvaluator(),
 		evolver:            agent.NewEvolver(),
+		marketService:      services.NewMarketService(),
+		quantService:       services.NewQuantService(),
+		agentService:       services.NewAgentService(),
+		settingsService:    services.NewSettingsService(),
 	}
 }
 
@@ -88,48 +96,11 @@ func (a *App) getCronEntry(key string) (cron.EntryID, bool) {
 }
 
 func (a *App) GetMachineId() string {
-	return machineid.GetMachineId()
+	return a.settingsService.GetMachineId()
 }
 
 func (a *App) CheckDeviceBinding(token string, apiBase string) map[string]any {
-	uuid := machineid.GetMachineId()
-	result := map[string]any{
-		"bound":       false,
-		"deviceCount": 0,
-		"maxDevices":  5,
-	}
-
-	if token == "" || apiBase == "" {
-		return result
-	}
-
-	url := fmt.Sprintf("%s/user/device-check?uuid=%s", apiBase, uuid)
-	resp, err := data.SharedHTTPClient.R().
-		SetHeader("Authorization", "Bearer "+token).
-		Get(url)
-	if err != nil {
-		return result
-	}
-
-	var respData struct {
-		Code int `json:"code"`
-		Data struct {
-			Bound       bool `json:"bound"`
-			DeviceCount int  `json:"deviceCount"`
-			MaxDevices  int  `json:"maxDevices"`
-		} `json:"data"`
-	}
-	if err := json.Unmarshal(resp.Body(), &respData); err != nil {
-		return result
-	}
-	if respData.Code != 0 {
-		return result
-	}
-
-	result["bound"] = respData.Data.Bound
-	result["deviceCount"] = respData.Data.DeviceCount
-	result["maxDevices"] = respData.Data.MaxDevices
-	return result
+	return a.settingsService.CheckDeviceBinding(token, apiBase)
 }
 
 func (a *App) QuitApp() {
@@ -1339,74 +1310,43 @@ func (a *App) shutdown(ctx context.Context) {
 
 // BatchGreet returns stock info for multiple stock codes in a single call
 func (a *App) BatchGreet(stockCodes []string) []*data.StockInfo {
-	if len(stockCodes) == 0 {
-		return nil
-	}
-
-	var follows []data.FollowedStock
-	db.Dao.Where("stock_code IN ?", stockCodes).Preload("Groups").Preload("Groups.GroupInfo").Find(&follows)
-	followMap := make(map[string]data.FollowedStock, len(follows))
-	for _, f := range follows {
-		followMap[f.StockCode] = f
-	}
-
-	stockInfos, err := data.NewStockDataApi().GetStockCodeRealTimeData(stockCodes...)
-	if err != nil || stockInfos == nil {
-		return nil
-	}
-
-	results := make([]*data.StockInfo, 0, len(*stockInfos))
-	for i := range *stockInfos {
-		info := &(*stockInfos)[i]
-		if follow, ok := followMap[info.Code]; ok {
-			addStockFollowData(follow, info)
-		}
-		results = append(results, info)
-	}
-	return results
+	return a.marketService.BatchGreet(stockCodes)
 }
 
 // Greet returns a greeting for the given name
 func (a *App) Greet(stockCode string) *data.StockInfo {
-	//stockInfo, _ := data.NewStockDataApi().GetStockCodeRealTimeData(stockCode)
-
-	follow := &data.FollowedStock{
-		StockCode: stockCode,
-	}
-	db.Dao.Model(follow).Where("stock_code = ?", stockCode).Preload("Groups").Preload("Groups.GroupInfo").First(follow)
-	stockInfo := getStockInfo(*follow)
-	return stockInfo
+	return a.marketService.Greet(stockCode)
 }
 
 func (a *App) Follow(stockCode string) string {
-	return data.NewStockDataApi().Follow(stockCode)
+	return a.marketService.Follow(stockCode)
 }
 
 func (a *App) UnFollow(stockCode string) string {
-	return data.NewStockDataApi().UnFollow(stockCode)
+	return a.marketService.UnFollow(stockCode)
 }
 
 func (a *App) GetFollowList(groupId int) *[]data.FollowedStock {
-	return data.NewStockDataApi().GetFollowList(groupId)
+	return a.marketService.GetFollowList(groupId)
 }
 
 func (a *App) GetStockList(key string) []data.StockBasic {
-	return data.NewStockDataApi().GetStockList(key)
+	return a.marketService.GetStockList(key)
 }
 
 func (a *App) SetCostPriceAndVolume(stockCode string, price float64, volume int64) string {
-	return data.NewStockDataApi().SetCostPriceAndVolume(price, volume, stockCode)
+	return a.marketService.SetCostPriceAndVolume(stockCode, price, volume)
 }
 
 func (a *App) SetTradingPrice(stockCode string, entryPrice, takeProfitPrice, stopLossPrice, costPrice float64) string {
-	return data.NewStockDataApi().SetTradingPrice(entryPrice, takeProfitPrice, stopLossPrice, costPrice, stockCode)
+	return a.marketService.SetTradingPrice(stockCode, entryPrice, takeProfitPrice, stopLossPrice, costPrice)
 }
 
 func (a *App) SetAlarmChangePercent(val, alarmPrice float64, stockCode string) string {
-	return data.NewStockDataApi().SetAlarmChangePercent(val, alarmPrice, stockCode)
+	return a.marketService.SetAlarmChangePercent(val, alarmPrice, stockCode)
 }
 func (a *App) SetStockSort(sort int64, stockCode string) {
-	data.NewStockDataApi().SetStockSort(sort, stockCode)
+	a.marketService.SetStockSort(sort, stockCode)
 }
 func (a *App) SendDingDingMessage(message string, stockCode string) string {
 	ttl, _ := a.cache.TTL([]byte(stockCode))
@@ -1567,240 +1507,51 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 }
 
 func (a *App) SaveAIResponseResult(stockCode, stockName, result, chatId, question string, aiConfigId int) {
-	data.NewDeepSeekOpenAi(a.ctx, aiConfigId).SaveAIResponseResult(stockCode, stockName, result, chatId, question)
+	a.agentService.SaveAIResponseResult(a.ctx, stockCode, stockName, result, chatId, question, aiConfigId)
 }
 
-// GetSystemStateSnapshot 获取当前系统的全局态势感知快照（时钟节律、情绪红绿灯、全市场涨跌比、实盘持仓风险预警）
+// GetSystemStateSnapshot 获取当前系统的全局态势感知快照
 func (a *App) GetSystemStateSnapshot() *agent.SystemStateSnapshot {
-	return agent.GetGlobalMarketSensor().GetSnapshot()
+	return a.agentService.GetSystemStateSnapshot()
 }
 
 // GetToolQuotaStatus 获取大模型工具调用成本预算与配额使用状态
 func (a *App) GetToolQuotaStatus() agent.QuotaStatus {
-	return agent.GetToolQuotaManager().GetQuotaStatus()
+	return a.agentService.GetToolQuotaStatus()
 }
 
 // ResetToolDailyQuota 手动重置今日工具调用配额与成本计数
 func (a *App) ResetToolDailyQuota() string {
-	agent.GetToolQuotaManager().ResetDailyQuota()
-	return "今日外部工具调用配额与预算已成功重置"
+	return a.agentService.ResetToolDailyQuota()
 }
 
 // SyncRecommendStocksFromIntelligence 从最新研报、ETF动量池及历史深度分析中一键提炼推荐股票
 func (a *App) SyncRecommendStocksFromIntelligence() (int, error) {
-	return agent.SyncRecommendStocksFromAllIntelligence(a.ctx)
+	return a.agentService.SyncRecommendStocksFromIntelligence(a.ctx)
 }
 
-// DiagnoseStock 提供结构化三维量化深度诊断（量化回测 + 资金筹码 + 技术形态）
-// 幂等锁：同一股票代码 30 秒内仅允许执行一次，防止前端重复触发导致重复日志/计费
-var (
-	diagnoseMu   sync.Mutex
-	diagnoseDone = make(map[string]time.Time) // stockCode -> 完成时间
-)
-
 func (a *App) DiagnoseStock(stockCode string) (*quant.StockDiagnosisResult, error) {
-	clean := models.CleanStockCode(stockCode)
-	if clean == "" {
-		return nil, fmt.Errorf("无效股票代码: %s", stockCode)
-	}
-
-	// 快速检查：是否刚完成过（无锁读取）
-	if t, ok := diagnoseDone[clean]; ok && time.Since(t) < 30*time.Second {
-		return nil, fmt.Errorf("诊断刚完成，请稍后重试（幂等保护）")
-	}
-
-	// 加锁执行
-	diagnoseMu.Lock()
-	// 双重检查
-	if t, ok := diagnoseDone[clean]; ok && time.Since(t) < 30*time.Second {
-		diagnoseMu.Unlock()
-		return nil, fmt.Errorf("诊断进行中，请勿重复提交")
-	}
-	diagnoseMu.Unlock()
-
-	res, err := quant.DiagnoseStock(clean)
-
-	// 记录完成时间（无论成功失败，防止错误重试风暴）
-	diagnoseMu.Lock()
-	diagnoseDone[clean] = time.Now()
-	diagnoseMu.Unlock()
-
-	// 定期清理过期键（简单策略：每 100 次调用清理一次）
-	if len(diagnoseDone)%100 == 0 {
-		cutoff := time.Now().Add(-5 * time.Minute)
-		diagnoseMu.Lock()
-		for k, v := range diagnoseDone {
-			if v.Before(cutoff) {
-				delete(diagnoseDone, k)
-			}
-		}
-		diagnoseMu.Unlock()
-	}
-
-	return res, err
+	return a.quantService.DiagnoseStock(stockCode)
 }
 
 // TriggerAIReportBacktest 手动或自动触发 AI 报告历史回测与胜率检验
 func (a *App) TriggerAIReportBacktest(limit int) (*quant.AIReportBacktestResult, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	mgr := quant.NewBacktestManager()
-	return mgr.RunAIReportBacktest(context.Background(), limit)
+	return a.quantService.TriggerAIReportBacktest(limit)
 }
 
 // RunSkillABTest runs an A/B test between two skills.
 func (a *App) RunSkillABTest(skillID1, skillID2 uint, limit int) (*quant.SkillABTestResult, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	mgr := quant.NewBacktestManager()
-	return mgr.RunSkillABTest(context.Background(), skillID1, skillID2, limit)
+	return a.quantService.RunSkillABTest(skillID1, skillID2, limit)
 }
 
 // GetAuditLogList 分页获取审计日志
 func (a *App) GetAuditLogList(query models.AuditLogQuery) (*models.AuditLogPageResp, error) {
-	if query.Page <= 0 {
-		query.Page = 1
-	}
-	if query.PageSize <= 0 {
-		query.PageSize = 20
-	}
-	offset := (query.Page - 1) * query.PageSize
-
-	var list []models.AuditLog
-	var total int64
-
-	q := db.Dao.Model(&models.AuditLog{})
-
-	// 构建查询条件
-	if query.UserID != "" {
-		q.Where("user_id = ?", query.UserID)
-	}
-	if query.AgentID != "" {
-		q.Where("agent_id = ?", query.AgentID)
-	}
-	if query.SkillID != 0 {
-		q.Where("skill_id = ?", query.SkillID)
-	}
-	if query.ToolName != "" {
-		q.Where("tool_name LIKE ?", "%"+query.ToolName+"%")
-	}
-	if query.ServerName != "" {
-		q.Where("server_name LIKE ?", "%"+query.ServerName+"%")
-	}
-	if query.Success != nil {
-		q.Where("success = ?", *query.Success)
-	}
-	if query.StartDate != "" {
-		q.Where("DATE(created_at) >= ?", query.StartDate)
-	}
-	if query.EndDate != "" {
-		q.Where("DATE(created_at) <= ?", query.EndDate)
-	}
-	if query.Keyword != "" {
-		keyword := "%" + query.Keyword + "%"
-		q.Where("request_body LIKE ? OR response LIKE ?", keyword, keyword)
-	}
-
-	// 计算总数
-	if err := q.Count(&total).Error; err != nil {
-		return nil, err
-	}
-	// 查询数据
-	if err := q.Order("created_at desc").Offset(offset).Limit(query.PageSize).Find(&list).Error; err != nil {
-		return nil, err
-	}
-
-	resp := &models.AuditLogPageResp{
-		Code:    0,
-		Message: "success",
-		Data: models.AuditLogPageData{
-			List:      list,
-			Total:     total,
-			Page:      query.Page,
-			PageSize:  query.PageSize,
-		},
-	}
-	return resp, nil
+	return a.settingsService.GetAuditLogList(query)
 }
 
 // ExportAuditLogCSV 导出审计日志为 CSV 字符串
 func (a *App) ExportAuditLogCSV(query models.AuditLogQuery) (string, error) {
-	// 不分页，导出所有符合条件的记录
-	var list []models.AuditLog
-	q := db.Dao.Model(&models.AuditLog{})
-
-	// 同样的过滤条件（复用逻辑）
-	if query.UserID != "" {
-		q.Where("user_id = ?", query.UserID)
-	}
-	if query.AgentID != "" {
-		q.Where("agent_id = ?", query.AgentID)
-	}
-	if query.SkillID != 0 {
-		q.Where("skill_id = ?", query.SkillID)
-	}
-	if query.ToolName != "" {
-		q.Where("tool_name LIKE ?", "%"+query.ToolName+"%")
-	}
-	if query.ServerName != "" {
-		q.Where("server_name LIKE ?", "%"+query.ServerName+"%")
-	}
-	if query.Success != nil {
-		q.Where("success = ?", *query.Success)
-	}
-	if query.StartDate != "" {
-		q.Where("DATE(created_at) >= ?", query.StartDate)
-	}
-	if query.EndDate != "" {
-		q.Where("DATE(created_at) <= ?", query.EndDate)
-	}
-	if query.Keyword != "" {
-		keyword := "%" + query.Keyword + "%"
-		q.Where("request_body LIKE ? OR response LIKE ?", keyword, keyword)
-	}
-
-	if err := q.Order("created_at desc").Find(&list).Error; err != nil {
-		return "", err
-	}
-
-	// 生成 CSV
-	var lines []string
-	// 表头
-	header := []string{
-		"ID", "CreatedAt", "UserID", "AgentID", "SkillID", "ToolName",
-		"ServerName", "RequestBody", "Response", "Success", "ErrorMsg", "DurationMs",
-	}
-	lines = append(lines, strings.Join(header, ","))
-
-	for _, entry := range list {
-		// 转义字段中的双引号和换行
-		escape := func(s string) string {
-			s = strings.ReplaceAll(s, `"`, `""`)
-			if strings.ContainsAny(s, `",\n`) {
-				return `"` + s + `"`
-			}
-			return s
-		}
-		createdAt := entry.CreatedAt.Format("2006-01-02 15:04:05")
-		record := []string{
-			strconv.Itoa(int(entry.ID)),
-			escape(createdAt),
-			escape(entry.UserID),
-			escape(entry.AgentID),
-			strconv.Itoa(int(entry.SkillID)),
-			escape(entry.ToolName),
-			escape(entry.ServerName),
-			escape(entry.RequestBody),
-			escape(entry.Response),
-			strconv.FormatBool(entry.Success),
-			escape(entry.ErrorMsg),
-			strconv.FormatInt(entry.DurationMs, 10),
-		}
-		lines = append(lines, strings.Join(record, ","))
-	}
-	return strings.Join(lines, "\n"), nil
+	return a.settingsService.ExportAuditLogCSV(query)
 }
 
 func (a *App) GetVersionInfo() *models.VersionInfo {
@@ -1926,12 +1677,12 @@ func (a *App) UpdateConfig(settingConfig *data.SettingConfig) string {
 }
 
 func (a *App) GetConfig() *data.SettingConfig {
-	return data.GetSettingConfig()
+	return a.settingsService.GetConfig()
 }
 
 // GetAiConfigTemplates 返回预设的 AI 配置模板，供前端向导使用
 func (a *App) GetAiConfigTemplates() []*data.AiConfigTemplate {
-	return data.NewSettingsApi().GetAiConfigTemplates()
+	return a.settingsService.GetAiConfigTemplates()
 }
 
 func (a *App) ExportConfig() string {
@@ -1955,17 +1706,17 @@ func (a *App) ExportConfig() string {
 
 // CleanupData 暴露给前端的清理入口
 func (a *App) CleanupData(cleanupType string) string {
-	return data.NewSettingsApi().CleanupData(cleanupType)
+	return a.settingsService.CleanupData(cleanupType)
 }
 
 // BackupData 暴露给前端的数据备份入口
 func (a *App) BackupData(backupType string) string {
-	return data.NewSettingsApi().BackupData(backupType)
+	return a.settingsService.BackupData(backupType)
 }
 
 // RestoreData 暴露给前端的恢复入口
 func (a *App) RestoreData(backupType string) string {
-	return data.NewSettingsApi().RestoreData(backupType)
+	return a.settingsService.RestoreData(backupType)
 }
 
 func (a *App) ShareAnalysis(stockCode, stockName string) string {
@@ -2013,46 +1764,34 @@ func (a *App) ShareText(text, title string) string {
 }
 
 func (a *App) GetfundList(key string) []data.FundBasic {
-	return data.NewFundApi().GetFundList(key)
+	return a.marketService.GetfundList(key)
 }
 func (a *App) GetFollowedFund() []data.FollowedFund {
-	return data.NewFundApi().GetFollowedFund()
+	return a.marketService.GetFollowedFund()
 }
 func (a *App) FollowFund(fundCode string) string {
-	return data.NewFundApi().FollowFund(fundCode)
+	return a.marketService.FollowFund(fundCode)
 }
 func (a *App) UnFollowFund(fundCode string) string {
-	return data.NewFundApi().UnFollowFund(fundCode)
+	return a.marketService.UnFollowFund(fundCode)
 }
 func (a *App) GetFundKLine(fundCode string, klt string, limit int) *data.KLineSourceResult {
-	return data.NewFundKLineApi().GetFundKLineWithFallback(fundCode, klt, limit)
+	return a.marketService.GetFundKLine(fundCode, klt, limit)
 }
 func (a *App) GetFundHistoryNetValue(fundCode string, pageSize int, startDate string, endDate string) []data.FundHistoryNetValue {
-	res, _ := data.NewFundApi().GetFundHistoryNetValue(fundCode, 1, pageSize, startDate, endDate)
-	if res == nil {
-		return []data.FundHistoryNetValue{}
-	}
-	return res
+	return a.marketService.GetFundHistoryNetValue(fundCode, pageSize, startDate, endDate)
 }
 func (a *App) GetFundTop10Holdings(fundCode string) []data.FundHoldingStock {
-	res, err := data.NewFundApi().GetFundTop10Holdings(fundCode)
-	if err != nil || res == nil {
-		return []data.FundHoldingStock{}
-	}
-	return res
+	return a.marketService.GetFundTop10Holdings(fundCode)
 }
 func (a *App) GetFundRanking(marketType, fundType, sortField, sortOrder string, pageIndex, pageSize int) *data.FundRankingResult {
-	res, err := data.NewFundApi().GetFundRanking(marketType, fundType, sortField, sortOrder, pageIndex, pageSize)
-	if err != nil || res == nil {
-		return &data.FundRankingResult{}
-	}
-	return res
+	return a.marketService.GetFundRanking(marketType, fundType, sortField, sortOrder, pageIndex, pageSize)
 }
 func (a *App) SearchFundCodes(keyword string) []data.FundSearchItem {
-	return data.NewFundApi().SearchFundCodes(keyword)
+	return a.marketService.SearchFundCodes(keyword)
 }
 func (a *App) GetFollowedFundPaged(pageIndex, pageSize int, keyword string) *data.FollowedFundPagedResult {
-	return data.NewFundApi().GetFollowedFundPaged(pageIndex, pageSize, keyword)
+	return a.marketService.GetFollowedFundPaged(pageIndex, pageSize, keyword)
 }
 func (a *App) SaveAsMarkdown(stockCode, stockName string) string {
 	res := data.NewDeepSeekOpenAi(a.ctx, 0).GetAIResponseResult(stockCode)
@@ -2095,261 +1834,115 @@ func (a *App) SetStockAICron(cronText, stockCode string) {
 
 }
 func (a *App) AddGroup(group data.Group) string {
-	ok := data.NewStockGroupApi(db.Dao).AddGroup(group)
-	if ok {
-		return "添加成功"
-	} else {
-		return "添加失败"
-	}
+	return a.marketService.AddGroup(group)
 }
 func (a *App) GetGroupList() []data.Group {
-	return data.NewStockGroupApi(db.Dao).GetGroupList()
+	return a.marketService.GetGroupList()
 }
 
 func (a *App) UpdateGroupSort(id int, newSort int) bool {
-	return data.NewStockGroupApi(db.Dao).UpdateGroupSort(id, newSort)
+	return a.marketService.UpdateGroupSort(id, newSort)
 }
 
 // UpdateGroup 修改分组名称
 func (a *App) UpdateGroup(id int, name string) string {
-	ok := data.NewStockGroupApi(db.Dao).UpdateGroup(id, name)
-	if ok {
-		return "修改成功"
-	}
-	return "修改失败"
+	return a.marketService.UpdateGroup(id, name)
 }
 
 func (a *App) InitializeGroupSort() bool {
-	return data.NewStockGroupApi(db.Dao).InitializeGroupSort()
+	return a.marketService.InitializeGroupSort()
 }
 
 func (a *App) GetGroupStockList(groupId int) []data.GroupStock {
-	return data.NewStockGroupApi(db.Dao).GetGroupStockByGroupId(groupId)
+	return a.marketService.GetGroupStockList(groupId)
 }
 
 func (a *App) AddStockGroup(groupId int, stockCode string) string {
-	ok := data.NewStockGroupApi(db.Dao).AddStockGroup(groupId, stockCode)
-	if ok {
-		return "添加成功"
-	} else {
-		return "添加失败"
-	}
+	return a.marketService.AddStockGroup(groupId, stockCode)
 }
 
 func (a *App) RemoveStockGroup(code, name string, groupId int) string {
-	ok := data.NewStockGroupApi(db.Dao).RemoveStockGroup(code, name, groupId)
-	if ok {
-		return "移除成功"
-	} else {
-		return "移除失败"
-	}
+	return a.marketService.RemoveStockGroup(code, name, groupId)
 }
 
 func (a *App) RemoveGroup(groupId int) string {
-	ok := data.NewStockGroupApi(db.Dao).RemoveGroup(groupId)
-	if ok {
-		return "移除成功"
-	} else {
-		return "移除失败"
-	}
+	return a.marketService.RemoveGroup(groupId)
 }
 
 func (a *App) GetStockKLine(stockCode, stockName string, days int64) *[]data.KLineData {
-	// 港股优先使用 gotdx (通达信 ExKLine2) 获取日K线，失败再降级到腾讯接口
-	if data.IsHKStockCode(stockCode) {
-		tdxData := data.NewTdxKLineApi().GetMACKLineData(stockCode, "101", int(days))
-		if tdxData != nil && len(*tdxData) > 0 {
-			return tdxData
-		}
-	}
-	return data.NewStockDataApi().GetHK_KLineData(stockCode, "day", days)
+	return a.marketService.GetStockKLine(stockCode, stockName, days)
 }
 
 func (a *App) GetStockMinutePriceLineData(stockCode, stockName string) map[string]any {
-	res := make(map[string]any, 4)
-	priceData, date := data.NewStockDataApi().GetStockMinutePriceData(stockCode)
-	res["priceData"] = priceData
-	res["date"] = date
-	res["stockName"] = stockName
-	res["stockCode"] = stockCode
-	return res
+	return a.marketService.GetStockMinutePriceLineData(stockCode, stockName)
 }
 
 func (a *App) GetStockCommonKLine(stockCode, stockName string, days int64) *[]data.KLineData {
-	return data.NewStockDataApi().GetCommonKLineData(stockCode, "day", days)
+	return a.marketService.GetStockCommonKLine(stockCode, stockName, days)
 }
 
-// GetStockEastMoneyKLine 东方财富多周期 K 线（分钟：1/5/10/60/120；日 101、周 102、半年 105、年 106）。
-// klt 与东方财富接口一致；10 分钟由 1 分钟数据聚合。limit 为根数上限（最大 5000）。
 func (a *App) GetStockEastMoneyKLine(stockCode, stockName string, klt string, limit int) *[]data.KLineData {
-	return a.GetStockEastMoneyKLinePage(stockCode, stockName, klt, limit, "")
+	return a.marketService.GetStockEastMoneyKLine(stockCode, stockName, klt, limit)
 }
 
-// GetStockEastMoneyKLinePage 分页拉取 K 线：end 为东财 end 参数（YYYYMMDD 或 YYYYMMDDHHmmss），空字符串表示取最新一段（同 GetStockEastMoneyKLine）。
 func (a *App) GetStockEastMoneyKLinePage(stockCode, stockName string, klt string, limit int, end string) *[]data.KLineData {
-	if limit <= 0 {
-		limit = 500
-	}
-	if limit > 5000 {
-		limit = 5000
-	}
-	klt = strings.TrimSpace(klt)
-	if klt == "" {
-		klt = "1"
-	}
-	api := data.NewEastMoneyKLineApi(data.GetSettingConfig())
-	end = strings.TrimSpace(end)
-	//if klt == "10" {
-	//	fetchN := limit * 10
-	//	if fetchN > 5000 {
-	//		fetchN = 5000
-	//	}
-	//	raw := api.GetKLineDataBefore(stockCode, "1", "", fetchN, end)
-	//	return data.AggregateKLineEveryN(raw, 10)
-	//}
-	return api.GetKLineDataBefore(stockCode, klt, "", limit, end)
+	return a.marketService.GetStockEastMoneyKLinePage(stockCode, stockName, klt, limit, end)
 }
 
-// GetStockKLineWithFallback 多数据源自动切换 K 线：优先东方财富，不可用时自动切换新浪财经。
-// 返回 KLineSourceResult，包含 data（K 线数组）和 source（实际使用的数据源标识：eastmoney / sina）。
 func (a *App) GetStockKLineWithFallback(stockCode, stockName string, klt string, limit int) *data.KLineSourceResult {
-	if limit <= 0 {
-		limit = 500
-	}
-	if limit > 5000 {
-		limit = 5000
-	}
-	klt = strings.TrimSpace(klt)
-	if klt == "" {
-		klt = "101"
-	}
-	return data.FetchKLineWithFallback(stockCode, stockName, klt, limit, "")
+	return a.marketService.GetStockKLineWithFallback(stockCode, stockName, klt, limit)
 }
 
-// GetStockKLinePageWithFallback 多数据源自动切换 K 线（分页）：优先东方财富，不可用时自动切换新浪财经。
-// end 参数仅对东方财富有效；新浪数据源不支持分页，将返回最新一段数据。
 func (a *App) GetStockKLinePageWithFallback(stockCode, stockName string, klt string, limit int, end string) *data.KLineSourceResult {
-	if limit <= 0 {
-		limit = 500
-	}
-	if limit > 5000 {
-		limit = 5000
-	}
-	klt = strings.TrimSpace(klt)
-	if klt == "" {
-		klt = "101"
-	}
-	end = strings.TrimSpace(end)
-	return data.FetchKLineWithFallback(stockCode, stockName, klt, limit, end)
+	return a.marketService.GetStockKLinePageWithFallback(stockCode, stockName, klt, limit, end)
 }
 
-// GetChipDistribution 获取/计算股票筹码分布（筹码图）数据（用于前端绘图）。
-// days：近多少个交易日；bins：分箱数量；adjustFlag：""/qfq/hfq
 func (a *App) GetChipDistribution(stockCode string, days int, bins int, adjustFlag string) (*data.ChipDistributionResult, error) {
-	stockCode = strings.TrimSpace(stockCode)
-	if stockCode == "" {
-		return nil, fmt.Errorf("stockCode 不能为空")
-	}
-	if days <= 0 {
-		days = 120
-	}
-	if bins <= 0 {
-		bins = 80
-	}
-	adjustFlag = strings.TrimSpace(strings.ToLower(adjustFlag))
-	if adjustFlag != "" && adjustFlag != "qfq" && adjustFlag != "hfq" {
-		adjustFlag = "qfq"
-	}
-
-	api := data.NewEastMoneyKLineApi(data.GetSettingConfig())
-	if !api.ValidateStockCode(stockCode) {
-		return nil, fmt.Errorf("股票代码无效：%s", stockCode)
-	}
-
-	var kLines *[]data.KLineData
-
-	if adjustFlag != "" {
-		kLines = api.GetKLineData(stockCode, "101", adjustFlag, days)
-	} else {
-		result := data.FetchKLineWithFallback(stockCode, "", "101", days, "")
-		if result != nil && result.Data != nil {
-			kLines = result.Data
-		}
-	}
-
-	if kLines == nil || len(*kLines) == 0 {
-		return nil, fmt.Errorf("未获取到K线数据")
-	}
-	calculator := data.NewChipDistributionCalculator()
-	return calculator.Calculate(stockCode, *kLines, bins)
+	return a.marketService.GetChipDistribution(stockCode, days, bins, adjustFlag)
 }
 
-// GetTdxCallAuction 通过通达信协议获取集合竞价数据。
-// stockCode 格式如 600519.SH、000001.SZ、430047.BJ；start 为起始位置（0=最新）；count 为请求数量（最大 500）。
 func (a *App) GetTdxCallAuction(stockCode string, start uint32, count uint32) *[]data.TdxCallAuctionData {
-	if count <= 0 {
-		count = 500
-	}
-	api := data.NewTdxKLineApi()
-	return api.GetCallAuction(stockCode, start, count)
+	return a.marketService.GetTdxCallAuction(stockCode, start, count)
 }
 
 func (a *App) GetTdxCompanyInfo(stockCode string) *data.TdxCompanyInfoBundle {
-	api := data.NewTdxKLineApi()
-	return api.GetF10Data(stockCode)
+	return a.marketService.GetTdxCompanyInfo(stockCode)
 }
 
 func (a *App) GetTdxFinanceInfo(stockCode string) *data.TdxFinanceInfo {
-	api := data.NewTdxKLineApi()
-	return api.GetFinanceInfo(stockCode)
+	return a.marketService.GetTdxFinanceInfo(stockCode)
 }
 
 func (a *App) GetTdxXDXRInfo(stockCode string) *[]data.TdxXDXRItem {
-	api := data.NewTdxKLineApi()
-	return api.GetXDXRInfo(stockCode)
+	return a.marketService.GetTdxXDXRInfo(stockCode)
 }
 
 func (a *App) GetTdxCompanyCategoryList(stockCode string) *[]data.TdxCompanyCategory {
-	api := data.NewTdxKLineApi()
-	return api.GetF10CategoryList(stockCode)
+	return a.marketService.GetTdxCompanyCategoryList(stockCode)
 }
 
 func (a *App) GetTdxCompanyCategoryContent(stockCode string, categoryName string) *data.TdxCompanyInfoSection {
-	api := data.NewTdxKLineApi()
-	return api.GetF10CategoryContent(stockCode, categoryName)
+	return a.marketService.GetTdxCompanyCategoryContent(stockCode, categoryName)
 }
 
-// GetTdxSymbolBelongBoard 通过通达信 MAC 接口获取股票所属板块信息
 func (a *App) GetTdxSymbolBelongBoard(stockCode string) *[]data.MACBelongBoardItem {
-	api := data.NewTdxKLineApi()
-	return api.GetMACSymbolBelongBoard(stockCode)
+	return a.marketService.GetTdxSymbolBelongBoard(stockCode)
 }
 
 func (a *App) GetTelegraphList(source string) *[]*models.Telegraph {
-	telegraphs := data.NewMarketNewsApi().GetTelegraphList(source)
-	return telegraphs
+	return a.marketService.GetTelegraphList(source)
 }
 
 func (a *App) ReFleshTelegraphList(source string) *[]*models.Telegraph {
-	//data.NewMarketNewsApi().GetNewTelegraph(30)
-	go data.NewMarketNewsApi().TelegraphList(30)
-	go data.NewMarketNewsApi().GetSinaNews(30)
-	go data.NewMarketNewsApi().TradingViewNews()
-	telegraphs := data.NewMarketNewsApi().GetTelegraphList(source)
-	return telegraphs
+	return a.marketService.ReFleshTelegraphList(source)
 }
 
 func (a *App) GlobalStockIndexes() map[string]any {
-	res := data.NewMarketNewsApi().GlobalStockIndexes(30)
-	if res == nil {
-		return map[string]any{}
-	}
-	return res
+	return a.marketService.GlobalStockIndexes()
 }
 
-// GlobalStockIndexesReadable 将全球指数 JSON 转为 AI 易读 Markdown 文本。
 func (a *App) GlobalStockIndexesReadable() string {
-	return data.NewMarketNewsApi().GlobalStockIndexesReadable(30)
+	return a.marketService.GlobalStockIndexesReadable()
 }
 
 func (a *App) SummaryStockNews(question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool, eventName string, historyJSON string) {
@@ -2444,33 +2037,17 @@ func preFetchMarketSummaryData() string {
 	return strings.Join(parts, "\n\n")
 }
 func (a *App) GetIndustryRank(sort string, cnt int) []any {
-	res := data.NewMarketNewsApi().GetIndustryRank(sort, cnt)
-	if res == nil {
-		return []any{}
-	}
-	dataVal, ok := res["data"]
-	if !ok || dataVal == nil {
-		return []any{}
-	}
-	data, ok := dataVal.([]any)
-	if !ok {
-		return []any{}
-	}
-	return data
+	return a.marketService.GetIndustryRank(sort, cnt)
 }
 func (a *App) GetIndustryMoneyRankSina(fenlei, sort string) []map[string]any {
-	res := data.NewMarketNewsApi().GetIndustryMoneyRankSina(fenlei, sort)
-	return res
+	return a.marketService.GetIndustryMoneyRankSina(fenlei, sort)
 }
 func (a *App) GetMoneyRankSina(sort string) []map[string]any {
-	res := data.NewMarketNewsApi().GetMoneyRankSina(sort)
-	return res
+	return a.marketService.GetMoneyRankSina(sort)
 }
 
 func (a *App) GetStockMoneyTrendByDay(stockCode string, days int) []map[string]any {
-	res := data.NewMarketNewsApi().GetStockMoneyTrendByDay(stockCode, days)
-	slice.Reverse(res)
-	return res
+	return a.marketService.GetStockMoneyTrendByDay(stockCode, days)
 }
 
 // OpenURL
@@ -2582,212 +2159,42 @@ func (a *App) SaveWordFile(filename string, base64Data string) string {
 //	@receiver a
 //	@return error
 func (a *App) GetAiConfigs() []*data.AIConfig {
-	return data.GetSettingConfig().AiConfigs
+	return a.settingsService.GetAiConfigs()
 }
 
 // GetAiAssistantSession 获取 AI 助手会话消息列表，sessionId 为空时获取最新的
 func (a *App) GetAiAssistantSession(sessionId string) (*models.AiAssistantSessionResp, error) {
-	return data.GetAiAssistantSession(sessionId)
+	return a.agentService.GetAiAssistantSession(sessionId)
 }
 
 // SaveAiAssistantSession 保存 AI 助手会话消息到数据库
 func (a *App) SaveAiAssistantSession(sessionId string, messages []models.AiAssistantMessage) error {
-	return data.SaveAiAssistantSession(sessionId, messages)
+	return a.agentService.SaveAiAssistantSession(sessionId, messages)
 }
 
-// FetchAiModels
-//
-//	@Description: 根据接口地址与 apiKey 自动获取支持的模型列表（OpenAI/DeepSeek 兼容 /models 接口）
-//	@receiver a
-//	@param baseUrl 接口地址（如 https://api.deepseek.com）
-//	@param apiKey  鉴权令牌
-//	@return []string 模型 ID 列表
+// FetchAiModels 根据接口地址与 apiKey 自动获取支持的模型列表
 func (a *App) FetchAiModels(baseUrl, apiKey string) []string {
-	baseUrl = strutil.Trim(baseUrl)
-	apiKey = strutil.Trim(apiKey)
-	if baseUrl == "" {
-		return []string{}
-	}
-	if apiKey == "" {
-		apiKey = "none"
-	}
-
-	type modelItem struct {
-		ID string `json:"id"`
-	}
-	var respData struct {
-		Data []modelItem `json:"data"`
-	}
-
-	client := resty.New()
-	client.SetBaseURL(baseUrl)
-	client.SetTimeout(10 * time.Second)
-
-	resp, err := client.R().
-		SetHeader("Authorization", "Bearer "+apiKey).
-		SetHeader("Content-Type", "application/json").
-		SetResult(&respData).
-		Get("/models")
-	if err != nil {
-		logger.SugaredLogger.Errorf("FetchAiModels error: %v", err)
-		return []string{}
-	}
-	if resp.IsError() {
-		logger.SugaredLogger.Errorf("FetchAiModels http error: %s", resp.Status())
-		return []string{}
-	}
-
-	modelsList := make([]string, 0, len(respData.Data))
-	for _, m := range respData.Data {
-		if strings.TrimSpace(m.ID) != "" {
-			modelsList = append(modelsList, m.ID)
-		}
-	}
-	return modelsList
+	return a.settingsService.FetchAiModels(baseUrl, apiKey)
 }
 
-// TestAiConnection
-//
-//	@Description: 真实调用 /chat/completions 验证 AI 配置连通性（兼容 DeepSeek/Ollama 等不支持 /models 的服务）
-//	@receiver a
-//	@param baseUrl  接口地址（如 https://api.deepseek.com）
-//	@param apiKey   鉴权令牌（Ollama 本地可留空）
-//	@param modelName 模型名（必填，用于真实请求）
-//	@return string 空串表示连接成功，否则为可读的错误信息
+// TestAiConnection 真实调用 /chat/completions 验证 AI 配置连通性
 func (a *App) TestAiConnection(baseUrl, apiKey, modelName string) string {
-	baseUrl = strutil.Trim(baseUrl)
-	apiKey = strutil.Trim(apiKey)
-	modelName = strutil.Trim(modelName)
-	if baseUrl == "" {
-		return "接口地址不能为空"
-	}
-	if modelName == "" {
-		return "请先在「模型名」中选择或填写一个模型"
-	}
-	if apiKey == "" {
-		apiKey = "none"
-	}
-
-	client := resty.New()
-	client.SetBaseURL(baseUrl)
-	client.SetTimeout(20 * time.Second)
-
-	payload := map[string]any{
-		"model":     modelName,
-		"max_tokens": 1,
-		"stream":    false,
-		"messages": []map[string]string{
-			{"role": "user", "content": "ping"},
-		},
-	}
-	resp, err := client.R().
-		SetHeader("Authorization", "Bearer "+apiKey).
-		SetHeader("Content-Type", "application/json").
-		SetBody(payload).
-		Post("/chat/completions")
-	if err != nil {
-		logger.SugaredLogger.Errorf("TestAiConnection error: %v", err)
-		return "无法访问接口：" + err.Error()
-	}
-	if resp.IsError() {
-		msg := parseOpenAIErrorBody(resp.Body())
-		if msg == "" {
-			msg = "HTTP " + resp.Status()
-		}
-		logger.SugaredLogger.Errorf("TestAiConnection http error: %s body: %s", resp.Status(), string(resp.Body()))
-		return msg
-	}
-	return ""
+	return a.settingsService.TestAiConnection(baseUrl, apiKey, modelName)
 }
 
-// parseOpenAIErrorBody 提取 OpenAI 兼容服务错误体中的可读信息
-func parseOpenAIErrorBody(body []byte) string {
-	if len(body) == 0 {
-		return ""
-	}
-	var v struct {
-		Error struct {
-			Message string `json:"message"`
-			Type    string `json:"type"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(body, &v); err == nil && v.Error.Message != "" {
-		if v.Error.Type != "" {
-			return v.Error.Type + ": " + v.Error.Message
-		}
-		return v.Error.Message
-	}
-	var e struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(body, &e); err == nil && e.Error != "" {
-		return e.Error
-	}
-	return ""
-}
-
-type AiModelInfo struct {
-	ModelName string `json:"modelName"`
-	MaxTokens int    `json:"maxTokens"`
-	Source    string `json:"source"`
-}
+type AiModelInfo = services.AiModelInfo
 
 func (a *App) FetchAiModelInfo(baseUrl, apiKey, modelName string) *AiModelInfo {
-	baseUrl = strutil.Trim(baseUrl)
-	modelName = strutil.Trim(modelName)
-	if baseUrl == "" || modelName == "" {
+	info := a.settingsService.FetchAiModelInfo(baseUrl, apiKey, modelName)
+	if info == nil {
 		return nil
 	}
-
-	info := &AiModelInfo{
-		ModelName: modelName,
-		MaxTokens: 0,
-		Source:    "",
-	}
-
-	if apiKey != "" {
-		type modelDetail struct {
-			ID             string `json:"id"`
-			MaxContextLen  int    `json:"max_context_length"`
-			ContextLength  int    `json:"context_length"`
-			MaxOutputTok   int    `json:"max_output_tokens"`
-			MaxTokensField int    `json:"max_tokens"`
-		}
-		var detail modelDetail
-
-		client := data.SharedHTTPClient
-		client.SetBaseURL(baseUrl)
-
-		resp, err := client.R().
-			SetHeader("Authorization", "Bearer "+apiKey).
-			SetHeader("Content-Type", "application/json").
-			SetResult(&detail).
-			Get("/models/" + modelName)
-
-		if err == nil && !resp.IsError() && detail.ID != "" {
-			if detail.MaxContextLen > 0 {
-				info.MaxTokens = detail.MaxContextLen
-				info.Source = "api"
-			} else if detail.ContextLength > 0 {
-				info.MaxTokens = detail.ContextLength
-				info.Source = "api"
-			} else if detail.MaxOutputTok > 0 {
-				info.MaxTokens = detail.MaxOutputTok
-				info.Source = "api"
-			} else if detail.MaxTokensField > 0 {
-				info.MaxTokens = detail.MaxTokensField
-				info.Source = "api"
-			}
-		}
-	}
-
 	if info.MaxTokens == 0 {
 		if maxTokens := getBuiltinModelMaxTokens(modelName); maxTokens > 0 {
 			info.MaxTokens = maxTokens
 			info.Source = "builtin"
 		}
 	}
-
 	return info
 }
 
@@ -3170,44 +2577,22 @@ func (a *App) ValidateCronExpr(expr string) string {
 //	@receiver a
 //	@return agent.MarketLifecycleStatus
 func (a *App) GetMarketLifecycleStatus() agent.MarketLifecycleStatus {
-	return agent.NewMarketLifecycleService(a.ctx).GetMarketLifecycleStatus()
+	return a.agentService.GetMarketLifecycleStatus(a.ctx)
 }
 
-// GeneratePreMarketBriefing
-//
-//	@Description: 生成盘前智能前瞻晨报（手动或定时触发）
-//	@receiver a
-//	@param aiConfigId AI 配置ID
-//	@return *agent.MarketIntelligenceReport 产出的智能晨报
+// GeneratePreMarketBriefing 生成盘前智能前瞻晨报
 func (a *App) GeneratePreMarketBriefing(aiConfigId int) *agent.MarketIntelligenceReport {
-	report, err := agent.NewMarketLifecycleService(a.ctx).GeneratePreMarketBriefing(a.ctx, aiConfigId)
-	if err != nil {
-		logger.SugaredLogger.Errorf("生成盘前前瞻失败：%v", err)
-	}
-	return report
+	return a.agentService.GeneratePreMarketBriefing(a.ctx, aiConfigId)
 }
 
-// GeneratePostMarketReview
-//
-//	@Description: 生成盘后收盘深度复盘（手动或定时触发）
-//	@receiver a
-//	@param aiConfigId AI 配置ID
-//	@return *agent.MarketIntelligenceReport 产出的智能复盘
+// GeneratePostMarketReview 生成盘后收盘深度复盘
 func (a *App) GeneratePostMarketReview(aiConfigId int) *agent.MarketIntelligenceReport {
-	report, err := agent.NewMarketLifecycleService(a.ctx).GeneratePostMarketReview(a.ctx, aiConfigId)
-	if err != nil {
-		logger.SugaredLogger.Errorf("生成收盘复盘失败：%v", err)
-	}
-	return report
+	return a.agentService.GeneratePostMarketReview(a.ctx, aiConfigId)
 }
 
-// GetLatestMarketIntelligenceReport
-//
-//	@Description: 获取最近一次盘前/盘后智能研报（供前端抽屉加载历史使用）
-//	@receiver a
-//	@return *agent.MarketIntelligenceReport
+// GetLatestMarketIntelligenceReport 获取最近一次盘前/盘后智能研报
 func (a *App) GetLatestMarketIntelligenceReport() *agent.MarketIntelligenceReport {
-	return agent.NewMarketLifecycleService(a.ctx).GetLatestReport()
+	return a.agentService.GetLatestMarketIntelligenceReport(a.ctx)
 }
 
 // SearchCronTasks
@@ -3255,252 +2640,125 @@ func (a *App) CalculateNextRunTimes(cron string, count int) []string {
 //   - uint: 新添加的交易记录ID
 //   - error: 错误信息
 func (a *App) AddTradingRecord(record data.TradingRecord) (uint, error) {
-	return data.NewStockDataApi().AddTradingRecord(record)
+	return a.settingsService.AddTradingRecord(record)
 }
 
-// GetTradingRecordList 获取交易记录列表（分页与筛选，返回结构与 AI 推荐列表一致）
 func (a *App) GetTradingRecordList(query data.TradingRecordListQuery) *data.TradingRecordPageData {
-	page, err := data.NewStockDataApi().GetTradingRecordList(query)
-	if err != nil {
-		return &data.TradingRecordPageData{}
-	}
-	return page
+	return a.settingsService.GetTradingRecordList(query)
 }
 
-// GetTradingRecordById 根据ID获取单个交易记录
-// 参数:
-//   - id: 交易记录ID
-//
-// 返回值:
-//   - *data.TradingRecord: 交易记录指针
-//   - error: 错误信息
 func (a *App) GetTradingRecordById(id uint) (*data.TradingRecord, error) {
-	return data.NewStockDataApi().GetTradingRecordById(id)
+	return a.settingsService.GetTradingRecordById(id)
 }
 
-// GetTradingRecordStatistics 获取交易记录统计数据
-//
-// 返回值:
-//   - *data.TradingRecordStatistics: 统计数据指针
 func (a *App) GetTradingRecordStatistics() *data.TradingRecordStatistics {
-	stats, err := data.NewStockDataApi().GetTradingRecordStatistics()
-	if err != nil {
-		return &data.TradingRecordStatistics{}
-	}
-	return stats
+	return a.settingsService.GetTradingRecordStatistics()
 }
 
-// UpdateTradingRecord 更新交易记录
-// 参数:
-//   - record: 交易记录结构体
-//
-// 返回值:
-//   - error: 错误信息
 func (a *App) UpdateTradingRecord(record data.TradingRecord) error {
-	return data.NewStockDataApi().UpdateTradingRecord(record)
+	return a.settingsService.UpdateTradingRecord(record)
 }
 
-// DeleteTradingRecord 删除交易记录
-// 参数:
-//   - id: 交易记录ID
-//
-// 返回值:
-//   - error: 错误信息
 func (a *App) DeleteTradingRecord(id uint) error {
-	return data.NewStockDataApi().DeleteTradingRecord(id)
+	return a.settingsService.DeleteTradingRecord(id)
 }
 
-// CheckFrequentTrading 检查是否频繁交易
-// 参数:
-//   - stockCode: 股票代码
-//
-// 返回值:
-//   - map[string]any: 包含 canTrade (bool) 和 msg (string)
 func (a *App) CheckFrequentTrading(stockCode string) map[string]any {
-	canTrade, msg := data.NewStockDataApi().CheckFrequentTrading(stockCode)
-	return map[string]any{
-		"canTrade": canTrade,
-		"msg":      msg,
-	}
+	return a.settingsService.CheckFrequentTrading(stockCode)
 }
 
 func (a *App) FetchAndSaveMarketStatistic() {
-	if !isTradingTime(time.Now()) {
-		logger.SugaredLogger.Debugf("当前非交易时间，跳过市场统计数据采集")
-		return
-	}
-	err := data.NewMarketStatisticApi().FetchAndSave()
-	if err != nil {
-		logger.SugaredLogger.Errorf("获取市场统计数据失败: %v", err)
-	}
+	a.marketService.FetchAndSaveMarketStatistic()
 }
 
 func (a *App) GetTodayMarketStatistic() []models.MarketStatistic {
-	return data.NewMarketStatisticApi().GetTodayData()
+	return a.marketService.GetTodayMarketStatistic()
 }
 
 func (a *App) GetMarketStatisticByDate(date string) []models.MarketStatistic {
-	return data.NewMarketStatisticApi().GetByDate(date)
+	return a.marketService.GetMarketStatisticByDate(date)
 }
 
 func (a *App) GetRecentDaysMarketStatistic(days int) []models.MarketStatistic {
-	return data.NewMarketStatisticApi().GetRecentDaysData(days)
+	return a.marketService.GetRecentDaysMarketStatistic(days)
 }
 
 func (a *App) CreateMCPServer(server *models.MCPServer) string {
-	err := data.NewMCPServerApi().Create(server)
-	if err != nil {
-		logger.SugaredLogger.Errorf("创建MCP服务器失败: %v", err)
-		return "创建失败: " + err.Error()
-	}
-	return "创建成功"
+	return a.agentService.CreateMCPServer(server)
 }
 
 func (a *App) UpdateMCPServer(server *models.MCPServer) string {
-	err := data.NewMCPServerApi().Update(server)
-	if err != nil {
-		logger.SugaredLogger.Errorf("更新MCP服务器失败: %v", err)
-		return "更新失败: " + err.Error()
-	}
-	return "更新成功"
+	return a.agentService.UpdateMCPServer(server)
 }
 
 func (a *App) DeleteMCPServer(id uint) string {
-	err := data.NewMCPServerApi().Delete(id)
-	if err != nil {
-		logger.SugaredLogger.Errorf("删除MCP服务器失败: %v", err)
-		return "删除失败: " + err.Error()
-	}
-	return "删除成功"
+	return a.agentService.DeleteMCPServer(id)
 }
 
 func (a *App) GetMCPServerByID(id uint) *models.MCPServer {
-	server, err := data.NewMCPServerApi().GetByID(id)
-	if err != nil {
-		logger.SugaredLogger.Errorf("获取MCP服务器失败: %v", err)
-		return nil
-	}
-	return server
+	return a.agentService.GetMCPServerByID(id)
 }
 
 func (a *App) GetMCPServerList(query *models.MCPServerQuery) *models.MCPServerPageResp {
-	return data.NewMCPServerApi().List(query)
+	return a.agentService.GetMCPServerList(query)
 }
 
 func (a *App) EnableMCPServer(id uint, enable bool) string {
-	err := data.NewMCPServerApi().EnableServer(id, enable)
-	if err != nil {
-		logger.SugaredLogger.Errorf("启用/禁用MCP服务器失败: %v", err)
-		return "操作失败: " + err.Error()
-	}
-	if enable {
-		return "已启用"
-	}
-	return "已禁用"
+	return a.agentService.EnableMCPServer(id, enable)
 }
 
 func (a *App) TestMCPServer(id uint) string {
-	result, err := data.NewMCPServerApi().TestConnection(id)
-	if err != nil {
-		logger.SugaredLogger.Errorf("测试MCP服务器连接失败: %v", err)
-		return "测试失败: " + err.Error()
-	}
-	return result
+	return a.agentService.TestMCPServer(id)
 }
 
 func (a *App) CreateSkill(skill *models.Skill) string {
-	err := data.NewSkillApi().Create(skill)
-	if err != nil {
-		logger.SugaredLogger.Errorf("创建技能失败: %v", err)
-		return "创建失败: " + err.Error()
-	}
-	return "创建成功"
+	return a.agentService.CreateSkill(skill)
 }
 
 func (a *App) UpdateSkill(skill *models.Skill) string {
-	err := data.NewSkillApi().Update(skill)
-	if err != nil {
-		logger.SugaredLogger.Errorf("更新技能失败: %v", err)
-		return "更新失败: " + err.Error()
-	}
-	return "更新成功"
+	return a.agentService.UpdateSkill(skill)
 }
 
 func (a *App) DeleteSkill(id uint) string {
-	err := data.NewSkillApi().Delete(id)
-	if err != nil {
-		logger.SugaredLogger.Errorf("删除技能失败: %v", err)
-		return "删除失败: " + err.Error()
-	}
-	return "删除成功"
+	return a.agentService.DeleteSkill(id)
 }
 
 func (a *App) GetSkillByID(id uint) *models.Skill {
-	skill, err := data.NewSkillApi().GetByID(id)
-	if err != nil {
-		logger.SugaredLogger.Errorf("获取技能失败: %v", err)
-		return nil
-	}
-	return skill
+	return a.agentService.GetSkillByID(id)
 }
 
 func (a *App) GetSkillList(query *models.SkillQuery) *models.SkillPageResp {
-	return data.NewSkillApi().List(query)
+	return a.agentService.GetSkillList(query)
 }
 
 func (a *App) EnableSkill(id uint, enable bool) string {
-	err := data.NewSkillApi().EnableSkill(id, enable)
-	if err != nil {
-		logger.SugaredLogger.Errorf("启用/禁用技能失败: %v", err)
-		return "操作失败: " + err.Error()
-	}
-	if enable {
-		return "已启用"
-	}
-	return "已禁用"
+	return a.agentService.EnableSkill(id, enable)
 }
 
 func (a *App) GetAllSkills() []models.Skill {
-	return data.NewSkillApi().GetAll()
+	return a.agentService.GetAllSkills()
 }
 
 func (a *App) LearnSkillFromProject(projectName string, analysis string) string {
-	llm := agent.LLMFromConfig()
-	skill, err := agent.NewEvolver().LearnFromProject(projectName, analysis, llm)
-	if err != nil {
-		logger.SugaredLogger.Errorf("LearnSkillFromProject failed: %v", err)
-		return "学习失败: " + err.Error()
-	}
-	return fmt.Sprintf("学习成功！已创建技能「%s」\n描述: %s\n触发关键词: %s",
-		skill.Name, skill.Description, strings.Join(skill.TriggerKeywords, ","))
+	return a.agentService.LearnSkillFromProject(projectName, analysis)
 }
 
 func (a *App) GetMCPToolsByServerID(serverID uint) []models.MCPServerTool {
-	return data.NewMCPServerApi().GetToolsByServerID(serverID)
+	return a.agentService.GetMCPToolsByServerID(serverID)
 }
 
 func (a *App) EnableMCPTool(id uint, enable bool) string {
-	if err := data.NewMCPServerApi().EnableTool(id, enable); err != nil {
-		return "操作失败: " + err.Error()
-	}
-	if enable {
-		return "已启用工具"
-	}
-	return "已禁用工具"
+	return a.agentService.EnableMCPTool(id, enable)
 }
 
 func (a *App) GetAllMCPTools() []models.MCPServerTool {
-	return data.NewMCPServerApi().GetAllTools()
+	return a.agentService.GetAllMCPTools()
 }
 
-type PromptTemplateItem struct {
-	ID   uint   `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
+type PromptTemplateItem = services.PromptTemplateItem
 
 func (a *App) GetPromptTemplates(name, promptType string) []PromptTemplateItem {
-	return []PromptTemplateItem{}
+	return a.agentService.GetPromptTemplates(name, promptType)
 }
 
 // ============================================================================
@@ -3516,52 +2774,25 @@ type VectorBTResult struct {
 
 // RunVectorBacktest 运行单次回测
 func (a *App) RunVectorBacktest(stockCode, strategyType string, params map[string]any) map[string]any {
-	resp, err := quant.VectorBTHandler(stockCode, strategyType, params)
-	if err != nil {
-		return map[string]any{"code": 0, "message": err.Error()}
-	}
-	return map[string]any{
-		"code":    resp.Code,
-		"message": resp.Message,
-		"data": map[string]any{
-			"report":   resp.Report,
-			"stats":    resp.Stats,
-			"strategy": resp.StrategyName,
-			"params":   params,
-		},
-	}
+	return a.quantService.RunVectorBacktest(stockCode, strategyType, params)
 }
 
 // RunVectorGridSearch 运行参数网格扫描
 func (a *App) RunVectorGridSearch(stockCode, strategyType string) map[string]any {
-	resp, err := quant.VectorBTGridSearchHandler(stockCode, strategyType)
-	if err != nil {
-		return map[string]any{"code": 0, "message": err.Error()}
-	}
-	return map[string]any{
-		"code":              resp.Code,
-		"message":           resp.Message,
-		"total_combinations": resp.TotalCombinations,
-		"best_strategy":     resp.BestStrategy,
-		"best_params":       resp.BestParams,
-		"best_stats":        resp.BestStats,
-		"duration":          resp.Duration,
-	}
+	return a.quantService.RunVectorGridSearch(stockCode, strategyType)
 }
 
 // GenerateETFRotationReport 手动或一键触发全市场ETF轮动多Agent决策分析
 func (a *App) GenerateETFRotationReport(aiConfigId int) (*agent.MarketIntelligenceReport, error) {
-	service := agent.NewMarketLifecycleService(a.ctx)
-	return service.GenerateETFRotationReport(context.Background(), aiConfigId)
+	return a.agentService.GenerateETFRotationReport(a.ctx, aiConfigId)
 }
 
 // GenerateSerenityResearchReport 手动或一键触发Serenity产业深度拆解
 func (a *App) GenerateSerenityResearchReport(targetName string, code string, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
-	service := agent.NewMarketLifecycleService(a.ctx)
-	return service.GenerateSerenityResearchReport(context.Background(), targetName, code, aiConfigId)
+	return a.agentService.GenerateSerenityResearchReport(a.ctx, targetName, code, aiConfigId)
 }
 
 // ReloadSkills 热重载技能定义，无需重启应用
 func (a *App) ReloadSkills() error {
-	return data.NewSkillApi().ReloadSkills()
+	return a.agentService.ReloadSkills()
 }
