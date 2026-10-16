@@ -442,8 +442,12 @@ onBeforeMount(() => {
       if (msg.reasoning_content) {
         if (msg.reasoning_content.startsWith("[STATUS]")) {
           data.analysisStatus = msg.reasoning_content.replace("[STATUS]", "").trim()
+        } else if (msg.reasoning_content.startsWith("[STEP]")) {
+          const stepText = msg.reasoning_content.replace("[STEP]", "").trim()
+          if (stepText) {
+            data.analysisStatus = stepText.length > 50 ? stepText.slice(0, 48) + "..." : stepText
+          }
         }
-        // [STEP] 工具调用日志与其它纯思考文本一律忽略
       }
       if (msg.extraContent) {
         data.airesult += msg.extraContent

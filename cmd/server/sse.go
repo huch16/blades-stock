@@ -45,7 +45,9 @@ func (h *SSEHub) removeClient(ch chan []byte) {
 	}
 }
 
-// Broadcast 向所有在线客户端广播结构化事件
+// Broadcast 向所有在线客户端广播结构化事件。
+// 根据 W3C EventSource 规范，若包含自定义 event: 名称，浏览器的 onmessage 回调将不会被触发。
+// 故采用标准 data: {"event": "...", "data": ...}\n\n 格式，确保客户端 onmessage 100% 稳定接收并派发。
 func (h *SSEHub) Broadcast(event string, data any) {
 	h.clientsMu.RLock()
 	defer h.clientsMu.RUnlock()
@@ -63,7 +65,7 @@ func (h *SSEHub) Broadcast(event string, data any) {
 		return
 	}
 
-	msg := []byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, string(bytes)))
+	msg := []byte(fmt.Sprintf("data: %s\n\n", string(bytes)))
 
 	for ch := range h.clients {
 		select {
@@ -117,7 +119,7 @@ func HandleSSE(w http.ResponseWriter, r *http.Request) {
 	defer globalSSEHub.removeClient(clientChan)
 
 	// 握手确认
-	if _, err := w.Write([]byte("event: ready\ndata: {\"status\":\"connected\"}\n\n")); err != nil {
+	if _, err := w.Write([]byte("data: {\"event\":\"ready\",\"data\":{\"status\":\"connected\"}}\n\n")); err != nil {
 		return
 	}
 	flusher.Flush()

@@ -80,6 +80,7 @@ class WebEventBus {
   private sseSource: EventSource | null = null
   private sseConnected: boolean = false
   private retryTimer: any = null
+  private attachedEvents: Set<string> = new Set()
 
   public onMultiple(event: string, callback: Function, maxCallbacks: number = -1): void {
     if (!this.listeners.has(event)) {
@@ -91,6 +92,7 @@ class WebEventBus {
       calledCount: 0,
     })
     this.ensureSSEConnection()
+    this.attachSSEListener(event)
   }
 
   public off(eventName: string, ...additionalEventNames: string[]): void {
@@ -131,6 +133,25 @@ class WebEventBus {
     }
   }
 
+  private handleSSEMessage(e: MessageEvent, explicitEvent?: string): void {
+    try {
+      const payload = JSON.parse(e.data)
+      const eventName = explicitEvent || (payload && payload.event) || 'message'
+      const eventData = (payload && typeof payload === 'object' && 'data' in payload) ? payload.data : payload
+      this.emit(eventName, eventData)
+    } catch (err) {
+      this.emit(explicitEvent || 'message', e.data)
+    }
+  }
+
+  private attachSSEListener(event: string): void {
+    if (!this.sseSource || this.attachedEvents.has(event)) return
+    this.attachedEvents.add(event)
+    this.sseSource.addEventListener(event, (e: any) => {
+      this.handleSSEMessage(e, event)
+    })
+  }
+
   // 保证与后端的 SSE 长连接连通
   public ensureSSEConnection(): void {
     if (this.sseConnected || typeof window === 'undefined') return
@@ -144,20 +165,22 @@ class WebEventBus {
     try {
       this.sseSource = new EventSource(url)
       this.sseConnected = true
+      this.attachedEvents.clear()
 
-      this.sseSource.onmessage = (e) => {
-        try {
-          const payload = JSON.parse(e.data)
-          if (payload && payload.event) {
-            this.emit(payload.event, payload.data)
-          }
-        } catch (err) {
-          this.emit('message', e.data)
-        }
+      this.sseSource.onmessage = (e) => this.handleSSEMessage(e)
+
+      // 为当前已注册的所有前端监听事件挂载 addEventListener，提供双重保障
+      for (const evt of this.listeners.keys()) {
+        this.attachSSEListener(evt)
+      }
+      const defaultEvents = ['newChatStream', 'marketIntelligenceReport', 'stockPriceAlertTriggered', 'refreshFollowList', 'loadingDone']
+      for (const evt of defaultEvents) {
+        this.attachSSEListener(evt)
       }
 
       this.sseSource.onerror = () => {
         this.sseConnected = false
+        this.attachedEvents.clear()
         if (this.sseSource) {
           this.sseSource.close()
           this.sseSource = null

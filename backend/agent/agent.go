@@ -3,6 +3,7 @@ package agent
 
 import (
 	"blades-stock/backend/agent/tools"
+	"blades-stock/backend/circuitbreaker"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
@@ -509,6 +510,12 @@ func getMCPTools() []bladesTools.Tool {
 }
 
 func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
+	breaker := circuitbreaker.Get("mcp:" + server.Name)
+	if !breaker.Allow() {
+		logger.SugaredLogger.Warnf("MCP服务 [%s] 断路器处于开启(熔断)状态，直接跳过连接", server.Name)
+		return nil
+	}
+
 	var transport bladesmc.TransportType
 	var endpoint string
 	var command string
@@ -531,8 +538,13 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 		return nil
 	}
 
-	// 超时驱动：优先环境变量 MCP_TIMEOUT_SECONDS，再读取 SettingConfig.McpTimeout，兜底 8s
+	// 超时驱动：优先环境变量 MCP_TIMEOUT_SECONDS，再读取 SettingConfig.McpTimeout，兜底 8s。
+	// 对于远程 HTTP MCP，连接超时严格限制在 3s 内，避免远程断网导致整个 Agent 流程阻塞几十秒。
 	clientTimeout := data.GetSettingConfig().GetMcpTimeout()
+	if transport == bladesmc.TransportHTTP && clientTimeout > 3*time.Second {
+		clientTimeout = 3 * time.Second
+	}
+
 	mcpClient, err := bladesmc.NewClient(bladesmc.ClientConfig{
 		Name:      server.Name,
 		Transport: transport,
@@ -545,41 +557,47 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 	})
 	if err != nil {
 		logger.SugaredLogger.Errorf("创建MCP客户端失败 [%s]: %v", server.Name, err)
+		breaker.Failure()
 		return nil
 	}
 
-	// Connect 增加 2 次轻量重试保护，应对外部进程偶发冷启动抖动
 	connStart := time.Now()
 	var connectErr error
-	for connAttempt := 1; connAttempt <= 2; connAttempt++ {
+	maxConnAttempts := 2
+	if transport == bladesmc.TransportHTTP {
+		maxConnAttempts = 1
+	}
+	for connAttempt := 1; connAttempt <= maxConnAttempts; connAttempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
 		connectErr = mcpClient.Connect(ctx)
 		cancel()
 		if connectErr == nil {
 			break
 		}
-		if connAttempt < 2 {
-			logger.SugaredLogger.Warnf("MCP服务 [%s] 首次连接失败: %v, 500ms后进行重试...", server.Name, connectErr)
-			time.Sleep(500 * time.Millisecond)
+		if connAttempt < maxConnAttempts {
+			logger.SugaredLogger.Warnf("MCP服务 [%s] 首次连接失败: %v, 300ms后进行重试...", server.Name, connectErr)
+			time.Sleep(300 * time.Millisecond)
 		}
 	}
 	RecordMCPConnect(context.Background(), server.Name, connectErr == nil, time.Since(connStart))
 
-		// Audit log for MCP connection
-		mcpAuditEntry := models.AuditLog{
-			ToolName:    "MCP_CONNECT",
-			ServerName:  server.Name,
-			Success:     connectErr == nil,
-			DurationMs:  int64(time.Since(connStart).Milliseconds()),
-		}
-		if connectErr != nil {
-			mcpAuditEntry.ErrorMsg = connectErr.Error()
-		}
-		go RecordAuditLog(mcpAuditEntry)
+	// Audit log for MCP connection
+	mcpAuditEntry := models.AuditLog{
+		ToolName:   "MCP_CONNECT",
+		ServerName: server.Name,
+		Success:    connectErr == nil,
+		DurationMs: int64(time.Since(connStart).Milliseconds()),
+	}
 	if connectErr != nil {
+		mcpAuditEntry.ErrorMsg = connectErr.Error()
+	}
+	go RecordAuditLog(mcpAuditEntry)
+	if connectErr != nil {
+		breaker.Failure()
 		logger.SugaredLogger.Errorf("MCP连接最终失败 [%s]: %v", server.Name, connectErr)
 		return nil
 	}
+	breaker.Success()
 
 	// Resolve 工具列表
 	var toolList []bladesTools.Tool

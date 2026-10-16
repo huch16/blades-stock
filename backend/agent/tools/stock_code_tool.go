@@ -26,9 +26,15 @@ func GetQueryStockCodeInfoTool() bladesTools.Tool {
 				logger.SugaredLogger.Errorf("QueryStockCodeInfo unmarshal error: %v", err)
 				return "未找到股票信息 (参数解析失败)", nil
 			}
-			searchWord, ok := parms["searchWord"].(string)
-			if !ok {
-				logger.SugaredLogger.Errorf("QueryStockCodeInfo searchWord not found in args")
+			searchWord := ""
+			for _, key := range []string{"searchWord", "code", "secid", "symbol", "keyword", "stockCode", "word", "query"} {
+				if v, ok := parms[key].(string); ok && strings.TrimSpace(v) != "" {
+					searchWord = strings.TrimSpace(v)
+					break
+				}
+			}
+			if searchWord == "" {
+				logger.SugaredLogger.Errorf("QueryStockCodeInfo searchWord not found in args: %s", args)
 				return "未找到股票信息", nil
 			}
 			logger.SugaredLogger.Infof("QueryStockCodeInfo searching for: %s", searchWord)

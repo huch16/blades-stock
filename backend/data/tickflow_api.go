@@ -48,6 +48,10 @@ func (c *TickFlowClient) GetKlines(symbol, period string, count int, adjust stri
 	if c.apiKey == "" {
 		return nil, fmt.Errorf("TickFlow API密钥未配置，请在设置中填写TickFlowAPIKey")
 	}
+	period = strings.TrimSpace(period)
+	if period == "" {
+		period = "1d"
+	}
 	if count <= 0 {
 		count = 200
 	}

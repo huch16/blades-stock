@@ -1493,11 +1493,16 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 	}
 
 	agentMode := string(agent.AgentModePlanExecute)
-	if !enableTools {
+	if !enableTools || (strings.TrimSpace(question) == "" && preFetchCtx != "") {
 		agentMode = string(agent.AgentModeDirect)
 	}
 
-	for msg := range agent.NewStockAiAgentApi().ChatWithContext(a.ctx, analysisQuestion, aiConfigId, sysPromptId, true, 5, think, agentMode) {
+	sysPrompt := ""
+	if agentMode == string(agent.AgentModeDirect) {
+		sysPrompt = "你现在是顶级证券投资顾问与量化宏观专家“财智”。所有核心客观盘面数据、估值百分位与详尽财务指标已在用户输入中完整提供，无需额外调用外部工具。请直接基于输入中的真实数据，从技术面、基本面、消息面、资金面四个维度输出结构清晰、多空判断明确的深度研报，严禁在正文中生成任何伪造的工具调用标签。"
+	}
+
+	for msg := range agent.NewStockAiAgentApi().ChatWithContext(a.ctx, analysisQuestion, aiConfigId, sysPromptId, true, 5, think, agentMode, sysPrompt) {
 		if msg == nil {
 			continue
 		}

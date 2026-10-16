@@ -3,6 +3,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-kratos/blades/tools"
 	"github.com/google/jsonschema-go/jsonschema"
@@ -108,6 +109,12 @@ func (t *bladesTool) Name() string                     { return t.name }
 func (t *bladesTool) Description() string              { return t.description }
 func (t *bladesTool) InputSchema() *jsonschema.Schema  { return t.inputSchema }
 func (t *bladesTool) OutputSchema() *jsonschema.Schema { return nil }
-func (t *bladesTool) Handle(_ context.Context, input string) (string, error) {
+func (t *bladesTool) Handle(_ context.Context, input string) (resp string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("tool %s panic: %v", t.name, r)
+			resp = fmt.Sprintf("工具 %s 执行异常: %v", t.name, r)
+		}
+	}()
 	return t.handler(input)
 }

@@ -634,15 +634,20 @@ func (s *AgentService) NewChatStreamCustom(emitter MessageEmitter, stock, stockC
 			analysisQuestion += "\n\n【预采集参考数据】以下数据由系统预先采集，是真实数据，可直接引用分析：\n" + preFetchCtx + "\n\n【重要】严禁编造或推算PE/PB/ROE/毛利率/营收/利润/资金流向/均线等任何数字指标。所有数据须来自预采集数据或工具返回结果。不确定的指标请明确说'数据不可得'，不要自行估算。"
 		}
 
-		// 根据工具启用状态动态决策 Agent 推演模式：
-		// 1. 若用户关闭函数工具调用，或已预注入详尽数据且不需要外部搜索，采用 direct 极速合成，15-25秒内出结果；
-		// 2. 若用户开启工具调用，采用 plan_execute 进行工具探索。
+		// 根据工具启用状态与预采集数据动态决策 Agent 推演模式：
+		// 1. 若用户关闭函数工具调用，或针对常规个股全景研判（question为空）已预注入详尽真实数据，采用 direct 极速合成，15-25秒内出结果；
+		// 2. 若用户开启工具调用且输入了特定探索问题，采用 plan_execute 进行工具探索。
 		agentMode := string(agent.AgentModePlanExecute)
-		if !enableTools {
+		if !enableTools || (strings.TrimSpace(question) == "" && preFetchCtx != "") {
 			agentMode = string(agent.AgentModeDirect)
 		}
 
-		for msg := range agent.NewStockAiAgentApi().ChatWithContext(context.Background(), analysisQuestion, aiConfigId, sysPromptId, false, 0, think, agentMode) {
+		sysPrompt := ""
+		if agentMode == string(agent.AgentModeDirect) {
+			sysPrompt = "你现在是顶级证券投资顾问与量化宏观专家“财智”。所有核心客观盘面数据、估值百分位与详尽财务指标已在用户输入中完整提供，无需额外调用外部工具。请直接基于输入中的真实数据，从技术面、基本面、消息面、资金面四个维度输出结构清晰、多空判断明确的深度研报，严禁在正文中生成任何伪造的工具调用标签。"
+		}
+
+		for msg := range agent.NewStockAiAgentApi().ChatWithContext(context.Background(), analysisQuestion, aiConfigId, sysPromptId, false, 0, think, agentMode, sysPrompt) {
 			if msg == nil || msg.Content == "agent-DONE" {
 				continue
 			}

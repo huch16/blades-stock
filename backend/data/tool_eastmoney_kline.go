@@ -19,6 +19,9 @@ func init() {
 // normalizeKLineType 将前端/自然语言 K 线类型转为东方财富 API 参数
 func normalizeKLineType(s string) string {
 	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return "101"
+	}
 	switch s {
 	case "day", "日", "101", "日k", "日k线":
 		return "101"

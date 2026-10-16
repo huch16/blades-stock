@@ -220,7 +220,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if skillPrompt != "" {
 				sysPrompt += skillPrompt + "\n\n"
 			}
-			sysPrompt += GetPromptTemplates().SystemRules
+			if agentMode == string(AgentModeDirect) || len(stockAiAgent.instance.AllTools) == 0 {
+				sysPrompt += "【研报数据使用纪律】：所有一手真实行情、财务指标与量化参考数据已在输入上下文中详尽注入，无需且不得尝试调用任何外部工具。请直接基于上述一手真实数据进行深度量化推演与结构化研报撰写，严禁在正文中生成任何 <tool_call> 等伪造标签。"
+			} else {
+				sysPrompt += GetPromptTemplates().SystemRules
+			}
 		}
 
 		// 当日市场状态注入（TTL 缓存，复用 GetMarketData 数据源）：市场相关

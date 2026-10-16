@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -87,6 +88,17 @@ func CleanStockCode(raw string) string {
 	match := regexp.MustCompile(`([0-9]{6})`).FindStringSubmatch(raw)
 	if len(match) > 1 {
 		return match[1]
+	}
+	// 处理纯数字但丢失前导零（1~5位，如 2906 -> 002906）
+	isDigits := true
+	for _, c := range raw {
+		if c < '0' || c > '9' {
+			isDigits = false
+			break
+		}
+	}
+	if isDigits && len(raw) > 0 && len(raw) < 6 {
+		return fmt.Sprintf("%06s", raw)
 	}
 	return raw
 }

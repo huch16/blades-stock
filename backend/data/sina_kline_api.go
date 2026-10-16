@@ -680,6 +680,17 @@ func cleanCodeOnly(raw string) string {
 			}
 		}
 	}
+	// 处理纯数字但长度不足 6 位的情况（如 JSON 解析丢失前导零，002906 变成 2906）
+	isDigits := true
+	for _, c := range raw {
+		if c < '0' || c > '9' {
+			isDigits = false
+			break
+		}
+	}
+	if isDigits && len(raw) > 0 && len(raw) < 6 {
+		raw = fmt.Sprintf("%06s", raw)
+	}
 	return raw
 }
 
@@ -687,6 +698,13 @@ func cleanCodeOnly(raw string) string {
 // 5 分钟内重复请求直接命中缓存，避免重复走完整的慢速降级链。
 func FetchKLineWithFallback(stockCode, stockName, klt string, limit int, end string) *KLineSourceResult {
 	stockCode = cleanCodeOnly(stockCode)
+	klt = strings.TrimSpace(klt)
+	if klt == "" {
+		klt = "101"
+	}
+	if limit <= 0 {
+		limit = 60
+	}
 	if cached := klineCacheGet(stockCode, klt, limit); cached != nil {
 		cached.Source = "cache:" + cached.Source
 		fillVolumeRatio(cached.Data)
@@ -698,6 +716,13 @@ func FetchKLineWithFallback(stockCode, stockName, klt string, limit int, end str
 }
 
 func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, end string) *KLineSourceResult {
+	klt = strings.TrimSpace(klt)
+	if klt == "" {
+		klt = "101"
+	}
+	if limit <= 0 {
+		limit = 60
+	}
 	// 港美股：仅走 MAC/东财（新浪/腾讯/通达信不支持港美股）
 	if IsHKStockCode(stockCode) || IsUSStockCode(stockCode) {
 		if macResult := tryKLineSource("tdx-mac", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {

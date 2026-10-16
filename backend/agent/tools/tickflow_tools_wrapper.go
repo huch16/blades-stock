@@ -42,8 +42,14 @@ func GetTickFlowToolWrappers() []bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			symbol := gjson.Get(args, "symbol").String()
-			period := gjson.Get(args, "period").String()
+			period := strings.TrimSpace(gjson.Get(args, "period").String())
+			if period == "" {
+				period = "1d"
+			}
 			count := int(gjson.Get(args, "count").Int())
+			if count <= 0 {
+				count = 100
+			}
 			adjust := gjson.Get(args, "adjust").String()
 			if symbol == "" {
 				return "请提供symbol参数", nil
@@ -76,8 +82,14 @@ func GetTickFlowToolWrappers() []bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			symbolsStr := gjson.Get(args, "symbols").String()
-			period := gjson.Get(args, "period").String()
+			period := strings.TrimSpace(gjson.Get(args, "period").String())
+			if period == "" {
+				period = "1d"
+			}
 			count := int(gjson.Get(args, "count").Int())
+			if count <= 0 {
+				count = 100
+			}
 			if symbolsStr == "" {
 				return "请提供symbols参数", nil
 			}

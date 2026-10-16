@@ -22,12 +22,24 @@ func GetStockKLineTool() bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			code := gjson.Get(args, "code").String()
-			kType := gjson.Get(args, "type").String()
+			if code == "" {
+				code = gjson.Get(args, "symbol").String()
+			}
+			if code == "" {
+				code = gjson.Get(args, "stockCode").String()
+			}
+			if code == "" {
+				code = gjson.Get(args, "secid").String()
+			}
+			kType := strings.TrimSpace(gjson.Get(args, "type").String())
+			if kType == "" {
+				kType = "day"
+			}
 			countStr := gjson.Get(args, "count").String()
 			code = CleanStockCode(code)
 			code = GetStockCode(code)
 			count, err := strconv.ParseInt(countStr, 10, 64)
-			if err != nil {
+			if err != nil || count <= 0 {
 				count = 90
 			}
 			kline := data.NewStockDataApi().GetKLineData(code, kType, count)
@@ -61,8 +73,17 @@ func GetStockEastMoneyKLineTool() bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			code := gjson.Get(args, "code").String()
+			if code == "" {
+				code = gjson.Get(args, "symbol").String()
+			}
+			if code == "" {
+				code = gjson.Get(args, "stockCode").String()
+			}
 			code = CleanStockCode(code)
-			klineTy := gjson.Get(args, "kline_ty").String()
+			klineTy := strings.TrimSpace(gjson.Get(args, "kline_ty").String())
+			if klineTy == "" {
+				klineTy = "101"
+			}
 			limit := int(gjson.Get(args, "limit").Int())
 			if limit <= 0 {
 				limit = 60
@@ -94,8 +115,17 @@ func GetEastMoneyKLineWithMATool() bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			code := gjson.Get(args, "code").String()
+			if code == "" {
+				code = gjson.Get(args, "symbol").String()
+			}
+			if code == "" {
+				code = gjson.Get(args, "stockCode").String()
+			}
 			code = CleanStockCode(code)
-			klineTy := gjson.Get(args, "kline_ty").String()
+			klineTy := strings.TrimSpace(gjson.Get(args, "kline_ty").String())
+			if klineTy == "" {
+				klineTy = "101"
+			}
 			limit := int(gjson.Get(args, "limit").Int())
 			if limit <= 0 {
 				limit = 60
