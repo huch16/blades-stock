@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
@@ -542,7 +543,16 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 
 	// 涨停热点与连板板块
 	uplimitHot := data.NewMarketNewsApi().GetUplimitHot(todayStr, 15)
-	uplimitJSON, _ := data.JSONToMarkdownTable([]byte(fmt.Sprintf("%v", uplimitHot)))
+	var uplimitJSON string
+	if b, err := json.Marshal(uplimitHot); err == nil {
+		if md, err2 := data.JSONToMarkdownTable(b); err2 == nil && strings.TrimSpace(md) != "" {
+			uplimitJSON = md
+		} else {
+			uplimitJSON = string(b)
+		}
+	} else {
+		uplimitJSON = "涨停复盘数据整理中..."
+	}
 
 	// 2. 触发 AI 历史报告自动回测闭环检验
 	btMgr := quant.NewBacktestManager()
@@ -601,8 +611,13 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
-	if strings.TrimSpace(finalReport) == "" || strings.HasPrefix(strings.TrimSpace(finalReport), "❌") {
-		return nil, fmt.Errorf("AI 生成收盘复盘失败: %s", finalReport)
+	rawContent := strings.TrimSpace(contentBuilder.String())
+	if rawContent == "" || strings.HasPrefix(rawContent, "❌") {
+		errMsg := rawContent
+		if errMsg == "" {
+			errMsg = "模型未返回任何有效内容，请检查大模型配置或网络"
+		}
+		return nil, fmt.Errorf("AI 生成收盘复盘失败: %s", errMsg)
 	}
 
 	title := fmt.Sprintf("🌆 A股全景收盘复盘与次日推演 (%s)", todayStr)
@@ -746,28 +761,40 @@ func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *Marke
 	var query *gorm.DB
 	switch reportType {
 	case "pre_market_briefing":
-		query = db.Dao.Where("classify LIKE ? OR stock_name LIKE ?", "%pre_market%", "%盘前%")
+		query = db.Dao.Where("chat_id LIKE ? OR stock_name LIKE ?", "%pre_market%", "%盘前%")
 	case "post_market_review":
-		query = db.Dao.Where("classify LIKE ? OR stock_name LIKE ? OR stock_code = ?", "%post_market%", "%收盘复盘%", "收盘复盘")
+		query = db.Dao.Where("chat_id LIKE ? OR stock_name LIKE ? OR stock_code = ?", "%post_market%", "%收盘复盘%", "收盘复盘")
 	case "etf_rotation_decision":
-		query = db.Dao.Where("classify LIKE ? OR stock_name LIKE ?", "%etf_rotation%", "%ETF轮动%")
+		query = db.Dao.Where("chat_id LIKE ? OR stock_name LIKE ?", "%etf_rotation%", "%ETF轮动%")
 	case "serenity_industry_analysis":
-		query = db.Dao.Where("classify LIKE ? OR stock_name LIKE ?", "%serenity%", "%Serenity%")
+		query = db.Dao.Where("chat_id LIKE ? OR stock_name LIKE ?", "%serenity%", "%Serenity%")
 	default:
-		query = db.Dao.Where("stock_code IN (?, ?) OR classify LIKE ?", "盘前前瞻", "收盘复盘", "%market%")
+		query = db.Dao.Where("stock_code IN (?, ?) OR chat_id LIKE ?", "盘前前瞻", "收盘复盘", "%market%")
 	}
 
 	err := query.Order("created_at DESC").First(&item).Error
 	if err == nil && item.ID > 0 {
-		return &MarketIntelligenceReport{
+		_, actions := types.ParseAndExtractActions(item.Content)
+		title := item.StockName
+		if title == "" {
+			title = "智能研报"
+		}
+		if !strings.Contains(title, item.CreatedAt.Format("2006-01-02")) {
+			title = fmt.Sprintf("%s (%s)", title, item.CreatedAt.Format("2006-01-02"))
+		}
+		rep := &MarketIntelligenceReport{
 			Type:        reportType,
-			Title:       fmt.Sprintf("%s (%s)", item.StockName, item.CreatedAt.Format("2006-01-02")),
+			Title:       title,
 			Summary:     "历史智能分析报告存档",
 			Content:     item.Content,
+			Actions:     actions,
 			GeneratedAt: item.CreatedAt,
 			TradingDate: item.CreatedAt.Format("2006-01-02"),
 			Source:      item.ModelName,
 		}
+		// 回填内存缓存加速后续读取
+		cacheReport(rep)
+		return rep
 	}
 
 	return nil
