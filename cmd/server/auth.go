@@ -4,25 +4,72 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"blades-stock/backend/logger"
 )
 
 // AuthConfig 访问鉴权配置
 type AuthConfig struct {
-	Token string
+	mu      sync.RWMutex
+	Token   string
+	DataDir string
 }
 
 var globalAuth = &AuthConfig{}
 
-func initAuth() {
-	globalAuth.Token = strings.TrimSpace(os.Getenv("BLADES_AUTH_TOKEN"))
-	if globalAuth.Token == "" {
-		logger.SugaredLogger.Warn("[Auth] BLADES_AUTH_TOKEN is not set. Server is running in OPEN mode (recommended only for trusted/private network).")
-	} else {
-		logger.SugaredLogger.Info("[Auth] Access token protection is ENABLED.")
+// initAuth 初始化访问鉴权配置
+func initAuth(dataDir string) {
+	globalAuth.mu.Lock()
+	defer globalAuth.mu.Unlock()
+
+	globalAuth.DataDir = dataDir
+	globalAuth.Token = ""
+
+	// 1. 优先读取环境变量 BLADES_AUTH_TOKEN
+	envToken := strings.TrimSpace(os.Getenv("BLADES_AUTH_TOKEN"))
+	if envToken != "" {
+		globalAuth.Token = envToken
+		logger.SugaredLogger.Info("[Auth] Access token protection is ENABLED (from environment).")
+		return
 	}
+
+	// 2. 次优先从本地持久化数据目录读取 auth.token
+	if dataDir != "" {
+		tokenFile := filepath.Join(dataDir, "auth.token")
+		if b, err := os.ReadFile(tokenFile); err == nil {
+			persistedToken := strings.TrimSpace(string(b))
+			if persistedToken != "" {
+				globalAuth.Token = persistedToken
+				logger.SugaredLogger.Info("[Auth] Access token protection is ENABLED (from persistent storage).")
+				return
+			}
+		}
+	}
+
+	logger.SugaredLogger.Warn("[Auth] BLADES_AUTH_TOKEN is not set. System requires first-login password initialization.")
+}
+
+func getAuthToken() string {
+	globalAuth.mu.RLock()
+	defer globalAuth.mu.RUnlock()
+	return globalAuth.Token
+}
+
+func setAuthToken(token string) error {
+	globalAuth.mu.Lock()
+	defer globalAuth.mu.Unlock()
+
+	token = strings.TrimSpace(token)
+	globalAuth.Token = token
+
+	if globalAuth.DataDir != "" {
+		tokenFile := filepath.Join(globalAuth.DataDir, "auth.token")
+		return os.WriteFile(tokenFile, []byte(token), 0o600)
+	}
+	return nil
 }
 
 // AuthMiddleware 校验公网访问 Token
@@ -37,19 +84,29 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// 未配置 Token 则处于开放模式，直接通过
-		if globalAuth.Token == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
-
 		path := r.URL.Path
 
 		// 静态资源与免鉴权端点放行
 		if path == "/health" ||
+			path == "/api/auth/status" ||
 			path == "/api/auth/login" ||
+			path == "/api/auth/init" ||
 			!strings.HasPrefix(path, "/api/") {
 			next.ServeHTTP(w, r)
+			return
+		}
+
+		serverToken := getAuthToken()
+
+		// 若服务端未配置任何 Token，则拒绝 RPC 调用并引导进行首次密码初始化
+		if serverToken == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]any{
+				"code":     401,
+				"needInit": true,
+				"error":    "系统尚未初始化访问密码，请在首次访问界面设置密码",
+			})
 			return
 		}
 
@@ -65,17 +122,86 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			clientToken = strings.TrimSpace(r.URL.Query().Get("token"))
 		}
 
-		if clientToken != globalAuth.Token {
+		if clientToken != serverToken {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]any{
-				"code":  401,
-				"error": "未授权访问：请提供正确的访问令牌 (Authorization: Bearer <token>)",
+				"code":     401,
+				"needInit": false,
+				"error":    "未授权访问：请提供正确的访问令牌 (Authorization: Bearer <token>)",
 			})
 			return
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+// HandleAuthStatus 查询当前鉴权状态与是否需要首次初始化
+func HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	serverToken := getAuthToken()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"code": 0,
+		"data": map[string]any{
+			"needInit":     serverToken == "",
+			"authRequired": true,
+			"version":      "1.4.0",
+		},
+	})
+}
+
+// HandleInitPassword 提供首次设置访问密码端点
+func HandleInitPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	current := getAuthToken()
+	if current != "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
+			"code":  400,
+			"error": "系统访问密码已设定，请直接输入密码登录",
+		})
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+		Token    string `json:"token"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	pwd := strings.TrimSpace(req.Password)
+	if pwd == "" {
+		pwd = strings.TrimSpace(req.Token)
+	}
+
+	if len(pwd) < 4 {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
+			"code":  400,
+			"error": "密码长度不能少于4位，请重新输入",
+		})
+		return
+	}
+
+	if err := setAuthToken(pwd); err != nil {
+		logger.SugaredLogger.Errorf("[Auth] Failed to persist auth.token: %v", err)
+	}
+	logger.SugaredLogger.Info("[Auth] Initial admin password has been set successfully.")
+
+	json.NewEncoder(w).Encode(map[string]any{
+		"code":    0,
+		"message": "访问密码初始化成功！",
+		"data": map[string]any{
+			"authenticated": true,
+			"token":         pwd,
+		},
 	})
 }
 
@@ -87,19 +213,37 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Token string `json:"token"`
+		Token    string `json:"token"`
+		Password string `json:"password"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
+	clientPwd := strings.TrimSpace(req.Token)
+	if clientPwd == "" {
+		clientPwd = strings.TrimSpace(req.Password)
+	}
+
+	serverToken := getAuthToken()
 	w.Header().Set("Content-Type", "application/json")
 
-	// 若服务端未配置 Token，则任何口令均放行
-	if globalAuth.Token == "" || req.Token == globalAuth.Token {
+	// 若尚未设置密码，提示需先初始化
+	if serverToken == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
+			"code":     400,
+			"needInit": true,
+			"error":    "系统尚未初始化访问密码，请先完成首次密码设置",
+		})
+		return
+	}
+
+	if clientPwd == serverToken {
 		json.NewEncoder(w).Encode(map[string]any{
 			"code":    0,
 			"message": "登录验证成功",
 			"data": map[string]any{
 				"authenticated": true,
+				"token":         serverToken,
 			},
 		})
 		return
@@ -108,7 +252,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(map[string]any{
 		"code":    401,
-		"error":   "访问口令错误，请重新输入",
+		"error":   "访问密码错误，请重新输入",
 		"data": map[string]any{
 			"authenticated": false,
 		},

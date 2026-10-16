@@ -48,7 +48,7 @@ func main() {
 	services.AutoMigrateAll()
 
 	// 3. 初始化安全鉴权
-	initAuth()
+	initAuth(dataDir)
 
 	// 4. 初始化核心业务微服务
 	marketService := services.NewMarketService()
@@ -86,7 +86,9 @@ func main() {
 		})
 	})
 
-	// 7.2 口令登录端点
+	// 7.2 安全鉴权端点 (状态探测、首次初始化与登录)
+	mux.HandleFunc("GET /api/auth/status", HandleAuthStatus)
+	mux.HandleFunc("POST /api/auth/init", HandleInitPassword)
 	mux.HandleFunc("POST /api/auth/login", HandleLogin)
 
 	// 7.3 SSE 实时推流端点

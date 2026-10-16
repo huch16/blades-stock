@@ -34,7 +34,27 @@ func setupTestServer(t *testing.T) http.Handler {
 	mux.HandleFunc("GET /api/events/stream", HandleSSE)
 	mux.HandleFunc("/api/App/", dispatcher.HandleRPC)
 
-	return AuthMiddleware(mux)
+	// 测试环境默认设置测试 Token
+	if getAuthToken() == "" {
+		_ = setAuthToken("test-unit-token-2026")
+	}
+
+	authHandler := AuthMiddleware(mux)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Test-No-Auth") == "1" {
+			r.Header.Del("X-Test-No-Auth")
+			authHandler.ServeHTTP(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") == "" {
+			token := getAuthToken()
+			if token != "" {
+				r.Header.Set("Authorization", "Bearer "+token)
+			}
+		}
+		authHandler.ServeHTTP(w, r)
+	})
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -116,16 +136,17 @@ func TestRPCDispatcher_GetStockList(t *testing.T) {
 func TestAuthProtection(t *testing.T) {
 	// 设置测试 Token
 	os.Setenv("BLADES_AUTH_TOKEN", "test-secret-key-1234")
-	initAuth()
+	initAuth("")
 	defer func() {
 		os.Unsetenv("BLADES_AUTH_TOKEN")
-		initAuth()
+		initAuth("")
 	}()
 
 	handler := setupTestServer(t)
 
 	// 1. 未携带 Token 请求 API 应该被拦截 401
 	reqUnauth := httptest.NewRequest(http.MethodPost, "/api/App/GetConfig", bytes.NewBufferString("[]"))
+	reqUnauth.Header.Set("X-Test-No-Auth", "1")
 	wUnauth := httptest.NewRecorder()
 	handler.ServeHTTP(wUnauth, reqUnauth)
 
@@ -141,6 +162,83 @@ func TestAuthProtection(t *testing.T) {
 
 	if wAuth.Code != http.StatusOK {
 		t.Fatalf("expected status 200 for authenticated request, got %d", wAuth.Code)
+	}
+}
+
+func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "blades-auth-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp failed: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	os.Unsetenv("BLADES_AUTH_TOKEN")
+	initAuth(tempDir)
+	defer func() {
+		initAuth("")
+	}()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/auth/status", HandleAuthStatus)
+	mux.HandleFunc("POST /api/auth/init", HandleInitPassword)
+	mux.HandleFunc("POST /api/auth/login", HandleLogin)
+	mux.HandleFunc("POST /api/App/GetConfig", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"code":0,"data":{"status":"ok"}}`))
+	})
+	handler := AuthMiddleware(mux)
+
+	// 1. 初始状态：应当返回 needInit = true
+	reqStatus := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
+	wStatus := httptest.NewRecorder()
+	handler.ServeHTTP(wStatus, reqStatus)
+	if wStatus.Code != http.StatusOK {
+		t.Fatalf("expected 200 for /api/auth/status, got %d", wStatus.Code)
+	}
+	var resStatus struct {
+		Code int `json:"code"`
+		Data struct {
+			NeedInit bool `json:"needInit"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(wStatus.Body).Decode(&resStatus); err != nil || !resStatus.Data.NeedInit {
+		t.Fatalf("expected needInit=true before init, got %+v", resStatus)
+	}
+
+	// 2. 初始化密码：设置初始密码为 535386
+	bodyInit := bytes.NewBufferString(`{"password":"535386"}`)
+	reqInit := httptest.NewRequest(http.MethodPost, "/api/auth/init", bodyInit)
+	wInit := httptest.NewRecorder()
+	handler.ServeHTTP(wInit, reqInit)
+	if wInit.Code != http.StatusOK {
+		t.Fatalf("expected 200 for /api/auth/init, got %d: %s", wInit.Code, wInit.Body.String())
+	}
+
+	// 3. 错误密码登录：应当被拒绝 401
+	bodyWrong := bytes.NewBufferString(`{"password":"wrong-password"}`)
+	reqWrong := httptest.NewRequest(http.MethodPost, "/api/auth/login", bodyWrong)
+	wWrong := httptest.NewRecorder()
+	handler.ServeHTTP(wWrong, reqWrong)
+	if wWrong.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for wrong password, got %d", wWrong.Code)
+	}
+
+	// 4. 正确密码登录：应当成功 200 并返回 token 535386
+	bodyCorrect := bytes.NewBufferString(`{"password":"535386"}`)
+	reqCorrect := httptest.NewRequest(http.MethodPost, "/api/auth/login", bodyCorrect)
+	wCorrect := httptest.NewRecorder()
+	handler.ServeHTTP(wCorrect, reqCorrect)
+	if wCorrect.Code != http.StatusOK {
+		t.Fatalf("expected 200 for correct login, got %d", wCorrect.Code)
+	}
+
+	// 5. 再次请求业务接口：携带 535386 应当放行 200
+	reqApp := httptest.NewRequest(http.MethodPost, "/api/App/GetConfig", bytes.NewBufferString("[]"))
+	reqApp.Header.Set("Authorization", "Bearer 535386")
+	wApp := httptest.NewRecorder()
+	handler.ServeHTTP(wApp, reqApp)
+	if wApp.Code != http.StatusOK {
+		t.Fatalf("expected 200 for authenticated RPC, got %d", wApp.Code)
 	}
 }
 

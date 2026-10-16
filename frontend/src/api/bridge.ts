@@ -11,8 +11,12 @@
 
 // 1. 环境感知
 export const isWails = (): boolean => {
+  if (typeof window === 'undefined') return false
+  // 若已加载 Web Universal Bridge 代理桩，则必定是 Web 浏览器模式
+  if ((window as any).__BLADES_WEB_BRIDGE__) {
+    return false
+  }
   return (
-    typeof window !== 'undefined' &&
     typeof (window as any).runtime !== 'undefined' &&
     typeof (window as any).go !== 'undefined' &&
     Boolean((window as any).go?.main?.App)
@@ -228,6 +232,8 @@ export function initUniversalBridge(): void {
     return
   }
 
+  // 显式标记当前处于 Web Universal Bridge 模式，防止代理对象被误判为原生 Wails
+  ;(window as any).__BLADES_WEB_BRIDGE__ = true
   console.log('[UniversalBridge] Running in Cloud-Native Web/Browser mode. Installing proxy stubs...')
 
   const win = window as any

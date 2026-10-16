@@ -21,8 +21,8 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PORT=${PORT:-8000}
-      # 公网访问安全口令（强烈建议在 .env 或此处设定自己的高强度口令）
-      - BLADES_AUTH_TOKEN=${BLADES_AUTH_TOKEN:-blades-stock-2026}
+      # 公网访问安全口令（可在 .env 指定，若为空则在首次访问 Web 页面时引导设置）
+      - BLADES_AUTH_TOKEN=${BLADES_AUTH_TOKEN:-}
       # 默认 SearXNG 聚合搜索端点
       - SEARXNG_URL=${SEARXNG_URL:-https://search.woha.men}
       # 可选外部 API Key 注入

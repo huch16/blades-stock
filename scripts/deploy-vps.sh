@@ -111,7 +111,11 @@ if [ "$HEALTHY" = true ]; then
     echo -e "${GREEN}==================================================================${NC}"
     echo -e " 🌐 服务内部监听端口: ${YELLOW}${APP_PORT}${NC}"
     echo -e " 🌐 网页直连地址:     ${YELLOW}http://${PUBLIC_IP}:${APP_PORT}${NC}"
-    echo -e " 🔐 专属访问口令:     ${YELLOW}${AUTH_TOKEN}${NC}"
+    if [ -n "$AUTH_TOKEN" ]; then
+        echo -e " 🔐 专属访问口令:     ${YELLOW}${AUTH_TOKEN}${NC}"
+    else
+        echo -e " 🔐 访问安全模式:     ${YELLOW}首次访问引导设置密码 (可直接在网页设置 535386)${NC}"
+    fi
     echo -e "${BLUE}------------------------------------------------------------------${NC}"
     echo -e " 💡 Nginx 反向代理提示：若使用 Nginx 反代，请将 proxy_pass 指向 http://127.0.0.1:${APP_PORT};"
     echo -e "    并确保开启 SSE 流式推流配置 (proxy_buffering off;)"
