@@ -21,22 +21,25 @@ RUN npm run build
 # ------------------------------------------------------------------------------
 # 阶段 2：编译纯 Go 服务端二进制 (cmd/server)
 # ------------------------------------------------------------------------------
-FROM golang:1.23-alpine AS backend-builder
+FROM golang:1.24-alpine AS backend-builder
 WORKDIR /build
 
 # 安装基础构建工具与 Git
 RUN apk add --no-cache git build-base
 
-# 缓存 Go 依赖（自动规范化 go 版本声明，确保兼容标准 Go 1.23 运行时环境）
+# 启用 Go 工具链自动兼容模式
+ENV GOTOOLCHAIN=auto
+
+# 缓存 Go 依赖（自动规范化 go 版本声明，确保兼容 Go 1.24 运行时环境与现代依赖库）
 COPY go.mod go.sum ./
-RUN sed -i 's/go 1\.[0-9]\+\(\.[0-9]\+\)\?/go 1.23.0/' go.mod && go mod download
+RUN sed -i 's/go 1\.[0-9]\+\(\.[0-9]\+\)\?/go 1.24.0/' go.mod && go mod download
 
 # 拷贝后端与服务源码
 COPY backend/ ./backend/
 COPY cmd/ ./cmd/
 
 # 静态编译纯 Go Web 服务端程序（禁用 CGO，移除调试符号，极致压缩体积）
-RUN sed -i 's/go 1\.[0-9]\+\(\.[0-9]\+\)\?/go 1.23.0/' go.mod && \
+RUN sed -i 's/go 1\.[0-9]\+\(\.[0-9]\+\)\?/go 1.24.0/' go.mod && \
     CGO_ENABLED=0 GOOS=linux go build -mod=mod -ldflags="-s -w" -o /blades-stock-server ./cmd/server
 
 # ------------------------------------------------------------------------------
