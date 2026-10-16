@@ -1,66 +1,73 @@
-# Build stage
-FROM golang:1.26-alpine AS builder
+# ==============================================================================
+# Blades Stock — Cloud-Native Web/SaaS Dockerfile
+# 多阶段极轻量构建（纯 Go 静态编译，零 CGO 依赖，内置前端静态资源与中文字体）
+# ==============================================================================
 
-# Install build dependencies
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    git \
-    nodejs \
-    npm \
-    python3 \
-    make \
-    && npm install -g wails@latest
+# ------------------------------------------------------------------------------
+# 阶段 1：编译前端 Vue 3 静态资源
+# ------------------------------------------------------------------------------
+FROM node:20-alpine AS frontend-builder
+WORKDIR /build/frontend
 
-WORKDIR /app
+# 先拷贝 package.json 利用 Docker 缓存层
+COPY frontend/package*.json ./
+RUN npm install
 
-# Copy go mod files
+# 拷贝前端源码并进行生产环境打包
+COPY frontend/ ./
+ENV VITE_MODE=web
+RUN npm run build
+
+# ------------------------------------------------------------------------------
+# 阶段 2：编译纯 Go 服务端二进制 (cmd/server)
+# ------------------------------------------------------------------------------
+FROM golang:1.23-alpine AS backend-builder
+WORKDIR /build
+
+# 安装基础构建工具与 Git
+RUN apk add --no-cache git build-base
+
+# 缓存 Go 依赖
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source code
-COPY . .
+# 拷贝后端与服务源码
+COPY backend/ ./backend/
+COPY cmd/ ./cmd/
 
-# Build frontend
-WORKDIR /app/frontend
-RUN npm ci && npm run build
+# 静态编译纯 Go Web 服务端程序（禁用 CGO，移除调试符号，极致压缩体积）
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /blades-stock-server ./cmd/server
 
-# Build Go binary
-WORKDIR /app
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
-    -tags "desktop,production" \
-    -ldflags "-w -s -H windowsgui" \
-    -o /app/blades-stock .
-
-# Runtime stage
-FROM alpine:latest
-
-# Install runtime dependencies (sqlite, etc.)
-RUN apk add --no-cache \
-    ca-certificates \
-    sqlite-libs \
-    tzdata
-
+# ------------------------------------------------------------------------------
+# 阶段 3：超轻量生产运行时镜像
+# ------------------------------------------------------------------------------
+FROM alpine:3.20
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/blades-stock .
+# 安装必要的运行时支撑库：HTTPS 证书、时区数据、curl（健康检查）、中文字体（防止图表乱码）
+RUN apk add --no-cache ca-certificates tzdata curl font-noto-cjk
 
-# Create data directory
-RUN mkdir -p /app/data /app/logs
+# 设置统一时区为亚洲/上海标准时间 (CST, UTC+8)
+ENV TZ=Asia/Shanghai
+ENV BLADES_DATA_DIR=/app/data
+ENV BLADES_LOG_DIR=/app/logs
+ENV PORT=8080
+ENV HOST=0.0.0.0
 
-# Expose metrics port
-EXPOSE 9464
+# 从前置阶段拷贝编译产物
+COPY --from=backend-builder /blades-stock-server /app/blades-stock-server
+COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:9464/healthz || exit 1
+# 挂载数据持久化目录与日志目录
+VOLUME ["/app/data", "/app/logs"]
 
-# Run as non-root user
-RUN addgroup -g 1000 -S appgroup && \
-    adduser -u 1000 -S appuser -G appgroup && \
-    chown -R appuser:appgroup /app
+# 暴露 Web 端口
+EXPOSE 8080
 
-USER appuser
+# 容器健康检查
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://127.0.0.1:8080/health || exit 1
 
-ENTRYPOINT ["./blades-stock"]
+# 启动服务端
+ENTRYPOINT ["/app/blades-stock-server"]
+CMD ["--data-dir=/app/data", "--dist-dir=/app/frontend/dist"]

@@ -1,58 +1,76 @@
 version: '3.8'
 
+# ==============================================================================
+# Blades Stock — Cloud-Native Web/SaaS 生产环境编排
+# 针对硬件配置优化：2核 CPU / 12G 内存 / 200GB SSD 云服务器 (Ubuntu 24.04)
+# ==============================================================================
+
 services:
+  # ----------------------------------------------------------------------------
+  # 核心量化投研中台 (Web UI + Go 核心引擎)
+  # ----------------------------------------------------------------------------
   blades-stock:
     build:
       context: .
       dockerfile: Dockerfile
+    image: blades-stock:latest
     container_name: blades-stock
     restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
-      - BLADES_STOCK_LOG_CONSOLE=1
-      - METRICS_EXPORTER=prometheus
-      - METRICS_PROMETHEUS_ADDR=:9464
+      - TZ=Asia/Shanghai
+      # 公网访问安全口令（强烈建议在 .env 或此处设定自己的高强度口令）
+      - BLADES_AUTH_TOKEN=${BLADES_AUTH_TOKEN:-blades-stock-2026}
+      # 默认 SearXNG 聚合搜索端点
+      - SEARXNG_URL=${SEARXNG_URL:-https://search.woha.men}
+      # 可选外部 API Key 注入
+      - TICKFLOW_API_KEY=${TICKFLOW_API_KEY:-}
     volumes:
+      # 持久化挂载本地 SQLite 权威库、自选配置与历史数据
       - ./data:/app/data
+      # 挂载运行日志目录
       - ./logs:/app/logs
-      # If you need to persist SQLite database
-    ports:
-      - "9464:9464"  # Prometheus metrics
+    deploy:
+      resources:
+        limits:
+          # 2核机器限制最多使用 1.8 核，预留 0.2 核保障宿主机系统与网络 I/O 稳定响应
+          cpus: '1.8'
+          # 12G 机器分配 4G 充裕内存给量化计算与行情内存缓存（剩余 8G 可分配给本地模型）
+          memory: 4G
+        reservations:
+          cpus: '0.2'
+          memory: 256M
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9464/healthz"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
+      start_period: 15s
       retries: 3
-      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
-  # Optional: Prometheus for metrics scraping
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    restart: unless-stopped
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-    depends_on:
-      - blades-stock
-
-  # Optional: Grafana for visualization
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    depends_on:
-      - prometheus
-
-volumes:
-  grafana-data:
+  # ----------------------------------------------------------------------------
+  # [进阶可选] 私有独享 SearXNG 搜索引擎节点
+  # 若需 100% 独立于外部公共搜索端点，取消下列注释即可一键启动独享搜索集群
+  # ----------------------------------------------------------------------------
+  # searxng:
+  #   image: searxng/searxng:latest
+  #   container_name: blades-searxng
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8888:8080"
+  #   environment:
+  #     - SEARXNG_BASE_URL=http://localhost:8888/
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 512M
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"

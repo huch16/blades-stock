@@ -37,6 +37,9 @@
   - 内置 Embedding 向量化检索与余弦相似度匹配，精准命中投研技能（如 Serenity 行业分析师提示模板），动态注入 System Prompt，显著提升垂类推理质量。
 - 🌐 **多源情报与 SearXNG 深度联网**：
   - 预设连接开源隐私聚合搜索引擎 SearXNG（默认端点：`https://search.woha.men`），涵盖多源资讯并提供百度 HTTP / 真实无头浏览器双重降级方案；支持 `FetchWebPage` 提取公告与研报正文。
+- ☁️ **双模架构与云原生 SaaS 交付 (Dual-Mode Hybrid Architecture)**：
+  - **一套核心资产，双模形态自适应**：同一仓库既支持编译跨平台独立桌面程序（Windows/macOS/Linux），又可通过内置 Universal Bridge 通信桥接无缝作为 **Web 浏览器投研平台** 运行。
+  - **Docker 容器化秒级交付**：纯 Go 静态无 CGO 依赖编译，体积小于 50MB，内存仅需约 80MB；内置访问口令安全防护（`BLADES_AUTH_TOKEN`）与 SSE 流式实时推送。
 - 🔌 **MCP (Model Context Protocol) 扩展生态**：
   - 支持外部 MCP 服务动态注册、工具白名单管控、自动化心跳探活与故障自愈降级。
 - 🛡️ **高可用韧性架构**：
@@ -173,6 +176,59 @@ npm run dev
 chmod +x ./scripts/build.sh
 ./scripts/build.sh
 ```
+
+---
+
+## ☁️ 云端 Web / SaaS 部署 (VPS Ubuntu 24.04)
+
+项目原生支持以 **Cloud-Native Web / SaaS** 形态容器化部署在云服务器上，多端浏览器（电脑、iPad、手机）直接访问，实现 7×24 小时全天候无人值守盘面盯盘与策略推演。
+
+### 推荐硬件配置（实测极其富余）
+- **推荐规格**：**2核 CPU / 12G 内存 / 200GB SSD**（或入门 2核 2G / 2核 4G）
+- **资源分配优化**：
+  - `blades-stock` 容器限制最大占用 **1.8 核 CPU** 与 **4G 内存**；
+  - 预留 0.2 核 CPU 保障宿主机网络与系统平稳运行；
+  - 剩余 **8G 内存** 支持在同一台 VPS 上额外挂载 **Ollama 离线大模型** 或 **私有 SearXNG 搜索集群**。
+
+---
+
+### 方式 1：一键自动化部署脚本（推荐）
+
+在全新的 Ubuntu 24.04 VPS 上，执行以下命令即可全自动完成依赖安装、SQLite 权威库注入、随机安全口令生成与服务启动：
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/huch16/blades-stock.git
+cd blades-stock
+
+# 2. 赋予执行权限并运行一键部署脚本
+chmod +x ./scripts/deploy-vps.sh
+./scripts/deploy-vps.sh
+```
+
+> **执行完毕后**，控制台将输出专属访问地址（如 `http://<你的公网IP>:8080`）与自动生成的安全访问口令（Token）。在任意设备浏览器打开，输入口令即可开启使用。
+
+---
+
+### 方式 2：标准 Docker Compose 手动编排
+
+```bash
+# 1. 创建本地持久化目录
+mkdir -p data logs
+cp build/bin/data/stock.db data/stock.db 2>/dev/null || true
+
+# 2. 启动服务集群
+docker compose up -d --build
+
+# 3. 查看实时运行日志
+docker compose logs -f blades-stock
+```
+
+### 常用运维指令
+- **查看容器日志**：`docker compose logs -f blades-stock`
+- **重启服务**：`docker compose restart`
+- **停止服务**：`docker compose down`
+- **修改访问口令**：编辑 `.env` 文件中的 `BLADES_AUTH_TOKEN`，执行 `docker compose up -d` 重新加载。
 
 ---
 
