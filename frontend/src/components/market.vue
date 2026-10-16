@@ -607,7 +607,8 @@ function openMarketIntelligence(type) {
       >
         <n-tabs
           type="segment"
-          animated
+          display-directive="show:lazy"
+          :animated="false"
         >
           <n-tab-pane
             name="全球指数"
@@ -756,7 +757,8 @@ function openMarketIntelligence(type) {
       >
         <n-tabs
           type="segment"
-          animated
+          display-directive="show:lazy"
+          :animated="false"
         >
           <!--          <n-tab-pane name="西部数据" tab="西部数据">-->
           <!--            <StockLightweightKlineChart code="105.WDC" :chart-height="panelHeight" stock-name="西部数据"-->
@@ -996,7 +998,8 @@ function openMarketIntelligence(type) {
       >
         <n-tabs
           type="card"
-          animated
+          display-directive="show:lazy"
+          :animated="false"
         >
           <n-tab-pane
             name="行业涨幅排名"

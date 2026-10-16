@@ -63,7 +63,6 @@ let treemapchart =null;
 
 onMounted(() => {
   handleChart()
-  handleTreemap()
   handleDailyChart()
   handleChangeRank()
   getIndex()
@@ -73,8 +72,10 @@ onMounted(() => {
 
   handleIndexInterval=setInterval(function () {
     getIndex()
-    handleTreemap()
-  }, 1000 * 10)
+    if (showTreemap.value) {
+      handleTreemap()
+    }
+  }, 1000 * 60)
 
   window.addEventListener('resize', handleResize)
 })
@@ -612,7 +613,7 @@ async function handleDailyChart() {
 function renderDailyUpDownChart(data) {
   if (!dailyUpDownChartRef.value || !data || data.length === 0) return
 
-  const chart = echarts.init(dailyUpDownChartRef.value)
+  const chart = echarts.getInstanceByDom(dailyUpDownChartRef.value) || echarts.init(dailyUpDownChartRef.value)
 
   const dates = data.map(d => d.dataDate)
   const upCounts = data.map(d => d.upCount)
@@ -806,7 +807,7 @@ function renderDailyUpDownChart(data) {
 function renderDailyLimitChart(data) {
   if (!dailyLimitChartRef.value || !data || data.length === 0) return
 
-  const chart = echarts.init(dailyLimitChartRef.value)
+  const chart = echarts.getInstanceByDom(dailyLimitChartRef.value) || echarts.init(dailyLimitChartRef.value)
 
   const dates = data.map(d => d.dataDate)
   const limitUps = data.map(d => d.limitUp)
@@ -974,7 +975,7 @@ async function handleChangeStats() {
 function renderChangeStatsChart(data) {
   if (!changeStatsChartRef.value || !data || data.length === 0) return
 
-  const chart = echarts.init(changeStatsChartRef.value)
+  const chart = echarts.getInstanceByDom(changeStatsChartRef.value) || echarts.init(changeStatsChartRef.value)
 
   const dates = data.map(d => d.changeDate)
   const totalCounts = data.map(d => d.totalCount)
@@ -1144,7 +1145,7 @@ function renderChangeStatsChart(data) {
 function renderChangeTypeChart(data) {
   if (!changeTypeChartRef.value || !data || data.length === 0) return
 
-  const chart = echarts.init(changeTypeChartRef.value)
+  const chart = echarts.getInstanceByDom(changeTypeChartRef.value) || echarts.init(changeTypeChartRef.value)
 
   const dateSet = [...new Set(data.map(d => d.changeDate))].sort()
 
@@ -1318,7 +1319,7 @@ async function handleDimensionDetail() {
 function renderDimensionDetailChart(data) {
   if (!dimensionDetailChartRef.value) return
 
-  const chart = echarts.init(dimensionDetailChartRef.value)
+  const chart = echarts.getInstanceByDom(dimensionDetailChartRef.value) || echarts.init(dimensionDetailChartRef.value)
 
   const dates = data.map(d => d.changeDate)
   const upCounts = data.map(d => d.upCount)
@@ -1424,7 +1425,7 @@ function renderDimensionDetailChart(data) {
 function renderDateTypeChart(data) {
   if (!dimensionDetailChartRef.value) return
 
-  const chart = echarts.init(dimensionDetailChartRef.value)
+  const chart = echarts.getInstanceByDom(dimensionDetailChartRef.value) || echarts.init(dimensionDetailChartRef.value)
 
   const typeNames = data.map(d => d.typeName).reverse()
   const upValues = data.map(d => d.upCount).reverse()
@@ -1744,7 +1745,7 @@ async function handleBullBearRank() {
 function renderBullBearChart(chartRefVal, title, items, direction, dimension) {
   if (!chartRefVal.value || !items || items.length === 0) return
 
-  const chart = echarts.init(chartRefVal.value)
+  const chart = echarts.getInstanceByDom(chartRefVal.value) || echarts.init(chartRefVal.value)
 
   const names = items.map(d => d.name).reverse()
   const mainValues = direction === 'up'
@@ -1878,9 +1879,11 @@ function renderBullBearChart(chartRefVal, title, items, direction, dimension) {
 }
 
 function handleTreemap() {
+  if (!showTreemap.value || !treemapRef.value) return
   const formatUtil = echarts.format;
   AnalyzeSentimentWithFreqWeight("").then((res) => {
-    treemapchart = echarts.init(treemapRef.value);
+    if (!treemapRef.value) return
+    treemapchart = echarts.getInstanceByDom(treemapRef.value) || echarts.init(treemapRef.value);
     let data = res['frequencies'].map(item => ({
       name: item.Word,
       frequency: item.Frequency,

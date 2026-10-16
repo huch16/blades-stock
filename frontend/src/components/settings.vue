@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import {h, onBeforeUnmount, onMounted, ref, computed, reactive, nextTick} from "vue";
+import {h, onBeforeUnmount, onMounted, ref, computed, reactive, nextTick, watch} from "vue";
 import {
   ExportConfig,
   GetConfig,
@@ -661,6 +661,12 @@ onMounted(() => {
     message.error('加载配置失败: ' + (err?.message || err))
   })
 
+  // 监听暗黑模式开关切换，实时响应主题更新无需等待保存
+  watch(() => formValue.value.darkTheme, (val) => {
+    if (typeof val !== 'undefined') {
+      EventsEmit("updateSettings", { darkTheme: val })
+    }
+  })
 })
 
 onBeforeUnmount(() => {
