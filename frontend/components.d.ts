@@ -70,5 +70,6 @@ declare module 'vue' {
     UplimitLadder: typeof import('./src/components/uplimitLadder.vue')['default']
     UserMessage: typeof import('./src/components/chat/UserMessage.vue')['default']
     VectorBTPanel: typeof import('./src/components/VectorBTPanel.vue')['default']
+    WebAuthModal: typeof import('./src/components/WebAuthModal.vue')['default']
   }
 }

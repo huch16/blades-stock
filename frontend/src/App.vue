@@ -29,6 +29,7 @@ import {
 import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime, IsHKTradingTime, IsUSTradingTime} from "../wailsjs/go/main/App";
 import FloatingAiAssistant from "./components/FloatingAiAssistant.vue";
 import FloatingAgentAssistant from "./components/FloatingAgentAssistant.vue";
+import WebAuthModal from "./components/WebAuthModal.vue";
 import MarketIntelligenceDrawer from "./components/MarketIntelligenceDrawer.vue";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
 import StockLightweightKlineChart from "./components/StockLightweightKlineChart.vue";
@@ -1219,6 +1220,7 @@ onMounted(() => {
               :rotate="-15"
             >
               <!--              <FloatingAiAssistant />-->
+              <WebAuthModal />
               <FloatingAgentAssistant @open-market-intelligence="onOpenMarketIntelligence" />
               <MarketIntelligenceDrawer
                 v-model:show="showMarketIntelligenceDrawer"
@@ -1287,5 +1289,22 @@ onMounted(() => {
   </n-config-provider>
 </template>
 <style>
+/* Web 浏览器模式优雅降级与响应式适配 */
+body.is-web-mode {
+  user-select: auto !important;
+  -webkit-user-select: auto !important;
+  overflow-x: hidden;
+}
 
+body.is-web-mode [style*="--wails-draggable:drag"] {
+  --wails-draggable: no-drag !important;
+  -webkit-app-region: no-drag !important;
+}
+
+/* 消除小屏与 iPad 移动端横向溢出 */
+@media screen and (max-width: 768px) {
+  body.is-web-mode .n-layout-sider {
+    min-width: 0 !important;
+  }
+}
 </style>
