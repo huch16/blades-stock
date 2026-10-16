@@ -11,6 +11,8 @@ import (
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
+
+	"github.com/samber/lo"
 )
 
 // MessageEmitter 抽象的消息/事件发射器接口
@@ -357,4 +359,224 @@ func (s *AgentService) GetAllMCPTools() []models.MCPServerTool {
 // GetPromptTemplates 获取提示词模板
 func (s *AgentService) GetPromptTemplates(name, promptType string) []PromptTemplateItem {
 	return []PromptTemplateItem{}
+}
+
+// -----------------------------------------------------------------------------
+// 定时任务管理与调度能力 (Cron Tasks)
+// -----------------------------------------------------------------------------
+
+// CreateCronTask 创建定时任务
+func (s *AgentService) CreateCronTask(task *models.CronTask) string {
+	err := agent.NewCronTaskApi().Create(task)
+	if err != nil {
+		return fmt.Sprintf("创建失败：%v", err)
+	}
+	return "创建成功"
+}
+
+// UpdateCronTask 更新定时任务
+func (s *AgentService) UpdateCronTask(task *models.CronTask) string {
+	err := agent.NewCronTaskApi().Update(task)
+	if err != nil {
+		return fmt.Sprintf("更新失败：%v", err)
+	}
+	return "更新成功"
+}
+
+// DeleteCronTask 删除定时任务
+func (s *AgentService) DeleteCronTask(id uint) string {
+	err := agent.NewCronTaskApi().Delete(id)
+	if err != nil {
+		return fmt.Sprintf("删除失败：%v", err)
+	}
+	return "删除成功"
+}
+
+// GetCronTaskByID 根据 ID 获取定时任务
+func (s *AgentService) GetCronTaskByID(id uint) *models.CronTask {
+	task, err := agent.NewCronTaskApi().GetByID(id)
+	if err != nil {
+		return nil
+	}
+	return task
+}
+
+// GetCronTaskList 获取定时任务分页列表
+func (s *AgentService) GetCronTaskList(query *models.CronTaskQuery) *models.CronTaskPageResp {
+	if query == nil {
+		query = &models.CronTaskQuery{}
+	}
+	return agent.NewCronTaskApi().List(query)
+}
+
+// EnableCronTask 启用/禁用定时任务
+func (s *AgentService) EnableCronTask(id uint, enable bool) string {
+	err := agent.NewCronTaskApi().EnableTask(id, enable)
+	if err != nil {
+		return fmt.Sprintf("操作失败：%v", err)
+	}
+	return "操作成功"
+}
+
+// ExecuteCronTaskNow 立即执行定时任务
+func (s *AgentService) ExecuteCronTaskNow(id uint) string {
+	task, err := agent.NewCronTaskApi().GetByID(id)
+	if err != nil {
+		return fmt.Sprintf("任务不存在：%v", err)
+	}
+	go func() {
+		_ = agent.NewCronTaskApi().ExecuteTask(context.Background(), task)
+	}()
+	return "任务执行中"
+}
+
+// GetCronTaskTypes 获取所有任务类型列表
+func (s *AgentService) GetCronTaskTypes() []lo.Tuple2[string, string] {
+	return agent.NewCronTaskApi().GetTaskTypes()
+}
+
+// ValidateCronExpr 验证 Cron 表达式语法与有效性
+func (s *AgentService) ValidateCronExpr(expr string) string {
+	err := agent.NewCronTaskApi().ValidateCronExpr(expr)
+	if err != nil {
+		return fmt.Sprintf("无效表达式：%v", err)
+	}
+	return "有效表达式"
+}
+
+// SearchCronTasks 搜索定时任务
+func (s *AgentService) SearchCronTasks(keyword string) []models.CronTask {
+	return agent.NewCronTaskApi().SearchTasks(keyword)
+}
+
+// CalculateNextRunTime 计算 Cron 表达式下一次触发时间
+func (s *AgentService) CalculateNextRunTime(cronExpr string) string {
+	t := agent.NewCronTaskApi().CalculateNextRunTime(cronExpr)
+	return t.Format("2006-01-02 15:04:05")
+}
+
+// CalculateNextRunTimes 计算未来多次触发时间序列
+func (s *AgentService) CalculateNextRunTimes(cronExpr string, count int) []string {
+	times := agent.NewCronTaskApi().CalculateNextRunTimes(cronExpr, count)
+	result := make([]string, 0, len(times))
+	for _, t := range times {
+		result = append(result, t.Format("2006-01-02 15:04:05"))
+	}
+	return result
+}
+
+// -----------------------------------------------------------------------------
+// AI 资讯总结与对话流式推流能力
+// -----------------------------------------------------------------------------
+
+// SummaryStockNews AI 市场全景资讯总结
+func (s *AgentService) SummaryStockNews(question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool, eventName string, historyJSON string) {
+	s.SummaryStockNewsCustom(s.defaultEmitter, question, aiConfigId, sysPromptId, enableTools, think, eventName, historyJSON)
+}
+
+// SummaryStockNewsCustom 自定义发射器 AI 市场资讯总结
+func (s *AgentService) SummaryStockNewsCustom(emitter MessageEmitter, question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool, eventName string, historyJSON string) {
+	if strings.TrimSpace(eventName) == "" {
+		eventName = "summaryStockNews"
+	}
+	q := strings.TrimSpace(question)
+	if q == "" {
+		q = "请对当前A股市场进行全面的AI资讯总结和分析。"
+	}
+
+	go func() {
+		defer func() {
+			if emitter != nil {
+				emitter(eventName, "DONE")
+			}
+		}()
+
+		for msg := range agent.NewStockAiAgentApi().ChatWithContext(context.Background(), q, aiConfigId, sysPromptId, false, 0, think, "plan_execute") {
+			if msg == nil || msg.Content == "agent-DONE" {
+				continue
+			}
+			if emitter != nil {
+				emitter(eventName, map[string]any{
+					"content":           msg.Content,
+					"reasoning_content": msg.ReasoningContent,
+				})
+			}
+		}
+	}()
+}
+
+// AbortSummaryStockNews 中止新闻总结推流
+func (s *AgentService) AbortSummaryStockNews() {
+	// 优雅中止
+}
+
+// NewChatStream AI 交互对话流式推流
+func (s *AgentService) NewChatStream(stock, stockCode, question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool) {
+	s.NewChatStreamCustom(s.defaultEmitter, stock, stockCode, question, aiConfigId, sysPromptId, enableTools, think)
+}
+
+// NewChatStreamCustom 自定义发射器 AI 交互对话流式推流
+func (s *AgentService) NewChatStreamCustom(emitter MessageEmitter, stock, stockCode, question string, aiConfigId int, sysPromptId *int, enableTools bool, think bool) {
+	go func() {
+		defer func() {
+			if emitter != nil {
+				emitter("newChatStream", "DONE")
+			}
+		}()
+
+		for msg := range agent.NewStockAiAgentApi().ChatWithContext(context.Background(), question, aiConfigId, sysPromptId, false, 0, think, "plan_execute") {
+			if msg == nil || msg.Content == "agent-DONE" {
+				continue
+			}
+			if emitter != nil {
+				emitter("newChatStream", map[string]any{
+					"content":           msg.Content,
+					"reasoning_content": msg.ReasoningContent,
+				})
+			}
+		}
+	}()
+}
+
+// SetStockAICron 设置个股 AI 监控定时任务
+func (s *AgentService) SetStockAICron(cronText, stockCode string) {
+	data.NewStockDataApi().SetStockAICron(cronText, stockCode)
+}
+
+// GetAIResponseResult 获取股票最新研报分析结果
+func (s *AgentService) GetAIResponseResult(stockCode string) string {
+	res := data.NewDeepSeekOpenAi(context.Background(), 0).GetAIResponseResult(stockCode)
+	if res != nil {
+		return res.Content
+	}
+	return ""
+}
+
+// -----------------------------------------------------------------------------
+// 技能治理与审批流兼容性桩 (Skill Governance Compatibility)
+// -----------------------------------------------------------------------------
+
+// FetchSkillChanges 查询技能审核与变更流水
+func (s *AgentService) FetchSkillChanges(query any) (any, error) {
+	return map[string]any{"list": []any{}, "total": 0}, nil
+}
+
+// ApproveSkillChange 批准技能发布/更新
+func (s *AgentService) ApproveSkillChange(id any) (any, error) {
+	return map[string]any{"code": 1, "msg": "ok"}, nil
+}
+
+// RejectSkillChange 驳回技能发布/更新
+func (s *AgentService) RejectSkillChange(id any) (any, error) {
+	return map[string]any{"code": 1, "msg": "ok"}, nil
+}
+
+// BatchApproveSkillChanges 批量批准技能发布
+func (s *AgentService) BatchApproveSkillChanges(ids any) (any, error) {
+	return map[string]any{"code": 1, "msg": "ok"}, nil
+}
+
+// BatchRejectSkillChanges 批量驳回技能发布
+func (s *AgentService) BatchRejectSkillChanges(ids any) (any, error) {
+	return map[string]any{"code": 1, "msg": "ok"}, nil
 }

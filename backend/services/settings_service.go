@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -24,11 +25,112 @@ type AiModelInfo struct {
 }
 
 // SettingsService 系统配置、交易风控、审计日志与设备管理服务
-type SettingsService struct{}
+type SettingsService struct {
+	versionInfo *models.VersionInfo
+}
 
 // NewSettingsService 创建系统配置服务实例
 func NewSettingsService() *SettingsService {
-	return &SettingsService{}
+	return &SettingsService{
+		versionInfo: &models.VersionInfo{
+			Version:           "1.4.0",
+			Content:           "Dual-Mode Hybrid Architecture Release",
+			OfficialStatement: "未经授权,禁止商业目的! 数据来源于网络,仅供参考;投资有风险,入市需谨慎",
+		},
+	}
+}
+
+// SetVersionInfo 设置系统版本信息
+func (s *SettingsService) SetVersionInfo(info *models.VersionInfo) {
+	if info != nil {
+		s.versionInfo = info
+	}
+}
+
+// GetVersionInfo 获取系统版本信息
+func (s *SettingsService) GetVersionInfo() *models.VersionInfo {
+	return s.versionInfo
+}
+
+// ExportConfig 导出系统配置为 JSON 字符串
+func (s *SettingsService) ExportConfig() string {
+	return data.NewSettingsApi().Export()
+}
+
+// OpenURL 打开外部 URL 链接（Web 模式下主要由前端 Bridge window.open 接管，后端记录审计）
+func (s *SettingsService) OpenURL(url string) {
+	logger.SugaredLogger.Infof("[SettingsService] OpenURL request: %s", url)
+}
+
+// SendDingDingMessageByType 按消息类型向钉钉发送告警推送
+func (s *SettingsService) SendDingDingMessageByType(message string, stockCode string, msgType int) string {
+	return data.NewDingDingAPI().SendDingDingMessage(message)
+}
+
+// SaveAsMarkdown 获取并返回 Markdown 分析结果（Web 模式下载兜底）
+func (s *SettingsService) SaveAsMarkdown(stockCode, stockName string) string {
+	res := data.NewDeepSeekOpenAi(context.Background(), 0).GetAIResponseResult(stockCode)
+	if res != nil && len(res.Content) > 0 {
+		return res.Content
+	}
+	return "分析结果异常,无法保存。"
+}
+
+// SaveWordFile 跨平台保存 Word 文件（Web 模式返回文件名）
+func (s *SettingsService) SaveWordFile(filename string, base64Data string) string {
+	return filename
+}
+
+// SaveImage 跨平台保存图片（Web 模式返回图片名）
+func (s *SettingsService) SaveImage(name, base64Data string) string {
+	return name
+}
+
+// ShareAnalysis 将个股研报结果分享至社区
+func (s *SettingsService) ShareAnalysis(stockCode, stockName string) string {
+	res := data.NewDeepSeekOpenAi(context.Background(), 0).GetAIResponseResult(stockCode)
+	if res != nil && len(res.Content) > 100 {
+		analysisTime := res.CreatedAt.Format("2006/01/02")
+		response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "blades-stock").SetFormData(map[string]string{
+			"text":         res.Content,
+			"stockCode":    stockCode,
+			"stockName":    stockName,
+			"analysisTime": analysisTime,
+		}).Post("http://go-stock.sparkmemory.top:16688/upload")
+		if err != nil {
+			return err.Error()
+		}
+		return response.String()
+	}
+	return "分析结果异常"
+}
+
+// ShareText 将文本内容直接分享至社区
+func (s *SettingsService) ShareText(text, title string) string {
+	text = strings.TrimSpace(text)
+	title = strings.TrimSpace(title)
+	if text == "" {
+		return "内容为空"
+	}
+	if title == "" {
+		title = "AI助手"
+	}
+	analysisTime := time.Now().Format("2006/01/02")
+	response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "blades-stock").SetFormData(map[string]string{
+		"text":         text,
+		"stockCode":    title,
+		"stockName":    title,
+		"analysisTime": analysisTime,
+	}).Post("http://go-stock.sparkmemory.top:16688/upload")
+	if err != nil {
+		return err.Error()
+	}
+	return response.String()
+}
+
+// FetchAuditLogs 前端兼容别名：分页获取审计日志
+func (s *SettingsService) FetchAuditLogs(query models.AuditLogQuery) (*models.AuditLogPageResp, error) {
+	return s.GetAuditLogList(query)
 }
 
 // GetMachineId 获取当前机器硬件标识

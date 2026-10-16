@@ -273,6 +273,22 @@ export function initUniversalBridge(): void {
         window.open(url, '_blank')
       },
 
+      // 运行环境信息探测（对齐 Wails Environment 返回结构）
+      Environment: async () => {
+        let platform = 'web'
+        if (typeof navigator !== 'undefined') {
+          const ua = (navigator.userAgent || '').toLowerCase()
+          if (ua.includes('win')) platform = 'windows'
+          else if (ua.includes('mac')) platform = 'darwin'
+          else if (ua.includes('linux')) platform = 'linux'
+        }
+        return {
+          buildType: 'production',
+          platform,
+          arch: 'amd64'
+        }
+      },
+
       // 窗口与全屏控制（利用 HTML5 规范 API 实现）
       WindowFullscreen: () => {
         if (!document.fullscreenElement) {
@@ -309,10 +325,26 @@ export function initUniversalBridge(): void {
           document.exitFullscreen().catch(() => {})
         }
       },
+      WindowIsMaximised: async () => Boolean(document.fullscreenElement),
+      WindowIsMinimised: async () => false,
+      WindowIsNormal: async () => !document.fullscreenElement,
       WindowSetSize: (_w: number, _h: number) => {},
       WindowGetSize: async () => {
         return { w: window.innerWidth, h: window.innerHeight }
       },
+      WindowSetPosition: (_x: number, _y: number) => {},
+      WindowGetPosition: async () => ({ x: 0, y: 0 }),
+      WindowSetMaxSize: (_w: number, _h: number) => {},
+      WindowSetMinSize: (_w: number, _h: number) => {},
+      WindowHide: () => {},
+      WindowShow: () => {},
+      Hide: () => {},
+      Show: () => {},
+      ScreenGetAll: async () => [
+        { isCurrent: true, isPrimary: true, width: window.screen?.width || window.innerWidth, height: window.screen?.height || window.innerHeight }
+      ],
+      OnFileDrop: (_callback: any, _useDropTarget?: boolean) => {},
+      OnFileDropOff: () => {},
       Quit: () => {
         window.close()
       },

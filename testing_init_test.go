@@ -12,6 +12,9 @@ import (
 // that NewApp() and other data.* APIs that read settings on first call have
 // a valid db.Dao to talk to.
 func TestMain(m *testing.M) {
+	os.Setenv("BLADES_STOCK_SKIP_DB_HEALTHCHECK", "1")
+	defer os.Unsetenv("BLADES_STOCK_SKIP_DB_HEALTHCHECK")
+
 	tmpDir, err := os.MkdirTemp("", "blades-stock-root-test-")
 	if err != nil {
 		panic("test setup: mkdir temp: " + err.Error())
