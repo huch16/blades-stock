@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	portFlag    = flag.String("port", "8080", "Web server listening port")
+	portFlag    = flag.String("port", "8000", "Web server listening port")
 	hostFlag    = flag.String("host", "0.0.0.0", "Web server listening host")
 	dataDirFlag = flag.String("data-dir", "data", "Path to data directory containing stock.db")
 	distDirFlag = flag.String("dist-dir", "frontend/dist", "Path to frontend dist directory")

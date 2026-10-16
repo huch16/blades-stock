@@ -61,17 +61,24 @@ if [ ! -f ".env" ]; then
     cat <<EOF > .env
 # Blades Stock 云端运行环境变量
 BLADES_AUTH_TOKEN=${RANDOM_TOKEN}
-PORT=8080
+PORT=8000
 TZ=Asia/Shanghai
 SEARXNG_URL=https://search.woha.men
 EOF
     echo -e "${GREEN}--> 已为您自动生成高强度安全访问口令并保存至 .env 文件${NC}"
 else
+    # 如果已有 .env 但未配置 PORT 或仍为 8080，则替换为 8000
+    if grep -q '^PORT=8080' .env; then
+        sed -i 's/^PORT=8080/PORT=8000/' .env
+        echo -e "${GREEN}--> 已自动将 .env 端口更新为 8000${NC}"
+    fi
     echo -e "${GREEN}--> 已检测到现有 .env 配置文件${NC}"
 fi
 
-# 提取当前 Token
+# 提取当前 Token 与端口
 AUTH_TOKEN=$(grep '^BLADES_AUTH_TOKEN=' .env | cut -d '=' -f2- | tr -d ' "')
+APP_PORT=$(grep '^PORT=' .env | cut -d '=' -f2- | tr -d ' "')
+APP_PORT=${APP_PORT:-8000}
 
 # 5. 构建与启动 Docker 容器
 echo -e "${BLUE}[3/4] 构建并启动 Docker 服务集群 (针对 2核/12G VPS 调优)...${NC}"
@@ -84,7 +91,7 @@ COUNT=0
 HEALTHY=false
 
 while [ $COUNT -lt $MAX_RETRIES ]; do
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/health || true)
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${APP_PORT}/health || true)
     if [ "$HTTP_CODE" = "200" ]; then
         HEALTHY=true
         break
@@ -102,10 +109,12 @@ if [ "$HEALTHY" = true ]; then
     echo -e "\n${GREEN}==================================================================${NC}"
     echo -e "${GREEN}🎉 Blades Stock 云原生投研平台已成功部署并启动！${NC}"
     echo -e "${GREEN}==================================================================${NC}"
-    echo -e " 🌐 网页访问地址:  ${YELLOW}http://${PUBLIC_IP}:8080${NC}"
-    echo -e " 🔐 专属访问口令:  ${YELLOW}${AUTH_TOKEN}${NC}"
+    echo -e " 🌐 服务内部监听端口: ${YELLOW}${APP_PORT}${NC}"
+    echo -e " 🌐 网页直连地址:     ${YELLOW}http://${PUBLIC_IP}:${APP_PORT}${NC}"
+    echo -e " 🔐 专属访问口令:     ${YELLOW}${AUTH_TOKEN}${NC}"
     echo -e "${BLUE}------------------------------------------------------------------${NC}"
-    echo -e " 💡 提示：在任意设备浏览器打开上述地址，输入口令即可开启 AI 投研驾驶舱。"
+    echo -e " 💡 Nginx 反向代理提示：若使用 Nginx 反代，请将 proxy_pass 指向 http://127.0.0.1:${APP_PORT};"
+    echo -e "    并确保开启 SSE 流式推流配置 (proxy_buffering off;)"
     echo -e " 📊 数据持久化位置: $(pwd)/data"
     echo -e " 📝 运行日志查看:   docker compose logs -f blades-stock"
     echo -e " 🛑 停止服务:       docker compose down"

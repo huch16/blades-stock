@@ -57,7 +57,7 @@ RUN apk add --no-cache ca-certificates tzdata curl font-noto-cjk
 ENV TZ=Asia/Shanghai
 ENV BLADES_DATA_DIR=/app/data
 ENV BLADES_LOG_DIR=/app/logs
-ENV PORT=8080
+ENV PORT=8000
 ENV HOST=0.0.0.0
 
 # 从前置阶段拷贝编译产物
@@ -68,11 +68,11 @@ COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
 VOLUME ["/app/data", "/app/logs"]
 
 # 暴露 Web 端口
-EXPOSE 8080
+EXPOSE 8000
 
 # 容器健康检查
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://127.0.0.1:8080/health || exit 1
+  CMD curl -f http://127.0.0.1:8000/health || exit 1
 
 # 启动服务端
 ENTRYPOINT ["/app/blades-stock-server"]

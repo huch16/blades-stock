@@ -17,9 +17,10 @@ services:
     container_name: blades-stock
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${PORT:-8000}:8000"
     environment:
       - TZ=Asia/Shanghai
+      - PORT=${PORT:-8000}
       # 公网访问安全口令（强烈建议在 .env 或此处设定自己的高强度口令）
       - BLADES_AUTH_TOKEN=${BLADES_AUTH_TOKEN:-blades-stock-2026}
       # 默认 SearXNG 聚合搜索端点
@@ -42,7 +43,7 @@ services:
           cpus: '0.2'
           memory: 256M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 5s
       start_period: 15s
