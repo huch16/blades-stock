@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -122,7 +123,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			clientToken = strings.TrimSpace(r.URL.Query().Get("token"))
 		}
 
-		if clientToken != serverToken {
+		if subtle.ConstantTimeCompare([]byte(clientToken), []byte(serverToken)) != 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]any{
@@ -237,7 +238,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if clientPwd == serverToken {
+	if subtle.ConstantTimeCompare([]byte(clientPwd), []byte(serverToken)) == 1 {
 		json.NewEncoder(w).Encode(map[string]any{
 			"code":    0,
 			"message": "登录验证成功",

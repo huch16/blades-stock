@@ -65,6 +65,18 @@ func (d *RPCDispatcher) HandleRPC(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
+	// 工业级容灾边界：全捕获 RPC 调用内部可能的 panic，杜绝崩溃并回吐标准化错误响应
+	defer func() {
+		if rec := recover(); rec != nil {
+			logger.SugaredLogger.Errorf("[RPCDispatcher] Panic in RPC call %s: %v", r.URL.Path, rec)
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code":  500,
+				"error": fmt.Sprintf("Internal RPC server panic: %v", rec),
+			})
+		}
+	}()
+
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(map[string]any{"code": 405, "error": "Method Not Allowed, use POST"})
