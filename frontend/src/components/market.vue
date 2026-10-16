@@ -124,14 +124,31 @@ onBeforeMount(() => {
     }
   })
   GetTelegraphList("财联社电报").then((res) => {
-    telegraphList.value = res
-  })
+    if (Array.isArray(res) && res.length > 0) {
+      telegraphList.value = res
+    } else {
+      telegraphList.value = []
+      ReFlesh("财联社电报")
+    }
+  }).catch(() => { telegraphList.value = [] })
+
   GetTelegraphList("新浪财经").then((res) => {
-    sinaNewsList.value = res
-  })
+    if (Array.isArray(res) && res.length > 0) {
+      sinaNewsList.value = res
+    } else {
+      sinaNewsList.value = []
+      ReFlesh("新浪财经")
+    }
+  }).catch(() => { sinaNewsList.value = [] })
+
   GetTelegraphList("外媒").then((res) => {
-    foreignNewsList.value = res
-  })
+    if (Array.isArray(res) && res.length > 0) {
+      foreignNewsList.value = res
+    } else {
+      foreignNewsList.value = []
+      ReFlesh("外媒")
+    }
+  }).catch(() => { foreignNewsList.value = [] })
   getIndex();
   industryRank();
   startTradingTimers();
@@ -198,27 +215,48 @@ EventsOn("changeMarketTab", async (msg) => {
 })
 
 EventsOn("newTelegraph", (data) => {
-  if (data!=null) {
-    for (let i = 0; i < data.length; i++) {
-      telegraphList.value.pop()
+  if (Array.isArray(data) && data.length > 0) {
+    if (!Array.isArray(telegraphList.value)) {
+      telegraphList.value = []
     }
-    telegraphList.value.unshift(...data)
+    const existingIds = new Set(telegraphList.value.map(item => item.ID || item.title || item.content))
+    const fresh = data.filter(item => !existingIds.has(item.ID || item.title || item.content))
+    if (fresh.length > 0) {
+      telegraphList.value.unshift(...fresh)
+      if (telegraphList.value.length > 80) {
+        telegraphList.value = telegraphList.value.slice(0, 80)
+      }
+    }
   }
 })
 EventsOn("newSinaNews", (data) => {
-  if (data!=null) {
-  for (let i = 0; i < data.length; i++) {
-    sinaNewsList.value.pop()
-  }
-  sinaNewsList.value.unshift(...data)
+  if (Array.isArray(data) && data.length > 0) {
+    if (!Array.isArray(sinaNewsList.value)) {
+      sinaNewsList.value = []
+    }
+    const existingIds = new Set(sinaNewsList.value.map(item => item.ID || item.title || item.content))
+    const fresh = data.filter(item => !existingIds.has(item.ID || item.title || item.content))
+    if (fresh.length > 0) {
+      sinaNewsList.value.unshift(...fresh)
+      if (sinaNewsList.value.length > 80) {
+        sinaNewsList.value = sinaNewsList.value.slice(0, 80)
+      }
+    }
   }
 })
 EventsOn("tradingViewNews", (data) => {
-  if (data!=null) {
-    for (let i = 0; i < data.length; i++) {
-      foreignNewsList.value.pop()
+  if (Array.isArray(data) && data.length > 0) {
+    if (!Array.isArray(foreignNewsList.value)) {
+      foreignNewsList.value = []
     }
-    foreignNewsList.value.unshift(...data)
+    const existingIds = new Set(foreignNewsList.value.map(item => item.ID || item.title || item.content))
+    const fresh = data.filter(item => !existingIds.has(item.ID || item.title || item.content))
+    if (fresh.length > 0) {
+      foreignNewsList.value.unshift(...fresh)
+      if (foreignNewsList.value.length > 80) {
+        foreignNewsList.value = foreignNewsList.value.slice(0, 80)
+      }
+    }
   }
 })
 
@@ -435,18 +473,17 @@ function share() {
 }
 
 function ReFlesh(source) {
-  //console.log("ReFlesh:", source)
   ReFleshTelegraphList(source).then(res => {
-    if (source === "财联社电报") {
-      telegraphList.value = res
+    if (Array.isArray(res)) {
+      if (source === "财联社电报") {
+        telegraphList.value = res
+      } else if (source === "新浪财经") {
+        sinaNewsList.value = res
+      } else if (source === "外媒") {
+        foreignNewsList.value = res
+      }
     }
-    if (source === "新浪财经") {
-      sinaNewsList.value = res
-    }
-    if (source === "外媒") {
-      foreignNewsList.value = res
-    }
-  })
+  }).catch(() => {})
 }
 function openMarketIntelligence(type) {
   try {

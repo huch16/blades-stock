@@ -69,35 +69,99 @@ function toEastMoneyCode(code) {
   return ''
 }
 
-function findStockList(val) {
+async function findStockList(val) {
   if (!val || !val.trim()) {
     options.value = []
     return
   }
   const q = val.trim().toLowerCase()
-  const filtered = stockList.value.filter(item =>
+  // 1. 先在内存列表 stockList 中匹配 (支持名称、代码、纯数字symbol、拼音缩写cnspell)
+  let filtered = stockList.value.filter(item =>
     (item.name && item.name.toLowerCase().includes(q)) ||
-    (item.ts_code && item.ts_code.toLowerCase().includes(q))
+    (item.ts_code && item.ts_code.toLowerCase().includes(q)) ||
+    (item.symbol && item.symbol.toLowerCase().includes(q)) ||
+    (item.cnspell && item.cnspell.toLowerCase().includes(q))
   ).slice(0, 30)
+
+  // 2. 若内存无结果或全量列表尚未加载完毕，动态向后端 API 请求模糊搜索
+  if (filtered.length === 0) {
+    try {
+      const remote = await GetStockList(val.trim())
+      if (Array.isArray(remote) && remote.length > 0) {
+        filtered = remote.slice(0, 30)
+      }
+    } catch (e) {
+      console.warn('GetStockList search error:', e)
+    }
+  }
+
   options.value = filtered.map(item => ({
-    label: item.name + ' - ' + item.ts_code,
-    value: item.ts_code,
+    label: (item.name || '') + ' - ' + (item.ts_code || item.symbol || ''),
+    value: item.ts_code || item.symbol,
   }))
 }
 
-function handleSearch(value) {
+async function handleSearch(value) {
   if (!value) return
-  const emCode = toEastMoneyCode(value)
-  if (!emCode) {
+  const raw = String(value).trim()
+  if (!raw) return
+
+  let targetCode = ''
+  let targetName = ''
+
+  // 1. 先尝试直接转东财代码（如果是纯数字代码如 600519，或标准格式如 600519.SH、AAPL.US）
+  let directEmCode = toEastMoneyCode(raw)
+
+  // 2. 如果输入的是中文股票名（如"贵州茅台"、"茅台"）或拼音缩写（如"gzmt"）
+  if (!directEmCode) {
+    const q = raw.toLowerCase()
+    // 优先从内存列表匹配
+    let matched = stockList.value.find(item =>
+      (item.name && item.name.toLowerCase() === q) ||
+      (item.cnspell && item.cnspell.toLowerCase() === q)
+    )
+    if (!matched) {
+      matched = stockList.value.find(item =>
+        (item.name && item.name.toLowerCase().includes(q))
+      )
+    }
+
+    // 若内存未命中，向后端搜索
+    if (!matched) {
+      try {
+        const remote = await GetStockList(raw)
+        if (Array.isArray(remote) && remote.length > 0) {
+          matched = remote[0]
+        }
+      } catch (e) {
+        console.warn('handleSearch remote lookup error:', e)
+      }
+    }
+
+    if (matched) {
+      targetCode = matched.ts_code || matched.symbol
+      targetName = matched.name || ''
+      directEmCode = toEastMoneyCode(targetCode)
+    }
+  } else {
+    targetCode = directEmCode
+    const found = stockList.value.find(item => item.ts_code === raw || toEastMoneyCode(item.ts_code) === directEmCode)
+    if (found) {
+      targetName = found.name
+    }
+  }
+
+  if (!directEmCode) {
     unsupportedCode.value = true
     return
   }
+
   unsupportedCode.value = false
-  selectedCode.value = emCode
-  const found = stockList.value.find(item => item.ts_code === value || toEastMoneyCode(item.ts_code) === emCode)
-  selectedName.value = found ? found.name : (selectedName.value || '')
-  addToRecent(emCode, selectedName.value)
-  setCurrentStock({ code: emCode, name: selectedName.value })
+  selectedCode.value = directEmCode
+  selectedName.value = targetName || selectedName.value || ''
+  addToRecent(directEmCode, selectedName.value)
+  setCurrentStock({ code: directEmCode, name: selectedName.value })
+  searchQuery.value = selectedName.value ? `${selectedName.value} (${directEmCode})` : directEmCode
 }
 
 function addToRecent(code, name) {
@@ -179,6 +243,9 @@ onMounted(async () => {
   if (!fromRoute && recentStocks.value.length > 0) {
     const firstRecent = recentStocks.value[0]
     selectRecent(firstRecent.code, firstRecent.name)
+  } else if (!fromRoute && !selectedCode.value) {
+    // 3. 全新启动无浏览历史时，默认加载贵州茅台 (600519.SH) 作为初始标的，保障开箱立即可用
+    selectRecent('600519.SH', '贵州茅台')
   }
 
   // 3. 监听全局选股事件

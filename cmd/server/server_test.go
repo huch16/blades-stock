@@ -481,3 +481,47 @@ func TestRPCDispatcher_MethodParityAudit(t *testing.T) {
 	}
 }
 
+func TestMarketNewsAndStockSearch(t *testing.T) {
+	handler := setupTestServer(t)
+
+	// 1. 测试 GetTelegraphList
+	reqNews := httptest.NewRequest(http.MethodPost, "/api/App/GetTelegraphList", bytes.NewBufferString(`["财联社电报"]`))
+	wNews := httptest.NewRecorder()
+	handler.ServeHTTP(wNews, reqNews)
+	if wNews.Code != http.StatusOK {
+		t.Fatalf("GetTelegraphList failed: status %d", wNews.Code)
+	}
+
+	// 2. 测试 ReFleshTelegraphList
+	reqRefresh := httptest.NewRequest(http.MethodPost, "/api/App/ReFleshTelegraphList", bytes.NewBufferString(`["新浪财经"]`))
+	wRefresh := httptest.NewRecorder()
+	handler.ServeHTTP(wRefresh, reqRefresh)
+	if wRefresh.Code != http.StatusOK {
+		t.Fatalf("ReFleshTelegraphList failed: status %d", wRefresh.Code)
+	}
+
+	// 3. 测试按股票代码搜索
+	reqStockCode := httptest.NewRequest(http.MethodPost, "/api/App/GetStockList", bytes.NewBufferString(`["600519"]`))
+	wStockCode := httptest.NewRecorder()
+	handler.ServeHTTP(wStockCode, reqStockCode)
+	if wStockCode.Code != http.StatusOK {
+		t.Fatalf("GetStockList by code failed: status %d", wStockCode.Code)
+	}
+
+	// 4. 测试按股票名称模糊搜索
+	reqStockName := httptest.NewRequest(http.MethodPost, "/api/App/GetStockList", bytes.NewBufferString(`["茅台"]`))
+	wStockName := httptest.NewRecorder()
+	handler.ServeHTTP(wStockName, reqStockName)
+	if wStockName.Code != http.StatusOK {
+		t.Fatalf("GetStockList by name failed: status %d", wStockName.Code)
+	}
+
+	// 5. 测试多源降级 K 线获取
+	reqKLine := httptest.NewRequest(http.MethodPost, "/api/App/GetStockKLineWithFallback", bytes.NewBufferString(`["600519.SH", "贵州茅台", "101", 10]`))
+	wKLine := httptest.NewRecorder()
+	handler.ServeHTTP(wKLine, reqKLine)
+	if wKLine.Code != http.StatusOK {
+		t.Fatalf("GetStockKLineWithFallback failed: status %d", wKLine.Code)
+	}
+}
+

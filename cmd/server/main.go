@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/services"
@@ -47,10 +48,41 @@ func main() {
 	// 执行全量数据表自动迁移与默认种子数据初始化 (确保全新安装具备完整表结构)
 	services.AutoMigrateAll()
 
-	// 3. 初始化安全鉴权
+	// 3. 初始化分词词典与舆情情感分析器 (防止新闻切词 nil 指针异常)
+	data.InitAnalyzeSentiment()
+
+	// 4. 启动市场资讯后台定时采集与实时 SSE 广播
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Warnf("[NewsCron] recovered from panic: %v", r)
+			}
+		}()
+		// 启动时立即预加载最新市场资讯入库
+		go data.NewMarketNewsApi().TelegraphList(30)
+		go data.NewMarketNewsApi().GetSinaNews(30)
+		go data.NewMarketNewsApi().TradingViewNews()
+
+		// 定时轮询并向 Web 客户端广播最新快讯 (财联社电报、新浪财经、外媒)
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if news := data.NewMarketNewsApi().TelegraphList(20); news != nil && len(*news) > 0 {
+				globalSSEHub.Broadcast("newTelegraph", news)
+			}
+			if sina := data.NewMarketNewsApi().GetSinaNews(20); sina != nil && len(*sina) > 0 {
+				globalSSEHub.Broadcast("newSinaNews", sina)
+			}
+			if tv := data.NewMarketNewsApi().TradingViewNews(); tv != nil && len(*tv) > 0 {
+				globalSSEHub.Broadcast("tradingViewNews", tv)
+			}
+		}
+	}()
+
+	// 5. 初始化安全鉴权
 	initAuth(dataDir)
 
-	// 4. 初始化核心业务微服务
+	// 6. 初始化核心业务微服务
 	marketService := services.NewMarketService()
 	quantService := services.NewQuantService()
 	agentService := services.NewAgentService()

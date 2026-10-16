@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"os"
 
 	"blades-stock/backend/agent"
@@ -69,7 +70,138 @@ func AutoMigrateAll() {
 	// 5. 播种系统默认精选 Skill (ETF 动量轮动 / Serenity 产业链分析)
 	SeedDefaultSkills()
 
+	// 6. 播种股票基础信息基准库（A 股、港股、美股）
+	SeedStockBasicsIfEmpty()
+
 	logger.SugaredLogger.Info("[Database] All tables migrated and initialized successfully.")
+}
+
+// SeedStockBasicsIfEmpty 当全新安装且股票基础信息库为空时，自动从自带基准快照导入
+func SeedStockBasicsIfEmpty() {
+	if db.Dao == nil {
+		return
+	}
+
+	// 1. 种子导入 A 股基础数据
+	var countA int64
+	db.Dao.Model(&data.StockBasic{}).Count(&countA)
+	if countA == 0 {
+		paths := []string{"build/stock_basic.json", "stock_basic.json", "../build/stock_basic.json", "/app/build/stock_basic.json"}
+		for _, p := range paths {
+			b, err := os.ReadFile(p)
+			if err != nil || len(b) == 0 {
+				continue
+			}
+			var resp struct {
+				Data struct {
+					Fields []string `json:"fields"`
+					Items  [][]any  `json:"items"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(b, &resp); err == nil && len(resp.Data.Items) > 0 {
+				var stocks []data.StockBasic
+				fieldMap := make(map[string]int)
+				for i, f := range resp.Data.Fields {
+					fieldMap[f] = i
+				}
+				getString := func(item []any, field string) string {
+					if idx, ok := fieldMap[field]; ok && idx < len(item) && item[idx] != nil {
+						if s, ok := item[idx].(string); ok {
+							return s
+						}
+					}
+					return ""
+				}
+				for _, item := range resp.Data.Items {
+					tsCode := getString(item, "ts_code")
+					if tsCode == "" {
+						continue
+					}
+					stocks = append(stocks, data.StockBasic{
+						TsCode:     tsCode,
+						Symbol:     getString(item, "symbol"),
+						Name:       getString(item, "name"),
+						Area:       getString(item, "area"),
+						Industry:   getString(item, "industry"),
+						Cnspell:    getString(item, "cnspell"),
+						Market:     getString(item, "market"),
+						Exchange:   getString(item, "exchange"),
+						CurrType:   getString(item, "curr_type"),
+						ListStatus: getString(item, "list_status"),
+						ListDate:   getString(item, "list_date"),
+						DelistDate: getString(item, "delist_date"),
+						IsHs:       getString(item, "is_hs"),
+						ActName:    getString(item, "act_name"),
+						ActEntType: getString(item, "act_ent_type"),
+						Fullname:   getString(item, "fullname"),
+						Ename:      getString(item, "enname"),
+					})
+				}
+				if len(stocks) > 0 {
+					if err := db.Dao.CreateInBatches(stocks, 400).Error; err == nil {
+						logger.SugaredLogger.Infof("[Database] 成功从 %s 播种 %d 条 A 股基础信息", p, len(stocks))
+					}
+				}
+				break
+			}
+		}
+		// 后台启动通达信增量校准同步（自动补全最新 A 股新股）
+		go func() {
+			defer func() { _ = recover() }()
+			data.NewTdxKLineApi().SyncStockBasicToDB()
+		}()
+	}
+
+	// 2. 种子导入港股基础数据
+	var countHK int64
+	db.Dao.Model(&models.StockInfoHK{}).Count(&countHK)
+	if countHK == 0 {
+		pathsHK := []string{"build/stock_base_info_hk.json", "stock_base_info_hk.json", "../build/stock_base_info_hk.json", "/app/build/stock_base_info_hk.json"}
+		for _, p := range pathsHK {
+			b, err := os.ReadFile(p)
+			if err != nil || len(b) == 0 {
+				continue
+			}
+			var hkStocks []models.StockInfoHK
+			if err := json.Unmarshal(b, &hkStocks); err == nil && len(hkStocks) > 0 {
+				for i := range hkStocks {
+					hkStocks[i].ID = 0
+				}
+				if err := db.Dao.CreateInBatches(hkStocks, 400).Error; err == nil {
+					logger.SugaredLogger.Infof("[Database] 成功从 %s 播种 %d 条港股基础信息", p, len(hkStocks))
+				}
+				break
+			}
+		}
+	}
+
+	// 3. 种子导入美股基础数据
+	var countUS int64
+	db.Dao.Model(&models.StockInfoUS{}).Count(&countUS)
+	if countUS == 0 {
+		pathsUS := []string{"build/stock_base_info_us.json", "stock_base_info_us.json", "../build/stock_base_info_us.json", "/app/build/stock_base_info_us.json"}
+		for _, p := range pathsUS {
+			b, err := os.ReadFile(p)
+			if err != nil || len(b) == 0 {
+				continue
+			}
+			var usStocks []models.StockInfoUS
+			if err := json.Unmarshal(b, &usStocks); err == nil && len(usStocks) > 0 {
+				for i := range usStocks {
+					usStocks[i].ID = 0
+				}
+				if err := db.Dao.CreateInBatches(usStocks, 400).Error; err == nil {
+					logger.SugaredLogger.Infof("[Database] 成功从 %s 播种 %d 条美股基础信息", p, len(usStocks))
+				}
+				break
+			}
+		}
+		// 后台启动通达信增量校准同步（自动补全港美股）
+		go func() {
+			defer func() { _ = recover() }()
+			data.NewTdxKLineApi().SyncHKUSStockBasicToDB()
+		}()
+	}
 }
 
 // SeedDefaultSkills 初始化默认的专家技能

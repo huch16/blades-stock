@@ -504,6 +504,14 @@ func calculateScore(words []string) (float64, int, int) {
 
 // 简单的分词函数，考虑了中文和英文
 func splitWords(text string) []string {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Warnf("splitWords panic recovered: %v", r)
+		}
+	}()
+	if seg.Dict == nil {
+		return strings.Fields(text)
+	}
 	return seg.Cut(text, true)
 }
 

@@ -398,9 +398,17 @@ func (s *MarketService) GetTelegraphList(source string) *[]*models.Telegraph {
 
 // ReFleshTelegraphList 刷新电报新闻列表
 func (s *MarketService) ReFleshTelegraphList(source string) *[]*models.Telegraph {
-	go data.NewMarketNewsApi().TelegraphList(30)
-	go data.NewMarketNewsApi().GetSinaNews(30)
-	go data.NewMarketNewsApi().TradingViewNews()
+	switch source {
+	case "财联社电报":
+		data.NewMarketNewsApi().TelegraphList(15)
+	case "新浪财经":
+		data.NewMarketNewsApi().GetSinaNews(15)
+	case "外媒":
+		data.NewMarketNewsApi().TradingViewNews()
+	default:
+		data.NewMarketNewsApi().TelegraphList(15)
+		data.NewMarketNewsApi().GetSinaNews(15)
+	}
 	return data.NewMarketNewsApi().GetTelegraphList(source)
 }
 

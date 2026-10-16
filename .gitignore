@@ -115,6 +115,9 @@ frontend/package.json.md5
 
 # Generated data files
 /build/*.json
+!/build/stock_basic.json
+!/build/stock_base_info_hk.json
+!/build/stock_base_info_us.json
 /backend/data/stock_basic.json
 /backend/data/data/dict/jp/dict.txt
 
