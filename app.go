@@ -1720,14 +1720,54 @@ func (a *App) CleanupData(cleanupType string) string {
 	return a.settingsService.CleanupData(cleanupType)
 }
 
-// BackupData 暴露给前端的数据备份入口
+// BackupData 暴露给前端的数据备份入口 (兼容旧版 CSV 导出)
 func (a *App) BackupData(backupType string) string {
 	return a.settingsService.BackupData(backupType)
 }
 
-// RestoreData 暴露给前端的恢复入口
+// RestoreData 暴露给前端的恢复入口 (兼容旧版 CSV 恢复)
 func (a *App) RestoreData(backupType string) string {
 	return a.settingsService.RestoreData(backupType)
+}
+
+// GetBackupOverview 获取系统数据资产概览
+func (a *App) GetBackupOverview() (*data.BackupOverview, error) {
+	return a.settingsService.GetBackupOverview()
+}
+
+// ListBackups 列出所有历史备份归档
+func (a *App) ListBackups() ([]data.BackupFileItem, error) {
+	return a.settingsService.ListBackups()
+}
+
+// CreateIntelligentBackup 一键创建全量智能资产备份包
+func (a *App) CreateIntelligentBackup(note string) string {
+	return a.settingsService.CreateIntelligentBackup(note)
+}
+
+// CreateDatabaseSnapshot 一键创建底层数据库物理快照
+func (a *App) CreateDatabaseSnapshot() string {
+	return a.settingsService.CreateDatabaseSnapshot()
+}
+
+// RestoreBackupFile 精确恢复指定文件名的备份
+func (a *App) RestoreBackupFile(fileName string) string {
+	return a.settingsService.RestoreBackupFile(fileName)
+}
+
+// DeleteBackupFile 删除指定的历史备份文件
+func (a *App) DeleteBackupFile(fileName string) string {
+	return a.settingsService.DeleteBackupFile(fileName)
+}
+
+// GetBackupContent 获取备份文件内容（用于前端直接下载保存）
+func (a *App) GetBackupContent(fileName string) string {
+	return a.settingsService.GetBackupContent(fileName)
+}
+
+// ImportIntelligentBackup 导入全量智能资产包 (JSON) 并安全合并写入
+func (a *App) ImportIntelligentBackup(content string) string {
+	return a.settingsService.ImportIntelligentBackup(content)
 }
 
 func (a *App) ShareAnalysis(stockCode, stockName string) string {

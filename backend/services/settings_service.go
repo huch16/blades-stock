@@ -205,14 +205,54 @@ func (s *SettingsService) CleanupData(cleanupType string) string {
 	return data.NewSettingsApi().CleanupData(cleanupType)
 }
 
-// BackupData 数据备份
+// BackupData 数据备份 (兼容旧版单模块 CSV 导出)
 func (s *SettingsService) BackupData(backupType string) string {
 	return data.NewSettingsApi().BackupData(backupType)
 }
 
-// RestoreData 数据恢复
+// RestoreData 数据恢复 (兼容旧版单模块 CSV 恢复)
 func (s *SettingsService) RestoreData(backupType string) string {
 	return data.NewSettingsApi().RestoreData(backupType)
+}
+
+// GetBackupOverview 获取系统数据资产概览
+func (s *SettingsService) GetBackupOverview() (*data.BackupOverview, error) {
+	return data.NewSettingsApi().GetBackupOverview()
+}
+
+// ListBackups 列出所有历史备份归档
+func (s *SettingsService) ListBackups() ([]data.BackupFileItem, error) {
+	return data.NewSettingsApi().ListBackups()
+}
+
+// CreateIntelligentBackup 一键创建全量智能资产备份包
+func (s *SettingsService) CreateIntelligentBackup(note string) string {
+	return data.NewSettingsApi().CreateIntelligentBackup(note)
+}
+
+// CreateDatabaseSnapshot 一键创建底层数据库物理快照
+func (s *SettingsService) CreateDatabaseSnapshot() string {
+	return data.NewSettingsApi().CreateDatabaseSnapshot()
+}
+
+// RestoreBackupFile 精确恢复指定文件名的备份
+func (s *SettingsService) RestoreBackupFile(fileName string) string {
+	return data.NewSettingsApi().RestoreBackupFile(fileName)
+}
+
+// DeleteBackupFile 删除指定的历史备份文件
+func (s *SettingsService) DeleteBackupFile(fileName string) string {
+	return data.NewSettingsApi().DeleteBackupFile(fileName)
+}
+
+// GetBackupContent 获取备份文件内容（用于前端直接下载保存）
+func (s *SettingsService) GetBackupContent(fileName string) string {
+	return data.NewSettingsApi().GetBackupContent(fileName)
+}
+
+// ImportIntelligentBackup 导入全量智能资产包 (JSON) 并安全合并写入
+func (s *SettingsService) ImportIntelligentBackup(content string) string {
+	return data.NewSettingsApi().ImportIntelligentBackup(content)
 }
 
 // ExportConfigString 导出配置 JSON 字符串

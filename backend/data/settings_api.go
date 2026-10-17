@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
-	"blades-stock/backend/paths"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -348,7 +347,71 @@ func cleanupBrowserTemp() string {
 	return fmt.Sprintf("已清理 %d 个浏览器临时目录", removed)
 }
 func backupDirPath() string {
-	return filepath.Join(paths.BaseDir(), "backups")
+	return EnsureBackupDir()
+}
+
+// GetBackupOverview 获取系统数据资产概览
+func (s *SettingsApi) GetBackupOverview() (*BackupOverview, error) {
+	return NewBackupManager().GetBackupOverview()
+}
+
+// ListBackups 列出所有历史备份归档
+func (s *SettingsApi) ListBackups() ([]BackupFileItem, error) {
+	return NewBackupManager().ListBackups()
+}
+
+// CreateIntelligentBackup 一键创建全量智能资产备份包
+func (s *SettingsApi) CreateIntelligentBackup(note string) string {
+	res, err := NewBackupManager().CreateIntelligentBackup(note)
+	if err != nil {
+		return "❌ 备份失败: " + err.Error()
+	}
+	return res
+}
+
+// CreateDatabaseSnapshot 一键创建底层数据库物理快照
+func (s *SettingsApi) CreateDatabaseSnapshot() string {
+	res, err := NewBackupManager().CreateDatabaseSnapshot()
+	if err != nil {
+		return "❌ 创建快照失败: " + err.Error()
+	}
+	return res
+}
+
+// RestoreBackupFile 精确恢复指定文件名的备份
+func (s *SettingsApi) RestoreBackupFile(fileName string) string {
+	res, err := NewBackupManager().RestoreBackupFile(fileName)
+	if err != nil {
+		return "❌ 恢复失败: " + err.Error()
+	}
+	return res
+}
+
+// DeleteBackupFile 删除指定的历史备份文件
+func (s *SettingsApi) DeleteBackupFile(fileName string) string {
+	err := NewBackupManager().DeleteBackupFile(fileName)
+	if err != nil {
+		return "❌ 删除失败: " + err.Error()
+	}
+	return "✅ 已成功删除备份文件: " + fileName
+}
+
+// GetBackupContent 获取备份文件内容（用于前端直接下载保存）
+func (s *SettingsApi) GetBackupContent(fileName string) string {
+	content, err := NewBackupManager().GetBackupContent(fileName)
+	if err != nil {
+		return "ERROR:" + err.Error()
+	}
+	return content
+}
+
+// ImportIntelligentBackup 导入全量智能资产包 (JSON) 并安全合并写入
+func (s *SettingsApi) ImportIntelligentBackup(content string) string {
+	res, err := NewBackupManager().ImportIntelligentBackup(content)
+	if err != nil {
+		return "❌ 导入恢复失败: " + err.Error()
+	}
+	return res
 }
 
 // BackupData 导出用户数据到 CSV，返回生成的文件路径

@@ -11,7 +11,15 @@ import {
   CleanupData,
   BackupData,
   RestoreData,
-  GetAiConfigTemplates
+  GetAiConfigTemplates,
+  GetBackupOverview,
+  ListBackups,
+  CreateIntelligentBackup,
+  CreateDatabaseSnapshot,
+  RestoreBackupFile,
+  DeleteBackupFile,
+  GetBackupContent,
+  ImportIntelligentBackup
 } from "../../wailsjs/go/main/App";
 import {NTag, NTooltip, NIcon, NCollapse, NCollapseItem, useMessage, useDialog} from "naive-ui";
 import {data, models} from "../../wailsjs/go/models";
@@ -657,6 +665,7 @@ onMounted(() => {
       currentAuthToken.value = getAuthToken()
       checkServerPing()
     }
+    fetchBackupCenterData()
   }).catch(err => {
     message.error('加载配置失败: ' + (err?.message || err))
   })
@@ -822,6 +831,235 @@ async function cleanup(type) {
   })
 }
 
+// ============================================================================
+// 智能数据资产与备份中心 (Modern Intelligent Backup & Asset Center)
+// ============================================================================
+const backupOverview = ref<any>({
+  aiConfigCount: 0,
+  skillCount: 0,
+  mcpServerCount: 0,
+  chatSessionCount: 0,
+  memoryCount: 0,
+  aiReportCount: 0,
+  aiRecommendCount: 0,
+  followedStockCount: 0,
+  followedFundCount: 0,
+  backtestCount: 0,
+  cronTaskCount: 0,
+  totalBackupFiles: 0,
+  totalBackupSizeStr: '0 B',
+  lastBackupTime: '暂未备份'
+})
+const backupList = ref<any[]>([])
+const loadingBackups = ref(false)
+const creatingBackup = ref(false)
+const creatingSnapshot = ref(false)
+const backupNote = ref('')
+
+async function fetchBackupCenterData() {
+  loadingBackups.value = true
+  try {
+    const [overview, list] = await Promise.all([
+      GetBackupOverview(),
+      ListBackups()
+    ])
+    if (overview) backupOverview.value = overview
+    backupList.value = Array.isArray(list) ? list : []
+  } catch (e: any) {
+    console.error('加载备份中心失败:', e)
+  } finally {
+    loadingBackups.value = false
+  }
+}
+
+// 触发下载到本地客户端/浏览器
+function triggerBrowserDownload(fileName: string, content: string, isBase64: boolean = false) {
+  let blob: Blob
+  if (isBase64) {
+    const byteCharacters = atob(content)
+    const byteNumbers = new Array(byteCharacters.length)
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i)
+    }
+    blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/octet-stream' })
+  } else {
+    blob = new Blob([content], { type: 'application/json;charset=utf-8' })
+  }
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(link.href)
+}
+
+// 一键全量智能资产备份
+async function handleCreateIntelligentBackup() {
+  creatingBackup.value = true
+  try {
+    const res = await CreateIntelligentBackup(backupNote.value)
+    message.success('全量智能资产包创建成功！')
+    backupNote.value = ''
+    await fetchBackupCenterData()
+    // 自动触发最新资产包下载
+    if (backupList.value.length > 0) {
+      const latest = backupList.value[0]
+      if (latest && latest.type === 'intel_bundle') {
+        downloadBackup(latest)
+      }
+    }
+  } catch (err: any) {
+    message.error('创建全量备份失败: ' + (err?.message || err))
+  } finally {
+    creatingBackup.value = false
+  }
+}
+
+// 一键创建底层数据库物理快照
+async function handleCreateDatabaseSnapshot() {
+  creatingSnapshot.value = true
+  try {
+    const res = await CreateDatabaseSnapshot()
+    message.success('数据库物理快照创建成功！')
+    await fetchBackupCenterData()
+  } catch (err: any) {
+    message.error('创建快照失败: ' + (err?.message || err))
+  } finally {
+    creatingSnapshot.value = false
+  }
+}
+
+// 下载指定的备份文件
+async function downloadBackup(item: any) {
+  try {
+    message.loading('正在打包下载...', { duration: 1500 })
+    const content = await GetBackupContent(item.fileName)
+    if (content.startsWith('ERROR:')) {
+      message.error('获取备份内容失败: ' + content)
+      return
+    }
+    const isBinary = item.fileName.endsWith('.db')
+    triggerBrowserDownload(item.fileName, content, isBinary)
+    message.success(`已开始下载 ${item.fileName}`)
+  } catch (err: any) {
+    message.error('下载备份文件失败: ' + (err?.message || err))
+  }
+}
+
+// 恢复指定的历史备份
+async function restoreBackupItem(item: any) {
+  const isBundle = item.type === 'intel_bundle'
+  const confirmText = isBundle
+    ? `确定要从全量资产包「${item.fileName}」恢复系统数据吗？包含的 AI模型配置、提示词技能、对话记忆与研报将被安全合并更新。`
+    : `确定要恢复「${item.fileName}」吗？`
+  try {
+    const confirm = await dialog.warning({
+      title: '确认恢复数据',
+      content: confirmText,
+      positiveText: '确认恢复',
+      negativeText: '取消',
+      closable: false
+    })
+    if (!confirm) return
+  } catch {
+    return
+  }
+
+  try {
+    const res = await RestoreBackupFile(item.fileName)
+    dialog.success({
+      title: '恢复结果报告',
+      content: res,
+      positiveText: '确定'
+    })
+    await fetchBackupCenterData()
+    // 重新加载配置
+    await getConfig()
+  } catch (err: any) {
+    message.error('恢复失败: ' + (err?.message || err))
+  }
+}
+
+// 删除指定的备份文件
+async function deleteBackupItem(item: any) {
+  try {
+    const confirm = await dialog.error({
+      title: '确认删除备份',
+      content: `确定要彻底删除备份文件「${item.fileName}」吗？此操作无法撤销。`,
+      positiveText: '确认删除',
+      negativeText: '取消',
+      closable: false
+    })
+    if (!confirm) return
+  } catch {
+    return
+  }
+  try {
+    const res = await DeleteBackupFile(item.fileName)
+    message.success(res)
+    await fetchBackupCenterData()
+  } catch (err: any) {
+    message.error('删除备份失败: ' + (err?.message || err))
+  }
+}
+
+// 本地上传资产包并恢复
+function uploadAndRestoreBackup() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json,.bladespkg'
+  input.onchange = (e: any) => {
+    const file = e.target?.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async (event: any) => {
+      const content = event.target?.result as string
+      if (!content) return
+      try {
+        const confirm = await dialog.warning({
+          title: '导入并恢复智能资产包',
+          content: `已选中本地文件「${file.name}」(${Math.round(file.size / 1024)} KB)。导入后将安全更新 AI大模型、技能库、对话记忆与自选资产。是否继续？`,
+          positiveText: '开始恢复',
+          negativeText: '取消',
+          closable: false
+        })
+        if (!confirm) return
+      } catch {
+        return
+      }
+      try {
+        const res = await ImportIntelligentBackup(content)
+        dialog.success({
+          title: '资产包恢复成功',
+          content: res,
+          positiveText: '确定'
+        })
+        await fetchBackupCenterData()
+        await getConfig()
+      } catch (err: any) {
+        message.error('导入资产包失败: ' + (err?.message || err))
+      }
+    }
+    reader.readAsText(file)
+  }
+  input.click()
+}
+
+// 专项 CSV 导出选项
+const csvExportOptions = [
+  { label: '📊 自选股票清单 (CSV)', key: 'followed_stocks' },
+  { label: '🎯 AI 推荐股票清单 (CSV)', key: 'recommend_stocks' },
+  { label: '📝 AI 分析报告记录 (CSV)', key: 'ai_reports' },
+  { label: '📈 关注基金清单 (CSV)', key: 'followed_funds' },
+  { label: '🧪 策略回测结果 (CSV)', key: 'backtest_results' },
+  { label: '⚡ 历史盘面异动 (CSV)', key: 'stock_change_history' }
+]
+
+function handleCsvExportSelect(key: string) {
+  backup(key)
+}
+
 async function backup(type) {
   const typeNameMap = {
     'followed_stocks': '自选股票',
@@ -835,8 +1073,8 @@ async function backup(type) {
   try {
     const confirm = await dialog.info({
       title: '确认备份',
-      content: `确定要备份${typeName}到 CSV 文件吗？`,
-      positiveText: '确认备份',
+      content: `确定要导出${typeName}到 CSV 文件吗？`,
+      positiveText: '确认导出',
       negativeText: '取消',
       closable: false
     })
@@ -844,8 +1082,9 @@ async function backup(type) {
   } catch {
     return
   }
-  BackupData(type).then(res => {
+  BackupData(type).then(async res => {
     message.success(res)
+    await fetchBackupCenterData()
   }).catch(err => {
     message.error('备份失败: ' + (err?.message || err))
   })
@@ -873,8 +1112,9 @@ async function restore(type) {
   } catch {
     return
   }
-  RestoreData(type).then(res => {
+  RestoreData(type).then(async res => {
     message.success(res)
+    await fetchBackupCenterData()
   }).catch(err => {
     message.error('恢复失败: ' + (err?.message || err))
   })
@@ -1611,31 +1851,189 @@ function importConfig() {
             </n-gi>
 
             <n-gi :span="24">
-              <n-divider title-placement="left">数据备份</n-divider>
+              <n-divider title-placement="left">智能数据资产与备份中心</n-divider>
             </n-gi>
 
+            <!-- 1. 资产概览仪表盘卡片 -->
             <n-gi :span="24">
-              <n-space vertical>
-                <n-text depth="3">导出用户数据到备份目录下的 CSV 文件（Excel 可直接打开），备份完成后会显示具体路径</n-text>
-                <n-space justify="center" wrap>
-                  <n-button type="info" ghost @click="backup('followed_stocks')">备份自选股票</n-button>
-                  <n-button type="info" ghost @click="backup('recommend_stocks')">备份推荐股票</n-button>
-                  <n-button type="info" ghost @click="backup('ai_reports')">备份AI分析报告</n-button>
-                  <n-button type="info" ghost @click="backup('followed_funds')">备份关注基金</n-button>
-                  <n-button type="info" ghost @click="backup('backtest_results')">备份回测结果</n-button>
-                  <n-button type="info" ghost @click="backup('stock_change_history')">备份异动历史</n-button>
+              <n-grid :cols="4" :x-gap="12" :y-gap="12">
+                <n-gi>
+                  <n-card size="small" embedded :bordered="false" style="border-radius: 8px;">
+                    <n-statistic label="🤖 AI 模型与智能技能">
+                      <template #default>
+                        <span style="font-size: 20px; font-weight: bold; color: #18a058;">{{ backupOverview.aiConfigCount }}</span>
+                        <span style="font-size: 13px; color: #999; margin: 0 4px;">项模型 /</span>
+                        <span style="font-size: 16px; font-weight: 600; color: #2080f0;">{{ backupOverview.skillCount }}</span>
+                        <span style="font-size: 13px; color: #999; margin-left: 4px;">个技能</span>
+                      </template>
+                    </n-statistic>
+                  </n-card>
+                </n-gi>
+                <n-gi>
+                  <n-card size="small" embedded :bordered="false" style="border-radius: 8px;">
+                    <n-statistic label="🧠 会话、记忆与MCP">
+                      <template #default>
+                        <span style="font-size: 20px; font-weight: bold; color: #2080f0;">{{ backupOverview.chatSessionCount }}</span>
+                        <span style="font-size: 13px; color: #999; margin: 0 4px;">会话 /</span>
+                        <span style="font-size: 16px; font-weight: 600; color: #f0a020;">{{ backupOverview.memoryCount }}</span>
+                        <span style="font-size: 13px; color: #999; margin-left: 4px;">条记忆</span>
+                      </template>
+                    </n-statistic>
+                  </n-card>
+                </n-gi>
+                <n-gi>
+                  <n-card size="small" embedded :bordered="false" style="border-radius: 8px;">
+                    <n-statistic label="📑 AI 研报与量化回测">
+                      <template #default>
+                        <span style="font-size: 20px; font-weight: bold; color: #d03050;">{{ backupOverview.aiReportCount }}</span>
+                        <span style="font-size: 13px; color: #999; margin: 0 4px;">篇研报 /</span>
+                        <span style="font-size: 16px; font-weight: 600; color: #18a058;">{{ backupOverview.backtestCount }}</span>
+                        <span style="font-size: 13px; color: #999; margin-left: 4px;">条回测</span>
+                      </template>
+                    </n-statistic>
+                  </n-card>
+                </n-gi>
+                <n-gi>
+                  <n-card size="small" embedded :bordered="false" style="border-radius: 8px;">
+                    <n-statistic label="📈 自选资产与监控">
+                      <template #default>
+                        <span style="font-size: 20px; font-weight: bold; color: #2080f0;">{{ backupOverview.followedStockCount }}</span>
+                        <span style="font-size: 13px; color: #999; margin: 0 4px;">只自选 /</span>
+                        <span style="font-size: 16px; font-weight: 600; color: #18a058;">{{ backupOverview.followedFundCount }}</span>
+                        <span style="font-size: 13px; color: #999; margin-left: 4px;">只基金</span>
+                      </template>
+                    </n-statistic>
+                  </n-card>
+                </n-gi>
+              </n-grid>
+            </n-gi>
+
+            <!-- 2. 核心操作控制台 -->
+            <n-gi :span="24">
+              <n-card size="small" style="background: rgba(128, 128, 128, 0.04); border-radius: 8px;">
+                <n-space justify="space-between" align="center" wrap>
+                  <n-space align="center">
+                    <n-input
+                      v-model:value="backupNote"
+                      placeholder="备份备注（可选，如：版本升级前快照）"
+                      style="width: 260px;"
+                      clearable
+                      size="small"
+                    />
+                    <n-button
+                      type="primary"
+                      :loading="creatingBackup"
+                      @click="handleCreateIntelligentBackup"
+                      style="font-weight: bold;"
+                    >
+                      🚀 一键全量智能资产备份 (.json)
+                    </n-button>
+                    <n-button
+                      type="info"
+                      ghost
+                      :loading="creatingSnapshot"
+                      @click="handleCreateDatabaseSnapshot"
+                    >
+                      💾 创建数据库物理快照 (.db)
+                    </n-button>
+                    <n-button
+                      type="warning"
+                      ghost
+                      @click="uploadAndRestoreBackup"
+                    >
+                      📥 导入并恢复资产包
+                    </n-button>
+                  </n-space>
+
+                  <n-space align="center">
+                    <n-dropdown
+                      trigger="click"
+                      :options="csvExportOptions"
+                      @select="handleCsvExportSelect"
+                    >
+                      <n-button secondary type="default">
+                        📊 导出单项 CSV 表格 ▾
+                      </n-button>
+                    </n-dropdown>
+                    <n-button text type="primary" @click="fetchBackupCenterData" :loading="loadingBackups">
+                      🔄 刷新列表
+                    </n-button>
+                  </n-space>
                 </n-space>
-                <n-divider/>
-                <n-text depth="3">从最近的备份 CSV 文件恢复数据到数据库（将覆盖当前数据）</n-text>
-                <n-space justify="center" wrap>
-                  <n-button type="warning" ghost @click="restore('followed_stocks')">恢复自选股票</n-button>
-                  <n-button type="warning" ghost @click="restore('recommend_stocks')">恢复推荐股票</n-button>
-                  <n-button type="warning" ghost @click="restore('ai_reports')">恢复AI分析报告</n-button>
-                  <n-button type="warning" ghost @click="restore('followed_funds')">恢复关注基金</n-button>
-                  <n-button type="warning" ghost @click="restore('backtest_results')">恢复回测结果</n-button>
-                  <n-button type="warning" ghost @click="restore('stock_change_history')">恢复异动历史</n-button>
-                </n-space>
-              </n-space>
+              </n-card>
+            </n-gi>
+
+            <!-- 3. 历史备份管理表格 -->
+            <n-gi :span="24">
+              <n-card size="small" :bordered="false" style="padding: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <n-text depth="3" style="font-size: 13px;">
+                    备份存档总计 {{ backupOverview.totalBackupFiles }} 份，占用空间 {{ backupOverview.totalBackupSizeStr }} (上次备份：{{ backupOverview.lastBackupTime }})
+                  </n-text>
+                </div>
+
+                <n-table size="small" :single-line="false" striped>
+                  <thead>
+                    <tr>
+                      <th style="width: 140px;">备份类型</th>
+                      <th style="width: 230px;">文件名称</th>
+                      <th>资产内容与规格</th>
+                      <th style="width: 90px;">大小</th>
+                      <th style="width: 160px;">创建时间</th>
+                      <th style="width: 190px; text-align: center;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="backupList.length === 0">
+                      <td colspan="6" style="text-align: center; color: #999; padding: 24px;">
+                        暂无备份文件，点击上方【一键全量智能资产备份】快速创建
+                      </td>
+                    </tr>
+                    <tr v-for="item in backupList" :key="item.fileName">
+                      <td>
+                        <n-tag v-if="item.type === 'intel_bundle'" type="success" size="small" round>
+                          全量智能资产包
+                        </n-tag>
+                        <n-tag v-else-if="item.type === 'db_snapshot'" type="info" size="small" round>
+                          数据库快照
+                        </n-tag>
+                        <n-tag v-else type="default" size="small" round>
+                          专项CSV表格
+                        </n-tag>
+                      </td>
+                      <td>
+                        <span style="font-family: monospace; font-size: 12px; font-weight: 500;">
+                          {{ item.fileName }}
+                        </span>
+                      </td>
+                      <td>
+                        <span style="font-size: 12px; color: #666;">
+                          {{ item.recordDesc }}
+                        </span>
+                      </td>
+                      <td>
+                        <span style="font-size: 12px;">{{ item.sizeStr }}</span>
+                      </td>
+                      <td>
+                        <span style="font-size: 12px; color: #888;">{{ item.timeStr }}</span>
+                      </td>
+                      <td style="text-align: center;">
+                        <n-space justify="center" size="small">
+                          <n-button size="tiny" type="primary" secondary @click="downloadBackup(item)">
+                            ⬇ 下载
+                          </n-button>
+                          <n-button size="tiny" type="warning" secondary @click="restoreBackupItem(item)">
+                            🔄 恢复
+                          </n-button>
+                          <n-button size="tiny" type="error" quaternary @click="deleteBackupItem(item)">
+                            🗑
+                          </n-button>
+                        </n-space>
+                      </td>
+                    </tr>
+                  </tbody>
+                </n-table>
+              </n-card>
             </n-gi>
 
             <n-gi :span="24">

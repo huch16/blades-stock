@@ -153,10 +153,14 @@ func main() {
 	mux.HandleFunc("POST /api/auth/init", HandleInitPassword)
 	mux.HandleFunc("POST /api/auth/login", HandleLogin)
 
-	// 7.3 SSE 实时推流端点
+	// 7.3 智能数据资产备份与恢复流端点 (支持 Web 模式安全直接下载与上传)
+	mux.HandleFunc("GET /api/backup/download", HandleBackupDownload)
+	mux.HandleFunc("POST /api/backup/upload", HandleBackupUpload)
+
+	// 7.4 SSE 实时推流端点
 	mux.HandleFunc("GET /api/events/stream", HandleSSE)
 
-	// 7.4 通用 RPC 分发端点
+	// 7.5 通用 RPC 分发端点
 	mux.HandleFunc("/api/App/", dispatcher.HandleRPC)
 
 	// 7.5 前端静态资源与 SPA Fallback 托管

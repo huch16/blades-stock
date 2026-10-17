@@ -322,6 +322,22 @@ export function RemoveStockGroup(arg1:string,arg2:string,arg3:number):Promise<st
 
 export function RestartAsAdmin():Promise<void>;
 
+export function GetBackupOverview():Promise<any>;
+
+export function ListBackups():Promise<Array<any>>;
+
+export function CreateIntelligentBackup(arg1:string):Promise<string>;
+
+export function CreateDatabaseSnapshot():Promise<string>;
+
+export function RestoreBackupFile(arg1:string):Promise<string>;
+
+export function DeleteBackupFile(arg1:string):Promise<string>;
+
+export function GetBackupContent(arg1:string):Promise<string>;
+
+export function ImportIntelligentBackup(arg1:string):Promise<string>;
+
 export function RestoreData(arg1:string):Promise<string>;
 
 export function RunVectorBacktest(arg1:string,arg2:string,arg3:Record<string, any>):Promise<Record<string, any>>;

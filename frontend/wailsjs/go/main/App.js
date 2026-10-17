@@ -634,6 +634,38 @@ export function RestartAsAdmin() {
   return window['go']['main']['App']['RestartAsAdmin']();
 }
 
+export function GetBackupOverview() {
+  return window['go']['main']['App']['GetBackupOverview']();
+}
+
+export function ListBackups() {
+  return window['go']['main']['App']['ListBackups']();
+}
+
+export function CreateIntelligentBackup(arg1) {
+  return window['go']['main']['App']['CreateIntelligentBackup'](arg1);
+}
+
+export function CreateDatabaseSnapshot() {
+  return window['go']['main']['App']['CreateDatabaseSnapshot']();
+}
+
+export function RestoreBackupFile(arg1) {
+  return window['go']['main']['App']['RestoreBackupFile'](arg1);
+}
+
+export function DeleteBackupFile(arg1) {
+  return window['go']['main']['App']['DeleteBackupFile'](arg1);
+}
+
+export function GetBackupContent(arg1) {
+  return window['go']['main']['App']['GetBackupContent'](arg1);
+}
+
+export function ImportIntelligentBackup(arg1) {
+  return window['go']['main']['App']['ImportIntelligentBackup'](arg1);
+}
+
 export function RestoreData(arg1) {
   return window['go']['main']['App']['RestoreData'](arg1);
 }
