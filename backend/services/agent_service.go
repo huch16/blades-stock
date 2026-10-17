@@ -9,6 +9,7 @@ import (
 
 	"blades-stock/backend/agent"
 	"blades-stock/backend/data"
+	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 
@@ -723,4 +724,40 @@ func (s *AgentService) BatchApproveSkillChanges(ids any) (any, error) {
 // BatchRejectSkillChanges 批量驳回技能发布
 func (s *AgentService) BatchRejectSkillChanges(ids any) (any, error) {
 	return map[string]any{"code": 1, "msg": "ok"}, nil
+}
+
+// -----------------------------------------------------------------------------
+// AI 语义向量精炼与经验结晶 (Semantic Distillation & Knowledge Crystallization)
+// -----------------------------------------------------------------------------
+
+// TriggerSemanticDistillation 手动或定时触发全局语义精炼、知识结晶与存储自愈
+func (s *AgentService) TriggerSemanticDistillation(ctx context.Context) (*agent.DistillationStats, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	distiller := agent.DefaultSemanticDistiller()
+	return distiller.RunMaintenanceCycle(ctx)
+}
+
+// GetDistillationStats 获取当前语义精炼、结晶总数与瘦身指标
+func (s *AgentService) GetDistillationStats(ctx context.Context) (*agent.DistillationStats, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	distiller := agent.DefaultSemanticDistiller()
+	return distiller.GetDistillationStats(ctx)
+}
+
+// GetKnowledgeCrystals 分页/分类获取平台凝练的历史高胜率经验结晶库
+func (s *AgentService) GetKnowledgeCrystals(ctx context.Context, category string, limit int) ([]agent.KnowledgeCrystal, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var crystals []agent.KnowledgeCrystal
+	q := db.Dao.Model(&agent.KnowledgeCrystal{})
+	if strings.TrimSpace(category) != "" {
+		q = q.Where("category = ?", category)
+	}
+	err := q.Order("accuracy_score desc, hit_count desc, id desc").Limit(limit).Find(&crystals).Error
+	return crystals, err
 }

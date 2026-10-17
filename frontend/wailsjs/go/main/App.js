@@ -394,6 +394,10 @@ export function GetDailyDimensionStats(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetDailyDimensionStats'](arg1, arg2, arg3);
 }
 
+export function GetDistillationStats() {
+  return window['go']['main']['App']['GetDistillationStats']();
+}
+
 export function GetFollowList(arg1) {
   return window['go']['main']['App']['GetFollowList'](arg1);
 }
@@ -440,6 +444,10 @@ export function GetIndustryMoneyRankSina(arg1, arg2) {
 
 export function GetIndustryRank(arg1, arg2) {
   return window['go']['main']['App']['GetIndustryRank'](arg1, arg2);
+}
+
+export function GetKnowledgeCrystals(arg1, arg2) {
+  return window['go']['main']['App']['GetKnowledgeCrystals'](arg1, arg2);
 }
 
 export function GetLatestMarketIntelligenceReport() {
@@ -872,6 +880,10 @@ export function TestMCPServer(arg1) {
 
 export function TriggerAIReportBacktest(arg1) {
   return window['go']['main']['App']['TriggerAIReportBacktest'](arg1);
+}
+
+export function TriggerSemanticDistillation() {
+  return window['go']['main']['App']['TriggerSemanticDistillation']();
 }
 
 export function UnFollow(arg1) {

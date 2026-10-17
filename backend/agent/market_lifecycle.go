@@ -281,6 +281,10 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	}
 	momentumTable := quant.FormatETFMomentumSummary(momentumList)
 
+	// 检索与盘前宏观和ETF轮动高度匹配的历史高胜率知识结晶 (语义 RAG 赋能)
+	retrievedCrystals, _ := DefaultSemanticDistiller().SearchKnowledgeCrystals(ctx, "A股盘前 隔夜外盘 宏观政策 行业ETF轮动", "etf_rotation", 2)
+	crystalPrompt := DefaultSemanticDistiller().FormatCrystalsForPrompt(retrievedCrystals)
+
 	// 2. 组装盘前前瞻 + ETF轮动 Prompt (包含 Skill 7 范式)
 	prompt := fmt.Sprintf(`你现在是顶级券商首席策略分析师兼量化宏观专家“财智”。今天是 %s。
 请严格按照【ETF轮动多Agent分析】实战范式，结合以下一手收集的盘前全球指数、核心ETF动态与要闻资讯，输出一份高水准【A股盘前智能前瞻与ETF轮动内参】：
@@ -296,7 +300,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 
 【最新宏观与隔夜核心要闻】：
 %s
-
+%s
 请按以下五维结构输出 Markdown 格式的盘前内参：
 ### 🌐 一、隔夜外盘与全球资产联动
 - 欧美股市、中概金龙指数表现及对A股开盘情绪的影响；
@@ -324,7 +328,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 - 如遇风控拦截（回撤冷却或盈亏比不足），则明确给出观望或等待回调的建议；
 
 【数据注入说明】：隔夜外盘行情、核心关注ETF池最新状态、纯数学动量矩阵（21日加权对数回归）以及隔夜宏观核心要闻已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。
-全文请使用专业券商内参语气，数据引用请保持客观，避免过度解读。`, todayStr, globalBrief, etfSummary.String(), momentumTable, newsText.String())
+全文请使用专业券商内参语气，数据引用请保持客观，避免过度解读。`, todayStr, globalBrief, etfSummary.String(), momentumTable, newsText.String(), crystalPrompt)
 
 	sysPrompt := "你现在是顶级券商首席策略分析师兼量化宏观专家“财智”。所有核心客观数据（隔夜外盘、ETF行情与纯数学动量矩阵、隔夜财经要闻）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的五维体系输出深度结构化的专业 Markdown 研报。"
 	reasoningBuilder := strings.Builder{}
@@ -562,6 +566,10 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 			btRes.Processed, btRes.AccuracyRate*100, btRes.Accurate)
 	}
 
+	// 检索与盘后总结高度相关的经验结晶与避险案例
+	retrievedCrystals, _ := DefaultSemanticDistiller().SearchKnowledgeCrystals(ctx, "收盘复盘 涨跌分布 龙虎榜 资金博弈 避险警示", "", 2)
+	crystalPrompt := DefaultSemanticDistiller().FormatCrystalsForPrompt(retrievedCrystals)
+
 	// 3. 组装收盘复盘 Prompt
 	prompt := fmt.Sprintf(`你现在是拥有20年实战经验的顶级A股量化私募投资总监“财智”。今天是 %s 收盘后。
 请基于今日盘面全景数据与量化指标，撰写一份深刻、严谨且指导性强的【A股全景收盘复盘与次日推演报告】：
@@ -574,7 +582,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 
 【AI预测回测与量化跟踪】：
 %s
-
+%s
 请按以下结构撰写深度复盘 Markdown 报告：
 ### 📊 一、全天行情概览与多空情绪定调
 - 大盘指数运行特征（放量/缩量、反弹/分歧、震荡区间）；
@@ -592,7 +600,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 - 明日开盘剧本推演（高开冲高/低开探底/平开震荡）；
 - 应对方案与持仓风控金句。
 
-【数据注入说明】：全天市场涨跌与量能分布、涨停连板与题材热度概要以及AI预测回测跟踪数据已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。`, todayStr, statSummary.String(), uplimitJSON, btSummary)
+【数据注入说明】：全天市场涨跌与量能分布、涨停连板与题材热度概要以及AI预测回测跟踪数据已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。`, todayStr, statSummary.String(), uplimitJSON, btSummary, crystalPrompt)
 
 	sysPrompt := "你现在是拥有20年实战经验的顶级A股量化私募投资总监“财智”。所有核心盘面客观数据（涨跌家数比、量能分布、涨停连板题材、AI回测胜率）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的结构输出深度复盘与次日推演报告。"
 	reasoningBuilder := strings.Builder{}

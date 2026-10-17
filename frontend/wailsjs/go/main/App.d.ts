@@ -204,6 +204,8 @@ export function GetDailyChangeStats(arg1:number):Promise<Array<data.DailyChangeS
 
 export function GetDailyDimensionStats(arg1:string,arg2:string,arg3:number):Promise<Array<data.DailyDimensionStats>>;
 
+export function GetDistillationStats():Promise<agent.DistillationStats>;
+
 export function GetFollowList(arg1:number):Promise<any>;
 
 export function GetFollowedFund():Promise<Array<data.FollowedFund>>;
@@ -227,6 +229,8 @@ export function GetHotStrategy():Promise<Record<string, any>>;
 export function GetIndustryMoneyRankSina(arg1:string,arg2:string):Promise<Array<Record<string, any>>>;
 
 export function GetIndustryRank(arg1:string,arg2:number):Promise<Array<any>>;
+
+export function GetKnowledgeCrystals(arg1:string,arg2:number):Promise<Array<agent.KnowledgeCrystal>>;
 
 export function GetLatestMarketIntelligenceReport():Promise<agent.MarketIntelligenceReport>;
 
@@ -443,6 +447,8 @@ export function TestAiConnection(arg1:string,arg2:string,arg3:string):Promise<st
 export function TestMCPServer(arg1:number):Promise<string>;
 
 export function TriggerAIReportBacktest(arg1:number):Promise<quant.AIReportBacktestResult>;
+
+export function TriggerSemanticDistillation():Promise<agent.DistillationStats>;
 
 export function UnFollow(arg1:string):Promise<string>;
 

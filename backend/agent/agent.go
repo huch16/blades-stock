@@ -233,6 +233,14 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 			thinkingPrompt = tpls.ReactThinking
 		}
 
+		// 语义向量经验结晶召回 (让 Agent 随着时间推移积累历史高胜率经验与避险规律，越来越聪明)
+		if mode != string(AgentModeDirect) {
+			crystals, _ := DefaultSemanticDistiller().SearchKnowledgeCrystals(ctx, question, "", 2)
+			if len(crystals) > 0 {
+				thinkingPrompt += "\n" + DefaultSemanticDistiller().FormatCrystalsForPrompt(crystals)
+			}
+		}
+
 		newMsg := blades.UserMessage(question + "\n\n" + thinkingPrompt)
 		newMsg.Metadata = inv.Message.Metadata
 		inv.Message = newMsg

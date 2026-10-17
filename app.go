@@ -2876,3 +2876,23 @@ func (a *App) BatchRejectSkillChanges(ids any) (any, error) {
 	return a.agentService.BatchRejectSkillChanges(ids)
 }
 
+// ============================================================================
+// AI 语义向量精炼与知识结晶 (Semantic Distillation & Knowledge Crystallization)
+// ============================================================================
+
+// TriggerSemanticDistillation 手动或一键触发全局语义精炼、知识结晶与存储自愈
+func (a *App) TriggerSemanticDistillation() (*agent.DistillationStats, error) {
+	return a.agentService.TriggerSemanticDistillation(a.ctx)
+}
+
+// GetDistillationStats 获取当前语义精炼、结晶总数与瘦身指标
+func (a *App) GetDistillationStats() (*agent.DistillationStats, error) {
+	return a.agentService.GetDistillationStats(a.ctx)
+}
+
+// GetKnowledgeCrystals 获取平台长期沉淀凝练的高胜率经验结晶库
+func (a *App) GetKnowledgeCrystals(category string, limit int) ([]agent.KnowledgeCrystal, error) {
+	return a.agentService.GetKnowledgeCrystals(a.ctx, category, limit)
+}
+
+

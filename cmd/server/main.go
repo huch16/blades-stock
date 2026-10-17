@@ -107,6 +107,31 @@ func main() {
 		}
 	}()
 
+	// 5.2 启动云端 AI 语义向量精炼与存储自愈守护协程 (解决云端长期运行数据爆炸、保持 Agent 持续进化)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Warnf("[SemanticDistillerCron] recovered from panic: %v", r)
+			}
+		}()
+
+		// 启动后延迟 30 秒执行首次轻量精炼，清除前序残留冗余
+		time.Sleep(30 * time.Second)
+		logger.SugaredLogger.Info("[SemanticDistillerCron] 启动初次后台语义精炼与知识结晶...")
+		_, _ = agent.DefaultSemanticDistiller().RunMaintenanceCycle(context.Background())
+
+		// 每 6 小时自动执行一次完整的语义去重、回测结晶、记忆折叠与 SQLite 物理瘦身
+		distillTicker := time.NewTicker(6 * time.Hour)
+		defer distillTicker.Stop()
+		for range distillTicker.C {
+			logger.SugaredLogger.Info("[SemanticDistillerCron] 执行定时周期性语义精炼与存储自愈循环...")
+			_, err := agent.DefaultSemanticDistiller().RunMaintenanceCycle(context.Background())
+			if err != nil {
+				logger.SugaredLogger.Warnf("[SemanticDistillerCron] 语义精炼循环提示: %v", err)
+			}
+		}
+	}()
+
 	// 6. 初始化安全鉴权
 	initAuth(dataDir)
 

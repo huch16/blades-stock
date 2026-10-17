@@ -1,5 +1,115 @@
 export namespace agent {
 	
+	export class DistillationStats {
+	    totalCrystals: number;
+	    prunedNewsCount: number;
+	    prunedMemories: number;
+	    prunedReports: number;
+	    averageAccuracy: number;
+	    totalHits: number;
+	    // Go type: time
+	    lastRunAt: any;
+	    databaseSizeMB: number;
+	    estimatedFreedMB: number;
+	    compressionRatio: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DistillationStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalCrystals = source["totalCrystals"];
+	        this.prunedNewsCount = source["prunedNewsCount"];
+	        this.prunedMemories = source["prunedMemories"];
+	        this.prunedReports = source["prunedReports"];
+	        this.averageAccuracy = source["averageAccuracy"];
+	        this.totalHits = source["totalHits"];
+	        this.lastRunAt = this.convertValues(source["lastRunAt"], null);
+	        this.databaseSizeMB = source["databaseSizeMB"];
+	        this.estimatedFreedMB = source["estimatedFreedMB"];
+	        this.compressionRatio = source["compressionRatio"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class KnowledgeCrystal {
+	    id: number;
+	    category: string;
+	    title: string;
+	    triggerPattern: string;
+	    summary: string;
+	    keyInsights: string;
+	    accuracyScore: number;
+	    hitCount: number;
+	    // Go type: time
+	    lastHitAt: any;
+	    vectorDim: number;
+	    sourceDate: string;
+	    sourceRef: string;
+	    contentHash: string;
+	    // Go type: time
+	    createdAt: any;
+	    // Go type: time
+	    updatedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new KnowledgeCrystal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.category = source["category"];
+	        this.title = source["title"];
+	        this.triggerPattern = source["triggerPattern"];
+	        this.summary = source["summary"];
+	        this.keyInsights = source["keyInsights"];
+	        this.accuracyScore = source["accuracyScore"];
+	        this.hitCount = source["hitCount"];
+	        this.lastHitAt = this.convertValues(source["lastHitAt"], null);
+	        this.vectorDim = source["vectorDim"];
+	        this.sourceDate = source["sourceDate"];
+	        this.sourceRef = source["sourceRef"];
+	        this.contentHash = source["contentHash"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class MarketIntelligenceReport {
 	    type: string;
 	    title: string;
