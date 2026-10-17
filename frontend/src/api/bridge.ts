@@ -12,7 +12,11 @@
 // 1. 环境感知
 export const isWails = (): boolean => {
   if (typeof window === 'undefined') return false
-  // 若已加载 Web Universal Bridge 代理桩，则必定是 Web 浏览器模式
+  // 核心判断：原生 Wails 客户端必定存在宿主注入的 window.WailsInvoke 或 window._wails
+  if (typeof (window as any).WailsInvoke !== 'undefined' || typeof (window as any)._wails !== 'undefined') {
+    return true
+  }
+  // 若已显式标记为 Web Universal Bridge 代理模式，则必定是 Web 浏览器模式
   if ((window as any).__BLADES_WEB_BRIDGE__) {
     return false
   }
@@ -274,17 +278,25 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
 export function initUniversalBridge(): void {
   if (typeof window === 'undefined') return
 
-  // 原生 Wails 桌面环境直接放行
-  if (isWails()) {
+  const win = window as any
+  // 原生 Wails 桌面环境判断（支持原生 WailsInvoke、_wails 或原生 runtime.EventsOn）：
+  // 命中原生桌面特征时绝对放行，绝不可误注入 Web 代理桩！
+  const isNativeWails =
+    typeof win.WailsInvoke !== 'undefined' ||
+    typeof win._wails !== 'undefined' ||
+    (typeof win.runtime !== 'undefined' && typeof win.runtime.EventsOn === 'function' && !win.__BLADES_WEB_BRIDGE__) ||
+    (typeof win.go !== 'undefined' && Boolean(win.go?.main?.App) && !win.__BLADES_WEB_BRIDGE__)
+
+  if (isNativeWails) {
     console.log('[UniversalBridge] Running in Native Wails Desktop mode.')
+    delete win.__BLADES_WEB_BRIDGE__
     return
   }
 
   // 显式标记当前处于 Web Universal Bridge 模式，防止代理对象被误判为原生 Wails
-  ;(window as any).__BLADES_WEB_BRIDGE__ = true
+  win.__BLADES_WEB_BRIDGE__ = true
   console.log('[UniversalBridge] Running in Cloud-Native Web/Browser mode. Installing proxy stubs...')
 
-  const win = window as any
   win.go = win.go || {}
   win.go.main = win.go.main || {}
 

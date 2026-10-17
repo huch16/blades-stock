@@ -14,6 +14,7 @@ import (
 	gotdx "github.com/bensema/gotdx"
 	"github.com/bensema/gotdx/proto"
 	"github.com/bensema/gotdx/types"
+	"gorm.io/gorm"
 )
 
 func init() {
@@ -1248,41 +1249,82 @@ func (t *TdxKLineApi) fetchStockListByMarket(market types.Market, result *[]TdxS
 
 // SyncStockBasicToDB 将通达信拉取的沪深京全市场股票列表同步（upsert）到 StockBasic 表。
 // 以 Symbol（纯代码）为去重键：已存在则更新名称/市场，不存在则新增。
-// 即时性高，适合作为 A 股基础信息的主数据源，定期调用以同步新上市/改名/退市。
+// 经内存预检与批量事务优化，杜绝单条高频读写对 SQLite 锁的长期占用。
 func (t *TdxKLineApi) SyncStockBasicToDB() (added, updated int, err error) {
 	list := t.GetAllStockList()
 	if list == nil || len(*list) == 0 {
 		return 0, 0, fmt.Errorf("通达信未返回股票列表数据")
 	}
 
+	// 1. 预先一次性将已有 Symbol 载入内存哈希映射，消除逐行 First() 导致的数千次读磁盘开销
+	var existing []struct {
+		Symbol string
+		Name   string
+		Market string
+	}
+	db.Dao.Model(&StockBasic{}).Select("symbol, name, market").Find(&existing)
+	existMap := make(map[string]struct{ Name, Market string }, len(existing))
+	for _, e := range existing {
+		existMap[e.Symbol] = struct{ Name, Market string }{Name: e.Name, Market: e.Market}
+	}
+
+	var toCreate []*StockBasic
+	type updateItem struct {
+		symbol string
+		tsCode string
+		name   string
+		market string
+	}
+	var toUpdate []updateItem
+
 	for _, item := range *list {
 		tsCode := fmt.Sprintf("%s.%s", item.Code, item.Market) // 如 600519.SH
-		stockInfo := &StockBasic{
-			Symbol: item.Code,
-			TsCode: tsCode,
-			Name:   item.Name,
-			Market: item.Market,
+		cur, exists := existMap[item.Code]
+		if !exists {
+			toCreate = append(toCreate, &StockBasic{
+				Symbol: item.Code,
+				TsCode: tsCode,
+				Name:   item.Name,
+				Market: item.Market,
+			})
+			existMap[item.Code] = struct{ Name, Market string }{Name: item.Name, Market: item.Market}
+		} else if cur.Name != item.Name || cur.Market != item.Market {
+			toUpdate = append(toUpdate, updateItem{
+				symbol: item.Code,
+				tsCode: tsCode,
+				name:   item.Name,
+				market: item.Market,
+			})
 		}
-		// 以 Symbol 查询是否已存在
-		exist := &StockBasic{}
-		db.Dao.Model(&StockBasic{}).Where("symbol = ?", stockInfo.Symbol).First(exist)
-		if exist.ID == 0 {
-			if e := db.Dao.Model(&StockBasic{}).Create(stockInfo); e.Error != nil {
-				logger.SugaredLogger.Warnf("SyncStockBasicToDB create %s error: %v", tsCode, e.Error)
-				continue
-			}
-			added++
+	}
+
+	// 2. 批量创建新股票
+	if len(toCreate) > 0 {
+		if err := db.Dao.CreateInBatches(toCreate, 300).Error; err != nil {
+			logger.SugaredLogger.Warnf("SyncStockBasicToDB 批量新增失败: %v", err)
 		} else {
-			// 已存在则更新名称与市场（不覆盖 Tushare/东财已补充的行业/地区等字段）
-			if e := db.Dao.Model(&StockBasic{}).Where("symbol = ?", stockInfo.Symbol).Updates(map[string]any{
-				"ts_code": tsCode,
-				"name":    item.Name,
-				"market":  item.Market,
-			}); e.Error != nil {
-				logger.SugaredLogger.Warnf("SyncStockBasicToDB update %s error: %v", tsCode, e.Error)
-				continue
+			added = len(toCreate)
+		}
+	}
+
+	// 3. 在单一事务中批量更新发生变动的标的，避免逐行 autocommit 争用 SQLite 锁
+	if len(toUpdate) > 0 {
+		err := db.Dao.Transaction(func(tx *gorm.DB) error {
+			for _, u := range toUpdate {
+				if e := tx.Model(&StockBasic{}).Where("symbol = ?", u.symbol).Updates(map[string]any{
+					"ts_code": u.tsCode,
+					"name":    u.name,
+					"market":  u.market,
+				}).Error; e != nil {
+					return e
+				}
 			}
-			updated++
+			return nil
+		})
+		if err != nil {
+			logger.SugaredLogger.Warnf("SyncStockBasicToDB 批量更新失败: %v", err)
+		} else {
+			updated = len(toUpdate)
 		}
 	}
 
@@ -1424,59 +1466,99 @@ func (t *TdxKLineApi) SyncHKUSStockBasicToDB() (hkAdded, hkUpdated, usAdded, usU
 		return 0, 0, 0, 0, err
 	}
 
-	// 港股：Code 补 .HK 与 DCToTsCode 风格一致
+	// 1. 港股差异对比
+	var existingHK []struct {
+		Code string
+		Name string
+	}
+	db.Dao.Model(&models.StockInfoHK{}).Select("code, name").Find(&existingHK)
+	hkMap := make(map[string]string, len(existingHK))
+	for _, e := range existingHK {
+		hkMap[e.Code] = e.Name
+	}
+
+	var hkCreate []*models.StockInfoHK
+	type hkUpdateItem struct {
+		code string
+		name string
+	}
+	var hkUpdate []hkUpdateItem
+
 	for _, item := range *hkList {
-		code := fmt.Sprintf("%05s.HK", item.Code) // 如 00001.HK
-		stockInfo := &models.StockInfoHK{
-			Code: code,
-			Name: item.Name,
-		}
-		exist := &models.StockInfoHK{}
-		db.Dao.Model(&models.StockInfoHK{}).Where("code = ?", code).First(exist)
-		if exist.ID == 0 {
-			if e := db.Dao.Model(&models.StockInfoHK{}).Create(stockInfo); e.Error != nil {
-				logger.SugaredLogger.Warnf("SyncHKUSStockBasicToDB create HK %s error: %v", code, e.Error)
-				continue
-			}
-			hkAdded++
-		} else {
-			if e := db.Dao.Model(&models.StockInfoHK{}).Where("code = ?", code).Updates(map[string]any{
-				"name": item.Name,
-			}); e.Error != nil {
-				logger.SugaredLogger.Warnf("SyncHKUSStockBasicToDB update HK %s error: %v", code, e.Error)
-				continue
-			}
-			hkUpdated++
+		code := fmt.Sprintf("%05s.HK", item.Code)
+		oldName, exists := hkMap[code]
+		if !exists {
+			hkCreate = append(hkCreate, &models.StockInfoHK{Code: code, Name: item.Name})
+			hkMap[code] = item.Name
+		} else if oldName != item.Name {
+			hkUpdate = append(hkUpdate, hkUpdateItem{code: code, name: item.Name})
 		}
 	}
 
-	// 美股：Code 直接使用字母代码
+	if len(hkCreate) > 0 {
+		if err := db.Dao.CreateInBatches(hkCreate, 300).Error; err != nil {
+			logger.SugaredLogger.Warnf("SyncHKUSStockBasicToDB 批量新增港股失败: %v", err)
+		} else {
+			hkAdded = len(hkCreate)
+		}
+	}
+	if len(hkUpdate) > 0 {
+		_ = db.Dao.Transaction(func(tx *gorm.DB) error {
+			for _, u := range hkUpdate {
+				tx.Model(&models.StockInfoHK{}).Where("code = ?", u.code).Update("name", u.name)
+			}
+			return nil
+		})
+		hkUpdated = len(hkUpdate)
+	}
+
+	// 2. 美股差异对比
+	var existingUS []struct {
+		Code string
+		Name string
+	}
+	db.Dao.Model(&models.StockInfoUS{}).Select("code, name").Find(&existingUS)
+	usMap := make(map[string]string, len(existingUS))
+	for _, e := range existingUS {
+		usMap[e.Code] = e.Name
+	}
+
+	var usCreate []*models.StockInfoUS
+	type usUpdateItem struct {
+		code string
+		name string
+	}
+	var usUpdate []usUpdateItem
+
 	for _, item := range *usList {
 		code := strings.TrimSpace(item.Code)
 		if code == "" {
 			continue
 		}
-		stockInfo := &models.StockInfoUS{
-			Code: code,
-			Name: item.Name,
+		oldName, exists := usMap[code]
+		if !exists {
+			usCreate = append(usCreate, &models.StockInfoUS{Code: code, Name: item.Name})
+			usMap[code] = item.Name
+		} else if oldName != item.Name {
+			usUpdate = append(usUpdate, usUpdateItem{code: code, name: item.Name})
 		}
-		exist := &models.StockInfoUS{}
-		db.Dao.Model(&models.StockInfoUS{}).Where("code = ?", code).First(exist)
-		if exist.ID == 0 {
-			if e := db.Dao.Model(&models.StockInfoUS{}).Create(stockInfo); e.Error != nil {
-				logger.SugaredLogger.Warnf("SyncHKUSStockBasicToDB create US %s error: %v", code, e.Error)
-				continue
-			}
-			usAdded++
+	}
+
+	if len(usCreate) > 0 {
+		if err := db.Dao.CreateInBatches(usCreate, 300).Error; err != nil {
+			logger.SugaredLogger.Warnf("SyncHKUSStockBasicToDB 批量新增美股失败: %v", err)
 		} else {
-			if e := db.Dao.Model(&models.StockInfoUS{}).Where("code = ?", code).Updates(map[string]any{
-				"name": item.Name,
-			}); e.Error != nil {
-				logger.SugaredLogger.Warnf("SyncHKUSStockBasicToDB update US %s error: %v", code, e.Error)
-				continue
-			}
-			usUpdated++
+			usAdded = len(usCreate)
 		}
+	}
+	if len(usUpdate) > 0 {
+		_ = db.Dao.Transaction(func(tx *gorm.DB) error {
+			for _, u := range usUpdate {
+				tx.Model(&models.StockInfoUS{}).Where("code = ?", u.code).Update("name", u.name)
+			}
+			return nil
+		})
+		usUpdated = len(usUpdate)
 	}
 
 	logger.SugaredLogger.Infof("SyncHKUSStockBasicToDB 完成：港股新增 %d 更新 %d，美股新增 %d 更新 %d",

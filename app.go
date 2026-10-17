@@ -29,6 +29,7 @@ import (
 	"github.com/duke-git/lancet/v2/strutil"
 	"github.com/robfig/cron/v3"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"gorm.io/gorm"
 )
 
 // App struct
@@ -353,11 +354,22 @@ func (a *App) domReady(ctx context.Context) {
 	}()
 	//检查股票基础信息
 	go func() {
-		go a.CheckStockBaseInfo(a.ctx)
-		go syncAllStockInfo(a.ctx)
+		cfg := a.GetConfig()
+		var count int64
+		db.Dao.Model(&data.StockBasic{}).Count(&count)
+
+		// 仅在首次启动无数据（count == 0）或用户开启「启动时更新基础信息」时，才在启动期拉取全量
+		if count == 0 || (cfg != nil && cfg.UpdateBasicInfoOnStart) {
+			logger.SugaredLogger.Infof("启动期按策略同步全市场标的基础数据 (count=%d, updateOnStart=%v)...", count, cfg != nil && cfg.UpdateBasicInfoOnStart)
+			// 串行执行，杜绝多个后台协程同时执行全量清空与批量写入引发 SQLite BUSY 死锁
+			a.CheckStockBaseInfo(a.ctx)
+			syncAllStockInfo(a.ctx)
+		} else {
+			logger.SugaredLogger.Infof("本地已有股票基础数据 (%d 条)，跳过启动期重复全量同步", count)
+		}
 
 		a.cron.AddFunc("0 0 2 * * *", func() {
-			logger.SugaredLogger.Errorf("Checking for stock updates...")
+			logger.SugaredLogger.Infof("定时维护：更新股票基础数据...")
 			a.CheckStockBaseInfo(a.ctx)
 		})
 		a.cron.AddFunc("30 05 8,12,20 * * *", func() {
@@ -414,14 +426,22 @@ func syncAllStockInfo(ctx context.Context) {
 	defer func() {
 		go runtime.EventsEmit(ctx, "loadingMsg", "done")
 	}()
-	db.Dao.Unscoped().Model(&models.AllStockInfo{}).Where("1=1").Delete(&models.AllStockInfo{})
+	var datas []models.AllStockInfo
 	for page := 1; page < 3; page++ {
 		res := data.NewStockDataApi().GetAllStocks(page, 3000, "", models.TechnicalIndicators{})
-		var datas []models.AllStockInfo
-		for _, data := range (*res).Result.Data {
-			datas = append(datas, data.ToAllStockInfo())
+		if res != nil && (*res).Result.Data != nil {
+			for _, d := range (*res).Result.Data {
+				datas = append(datas, d.ToAllStockInfo())
+			}
 		}
-		err := db.Dao.CreateInBatches(&datas, 1000).Error
+	}
+	if len(datas) > 0 {
+		err := db.Dao.Transaction(func(tx *gorm.DB) error {
+			if e := tx.Unscoped().Model(&models.AllStockInfo{}).Where("1=1").Delete(&models.AllStockInfo{}).Error; e != nil {
+				return e
+			}
+			return tx.CreateInBatches(&datas, 500).Error
+		})
 		if err != nil {
 			logger.SugaredLogger.Errorf("db.Dao.CreateInBatches error:%s", err.Error())
 		}
@@ -438,34 +458,19 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 		SetResult(stockBasics).
 		Get(data.StaticDataServiceURL() + "/go-stock/stock_basic.json")
 
-	db.Dao.Unscoped().Model(&data.StockBasic{}).Where("1=1").Delete(&data.StockBasic{})
-	err := db.Dao.CreateInBatches(stockBasics, 400).Error
-	if err != nil {
-		logger.SugaredLogger.Errorf("保存StockBasic股票基础信息失败:%s", err.Error())
+	if stockBasics != nil && len(*stockBasics) > 0 {
+		err := db.Dao.Transaction(func(tx *gorm.DB) error {
+			if e := tx.Unscoped().Model(&data.StockBasic{}).Where("1=1").Delete(&data.StockBasic{}).Error; e != nil {
+				return e
+			}
+			return tx.CreateInBatches(stockBasics, 500).Error
+		})
+		if err != nil {
+			logger.SugaredLogger.Errorf("保存StockBasic股票基础信息失败:%s", err.Error())
+		}
 	}
-	// 全量覆盖完成后，用通达信即时数据对 A 股做增量校准（新股上市当天即可见）
-	go a.syncStockBasicFromTdx()
-
-	//count := int64(0)
-	//db.Dao.Model(&data.StockBasic{}).Count(&count)
-	//if count == int64(len(*stockBasics)) {
-	//	return
-	//}
-	//for _, stock := range *stockBasics {
-	//	stockInfo := &data.StockBasic{
-	//		TsCode: stock.TsCode,
-	//		Name:   stock.Name,
-	//		Symbol: stock.Symbol,
-	//		BKCode: stock.BKCode,
-	//		BKName: stock.BKName,
-	//	}
-	//	db.Dao.Model(&data.StockBasic{}).Where("ts_code = ?", stock.TsCode).First(stockInfo)
-	//	if stockInfo.ID == 0 {
-	//		db.Dao.Model(&data.StockBasic{}).Create(stockInfo)
-	//	} else {
-	//		db.Dao.Model(&data.StockBasic{}).Where("ts_code = ?", stock.TsCode).Updates(stockInfo)
-	//	}
-	//}
+	// 全量覆盖完成后，用通达信即时数据对 A 股做增量校准（单事务内存比对，耗时极短，串行执行避免竞争）
+	a.syncStockBasicFromTdx()
 
 	stockHKBasics := &[]models.StockInfoHK{}
 	data.SharedHTTPClient.R().
@@ -473,54 +478,37 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 		SetResult(stockHKBasics).
 		Get(data.StaticDataServiceURL() + "/go-stock/stock_base_info_hk.json")
 
-	db.Dao.Unscoped().Model(&models.StockInfoHK{}).Where("1=1").Delete(&models.StockInfoHK{})
-	err = db.Dao.CreateInBatches(stockHKBasics, 400).Error
-	if err != nil {
-		logger.SugaredLogger.Errorf("保存StockInfoHK股票基础信息失败:%s", err.Error())
+	if stockHKBasics != nil && len(*stockHKBasics) > 0 {
+		err := db.Dao.Transaction(func(tx *gorm.DB) error {
+			if e := tx.Unscoped().Model(&models.StockInfoHK{}).Where("1=1").Delete(&models.StockInfoHK{}).Error; e != nil {
+				return e
+			}
+			return tx.CreateInBatches(stockHKBasics, 500).Error
+		})
+		if err != nil {
+			logger.SugaredLogger.Errorf("保存StockInfoHK股票基础信息失败:%s", err.Error())
+		}
 	}
 
-	//for _, stock := range *stockHKBasics {
-	//	stockInfo := &models.StockInfoHK{
-	//		Code:   stock.Code,
-	//		Name:   stock.Name,
-	//		BKName: stock.BKName,
-	//		BKCode: stock.BKCode,
-	//	}
-	//	db.Dao.Model(&models.StockInfoHK{}).Where("code = ?", stock.Code).First(stockInfo)
-	//	if stockInfo.ID == 0 {
-	//		db.Dao.Model(&models.StockInfoHK{}).Create(stockInfo)
-	//	} else {
-	//		db.Dao.Model(&models.StockInfoHK{}).Where("code = ?", stock.Code).Updates(stockInfo)
-	//	}
-	//}
 	stockUSBasics := &[]models.StockInfoUS{}
 	data.SharedHTTPClient.R().
 		SetHeader("user", "blades-stock").
 		SetResult(stockUSBasics).
 		Get(data.StaticDataServiceURL() + "/go-stock/stock_base_info_us.json")
 
-	db.Dao.Unscoped().Model(&models.StockInfoUS{}).Where("1=1").Delete(&models.StockInfoUS{})
-	err = db.Dao.CreateInBatches(stockUSBasics, 400).Error
-	if err != nil {
-		logger.SugaredLogger.Errorf("保存StockInfoUS股票基础信息失败:%s", err.Error())
+	if stockUSBasics != nil && len(*stockUSBasics) > 0 {
+		err := db.Dao.Transaction(func(tx *gorm.DB) error {
+			if e := tx.Unscoped().Model(&models.StockInfoUS{}).Where("1=1").Delete(&models.StockInfoUS{}).Error; e != nil {
+				return e
+			}
+			return tx.CreateInBatches(stockUSBasics, 500).Error
+		})
+		if err != nil {
+			logger.SugaredLogger.Errorf("保存StockInfoUS股票基础信息失败:%s", err.Error())
+		}
 	}
 	// 港股/美股全量覆盖完成后，用通达信扩展行情即时数据做增量校准
-	go a.syncHKUSStockBasicFromTdx()
-	//for _, stock := range *stockUSBasics {
-	//	stockInfo := &models.StockInfoUS{
-	//		Code:   stock.Code,
-	//		Name:   stock.Name,
-	//		BKName: stock.BKName,
-	//		BKCode: stock.BKCode,
-	//	}
-	//	db.Dao.Model(&models.StockInfoUS{}).Where("code = ?", stock.Code).First(stockInfo)
-	//	if stockInfo.ID == 0 {
-	//		db.Dao.Model(&models.StockInfoUS{}).Create(stockInfo)
-	//	} else {
-	//		db.Dao.Model(&models.StockInfoUS{}).Where("code = ?", stock.Code).Updates(stockInfo)
-	//	}
-	//}
-
+	a.syncHKUSStockBasicFromTdx()
 }
 
 // syncStockBasicFromTdx 用通达信即时数据对 A 股基础信息做增量校准。

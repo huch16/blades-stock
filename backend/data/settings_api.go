@@ -911,63 +911,91 @@ func UpdateConfig(s *SettingConfig) string {
 	if s.EmbeddingEnabled && strings.TrimSpace(s.EmbeddingModelName) == "" {
 		return "保存失败: 向量模型已启用但未配置模型名称"
 	}
-	err := db.Dao.Transaction(func(tx *gorm.DB) error {
-		count := int64(0)
-		// 清理已废弃字段，避免旧数据污染
-		tx.Model(&Settings{}).Where("1=1").Updates(map[string]any{"iwencai_api_key": ""})
-		tx.Model(&Settings{}).Count(&count)
-		if count > 0 {
-			result := tx.Model(&Settings{}).Where("id=?", s.ID).Updates(map[string]any{
-				"local_push_enable":          s.LocalPushEnable,
-				"ding_push_enable":           s.DingPushEnable,
-				"ding_robot":                 s.DingRobot,
-				"update_basic_info_on_start": s.UpdateBasicInfoOnStart,
-				"refresh_interval":           s.RefreshInterval,
-				"open_ai_enable":             s.OpenAiEnable,
-				"ai_config_id":               s.AiConfigID,
-				"tushare_token":              s.TushareToken,
-				"prompt":                     s.Prompt,
-				"check_update":               s.CheckUpdate,
-				"update_channel":             s.UpdateChannel,
-				"question_template":          s.QuestionTemplate,
-				"crawl_time_out":             s.CrawlTimeOut,
-				"k_days":                     s.KDays,
-				"enable_danmu":               s.EnableDanmu,
-				"browser_path":               s.BrowserPath,
-				"enable_news":                s.EnableNews,
-				"dark_theme":                 s.DarkTheme,
-				"enable_fund":                s.EnableFund,
-				"enable_push_news":           s.EnablePushNews,
-				"enable_only_push_red_news":  s.EnableOnlyPushRedNews,
-				"http_proxy":                 s.HttpProxy,
-				"http_proxy_enabled":         s.HttpProxyEnabled,
-				"enable_agent":               s.EnableAgent,
-				"disable_browser_search":     s.DisableBrowserSearch,
-				"qgqp_b_id":                  s.QgqpBId,
-				"em_api_key":                 s.EmApiKey,
-			"tickflow_api_key":           s.TickFlowAPIKey,
-			"akshare_service_url":       s.AkshareServiceUrl,
-			"adata_service_url":         s.ADataServiceUrl,
-			"default_data_source":       s.DefaultDataSource,
-				"window_width":               s.WindowWidth,
-				"window_height":              s.WindowHeight,
-				"prompt_plaza_api_base":      s.PromptPlazaApiBase,
-				"embedding_enabled":          s.EmbeddingEnabled,
-				"embedding_model_name":       s.EmbeddingModelName,
-				"embedding_base_url":         s.EmbeddingBaseUrl,
-				"embedding_api_key":          s.EmbeddingApiKey,
-			})
+	var err error
+	maxRetries := 5
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = db.Dao.Transaction(func(tx *gorm.DB) error {
+			count := int64(0)
+			// 清理已废弃字段，避免旧数据污染
+			tx.Model(&Settings{}).Where("1=1").Updates(map[string]any{"iwencai_api_key": ""})
+			tx.Model(&Settings{}).Count(&count)
+			if count > 0 {
+				targetID := s.ID
+				if targetID == 0 {
+					var exist Settings
+					if err := tx.First(&exist).Error; err == nil && exist.ID > 0 {
+						targetID = exist.ID
+					}
+				}
+				query := tx.Model(&Settings{})
+				if targetID > 0 {
+					query = query.Where("id=?", targetID)
+				} else {
+					query = query.Where("1=1")
+				}
+				result := query.Updates(map[string]any{
+					"local_push_enable":          s.LocalPushEnable,
+					"ding_push_enable":           s.DingPushEnable,
+					"ding_robot":                 s.DingRobot,
+					"update_basic_info_on_start": s.UpdateBasicInfoOnStart,
+					"refresh_interval":           s.RefreshInterval,
+					"open_ai_enable":             s.OpenAiEnable,
+					"ai_config_id":               s.AiConfigID,
+					"tushare_token":              s.TushareToken,
+					"prompt":                     s.Prompt,
+					"check_update":               s.CheckUpdate,
+					"update_channel":             s.UpdateChannel,
+					"question_template":          s.QuestionTemplate,
+					"crawl_time_out":             s.CrawlTimeOut,
+					"k_days":                     s.KDays,
+					"enable_danmu":               s.EnableDanmu,
+					"browser_path":               s.BrowserPath,
+					"enable_news":                s.EnableNews,
+					"dark_theme":                 s.DarkTheme,
+					"enable_fund":                s.EnableFund,
+					"enable_push_news":           s.EnablePushNews,
+					"enable_only_push_red_news":  s.EnableOnlyPushRedNews,
+					"http_proxy":                 s.HttpProxy,
+					"http_proxy_enabled":         s.HttpProxyEnabled,
+					"enable_agent":               s.EnableAgent,
+					"disable_browser_search":     s.DisableBrowserSearch,
+					"qgqp_b_id":                  s.QgqpBId,
+					"em_api_key":                 s.EmApiKey,
+					"tickflow_api_key":           s.TickFlowAPIKey,
+					"akshare_service_url":        s.AkshareServiceUrl,
+					"adata_service_url":          s.ADataServiceUrl,
+					"default_data_source":        s.DefaultDataSource,
+					"window_width":               s.WindowWidth,
+					"window_height":              s.WindowHeight,
+					"prompt_plaza_api_base":      s.PromptPlazaApiBase,
+					"embedding_enabled":          s.EmbeddingEnabled,
+					"embedding_model_name":       s.EmbeddingModelName,
+					"embedding_base_url":         s.EmbeddingBaseUrl,
+					"embedding_api_key":          s.EmbeddingApiKey,
+				})
+				if result.Error != nil {
+					return result.Error
+				}
+				return updateAiConfigsTx(tx, s.AiConfigs)
+			}
+			result := tx.Model(&Settings{}).Create(s.Settings)
 			if result.Error != nil {
 				return result.Error
 			}
 			return updateAiConfigsTx(tx, s.AiConfigs)
+		})
+
+		if err == nil {
+			break
 		}
-		result := tx.Model(&Settings{}).Create(s.Settings)
-		if result.Error != nil {
-			return result.Error
+		// 若因并发锁竞争导致 SQLITE_BUSY，退避重试
+		if strings.Contains(err.Error(), "locked") || strings.Contains(err.Error(), "busy") {
+			logger.SugaredLogger.Warnf("UpdateConfig 遇数据库锁 (尝试 %d/%d): %v", attempt, maxRetries, err)
+			time.Sleep(time.Duration(100*attempt) * time.Millisecond)
+			continue
 		}
-		return updateAiConfigsTx(tx, s.AiConfigs)
-	})
+		break
+	}
 	if err != nil {
 		logger.SugaredLogger.Errorf("更新配置失败: %v", err)
 		return "保存失败: " + err.Error()

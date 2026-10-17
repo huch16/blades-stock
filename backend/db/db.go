@@ -17,6 +17,22 @@ import (
 
 var Dao *gorm.DB
 
+// BuildSqliteDSN 规范化 SQLite 连接串，注入现代 WAL 与 immediate 锁控制参数。
+// 适配 glebarez/sqlite (modernc.org/sqlite) 驱动语法：
+// 1. PRAGMA 必须通过 _pragma 参数传递（驱动内 applyQueryParams 只扫描 q["_pragma"]）
+// 2. _txlock=immediate 确保写事务以 BEGIN IMMEDIATE 启动，杜绝多连接并发写升级死锁
+func BuildSqliteDSN(rawPath string) string {
+	if rawPath == "" {
+		rawPath = filepath.Join(paths.DataDir(), "stock.db")
+	}
+	// 剥离可能存在的旧格式 query
+	pathOnly := rawPath
+	if idx := strings.Index(pathOnly, "?"); idx >= 0 {
+		pathOnly = pathOnly[:idx]
+	}
+	return pathOnly + "?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-64000)&_txlock=immediate"
+}
+
 func Init(sqlitePath string) {
 	dbLogger := logger.New(
 		log.New(os.Stdout, "\r\n", log.LstdFlags),
@@ -30,21 +46,19 @@ func Init(sqlitePath string) {
 	)
 	var openDb *gorm.DB
 	var err error
-	if sqlitePath == "" {
-		sqlitePath = filepath.Join(paths.DataDir(), "stock.db?_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-64000")
-	}
-	openDb, err = gorm.Open(sqlite.Open(sqlitePath), &gorm.Config{
+	dsn := BuildSqliteDSN(sqlitePath)
+	openDb, err = gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger:                                   dbLogger,
 		DisableForeignKeyConstraintWhenMigrating: true,
 		SkipDefaultTransaction:                   true,
-		PrepareStmt:                              true,
+		PrepareStmt:                              false, // 避免 prepared statement 缓存在连接池中持有表级读锁
 	})
 
 	if err != nil {
 		log.Fatalf("db connection error is %s", err.Error())
 	}
 
-	// 兜底：确保 busy_timeout / WAL / synchronous / cache_size 生效（保证多用户高并发读与30秒等待容错）
+	// 兜底：确保连接池初始连接的 busy_timeout / WAL / synchronous / cache_size 生效
 	if err := openDb.Exec("PRAGMA busy_timeout=30000").Error; err != nil {
 		log.Printf("warn: set busy_timeout failed: %v", err)
 	}
@@ -62,10 +76,9 @@ func Init(sqlitePath string) {
 	if err != nil {
 		log.Fatalf("openDb.DB error is  %s", err.Error())
 	}
-	// 在 WAL 模式下，SQLite 支持多连接并发读取且读写互不阻塞。
-	// 设置连接池 MaxOpenConns(25) + MaxIdleConns(10)，配合 30 秒 busy_timeout，彻底消除多用户排队造成的阻塞死锁
-	dbCon.SetMaxIdleConns(10)
-	dbCon.SetMaxOpenConns(25)
+	// 在 WAL 模式下配合 _txlock=immediate 与 busy_timeout(30000)，读写互不阻塞，写写有序等待
+	dbCon.SetMaxIdleConns(5)
+	dbCon.SetMaxOpenConns(10)
 	dbCon.SetConnMaxLifetime(time.Hour)
 	Dao = openDb
 
@@ -73,9 +86,7 @@ func Init(sqlitePath string) {
 	AutoMigrate()
 
 	// 2. 启动期健康检查：DB 文件合法 + 关键表齐全才视为可启动。
-	// sqlitePath 可能包含 DSN 后缀（?_busy_timeout=...），健康检查只关心物理文件路径，
-	// 所以先剥离 ? 及其后内容。
-	dbPathOnly := sqlitePath
+	dbPathOnly := dsn
 	if idx := strings.Index(dbPathOnly, "?"); idx >= 0 {
 		dbPathOnly = dbPathOnly[:idx]
 	}
