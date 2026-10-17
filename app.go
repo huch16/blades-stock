@@ -2852,3 +2852,39 @@ func (a *App) GenerateSerenityResearchReport(targetName string, code string, aiC
 func (a *App) ReloadSkills() error {
 	return a.agentService.ReloadSkills()
 }
+
+// GetAIResponseResult 获取指定标的最新AI分析结果
+func (a *App) GetAIResponseResult(stock string) *models.AIResponseResult {
+	return data.NewDeepSeekOpenAi(a.ctx, 0).GetAIResponseResult(stock)
+}
+
+// FetchAuditLogs 前端兼容别名：分页获取审计日志
+func (a *App) FetchAuditLogs(query models.AuditLogQuery) (*models.AuditLogPageResp, error) {
+	return a.settingsService.FetchAuditLogs(query)
+}
+
+// FetchSkillChanges 查询技能审核与变更流水
+func (a *App) FetchSkillChanges(query any) (any, error) {
+	return a.agentService.FetchSkillChanges(query)
+}
+
+// ApproveSkillChange 批准技能发布/更新
+func (a *App) ApproveSkillChange(id any) (any, error) {
+	return a.agentService.ApproveSkillChange(id)
+}
+
+// RejectSkillChange 驳回技能发布/更新
+func (a *App) RejectSkillChange(id any) (any, error) {
+	return a.agentService.RejectSkillChange(id)
+}
+
+// BatchApproveSkillChanges 批量批准技能发布
+func (a *App) BatchApproveSkillChanges(ids any) (any, error) {
+	return a.agentService.BatchApproveSkillChanges(ids)
+}
+
+// BatchRejectSkillChanges 批量驳回技能发布
+func (a *App) BatchRejectSkillChanges(ids any) (any, error) {
+	return a.agentService.BatchRejectSkillChanges(ids)
+}
+

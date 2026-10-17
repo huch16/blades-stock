@@ -38,8 +38,16 @@ export function AnalyzeSentimentWithFreqWeight(arg1) {
   return window['go']['main']['App']['AnalyzeSentimentWithFreqWeight'](arg1);
 }
 
+export function ApproveSkillChange(arg1) {
+  return window['go']['main']['App']['ApproveSkillChange'](arg1);
+}
+
 export function BackupData(arg1) {
   return window['go']['main']['App']['BackupData'](arg1);
+}
+
+export function BatchApproveSkillChanges(arg1) {
+  return window['go']['main']['App']['BatchApproveSkillChanges'](arg1);
 }
 
 export function BatchDeleteAIResponseResult(arg1) {
@@ -52,6 +60,10 @@ export function BatchDeleteAllStockInfo(arg1) {
 
 export function BatchGreet(arg1) {
   return window['go']['main']['App']['BatchGreet'](arg1);
+}
+
+export function BatchRejectSkillChanges(arg1) {
+  return window['go']['main']['App']['BatchRejectSkillChanges'](arg1);
 }
 
 export function CalculateNextRunTime(arg1) {
@@ -90,6 +102,14 @@ export function CreateCronTask(arg1) {
   return window['go']['main']['App']['CreateCronTask'](arg1);
 }
 
+export function CreateDatabaseSnapshot() {
+  return window['go']['main']['App']['CreateDatabaseSnapshot']();
+}
+
+export function CreateIntelligentBackup(arg1) {
+  return window['go']['main']['App']['CreateIntelligentBackup'](arg1);
+}
+
 export function CreateMCPServer(arg1) {
   return window['go']['main']['App']['CreateMCPServer'](arg1);
 }
@@ -108,6 +128,10 @@ export function DeleteAiRecommendStocks(arg1) {
 
 export function DeleteAllStockInfo(arg1) {
   return window['go']['main']['App']['DeleteAllStockInfo'](arg1);
+}
+
+export function DeleteBackupFile(arg1) {
+  return window['go']['main']['App']['DeleteBackupFile'](arg1);
 }
 
 export function DeleteCronTask(arg1) {
@@ -134,6 +158,10 @@ export function DeleteTradingRecord(arg1) {
   return window['go']['main']['App']['DeleteTradingRecord'](arg1);
 }
 
+export function DiagnoseStock(arg1) {
+  return window['go']['main']['App']['DiagnoseStock'](arg1);
+}
+
 export function EMDictCode(arg1) {
   return window['go']['main']['App']['EMDictCode'](arg1);
 }
@@ -158,6 +186,10 @@ export function ExecuteCronTaskNow(arg1) {
   return window['go']['main']['App']['ExecuteCronTaskNow'](arg1);
 }
 
+export function ExportAuditLogCSV(arg1) {
+  return window['go']['main']['App']['ExportAuditLogCSV'](arg1);
+}
+
 export function ExportConfig() {
   return window['go']['main']['App']['ExportConfig']();
 }
@@ -174,12 +206,36 @@ export function FetchAndSaveMarketStatistic() {
   return window['go']['main']['App']['FetchAndSaveMarketStatistic']();
 }
 
+export function FetchAuditLogs(arg1) {
+  return window['go']['main']['App']['FetchAuditLogs'](arg1);
+}
+
+export function FetchSkillChanges(arg1) {
+  return window['go']['main']['App']['FetchSkillChanges'](arg1);
+}
+
 export function Follow(arg1) {
   return window['go']['main']['App']['Follow'](arg1);
 }
 
 export function FollowFund(arg1) {
   return window['go']['main']['App']['FollowFund'](arg1);
+}
+
+export function GenerateETFRotationReport(arg1) {
+  return window['go']['main']['App']['GenerateETFRotationReport'](arg1);
+}
+
+export function GeneratePostMarketReview(arg1) {
+  return window['go']['main']['App']['GeneratePostMarketReview'](arg1);
+}
+
+export function GeneratePreMarketBriefing(arg1) {
+  return window['go']['main']['App']['GeneratePreMarketBriefing'](arg1);
+}
+
+export function GenerateSerenityResearchReport(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GenerateSerenityResearchReport'](arg1, arg2, arg3);
 }
 
 export function GetAIResponseResult(arg1) {
@@ -192,6 +248,10 @@ export function GetAIResponseResultList(arg1) {
 
 export function GetAiAssistantSession(arg1) {
   return window['go']['main']['App']['GetAiAssistantSession'](arg1);
+}
+
+export function GetAiConfigTemplates() {
+  return window['go']['main']['App']['GetAiConfigTemplates']();
 }
 
 export function GetAiConfigs() {
@@ -250,6 +310,10 @@ export function GetAllStocks(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['GetAllStocks'](arg1, arg2, arg3, arg4);
 }
 
+export function GetAuditLogList(arg1) {
+  return window['go']['main']['App']['GetAuditLogList'](arg1);
+}
+
 export function GetBKFundFlowList(arg1, arg2) {
   return window['go']['main']['App']['GetBKFundFlowList'](arg1, arg2);
 }
@@ -264,6 +328,14 @@ export function GetBKFundFlowTopList(arg1) {
 
 export function GetBKFundFlowTopListByDate(arg1, arg2) {
   return window['go']['main']['App']['GetBKFundFlowTopListByDate'](arg1, arg2);
+}
+
+export function GetBackupContent(arg1) {
+  return window['go']['main']['App']['GetBackupContent'](arg1);
+}
+
+export function GetBackupOverview() {
+  return window['go']['main']['App']['GetBackupOverview']();
 }
 
 export function GetChangeRank(arg1, arg2) {
@@ -370,6 +442,14 @@ export function GetIndustryRank(arg1, arg2) {
   return window['go']['main']['App']['GetIndustryRank'](arg1, arg2);
 }
 
+export function GetLatestMarketIntelligenceReport() {
+  return window['go']['main']['App']['GetLatestMarketIntelligenceReport']();
+}
+
+export function GetLatestMarketIntelligenceReportByType(arg1) {
+  return window['go']['main']['App']['GetLatestMarketIntelligenceReportByType'](arg1);
+}
+
 export function GetLatestTradingDay() {
   return window['go']['main']['App']['GetLatestTradingDay']();
 }
@@ -388,6 +468,10 @@ export function GetMCPToolsByServerID(arg1) {
 
 export function GetMachineId() {
   return window['go']['main']['App']['GetMachineId']();
+}
+
+export function GetMarketLifecycleStatus() {
+  return window['go']['main']['App']['GetMarketLifecycleStatus']();
 }
 
 export function GetMarketStatisticByDate(arg1) {
@@ -462,6 +546,10 @@ export function GetStockRealTimePrice(arg1) {
   return window['go']['main']['App']['GetStockRealTimePrice'](arg1);
 }
 
+export function GetSystemStateSnapshot() {
+  return window['go']['main']['App']['GetSystemStateSnapshot']();
+}
+
 export function GetTdxCallAuction(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetTdxCallAuction'](arg1, arg2, arg3);
 }
@@ -500,6 +588,10 @@ export function GetTimezone() {
 
 export function GetTodayMarketStatistic() {
   return window['go']['main']['App']['GetTodayMarketStatistic']();
+}
+
+export function GetToolQuotaStatus() {
+  return window['go']['main']['App']['GetToolQuotaStatus']();
 }
 
 export function GetTradingRecordById(arg1) {
@@ -562,6 +654,10 @@ export function HotTopic(arg1) {
   return window['go']['main']['App']['HotTopic'](arg1);
 }
 
+export function ImportIntelligentBackup(arg1) {
+  return window['go']['main']['App']['ImportIntelligentBackup'](arg1);
+}
+
 export function IndustryResearchReport(arg1) {
   return window['go']['main']['App']['IndustryResearchReport'](arg1);
 }
@@ -598,6 +694,10 @@ export function LearnSkillFromProject(arg1, arg2) {
   return window['go']['main']['App']['LearnSkillFromProject'](arg1, arg2);
 }
 
+export function ListBackups() {
+  return window['go']['main']['App']['ListBackups']();
+}
+
 export function LongTigerRank(arg1) {
   return window['go']['main']['App']['LongTigerRank'](arg1);
 }
@@ -622,6 +722,14 @@ export function ReFleshTelegraphList(arg1) {
   return window['go']['main']['App']['ReFleshTelegraphList'](arg1);
 }
 
+export function RejectSkillChange(arg1) {
+  return window['go']['main']['App']['RejectSkillChange'](arg1);
+}
+
+export function ReloadSkills() {
+  return window['go']['main']['App']['ReloadSkills']();
+}
+
 export function RemoveGroup(arg1) {
   return window['go']['main']['App']['RemoveGroup'](arg1);
 }
@@ -630,44 +738,24 @@ export function RemoveStockGroup(arg1, arg2, arg3) {
   return window['go']['main']['App']['RemoveStockGroup'](arg1, arg2, arg3);
 }
 
+export function ResetToolDailyQuota() {
+  return window['go']['main']['App']['ResetToolDailyQuota']();
+}
+
 export function RestartAsAdmin() {
   return window['go']['main']['App']['RestartAsAdmin']();
-}
-
-export function GetBackupOverview() {
-  return window['go']['main']['App']['GetBackupOverview']();
-}
-
-export function ListBackups() {
-  return window['go']['main']['App']['ListBackups']();
-}
-
-export function CreateIntelligentBackup(arg1) {
-  return window['go']['main']['App']['CreateIntelligentBackup'](arg1);
-}
-
-export function CreateDatabaseSnapshot() {
-  return window['go']['main']['App']['CreateDatabaseSnapshot']();
 }
 
 export function RestoreBackupFile(arg1) {
   return window['go']['main']['App']['RestoreBackupFile'](arg1);
 }
 
-export function DeleteBackupFile(arg1) {
-  return window['go']['main']['App']['DeleteBackupFile'](arg1);
-}
-
-export function GetBackupContent(arg1) {
-  return window['go']['main']['App']['GetBackupContent'](arg1);
-}
-
-export function ImportIntelligentBackup(arg1) {
-  return window['go']['main']['App']['ImportIntelligentBackup'](arg1);
-}
-
 export function RestoreData(arg1) {
   return window['go']['main']['App']['RestoreData'](arg1);
+}
+
+export function RunSkillABTest(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RunSkillABTest'](arg1, arg2, arg3);
 }
 
 export function RunVectorBacktest(arg1, arg2, arg3) {
@@ -770,12 +858,20 @@ export function SummaryStockNews(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['SummaryStockNews'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
+export function SyncRecommendStocksFromIntelligence() {
+  return window['go']['main']['App']['SyncRecommendStocksFromIntelligence']();
+}
+
 export function TestAiConnection(arg1, arg2, arg3) {
   return window['go']['main']['App']['TestAiConnection'](arg1, arg2, arg3);
 }
 
 export function TestMCPServer(arg1) {
   return window['go']['main']['App']['TestMCPServer'](arg1);
+}
+
+export function TriggerAIReportBacktest(arg1) {
+  return window['go']['main']['App']['TriggerAIReportBacktest'](arg1);
 }
 
 export function UnFollow(arg1) {
@@ -821,78 +917,3 @@ export function UpdateTradingRecord(arg1) {
 export function ValidateCronExpr(arg1) {
   return window['go']['main']['App']['ValidateCronExpr'](arg1);
 }
-
-export function DiagnoseStock(arg1) {
-  return window['go']['main']['App']['DiagnoseStock'](arg1);
-}
-
-export function TriggerAIReportBacktest(arg1) {
-  return window['go']['main']['App']['TriggerAIReportBacktest'](arg1);
-}
-
-export function GeneratePostMarketReview(arg1) {
-  return window['go']['main']['App']['GeneratePostMarketReview'](arg1);
-}
-
-export function GeneratePreMarketBriefing(arg1) {
-  return window['go']['main']['App']['GeneratePreMarketBriefing'](arg1);
-}
-
-export function GenerateETFRotationReport(arg1) {
-  return window['go']['main']['App']['GenerateETFRotationReport'](arg1);
-}
-
-export function GenerateSerenityResearchReport(arg1, arg2, arg3) {
-  return window['go']['main']['App']['GenerateSerenityResearchReport'](arg1, arg2, arg3);
-}
-
-export function GetLatestMarketIntelligenceReport() {
-  return window['go']['main']['App']['GetLatestMarketIntelligenceReport']();
-}
-
-export function GetLatestMarketIntelligenceReportByType(arg1) {
-  return window['go']['main']['App']['GetLatestMarketIntelligenceReportByType'](arg1);
-}
-
-export function GetMarketLifecycleStatus() {
-  return window['go']['main']['App']['GetMarketLifecycleStatus']();
-}
-
-export function GetSystemStateSnapshot() {
-  return window['go']['main']['App']['GetSystemStateSnapshot']();
-}
-
-export function SyncRecommendStocksFromIntelligence() {
-  return window['go']['main']['App']['SyncRecommendStocksFromIntelligence']();
-}
-
-export function GetAiConfigTemplates() {
-  return window['go']['main']['App']['GetAiConfigTemplates']();
-}
-
-export function FetchAuditLogs(arg1) {
-  return window['go']['main']['App']['FetchAuditLogs'] ? window['go']['main']['App']['FetchAuditLogs'](arg1) : Promise.resolve({ code: 1, data: { list: [], total: 0 } });
-}
-
-export function FetchSkillChanges(arg1) {
-  return window['go']['main']['App']['FetchSkillChanges'] ? window['go']['main']['App']['FetchSkillChanges'](arg1) : Promise.resolve({ code: 1, data: { list: [], total: 0 } });
-}
-
-export function ApproveSkillChange(arg1) {
-  return window['go']['main']['App']['ApproveSkillChange'] ? window['go']['main']['App']['ApproveSkillChange'](arg1) : Promise.resolve({ code: 1, msg: 'ok' });
-}
-
-export function RejectSkillChange(arg1) {
-  return window['go']['main']['App']['RejectSkillChange'] ? window['go']['main']['App']['RejectSkillChange'](arg1) : Promise.resolve({ code: 1, msg: 'ok' });
-}
-
-export function BatchApproveSkillChanges(arg1) {
-  return window['go']['main']['App']['BatchApproveSkillChanges'] ? window['go']['main']['App']['BatchApproveSkillChanges'](arg1) : Promise.resolve({ code: 1, msg: 'ok' });
-}
-
-export function BatchRejectSkillChanges(arg1) {
-  return window['go']['main']['App']['BatchRejectSkillChanges'] ? window['go']['main']['App']['BatchRejectSkillChanges'](arg1) : Promise.resolve({ code: 1, msg: 'ok' });
-}
-
-
-

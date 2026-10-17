@@ -3,7 +3,9 @@
 import {models} from '../models';
 import {data} from '../models';
 import {context} from '../models';
-import {main} from '../models';
+import {quant} from '../models';
+import {services} from '../models';
+import {agent} from '../models';
 import {lo} from '../models';
 
 export function AbortChatWithAgent():Promise<void>;
@@ -24,13 +26,19 @@ export function AnalyzeSentiment(arg1:string):Promise<models.SentimentResult>;
 
 export function AnalyzeSentimentWithFreqWeight(arg1:string):Promise<Record<string, any>>;
 
+export function ApproveSkillChange(arg1:any):Promise<any>;
+
 export function BackupData(arg1:string):Promise<string>;
+
+export function BatchApproveSkillChanges(arg1:any):Promise<any>;
 
 export function BatchDeleteAIResponseResult(arg1:Array<number>):Promise<string>;
 
 export function BatchDeleteAllStockInfo(arg1:Array<number>):Promise<string>;
 
 export function BatchGreet(arg1:Array<string>):Promise<Array<data.StockInfo>>;
+
+export function BatchRejectSkillChanges(arg1:any):Promise<any>;
 
 export function CalculateNextRunTime(arg1:string):Promise<string>;
 
@@ -50,6 +58,10 @@ export function ClsCalendar():Promise<Array<any>>;
 
 export function CreateCronTask(arg1:models.CronTask):Promise<string>;
 
+export function CreateDatabaseSnapshot():Promise<string>;
+
+export function CreateIntelligentBackup(arg1:string):Promise<string>;
+
 export function CreateMCPServer(arg1:models.MCPServer):Promise<string>;
 
 export function CreateSkill(arg1:models.Skill):Promise<string>;
@@ -59,6 +71,8 @@ export function DeleteAIResponseResult(arg1:number):Promise<string>;
 export function DeleteAiRecommendStocks(arg1:number):Promise<string>;
 
 export function DeleteAllStockInfo(arg1:number):Promise<string>;
+
+export function DeleteBackupFile(arg1:string):Promise<string>;
 
 export function DeleteCronTask(arg1:number):Promise<string>;
 
@@ -72,6 +86,8 @@ export function DeleteStockChangeHistory(arg1:number):Promise<string>;
 
 export function DeleteTradingRecord(arg1:number):Promise<void>;
 
+export function DiagnoseStock(arg1:string):Promise<quant.StockDiagnosisResult>;
+
 export function EMDictCode(arg1:string):Promise<Array<any>>;
 
 export function EnableCronTask(arg1:number,arg2:boolean):Promise<string>;
@@ -84,23 +100,39 @@ export function EnableSkill(arg1:number,arg2:boolean):Promise<string>;
 
 export function ExecuteCronTaskNow(arg1:number):Promise<string>;
 
+export function ExportAuditLogCSV(arg1:models.AuditLogQuery):Promise<string>;
+
 export function ExportConfig():Promise<string>;
 
-export function FetchAiModelInfo(arg1:string,arg2:string,arg3:string):Promise<main.AiModelInfo>;
+export function FetchAiModelInfo(arg1:string,arg2:string,arg3:string):Promise<services.AiModelInfo>;
 
 export function FetchAiModels(arg1:string,arg2:string):Promise<Array<string>>;
 
 export function FetchAndSaveMarketStatistic():Promise<void>;
 
+export function FetchAuditLogs(arg1:models.AuditLogQuery):Promise<models.AuditLogPageResp>;
+
+export function FetchSkillChanges(arg1:any):Promise<any>;
+
 export function Follow(arg1:string):Promise<string>;
 
 export function FollowFund(arg1:string):Promise<string>;
+
+export function GenerateETFRotationReport(arg1:number):Promise<agent.MarketIntelligenceReport>;
+
+export function GeneratePostMarketReview(arg1:number):Promise<agent.MarketIntelligenceReport>;
+
+export function GeneratePreMarketBriefing(arg1:number):Promise<agent.MarketIntelligenceReport>;
+
+export function GenerateSerenityResearchReport(arg1:string,arg2:string,arg3:number):Promise<agent.MarketIntelligenceReport>;
 
 export function GetAIResponseResult(arg1:string):Promise<models.AIResponseResult>;
 
 export function GetAIResponseResultList(arg1:models.AIResponseResultQuery):Promise<models.AIResponseResultPageData>;
 
 export function GetAiAssistantSession(arg1:string):Promise<models.AiAssistantSessionResp>;
+
+export function GetAiConfigTemplates():Promise<Array<data.AiConfigTemplate>>;
 
 export function GetAiConfigs():Promise<Array<data.AIConfig>>;
 
@@ -130,6 +162,8 @@ export function GetAllStockInfoList(arg1:data.AllStockInfoQuery):Promise<data.Al
 
 export function GetAllStocks(arg1:number,arg2:number,arg3:string,arg4:models.TechnicalIndicators):Promise<models.AllStocksResp>;
 
+export function GetAuditLogList(arg1:models.AuditLogQuery):Promise<models.AuditLogPageResp>;
+
 export function GetBKFundFlowList(arg1:string,arg2:number):Promise<Array<models.BKFundFlowPoint>>;
 
 export function GetBKFundFlowListByDate(arg1:string,arg2:string):Promise<Array<models.BKFundFlowPoint>>;
@@ -137,6 +171,10 @@ export function GetBKFundFlowListByDate(arg1:string,arg2:string):Promise<Array<m
 export function GetBKFundFlowTopList(arg1:number):Promise<Array<models.BKFundFlow>>;
 
 export function GetBKFundFlowTopListByDate(arg1:string,arg2:number):Promise<Array<models.BKFundFlow>>;
+
+export function GetBackupContent(arg1:string):Promise<string>;
+
+export function GetBackupOverview():Promise<data.BackupOverview>;
 
 export function GetChangeRank(arg1:number,arg2:number):Promise<data.ChangeRankResult>;
 
@@ -190,6 +228,10 @@ export function GetIndustryMoneyRankSina(arg1:string,arg2:string):Promise<Array<
 
 export function GetIndustryRank(arg1:string,arg2:number):Promise<Array<any>>;
 
+export function GetLatestMarketIntelligenceReport():Promise<agent.MarketIntelligenceReport>;
+
+export function GetLatestMarketIntelligenceReportByType(arg1:string):Promise<agent.MarketIntelligenceReport>;
+
 export function GetLatestTradingDay():Promise<string>;
 
 export function GetMCPServerByID(arg1:number):Promise<models.MCPServer>;
@@ -200,11 +242,13 @@ export function GetMCPToolsByServerID(arg1:number):Promise<Array<models.MCPServe
 
 export function GetMachineId():Promise<string>;
 
+export function GetMarketLifecycleStatus():Promise<agent.MarketLifecycleStatus>;
+
 export function GetMarketStatisticByDate(arg1:string):Promise<Array<models.MarketStatistic>>;
 
 export function GetMoneyRankSina(arg1:string):Promise<Array<Record<string, any>>>;
 
-export function GetPromptTemplates(arg1:string,arg2:string):Promise<Array<main.PromptTemplateItem>>;
+export function GetPromptTemplates(arg1:string,arg2:string):Promise<Array<services.PromptTemplateItem>>;
 
 export function GetRecentDaysMarketStatistic(arg1:number):Promise<Array<models.MarketStatistic>>;
 
@@ -236,6 +280,8 @@ export function GetStockMoneyTrendByDay(arg1:string,arg2:number):Promise<Array<R
 
 export function GetStockRealTimePrice(arg1:string):Promise<Record<string, any>>;
 
+export function GetSystemStateSnapshot():Promise<agent.SystemStateSnapshot>;
+
 export function GetTdxCallAuction(arg1:string,arg2:number,arg3:number):Promise<any>;
 
 export function GetTdxCompanyCategoryContent(arg1:string,arg2:string):Promise<data.TdxCompanyInfoSection>;
@@ -255,6 +301,8 @@ export function GetTelegraphList(arg1:string):Promise<any>;
 export function GetTimezone():Promise<Record<string, any>>;
 
 export function GetTodayMarketStatistic():Promise<Array<models.MarketStatistic>>;
+
+export function GetToolQuotaStatus():Promise<agent.QuotaStatus>;
 
 export function GetTradingRecordById(arg1:number):Promise<data.TradingRecord>;
 
@@ -286,6 +334,8 @@ export function HotStock(arg1:string):Promise<any>;
 
 export function HotTopic(arg1:number):Promise<Array<any>>;
 
+export function ImportIntelligentBackup(arg1:string):Promise<string>;
+
 export function IndustryResearchReport(arg1:string):Promise<Array<any>>;
 
 export function InitCronTasks():Promise<void>;
@@ -304,6 +354,8 @@ export function IsUSTradingTime():Promise<boolean>;
 
 export function LearnSkillFromProject(arg1:string,arg2:string):Promise<string>;
 
+export function ListBackups():Promise<Array<data.BackupFileItem>>;
+
 export function LongTigerRank(arg1:string):Promise<any>;
 
 export function NewChatStream(arg1:string,arg2:string,arg3:string,arg4:number,arg5:any,arg6:boolean,arg7:boolean):Promise<void>;
@@ -316,29 +368,23 @@ export function QuitApp():Promise<void>;
 
 export function ReFleshTelegraphList(arg1:string):Promise<any>;
 
+export function RejectSkillChange(arg1:any):Promise<any>;
+
+export function ReloadSkills():Promise<void>;
+
 export function RemoveGroup(arg1:number):Promise<string>;
 
 export function RemoveStockGroup(arg1:string,arg2:string,arg3:number):Promise<string>;
 
+export function ResetToolDailyQuota():Promise<string>;
+
 export function RestartAsAdmin():Promise<void>;
-
-export function GetBackupOverview():Promise<any>;
-
-export function ListBackups():Promise<Array<any>>;
-
-export function CreateIntelligentBackup(arg1:string):Promise<string>;
-
-export function CreateDatabaseSnapshot():Promise<string>;
 
 export function RestoreBackupFile(arg1:string):Promise<string>;
 
-export function DeleteBackupFile(arg1:string):Promise<string>;
-
-export function GetBackupContent(arg1:string):Promise<string>;
-
-export function ImportIntelligentBackup(arg1:string):Promise<string>;
-
 export function RestoreData(arg1:string):Promise<string>;
+
+export function RunSkillABTest(arg1:number,arg2:number,arg3:number):Promise<quant.SkillABTestResult>;
 
 export function RunVectorBacktest(arg1:string,arg2:string,arg3:Record<string, any>):Promise<Record<string, any>>;
 
@@ -390,9 +436,13 @@ export function StockResearchReport(arg1:string):Promise<Array<any>>;
 
 export function SummaryStockNews(arg1:string,arg2:number,arg3:any,arg4:boolean,arg5:boolean,arg6:string,arg7:string):Promise<void>;
 
+export function SyncRecommendStocksFromIntelligence():Promise<number>;
+
 export function TestAiConnection(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function TestMCPServer(arg1:number):Promise<string>;
+
+export function TriggerAIReportBacktest(arg1:number):Promise<quant.AIReportBacktestResult>;
 
 export function UnFollow(arg1:string):Promise<string>;
 
@@ -415,42 +465,3 @@ export function UpdateSkill(arg1:models.Skill):Promise<string>;
 export function UpdateTradingRecord(arg1:data.TradingRecord):Promise<void>;
 
 export function ValidateCronExpr(arg1:string):Promise<string>;
-
-export function DiagnoseStock(arg1:string):Promise<any>;
-
-export function TriggerAIReportBacktest(arg1:number):Promise<any>;
-
-export function GeneratePostMarketReview(arg1:number):Promise<any>;
-
-export function GeneratePreMarketBriefing(arg1:number):Promise<any>;
-
-export function GenerateETFRotationReport(arg1:number):Promise<any>;
-
-export function GenerateSerenityResearchReport(arg1:string,arg2:string,arg3:number):Promise<any>;
-
-export function GetLatestMarketIntelligenceReport():Promise<any>;
-
-export function GetLatestMarketIntelligenceReportByType(arg1:string):Promise<any>;
-
-export function GetMarketLifecycleStatus():Promise<any>;
-
-export function GetSystemStateSnapshot():Promise<any>;
-
-export function SyncRecommendStocksFromIntelligence():Promise<number>;
-
-export function GetAiConfigTemplates():Promise<any>;
-
-export function FetchAuditLogs(arg1:any):Promise<any>;
-
-export function FetchSkillChanges(arg1:any):Promise<any>;
-
-export function ApproveSkillChange(arg1:any):Promise<any>;
-
-export function RejectSkillChange(arg1:any):Promise<any>;
-
-export function BatchApproveSkillChanges(arg1:any):Promise<any>;
-
-export function BatchRejectSkillChanges(arg1:any):Promise<any>;
-
-
-
