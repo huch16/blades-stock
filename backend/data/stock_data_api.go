@@ -405,15 +405,20 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 				continue
 			}
 			stockInfos = append(stockInfos, *stockData)
-			go func() {
+			go func(sd StockInfo) {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Warnf("Save StockInfo panic: %v", r)
+					}
+				}()
 				var count int64
-				db.Dao.Model(&StockInfo{}).Where("code = ?", stockData.Code).Count(&count)
+				db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Count(&count)
 				if count == 0 {
-					db.Dao.Model(&StockInfo{}).Create(stockData)
+					db.Dao.Model(&StockInfo{}).Create(&sd)
 				} else {
-					db.Dao.Model(&StockInfo{}).Where("code = ?", stockData.Code).Updates(stockData)
+					db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Updates(&sd)
 				}
-			}()
+			}(*stockData)
 		}
 	}
 
@@ -467,15 +472,20 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 				continue
 			}
 			stockInfos = append(stockInfos, *stockData)
-			go func() {
+			go func(sd StockInfo) {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Warnf("Save TxStockInfo panic: %v", r)
+					}
+				}()
 				var count int64
-				db.Dao.Model(&StockInfo{}).Where("code = ?", stockData.Code).Count(&count)
+				db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Count(&count)
 				if count == 0 {
-					db.Dao.Model(&StockInfo{}).Create(stockData)
+					db.Dao.Model(&StockInfo{}).Create(&sd)
 				} else {
-					db.Dao.Model(&StockInfo{}).Where("code = ?", stockData.Code).Updates(stockData)
+					db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Updates(&sd)
 				}
-			}()
+			}(*stockData)
 		}
 		return &stockInfos, nil
 	}
@@ -496,15 +506,20 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 		}
 		stockInfos = append(stockInfos, *stockData)
 
-		go func() {
+		go func(sd StockInfo) {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Warnf("Save SingleStockData panic: %v", r)
+				}
+			}()
 			var count int64
-			db.Dao.Model(&StockInfo{}).Where("code = ?", stockData.Code).Count(&count)
+			db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Count(&count)
 			if count == 0 {
-				db.Dao.Model(&StockInfo{}).Create(stockData)
+				db.Dao.Model(&StockInfo{}).Create(&sd)
 			} else {
-				db.Dao.Model(&StockInfo{}).Where("code = ?", stockData.Code).Updates(stockData)
+				db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Updates(&sd)
 			}
-		}()
+		}(*stockData)
 
 	}
 

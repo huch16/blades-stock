@@ -446,6 +446,11 @@ func (a *CronTaskApi) executeStockChangeSave(ctx context.Context, task *models.C
 			// 仅针对重点异动尝试唤醒 Serenity 产业链分析 (带有防刷保护)
 			if item.Name != "" && item.Code != "" {
 				go func(name, code, desc string) {
+					defer func() {
+						if r := recover(); r != nil {
+							logger.SugaredLogger.Errorf("TriggerSectorAnomalySerenityAnalysis panic: %v", r)
+						}
+					}()
 					lifecycleSvc := NewMarketLifecycleService(ctx)
 					_, _ = lifecycleSvc.TriggerSectorAnomalySerenityAnalysis(context.Background(), name, code, desc, 0)
 				}(item.Name, item.Code, item.TypeName)

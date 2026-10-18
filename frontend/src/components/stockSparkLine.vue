@@ -1,5 +1,5 @@
 <script setup>
-import {onMounted, onBeforeMount, ref, watchEffect} from "vue";
+import {onMounted, onBeforeMount, onUnmounted, ref, watchEffect} from "vue";
 import * as echarts from '../utils/echarts';
 import {GetStockMinutePriceLineData} from "../../wailsjs/go/main/App"; // 如果您使用多个组件，请将此样式导入放在您的主文件中
 const {idSuffix,stockCode,stockName,lastPrice,openPrice,darkTheme} = defineProps({
@@ -129,11 +129,17 @@ onMounted(() => {
 
 
 watchEffect(() => {
-  console.log(stockName,'lastPrice变化为:', lastPrice,lastPrice > openPrice)
-  setChartData(chart.value);
+  if (chart.value) {
+    setChartData(chart.value);
+  }
 })
 
-
+onUnmounted(() => {
+  if (chart.value) {
+    chart.value.dispose();
+    chart.value = null;
+  }
+})
 </script>
 <template>
   <div

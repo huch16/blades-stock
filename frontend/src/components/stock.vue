@@ -608,6 +608,13 @@ onBeforeUnmount(() => {
 
   cleanupDraggableTabs()
 
+  if (kLineChartRef2.value) {
+    echarts.getInstanceByDom(kLineChartRef2.value)?.dispose()
+  }
+  if (kLineChartRef.value) {
+    echarts.getInstanceByDom(kLineChartRef.value)?.dispose()
+  }
+
 })
 
 //判断是否是A股交易时间
@@ -1036,7 +1043,7 @@ function clearFeishi() {
 function showFsChart(code, name) {
   data.name = name
   data.code = code
-  const chart = echarts.init(kLineChartRef2.value);
+  const chart = echarts.getInstanceByDom(kLineChartRef2.value) || echarts.init(kLineChartRef2.value);
   GetStockMinutePriceLineData(code, name).then(result => {
     // console.log("GetStockMinutePriceLineData", result)
     const priceData = result.priceData
@@ -1303,7 +1310,7 @@ function calculateMA(dayCount, values) {
 function handleKLine() {
   GetStockKLine(data.code, data.name, 365).then(result => {
     //console.log("GetStockKLine",result)
-    const chart = echarts.init(kLineChartRef.value);
+    const chart = echarts.getInstanceByDom(kLineChartRef.value) || echarts.init(kLineChartRef.value);
     const categoryData = [];
     const values = [];
     const volumns = [];

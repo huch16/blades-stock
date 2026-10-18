@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {onMounted, ref} from "vue";
+import {onMounted, onUnmounted, ref} from "vue";
 import {GetStockMoneyTrendByDay} from "../../wailsjs/go/main/App";
 import * as echarts from "../utils/echarts";
 
@@ -363,6 +363,12 @@ const handleLine = (code, days) => {
     chart.setOption(option);
   })
 }
+
+onUnmounted(() => {
+  if (LineChartRef.value) {
+    echarts.getInstanceByDom(LineChartRef.value)?.dispose();
+  }
+});
 </script>
 
 <template>

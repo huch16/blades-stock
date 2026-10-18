@@ -202,6 +202,12 @@ func triggerRebuildAsync(reason string) {
 
 	go func() {
 		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("GraphQuery: 后台重建 manifest panic: %v", r)
+				status.OK = false
+				status.Message = fmt.Sprintf("panic: %v", r)
+				status.EndedAt = time.Now()
+			}
 			rebuildMu.Lock()
 			rebuildingNow = false
 			lastRebuild = status

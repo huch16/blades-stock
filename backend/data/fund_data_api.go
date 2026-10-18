@@ -851,6 +851,11 @@ func (f *FundApi) batchCrawlFundData(funds []FollowedFund) {
 			wg.Add(1)
 			go func(c string) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Warnf("CrawlFundBasic panic for %s: %v", c, r)
+					}
+				}()
 				f.CrawlFundBasic(c)
 			}(code)
 		}
@@ -861,6 +866,11 @@ func (f *FundApi) batchCrawlFundData(funds []FollowedFund) {
 			wg.Add(1)
 			go func(c string) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Warnf("crawlFundNetUnitValueViaEastMoney panic for %s: %v", c, r)
+					}
+				}()
 				f.crawlFundNetUnitValueViaEastMoney(c)
 			}(code)
 		}
@@ -868,6 +878,11 @@ func (f *FundApi) batchCrawlFundData(funds []FollowedFund) {
 			wg.Add(1)
 			go func(c string) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Warnf("CrawlFundNetEstimatedUnit panic for %s: %v", c, r)
+					}
+				}()
 				f.CrawlFundNetEstimatedUnit(c)
 			}(code)
 		}
@@ -877,12 +892,22 @@ func (f *FundApi) batchCrawlFundData(funds []FollowedFund) {
 		wg.Add(1)
 		go func(c string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Warnf("crawlOnExchangeFundNetUnitValue panic for %s: %v", c, r)
+				}
+			}()
 			f.crawlOnExchangeFundNetUnitValue(c)
 		}(code)
 		if _, ok := parsedStock[code]; !ok {
 			wg.Add(1)
 			go func(c string) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Warnf("crawlOnExchangeFundQuote panic for %s: %v", c, r)
+					}
+				}()
 				f.crawlOnExchangeFundQuote(c)
 			}(code)
 		}

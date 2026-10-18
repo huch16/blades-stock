@@ -673,6 +673,11 @@ func (d *SemanticDistiller) SearchKnowledgeCrystals(ctx context.Context, query s
 	// 异步更新热度计数 (HitCount)
 	if len(hitIDs) > 0 {
 		go func(ids []uint) {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Warnf("semantic distiller hitCount update panic: %v", r)
+				}
+			}()
 			db.Dao.Model(&KnowledgeCrystal{}).Where("id IN ?", ids).
 				Updates(map[string]interface{}{
 					"hit_count":   gormExpr("hit_count + 1"),

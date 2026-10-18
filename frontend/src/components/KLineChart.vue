@@ -48,6 +48,9 @@ onUnmounted(() => {
   if (resizeHandler) {
     window.removeEventListener('resize', resizeHandler)
   }
+  if (kLineChartRef.value) {
+    echarts.getInstanceByDom(kLineChartRef.value)?.dispose()
+  }
 })
 
 function handleKLine(code,stockName){

@@ -85,6 +85,11 @@ func ScreenByStrategy(strategyName string, codes []string, limit int) (*Strategy
 		wg.Add(1)
 		go func(code string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Warnf("ScoreStrategy panic for %s: %v", code, r)
+				}
+			}()
 			// skip self-limiter: sem <- struct{}{}
 			// skip self-limiter: defer func() { <-sem }()
 

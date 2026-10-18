@@ -361,12 +361,15 @@ EventsOn('show-market-intelligence-serenity', (data) => {
   emit('update:show', true)
 })
 
+let onWinShowIntel = null
+let onWinShowSerenity = null
+
 if (typeof window !== 'undefined') {
-  const onWinShowIntel = (e) => {
+  onWinShowIntel = (e) => {
     if (e.detail) currentTab.value = e.detail
     emit('update:show', true)
   }
-  const onWinShowSerenity = (e) => {
+  onWinShowSerenity = (e) => {
     currentTab.value = 'serenity_industry_analysis'
     if (e.detail) {
       serenityTarget.value = typeof e.detail === 'string' ? e.detail : (e.detail?.name || '')
@@ -388,6 +391,10 @@ onBeforeUnmount(() => {
   EventsOff('marketIntelligenceReport')
   EventsOff('show-market-intelligence')
   EventsOff('show-market-intelligence-serenity')
+  if (typeof window !== 'undefined') {
+    if (onWinShowIntel) window.removeEventListener('show-market-intelligence', onWinShowIntel)
+    if (onWinShowSerenity) window.removeEventListener('show-market-intelligence-serenity', onWinShowSerenity)
+  }
 })
 </script>
 

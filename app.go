@@ -132,6 +132,7 @@ func (a *App) domReady(ctx context.Context) {
 
 	// 初始化 VPS 数据服务
 	go func() {
+		defer PanicHandler()
 		// 交易日历（AData → Baostock → 周末判断）
 		data.InitTradingCalendar()
 
@@ -149,6 +150,7 @@ func (a *App) domReady(ctx context.Context) {
 	defer func() {
 		// 增加延迟确保前端已准备好接收事件
 		go func() {
+			defer PanicHandler()
 			time.Sleep(2 * time.Second)
 			runtime.EventsEmit(a.ctx, "loadingMsg", "done")
 		}()
@@ -174,9 +176,10 @@ func (a *App) domReady(ctx context.Context) {
 	//定时更新数据
 	config := data.GetSettingConfig()
 	go func() {
-		go data.NewMarketNewsApi().TelegraphList(30)
-		go data.NewMarketNewsApi().GetSinaNews(30)
-		go data.NewMarketNewsApi().TradingViewNews()
+		defer PanicHandler()
+		go func() { defer PanicHandler(); data.NewMarketNewsApi().TelegraphList(30) }()
+		go func() { defer PanicHandler(); data.NewMarketNewsApi().GetSinaNews(30) }()
+		go func() { defer PanicHandler(); data.NewMarketNewsApi().TradingViewNews() }()
 
 		interval := config.RefreshInterval
 		if interval <= 0 {
@@ -238,6 +241,7 @@ func (a *App) domReady(ctx context.Context) {
 
 	//刷新基金净值信息
 	go func() {
+		defer PanicHandler()
 		//ticker := time.NewTicker(time.Second * time.Duration(60))
 		//defer ticker.Stop()
 		//for range ticker.C {
@@ -314,6 +318,7 @@ func (a *App) domReady(ctx context.Context) {
 	go MonitorFollowedStockCostPrices(a)
 	// 市场统计数据采集（交易日每5分钟）
 	go func() {
+		defer PanicHandler()
 		a.FetchAndSaveMarketStatistic()
 		idMarketStat, err := a.cron.AddFunc("0 */5 9-15 * * 1-5", func() {
 			a.FetchAndSaveMarketStatistic()
@@ -326,6 +331,7 @@ func (a *App) domReady(ctx context.Context) {
 	}()
 	// 板块资金流向数据采集（交易日每60秒）
 	go func() {
+		defer PanicHandler()
 		data.NewBKFundFlowApi().FetchAndSave()
 		idBKFundFlow, err := a.cron.AddFunc("@every 60s", func() {
 			if a.IsTradingTime() {
@@ -340,6 +346,7 @@ func (a *App) domReady(ctx context.Context) {
 	}()
 	// 概念资金流向数据采集（交易日每60秒）
 	go func() {
+		defer PanicHandler()
 		data.NewConceptFundFlowApi().FetchAndSave()
 		idConceptFundFlow, err := a.cron.AddFunc("@every 60s", func() {
 			if a.IsTradingTime() {
@@ -354,6 +361,7 @@ func (a *App) domReady(ctx context.Context) {
 	}()
 	//检查股票基础信息
 	go func() {
+		defer PanicHandler()
 		cfg := a.GetConfig()
 		var count int64
 		db.Dao.Model(&data.StockBasic{}).Count(&count)
@@ -672,18 +680,21 @@ func preCacheTradingDays() {
 	}
 	now := time.Now().In(loc)
 	go func() {
+		defer PanicHandler()
 		for i := -7; i <= 7; i++ {
 			d := now.AddDate(0, 0, i)
 			isTradingDay(d)
 		}
 	}()
 	go func() {
+		defer PanicHandler()
 		for i := -7; i <= 7; i++ {
 			d := now.AddDate(0, 0, i)
 			isHKTradingDay(d)
 		}
 	}()
 	go func() {
+		defer PanicHandler()
 		est, _ := time.LoadLocation("America/New_York")
 		for i := -7; i <= 7; i++ {
 			d := now.AddDate(0, 0, i)
@@ -2546,6 +2557,7 @@ func (a *App) ExecuteCronTaskNow(id uint) string {
 	}
 
 	go func() {
+		defer PanicHandler()
 		err := agent.NewCronTaskApi().ExecuteTask(a.ctx, task)
 		if err != nil {
 			logger.SugaredLogger.Errorf("执行任务失败：%v %s", err, task.Name)

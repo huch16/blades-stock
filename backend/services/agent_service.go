@@ -446,6 +446,11 @@ func (s *AgentService) ExecuteCronTaskNow(id uint) string {
 		return fmt.Sprintf("任务不存在：%v", err)
 	}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("ExecuteCronTaskNow panic for task %d: %v", id, r)
+			}
+		}()
 		_ = agent.NewCronTaskApi().ExecuteTask(context.Background(), task)
 	}()
 	return "任务执行中"
@@ -507,6 +512,14 @@ func (s *AgentService) SummaryStockNewsCustom(emitter MessageEmitter, question s
 
 	go func() {
 		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("SummaryStockNewsCustom panic: %v", r)
+				if emitter != nil {
+					emitter(eventName, map[string]any{
+						"content": fmt.Sprintf("❌ 资讯总结运行异常: %v", r),
+					})
+				}
+			}
 			if emitter != nil {
 				emitter(eventName, "DONE")
 			}

@@ -86,6 +86,24 @@ onUnmounted(()=>{
   clearInterval(handleChartInterval)
   clearInterval(handleIndexInterval)
   window.removeEventListener('resize', handleResize)
+  // 彻底销毁所有 ECharts 实例，释放 Canvas 上下文与内存
+  const domRefs = [
+    chartRef?.value,
+    limitChartRef?.value,
+    changeRankConceptRef?.value,
+    treemapRef?.value,
+    dailyUpDownChartRef?.value,
+    dailyLimitChartRef?.value,
+    changeStatsChartRef?.value,
+    changeTypeChartRef?.value,
+    dimensionDetailChartRef?.value,
+    chartRefVal?.value
+  ]
+  domRefs.forEach(dom => {
+    if (dom) {
+      echarts.getInstanceByDom(dom)?.dispose()
+    }
+  })
 })
 
 function handleResize() {

@@ -7,6 +7,7 @@ import (
 
 	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/data"
+	"blades-stock/backend/logger"
 
 	bladesTools "github.com/go-kratos/blades/tools"
 )
@@ -39,6 +40,15 @@ func getDailyMarketBrief(question string) string {
 
 	done := make(chan string, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("GetMarketBrief panic: %v", r)
+				select {
+				case done <- "":
+				default:
+				}
+			}
+		}()
 		b, err := data.GetMarketBrief()
 		if err != nil {
 			done <- ""

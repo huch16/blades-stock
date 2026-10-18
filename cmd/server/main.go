@@ -42,7 +42,7 @@ func main() {
 		dataDir = envData
 	}
 	_ = os.MkdirAll(dataDir, 0o755)
-	dbPath := filepath.Join(dataDir, "stock.db?_busy_timeout=30000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-64000")
+	dbPath := filepath.Join(dataDir, "stock.db")
 	logger.SugaredLogger.Infof("[Database] Initializing SQLite at: %s", dbPath)
 	db.Init(dbPath)
 
@@ -60,9 +60,16 @@ func main() {
 			}
 		}()
 		// 启动时立即预加载最新市场资讯入库
-		go data.NewMarketNewsApi().TelegraphList(30)
-		go data.NewMarketNewsApi().GetSinaNews(30)
-		go data.NewMarketNewsApi().TradingViewNews()
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Warnf("[NewsCron:Preload] recovered from panic: %v", r)
+				}
+			}()
+			data.NewMarketNewsApi().TelegraphList(30)
+			data.NewMarketNewsApi().GetSinaNews(30)
+			data.NewMarketNewsApi().TradingViewNews()
+		}()
 
 		// 定时轮询并向 Web 客户端广播最新快讯 (财联社电报、新浪财经、外媒)
 		ticker := time.NewTicker(30 * time.Second)
@@ -89,6 +96,11 @@ func main() {
 		}()
 		// 启动时立即主动抓取一次，确保全新部署开箱即有盘面图表数据
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Warnf("[MarketStatsCron:Preload] recovered from panic: %v", r)
+				}
+			}()
 			_ = data.NewMarketStatisticApi().FetchAndSave()
 			_, _ = data.NewBKFundFlowApi().FetchAndSave()
 			_, _ = data.NewConceptFundFlowApi().FetchAndSave()

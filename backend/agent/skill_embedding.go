@@ -63,13 +63,34 @@ func GetSkillEmbeddingService(es *EmbeddingService, retr Retriever) *SkillEmbedd
 		logger.SugaredLogger.Info("SkillEmbeddingService 已启用（语义匹配）")
 		if err := skillEmbedSvc.loadFromDB(); err != nil {
 			logger.SugaredLogger.Warnf("从DB加载skill embedding失败: %v，将异步重新计算", err)
-			go func() { _ = skillEmbedSvc.RefreshEmbeddings() }()
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Errorf("RefreshEmbeddings panic: %v", r)
+					}
+				}()
+				_ = skillEmbedSvc.RefreshEmbeddings()
+			}()
 		} else if skillEmbedSvc.embeddingCount() == 0 {
 			logger.SugaredLogger.Info("skill_embeddings 为空，后台异步初始化计算")
-			go func() { _ = skillEmbedSvc.RefreshEmbeddings() }()
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Errorf("RefreshEmbeddings panic: %v", r)
+					}
+				}()
+				_ = skillEmbedSvc.RefreshEmbeddings()
+			}()
 		} else {
 			// 本地DB已存在向量，极速启动！后台增量对比刷新
-			go func() { _ = skillEmbedSvc.RefreshEmbeddings() }()
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logger.SugaredLogger.Errorf("RefreshEmbeddings panic: %v", r)
+					}
+				}()
+				_ = skillEmbedSvc.RefreshEmbeddings()
+			}()
 		}
 	} else {
 		logger.SugaredLogger.Warn("EmbeddingService 未配置，SkillEmbeddingService 降级为关键词匹配")
@@ -137,6 +158,11 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 		wg.Add(1)
 		go func(sk models.Skill, contentHash, text string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("skill %s embedding panic: %v", sk.Name, r)
+				}
+			}()
 			vec, err := s.es.Embed(text)
 			if err != nil {
 				logger.SugaredLogger.Warnf("skill %s embedding失败: %v", sk.Name, err)
