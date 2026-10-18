@@ -87,17 +87,18 @@ function handleOpenAuthManage() {
   openAuthModal('manage')
 }
 
-function handleWebLogout() {
-  dialog.warning({
+async function handleWebLogout() {
+  const confirm = await confirmDialog({
     title: '确认退出登录？',
     content: '退出后将清除当前浏览器保存的授权凭据，再次访问需重新输入口令。',
     positiveText: '确认退出',
     negativeText: '取消',
-    onPositiveAction: () => {
-      logoutWebAuth()
-      message.info('已清除授权凭证')
-    }
+    type: 'warning'
   })
+  if (confirm) {
+    logoutWebAuth()
+    message.info('已清除授权凭证')
+  }
 }
 
 const formRef = ref(null)
@@ -113,27 +114,30 @@ const isFormDirty = computed(() => {
 function markClean() {
   originalFormValue.value = JSON.parse(JSON.stringify(formValue.value))
 }
-function cancelChanges() {
+async function cancelChanges() {
   if (!isFormDirty.value) return
-  dialog.warning({
+  const confirm = await confirmDialog({
     title: '放弃未保存的修改？',
     content: '当前有未保存的修改，确定要放弃并恢复到最后保存的状态吗？',
     positiveText: '确定放弃',
     negativeText: '继续编辑',
-    onPositiveAction: () => {
-      formValue.value = JSON.parse(JSON.stringify(originalFormValue.value))
-      message.info('已恢复到最后保存的状态')
-    }
+    type: 'warning'
   })
+  if (confirm) {
+    formValue.value = JSON.parse(JSON.stringify(originalFormValue.value))
+    message.info('已恢复到最后保存的状态')
+  }
 }
-function resetToDefaults() {
-  dialog.warning({
+async function resetToDefaults() {
+  const confirm = await confirmDialog({
     title: '确认恢复默认值？',
     content: '这将把所有设置重置为出厂默认值，当前未保存的修改将丢失。',
     positiveText: '确认重置',
     negativeText: '取消',
-    onPositiveAction: () => {
-      GetConfig().then(res => {
+    type: 'warning'
+  })
+  if (!confirm) return
+  GetConfig().then(res => {
         formValue.value = {
           ID: res.ID,
           tushareToken: res.tushareToken,
@@ -166,8 +170,6 @@ function resetToDefaults() {
         markClean()
         message.success('已恢复默认值，请点击「保存设置」生效')
       }).catch(err => message.error('重置失败: ' + (err?.message || err)))
-    }
-  })
 }
 
 // ========================
@@ -807,24 +809,13 @@ function sendTestNotice() {
 
 function exportConfig() {
   ExportConfig().then(res => {
-    if (!isWails()) {
-      try {
-        const blob = new Blob([res], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `blades-stock-config-${new Date().toISOString().slice(0, 10)}.json`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        message.success('配置文件已成功导出并触发下载')
-        return
-      } catch (e) {
-        // fallback
-      }
+    if (!res) {
+      message.error('导出配置失败: 配置内容为空')
+      return
     }
-    message.info(res)
+    const fileName = `blades-stock-config-${new Date().toISOString().slice(0, 10)}.json`
+    triggerBrowserDownload(fileName, res)
+    message.success('配置文件已成功导出并保存')
   }).catch(err => {
     message.error('导出失败: ' + (err?.message || err))
   })
@@ -1002,7 +993,22 @@ async function handleCreateDatabaseSnapshot() {
 // 下载指定的备份文件
 async function downloadBackup(item: any) {
   try {
-    message.loading('正在打包下载...', { duration: 1500 })
+    message.loading('正在准备下载...', { duration: 1500 })
+    // Web 模式下优先使用原生流式下载端点，彻底避免超大文件 Base64 内存膨胀
+    if (!isWails()) {
+      const token = currentAuthToken.value || localStorage.getItem('blades_web_auth_token') || ''
+      const downloadUrl = `/api/backup/download?file=${encodeURIComponent(item.fileName)}&token=${encodeURIComponent(token)}`
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = item.fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      message.success(`已开始下载 ${item.fileName}`)
+      return
+    }
+
+    // 桌面端使用统一内容通道下载
     const content = await GetBackupContent(item.fileName)
     if (content.startsWith('ERROR:')) {
       message.error('获取备份内容失败: ' + content)

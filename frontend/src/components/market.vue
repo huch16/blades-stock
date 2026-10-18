@@ -447,7 +447,30 @@ async function copyToClipboard() {
 
 function saveAsMarkdown() {
   SaveAsMarkdown('市场资讯', '市场资讯').then(result => {
-    message.success(result)
+    if (!result || result === '取消保存') {
+      message.info(result || '已取消保存')
+      return
+    }
+    if (result.startsWith('保存失败') || result.startsWith('分析结果异常')) {
+      message.error(result)
+      return
+    }
+    if (result.startsWith('已保存至：')) {
+      message.success(result)
+      return
+    }
+    // Web 模式下后端返回 Markdown 正文，触发浏览器下载
+    const blob = new Blob([result], { type: 'text/markdown;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `市场资讯-AI分析结果_${new Date().toISOString().slice(0, 10)}.md`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    message.success('已导出为 Markdown 文件并开始下载')
+  }).catch(err => {
+    message.error('导出 Markdown 失败: ' + (err?.message || err))
   })
 }
 

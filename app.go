@@ -1849,6 +1849,9 @@ func (a *App) SaveAsMarkdown(stockCode, stockName string) string {
 		if err != nil {
 			return err.Error()
 		}
+		if file == "" {
+			return "取消保存"
+		}
 		if err = os.WriteFile(file, []byte(res.Content), 0644); err != nil {
 			return "保存失败：" + err.Error()
 		}
