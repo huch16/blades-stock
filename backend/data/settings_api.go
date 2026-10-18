@@ -420,11 +420,12 @@ func (s *SettingsApi) BackupData(backupType string) string {
 
 	backupDir := backupDirPath()
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		return "创建备份目录失败: " + err.Error()
+		return "❌ 创建备份目录失败: " + err.Error()
 	}
 
 	ts := time.Now().Format("20060102_150405")
-	fileName := filepath.Join(backupDir, fmt.Sprintf("%s_%s.csv", backupType, ts))
+	baseFileName := fmt.Sprintf("%s_%s.csv", backupType, ts)
+	fileName := filepath.Join(backupDir, baseFileName)
 
 	var result string
 	switch backupType {
@@ -441,9 +442,12 @@ func (s *SettingsApi) BackupData(backupType string) string {
 	case BackupStockChangeHistory:
 		result = backupStockChangeHistory(fileName)
 	default:
-		return "未知备份类型: " + backupType
+		return "❌ 未知备份类型: " + backupType
 	}
-	return fmt.Sprintf("%s\n备份目录: %s", result, backupDir)
+	if strings.Contains(result, "失败") {
+		return "❌ " + result
+	}
+	return fmt.Sprintf("✅ %s\nFILE:%s\n备份目录: %s", result, baseFileName, backupDir)
 }
 
 // RestoreData 从 CSV 文件恢复数据到数据库
@@ -454,35 +458,40 @@ func (s *SettingsApi) RestoreData(backupType string) string {
 	pattern := filepath.Join(backupDir, backupType+"_*.csv")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
-		return "查找备份文件失败: " + err.Error()
+		return "❌ 查找备份文件失败: " + err.Error()
 	}
 	if len(matches) == 0 {
-		return "未找到 " + backupType + " 的备份文件，请先执行备份\n备份目录: " + backupDir
+		return "❌ 未找到 " + backupType + " 的备份文件，请先执行备份\n备份目录: " + backupDir
 	}
 
 	// 使用最新的文件
 	fileName := matches[len(matches)-1]
 
+	var res string
 	switch backupType {
 	case BackupFollowedStocks:
-		return restoreFollowedStocks(fileName)
+		res = restoreFollowedStocks(fileName)
 	case BackupRecommendStocks:
-		return restoreRecommendStocks(fileName)
+		res = restoreRecommendStocks(fileName)
 	case BackupAIReports:
-		return restoreAIReports(fileName)
+		res = restoreAIReports(fileName)
 	case BackupFollowedFunds:
-		return restoreFollowedFunds(fileName)
+		res = restoreFollowedFunds(fileName)
 	case BackupBacktestResults:
-		return restoreBacktestResults(fileName)
+		res = restoreBacktestResults(fileName)
 	case BackupStockChangeHistory:
-		return restoreStockChangeHistory(fileName)
+		res = restoreStockChangeHistory(fileName)
 	default:
-		return "未知恢复类型: " + backupType
+		return "❌ 未知恢复类型: " + backupType
 	}
+	if strings.Contains(res, "失败") {
+		return "❌ " + res
+	}
+	return "✅ " + res
 }
 
 func backupFollowedStocks(fileName string) string {
-	rows, err := db.Dao.Raw("SELECT stock_code, name, volume, cost_price, price, change_percent, alarm_change_percent, alarm_price, time, sort, ai_config_id, entry_price, take_profit_price, stop_loss_price FROM followed_stock WHERE is_del=0 ORDER BY sort, id").Rows()
+	rows, err := db.Dao.Raw("SELECT stock_code, name, volume, cost_price, price, change_percent, alarm_change_percent, alarm_price, time, sort, ai_config_id, entry_price, take_profit_price, stop_loss_price FROM followed_stock WHERE is_del=0 ORDER BY sort, stock_code").Rows()
 	if err != nil {
 		return "导出自选股票失败: " + err.Error()
 	}
@@ -618,12 +627,41 @@ func restoreFollowedStocks(fileName string) string {
 	}
 	tx := db.Dao.Begin()
 	for _, r := range records {
-		err := tx.Exec("INSERT OR REPLACE INTO followed_stock (stock_code, name, volume, cost_price, price, change_percent, alarm_change_percent, alarm_price, time, sort, ai_config_id, entry_price, take_profit_price, stop_loss_price) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-			r["股票代码"], r["名称"], r["持仓量"], r["成本价"], r["当前价"], r["涨跌幅%"], r["预警涨跌幅%"], r["预警价"], r["时间"], r["排序"], r["AI配置ID"], r["入场价"], r["止盈价"], r["止损价"],
-		).Error
-		if err != nil {
-			tx.Rollback()
-			return "恢复自选股票失败: " + err.Error()
+		code := strings.TrimSpace(r["股票代码"])
+		if code == "" {
+			continue
+		}
+		var count int64
+		tx.Model(&FollowedStock{}).Where("stock_code = ?", code).Count(&count)
+		if count > 0 {
+			err := tx.Model(&FollowedStock{}).Where("stock_code = ?", code).Updates(map[string]any{
+				"name":                 r["名称"],
+				"volume":               r["持仓量"],
+				"cost_price":           r["成本价"],
+				"price":                r["当前价"],
+				"change_percent":       r["涨跌幅%"],
+				"alarm_change_percent": r["预警涨跌幅%"],
+				"alarm_price":          r["预警价"],
+				"time":                 r["时间"],
+				"sort":                 r["排序"],
+				"ai_config_id":         r["AI配置ID"],
+				"entry_price":          r["入场价"],
+				"take_profit_price":    r["止盈价"],
+				"stop_loss_price":      r["止损价"],
+				"is_del":               0,
+			}).Error
+			if err != nil {
+				tx.Rollback()
+				return "恢复自选股票失败: " + err.Error()
+			}
+		} else {
+			err := tx.Exec("INSERT INTO followed_stock (stock_code, name, volume, cost_price, price, change_percent, alarm_change_percent, alarm_price, time, sort, ai_config_id, entry_price, take_profit_price, stop_loss_price, is_del) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+				code, r["名称"], r["持仓量"], r["成本价"], r["当前价"], r["涨跌幅%"], r["预警涨跌幅%"], r["预警价"], r["时间"], r["排序"], r["AI配置ID"], r["入场价"], r["止盈价"], r["止损价"],
+			).Error
+			if err != nil {
+				tx.Rollback()
+				return "恢复自选股票失败: " + err.Error()
+			}
 		}
 	}
 	tx.Commit()

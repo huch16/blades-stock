@@ -35,6 +35,31 @@ const message = useMessage()
 const dialog = useDialog()
 const aiConfigStore = useAiConfigStore()
 
+// 封装原生 Promise 对齐 Naive UI 对话框确认行为
+function confirmDialog(options: {
+  title: string
+  content: string
+  positiveText?: string
+  negativeText?: string
+  type?: 'info' | 'warning' | 'error' | 'success'
+}): Promise<boolean> {
+  return new Promise((resolve) => {
+    const dialogType = options.type || 'info'
+    const fn = (dialog as any)[dialogType] || dialog.info
+    fn({
+      title: options.title,
+      content: options.content,
+      positiveText: options.positiveText || '确定',
+      negativeText: options.negativeText || '取消',
+      closable: false,
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+      onMaskClick: () => resolve(false)
+    })
+  })
+}
+
 // 双模环境感知与 Web 安全态势
 const isWebMode = computed(() => !isWails())
 const currentAuthToken = ref('')
@@ -815,18 +840,14 @@ async function cleanup(type) {
     'all': '所有中间数据'
   }
   const typeName = typeNameMap[type] || type
-  try {
-    const confirm = await dialog.warning({
-      title: '确认清理',
-      content: `确定要清理${typeName}吗？此操作不可恢复。`,
-      positiveText: '确认清理',
-      negativeText: '取消',
-      closable: false
-    })
-    if (!confirm) return
-  } catch {
-    return
-  }
+  const confirm = await confirmDialog({
+    title: '确认清理',
+    content: `确定要清理${typeName}吗？此操作不可恢复。`,
+    positiveText: '确认清理',
+    negativeText: '取消',
+    type: 'warning'
+  })
+  if (!confirm) return
   CleanupData(type).then(res => {
     message.success(res)
   }).catch(err => {
@@ -930,7 +951,8 @@ function triggerBrowserDownload(fileName: string, content: string, isBase64: boo
     }
     blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/octet-stream' })
   } else {
-    blob = new Blob([content], { type: 'application/json;charset=utf-8' })
+    const mimeType = fileName.endsWith('.csv') ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8'
+    blob = new Blob([content], { type: mimeType })
   }
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
@@ -1000,18 +1022,14 @@ async function restoreBackupItem(item: any) {
   const confirmText = isBundle
     ? `确定要从全量资产包「${item.fileName}」恢复系统数据吗？包含的 AI模型配置、提示词技能、对话记忆与研报将被安全合并更新。`
     : `确定要恢复「${item.fileName}」吗？`
-  try {
-    const confirm = await dialog.warning({
-      title: '确认恢复数据',
-      content: confirmText,
-      positiveText: '确认恢复',
-      negativeText: '取消',
-      closable: false
-    })
-    if (!confirm) return
-  } catch {
-    return
-  }
+  const confirm = await confirmDialog({
+    title: '确认恢复数据',
+    content: confirmText,
+    positiveText: '确认恢复',
+    negativeText: '取消',
+    type: 'warning'
+  })
+  if (!confirm) return
 
   try {
     const res = await RestoreBackupFile(item.fileName)
@@ -1030,18 +1048,14 @@ async function restoreBackupItem(item: any) {
 
 // 删除指定的备份文件
 async function deleteBackupItem(item: any) {
-  try {
-    const confirm = await dialog.error({
-      title: '确认删除备份',
-      content: `确定要彻底删除备份文件「${item.fileName}」吗？此操作无法撤销。`,
-      positiveText: '确认删除',
-      negativeText: '取消',
-      closable: false
-    })
-    if (!confirm) return
-  } catch {
-    return
-  }
+  const confirm = await confirmDialog({
+    title: '确认删除备份',
+    content: `确定要彻底删除备份文件「${item.fileName}」吗？此操作无法撤销。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    type: 'error'
+  })
+  if (!confirm) return
   try {
     const res = await DeleteBackupFile(item.fileName)
     message.success(res)
@@ -1063,18 +1077,14 @@ function uploadAndRestoreBackup() {
     reader.onload = async (event: any) => {
       const content = event.target?.result as string
       if (!content) return
-      try {
-        const confirm = await dialog.warning({
-          title: '导入并恢复智能资产包',
-          content: `已选中本地文件「${file.name}」(${Math.round(file.size / 1024)} KB)。导入后将安全更新 AI大模型、技能库、对话记忆与自选资产。是否继续？`,
-          positiveText: '开始恢复',
-          negativeText: '取消',
-          closable: false
-        })
-        if (!confirm) return
-      } catch {
-        return
-      }
+      const confirm = await confirmDialog({
+        title: '导入并恢复智能资产包',
+        content: `已选中本地文件「${file.name}」(${Math.round(file.size / 1024)} KB)。导入后将安全更新 AI大模型、技能库、对话记忆与自选资产。是否继续？`,
+        positiveText: '开始恢复',
+        negativeText: '取消',
+        type: 'warning'
+      })
+      if (!confirm) return
       try {
         const res = await ImportIntelligentBackup(content)
         dialog.success({
@@ -1107,8 +1117,8 @@ function handleCsvExportSelect(key: string) {
   backup(key)
 }
 
-async function backup(type) {
-  const typeNameMap = {
+async function backup(type: string) {
+  const typeNameMap: Record<string, string> = {
     'followed_stocks': '自选股票',
     'recommend_stocks': '推荐股票',
     'ai_reports': 'AI分析报告',
@@ -1117,28 +1127,49 @@ async function backup(type) {
     'stock_change_history': '异动历史(最近1万条)'
   }
   const typeName = typeNameMap[type] || type
-  try {
-    const confirm = await dialog.info({
-      title: '确认备份',
-      content: `确定要导出${typeName}到 CSV 文件吗？`,
-      positiveText: '确认导出',
-      negativeText: '取消',
-      closable: false
-    })
-    if (!confirm) return
-  } catch {
-    return
-  }
-  BackupData(type).then(async res => {
-    message.success(res)
-    await fetchBackupCenterData()
-  }).catch(err => {
-    message.error('备份失败: ' + (err?.message || err))
+  const confirm = await confirmDialog({
+    title: '确认备份',
+    content: `确定要导出「${typeName}」到 CSV 文件吗？`,
+    positiveText: '确认导出',
+    negativeText: '取消',
+    type: 'info'
   })
+  if (!confirm) return
+
+  const loadingMsg = message.loading(`正在导出 ${typeName} 到 CSV 表格...`, { duration: 0 })
+  try {
+    const res = await BackupData(type)
+    loadingMsg.destroy()
+    if (res.startsWith('❌') || res.includes('失败')) {
+      message.error(res)
+      return
+    }
+
+    message.success(`导出「${typeName}」成功！已归档至备份中心`)
+
+    // 从返回值中解析出文件名并触发自动下载
+    const match = res.match(/FILE:([^\s\r\n]+)/)
+    const fileName = match ? match[1] : null
+    if (fileName) {
+      try {
+        const content = await GetBackupContent(fileName)
+        if (!content.startsWith('ERROR:')) {
+          triggerBrowserDownload(fileName, content)
+        }
+      } catch (dlErr) {
+        console.warn('自动下载 CSV 失败，请在历史备份列表中手动下载:', dlErr)
+      }
+    }
+
+    await fetchBackupCenterData()
+  } catch (err: any) {
+    loadingMsg.destroy()
+    message.error('备份失败: ' + (err?.message || err))
+  }
 }
 
-async function restore(type) {
-  const typeNameMap = {
+async function restore(type: string) {
+  const typeNameMap: Record<string, string> = {
     'followed_stocks': '自选股票',
     'recommend_stocks': '推荐股票',
     'ai_reports': 'AI分析报告',
@@ -1147,24 +1178,29 @@ async function restore(type) {
     'stock_change_history': '异动历史(最近1万条)'
   }
   const typeName = typeNameMap[type] || type
+  const confirm = await confirmDialog({
+    title: '确认恢复',
+    content: `确定要从 CSV 恢复「${typeName}」吗？将覆盖当前数据。`,
+    positiveText: '确认恢复',
+    negativeText: '取消',
+    type: 'warning'
+  })
+  if (!confirm) return
+
+  const loadingMsg = message.loading(`正在恢复 ${typeName}...`, { duration: 0 })
   try {
-    const confirm = await dialog.warning({
-      title: '确认恢复',
-      content: `确定要从 CSV 恢复 ${typeName} 吗？将覆盖当前数据。`,
-      positiveText: '确认恢复',
-      negativeText: '取消',
-      closable: false
-    })
-    if (!confirm) return
-  } catch {
-    return
-  }
-  RestoreData(type).then(async res => {
+    const res = await RestoreData(type)
+    loadingMsg.destroy()
+    if (res.startsWith('❌') || res.includes('失败') || res.includes('未找到')) {
+      message.error(res)
+      return
+    }
     message.success(res)
     await fetchBackupCenterData()
-  }).catch(err => {
+  } catch (err: any) {
+    loadingMsg.destroy()
     message.error('恢复失败: ' + (err?.message || err))
-  })
+  }
 }
 
 function importConfig() {

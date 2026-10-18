@@ -616,20 +616,25 @@ func formatCsvDescription(name string) string {
 }
 
 func restoreSpecificCSV(filePath, fileName string) (string, error) {
+	var res string
 	switch {
 	case strings.HasPrefix(fileName, "followed_stocks"):
-		return restoreFollowedStocks(filePath), nil
+		res = restoreFollowedStocks(filePath)
 	case strings.HasPrefix(fileName, "recommend_stocks"):
-		return restoreRecommendStocks(filePath), nil
+		res = restoreRecommendStocks(filePath)
 	case strings.HasPrefix(fileName, "ai_reports"):
-		return restoreAIReports(filePath), nil
+		res = restoreAIReports(filePath)
 	case strings.HasPrefix(fileName, "followed_funds"):
-		return restoreFollowedFunds(filePath), nil
+		res = restoreFollowedFunds(filePath)
 	case strings.HasPrefix(fileName, "backtest_results"):
-		return restoreBacktestResults(filePath), nil
+		res = restoreBacktestResults(filePath)
 	case strings.HasPrefix(fileName, "stock_change_history"):
-		return restoreStockChangeHistory(filePath), nil
+		res = restoreStockChangeHistory(filePath)
 	default:
 		return "", fmt.Errorf("未知的 CSV 类型: %s", fileName)
 	}
+	if strings.Contains(res, "失败") {
+		return "", fmt.Errorf("%s", res)
+	}
+	return res, nil
 }
