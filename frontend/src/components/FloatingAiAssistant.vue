@@ -56,18 +56,6 @@
                   quaternary
                   circle
                   size="small"
-                  title="分享到社区"
-                  :loading="shareLoading"
-                  @click="shareAiToCommunity"
-                >
-                  <template #icon>
-                    <NIcon :component="ShareSocialOutline" />
-                  </template>
-                </NButton>
-                <NButton
-                  quaternary
-                  circle
-                  size="small"
                   title="关闭"
                   @click="closePanel"
                 >
@@ -208,18 +196,6 @@
                           </template>
                           导出图
                         </NButton>
-                        <NButton
-                          quaternary
-                          size="tiny"
-                          class="msg-share-btn"
-                          :loading="shareLoading"
-                          @click="shareAiContent(msg)"
-                        >
-                          <template #icon>
-                            <NIcon :component="ShareSocialOutline" />
-                          </template>
-                          分享
-                        </NButton>
                       </div>
                     </template>
                     <template v-else>
@@ -341,18 +317,6 @@
                           </template>
                           导出图
                         </NButton>
-                        <NButton
-                          quaternary
-                          size="tiny"
-                          class="msg-share-btn"
-                          :loading="shareLoading"
-                          @click="shareAiContent(msg)"
-                        >
-                          <template #icon>
-                            <NIcon :component="ShareSocialOutline" />
-                          </template>
-                          分享
-                        </NButton>
                       </div>
                     </template>
                   </div>
@@ -456,10 +420,9 @@ import {
   SparklesOutline,
   PersonCircleOutline,
   CopyOutline,
-  ShareSocialOutline,
   ImageOutline
 } from '@vicons/ionicons5'
-import { AbortSummaryStockNews, GetAiAssistantSession, GetAiConfigs, GetConfig, GetVersionInfo, SaveAiAssistantSession, ShareText, SummaryStockNews } from '../../wailsjs/go/main/App'
+import { AbortSummaryStockNews, GetAiAssistantSession, GetAiConfigs, GetConfig, GetVersionInfo, SaveAiAssistantSession, SummaryStockNews } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
@@ -523,7 +486,6 @@ const canSend = computed(() => !!inputValue.value.trim())
 const scrollbarRef = ref(null)
 const darkTheme = ref(false)
 const appIcon = ref('')
-const shareLoading = ref(false)
 /** 正在导出图片的消息键 `${displayFromIndex}-${index}`，空表示未在导出 */
 const exportImageKey = ref('')
 const shareTipVisible = ref(false)
@@ -571,26 +533,6 @@ function getLastAssistantContent() {
     }
   }
   return ''
-}
-
-function shareAiToCommunity() {
-  const text = getLastAssistantContent()
-  if (!text) {
-    shareTipText.value = '暂无可分享的 AI 回复内容'
-    shareTipVisible.value = true
-    return
-  }
-  shareTextToCommunity(text, 'AI助手')
-}
-
-function shareAiContent(msg) {
-  const text = (msg?.content ?? '').trim()
-  if (!text) {
-    shareTipText.value = '暂无可分享的 AI 正文内容'
-    shareTipVisible.value = true
-    return
-  }
-  shareTextToCommunity(text, 'AI助手')
 }
 
 function assistantReplyExportTarget(editorId, bubble) {
@@ -672,25 +614,6 @@ async function copyAiContent(msg) {
   } catch (e) {
     message.error('复制失败，请手动选择文本')
   }
-}
-
-function shareTextToCommunity(text, title) {
-  if (shareLoading.value) return
-  shareLoading.value = true
-  shareTipText.value = '正在分享到社区...'
-  shareTipVisible.value = true
-  ShareText(text, title)
-    .then((msg) => {
-      shareTipText.value = msg
-      shareTipVisible.value = true
-    })
-    .catch((err) => {
-      shareTipText.value = '分享失败: ' + (err?.message ?? err)
-      shareTipVisible.value = true
-    })
-    .finally(() => {
-      shareLoading.value = false
-    })
 }
 
 function abortStream(showTip = true) {
@@ -1260,7 +1183,6 @@ watch(aiConfigId, (newId) => {
   justify-content: flex-end;
   margin-top: 0;
 }
-.msg-share-btn,
 .msg-expand-btn,
 .msg-copy-btn,
 .msg-export-img-btn {
@@ -1272,7 +1194,6 @@ watch(aiConfigId, (newId) => {
   border: 1px solid var(--n-primary-color);
   transition: color 0.2s, border-color 0.2s, background-color 0.2s;
 }
-.msg-share-btn:hover,
 .msg-expand-btn:hover,
 .msg-copy-btn:hover,
 .msg-export-img-btn:hover {
@@ -1280,7 +1201,6 @@ watch(aiConfigId, (newId) => {
   background-color: var(--n-primary-color);
   color: #fff;
 }
-.message-item.user .msg-bubble .msg-share-btn,
 .message-item.user .msg-bubble .msg-expand-btn,
 .message-item.user .msg-bubble .msg-copy-btn,
 .message-item.user .msg-bubble .msg-export-img-btn {
@@ -1288,7 +1208,6 @@ watch(aiConfigId, (newId) => {
   background-color: rgba(255, 255, 255, 0.22);
   border-color: rgba(255, 255, 255, 0.65);
 }
-.message-item.user .msg-bubble .msg-share-btn:hover,
 .message-item.user .msg-bubble .msg-expand-btn:hover,
 .message-item.user .msg-bubble .msg-copy-btn:hover,
 .message-item.user .msg-bubble .msg-export-img-btn:hover {

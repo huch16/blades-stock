@@ -1759,47 +1759,12 @@ func (a *App) ImportIntelligentBackup(content string) string {
 }
 
 func (a *App) ShareAnalysis(stockCode, stockName string) string {
-	//http://go-stock.sparkmemory.top:16688/upload
-	res := data.NewDeepSeekOpenAi(a.ctx, 0).GetAIResponseResult(stockCode)
-	if res != nil && len(res.Content) > 100 {
-		analysisTime := res.CreatedAt.Format("2006/01/02")
-		//logger.SugaredLogger.Infof("%s analysisTime:%s", res.CreatedAt, analysisTime)
-		response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "blades-stock").SetFormData(map[string]string{
-			"text":         res.Content,
-			"stockCode":    stockCode,
-			"stockName":    stockName,
-			"analysisTime": analysisTime,
-		}).Post("http://go-stock.sparkmemory.top:16688/upload")
-		if err != nil {
-			return err.Error()
-		}
-		return response.String()
-	} else {
-		return "分析结果异常"
-	}
+	return a.settingsService.ShareAnalysis(stockCode, stockName)
 }
 
-// ShareText 直接把文本分享到社区（用于 AI 助手等非 AIResponseResult 场景）
+// ShareText 直接把文本分享到社区（已废弃：本项目无社区服务）
 func (a *App) ShareText(text, title string) string {
-	text = strings.TrimSpace(text)
-	title = strings.TrimSpace(title)
-	if text == "" {
-		return "内容为空"
-	}
-	if title == "" {
-		title = "AI助手"
-	}
-	analysisTime := time.Now().Format("2006/01/02")
-	response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "blades-stock").SetFormData(map[string]string{
-		"text":         text,
-		"stockCode":    title,
-		"stockName":    title,
-		"analysisTime": analysisTime,
-	}).Post("http://go-stock.sparkmemory.top:16688/upload")
-	if err != nil {
-		return err.Error()
-	}
-	return response.String()
+	return a.settingsService.ShareText(text, title)
 }
 
 func (a *App) GetfundList(key string) []data.FundBasic {

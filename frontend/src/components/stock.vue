@@ -30,7 +30,6 @@ import {
   SetStockAICron,
   SetStockSort,
   SetTradingPrice,
-  ShareAnalysis,
   UnFollow,
   UpdateGroup,
   UpdateGroupSort,
@@ -2266,30 +2265,6 @@ AI赋能股票分析：自选股行情获取，成本盈亏展示，涨跌报警
   }
 }
 
-function share(code, name) {
-  ShareAnalysis(code, name).then(msg => {
-    //message.info(msg)
-    notify.info({
-      avatar: () =>
-          h(NAvatar, {
-            size: 'small',
-            round: false,
-            src: icon.value
-          }),
-      title: '分享到社区',
-      duration: 1000 * 30,
-      content: () => {
-        return h('div', {
-          style: {
-            'text-align': 'left',
-            'font-size': '14px',
-          }
-        }, {default: () => msg})
-      },
-    })
-  })
-}
-
 const addTabModel = ref({
   name: '',
   sort: 1,
@@ -2748,7 +2723,6 @@ watch(modalShow6, (newVal) => {
         <n-button size="tiny" type="success" @click="copyToClipboard">复制到剪切板</n-button>
         <n-button size="tiny" type="primary" @click="saveAsMarkdown">保存为Markdown文件</n-button>
         <n-button size="tiny" type="primary" @click="saveAsWord">保存为Word文件</n-button>
-        <n-button size="tiny" type="error" @click="share(data.code,data.name)">分享到项目社区</n-button>
       </n-flex>
     </template>
   </n-modal>

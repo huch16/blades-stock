@@ -86,46 +86,14 @@ func (s *SettingsService) SaveImage(name, base64Data string) string {
 	return name
 }
 
-// ShareAnalysis 将个股研报结果分享至社区
+// ShareAnalysis 将个股研报结果分享至社区（已废弃：本项目无社区服务）
 func (s *SettingsService) ShareAnalysis(stockCode, stockName string) string {
-	res := data.NewDeepSeekOpenAi(context.Background(), 0).GetAIResponseResult(stockCode)
-	if res != nil && len(res.Content) > 100 {
-		analysisTime := res.CreatedAt.Format("2006/01/02")
-		response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "blades-stock").SetFormData(map[string]string{
-			"text":         res.Content,
-			"stockCode":    stockCode,
-			"stockName":    stockName,
-			"analysisTime": analysisTime,
-		}).Post("http://go-stock.sparkmemory.top:16688/upload")
-		if err != nil {
-			return err.Error()
-		}
-		return response.String()
-	}
-	return "分析结果异常"
+	return "本项目未启用社区分享服务"
 }
 
-// ShareText 将文本内容直接分享至社区
+// ShareText 将文本内容直接分享至社区（已废弃：本项目无社区服务）
 func (s *SettingsService) ShareText(text, title string) string {
-	text = strings.TrimSpace(text)
-	title = strings.TrimSpace(title)
-	if text == "" {
-		return "内容为空"
-	}
-	if title == "" {
-		title = "AI助手"
-	}
-	analysisTime := time.Now().Format("2006/01/02")
-	response, err := data.SharedHTTPClient.R().SetHeader("ua-x", "blades-stock").SetFormData(map[string]string{
-		"text":         text,
-		"stockCode":    title,
-		"stockName":    title,
-		"analysisTime": analysisTime,
-	}).Post("http://go-stock.sparkmemory.top:16688/upload")
-	if err != nil {
-		return err.Error()
-	}
-	return response.String()
+	return "本项目未启用社区分享服务"
 }
 
 // FetchAuditLogs 前端兼容别名：分页获取审计日志

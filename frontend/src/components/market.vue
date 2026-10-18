@@ -14,7 +14,6 @@ import {
   ReFleshTelegraphList,
   SaveAIResponseResult,
   SaveAsMarkdown,
-  ShareAnalysis,
   SummaryStockNews,
   GetAiConfigs,
 } from "../../wailsjs/go/main/App";
@@ -471,30 +470,6 @@ function saveAsMarkdown() {
     message.success('已导出为 Markdown 文件并开始下载')
   }).catch(err => {
     message.error('导出 Markdown 失败: ' + (err?.message || err))
-  })
-}
-
-function share() {
-  ShareAnalysis('市场资讯', '市场资讯').then(msg => {
-    //message.info(msg)
-    notify.info({
-      avatar: () =>
-          h(NAvatar, {
-            size: 'small',
-            round: false,
-            src: icon.value
-          }),
-      title: '分享到社区',
-      duration: 1000 * 30,
-      content: () => {
-        return h('div', {
-          style: {
-            'text-align': 'left',
-            'font-size': '14px',
-          }
-        }, {default: () => msg})
-      },
-    })
   })
 }
 
@@ -1559,13 +1534,6 @@ function openMarketIntelligence(type) {
           @click="saveAsMarkdown"
         >
           保存为Markdown文件
-        </n-button>
-        <n-button
-          size="tiny"
-          type="error"
-          @click="share"
-        >
-          分享到项目社区
         </n-button>
       </n-flex>
     </template>

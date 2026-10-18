@@ -1,6 +1,6 @@
 <script setup>
 import {computed, h, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref,reactive} from 'vue'
-import {GetAIResponseResultList, GetConfig, SaveAsMarkdown, ShareAnalysis,DeleteAIResponseResult} from "../../wailsjs/go/main/App";
+import {GetAIResponseResultList, GetConfig, SaveAsMarkdown, DeleteAIResponseResult} from "../../wailsjs/go/main/App";
 import {NAvatar, NButton, NEllipsis, NText, useMessage} from "naive-ui";
 import {MdEditor, MdPreview} from 'md-editor-v3';
 
@@ -203,29 +203,6 @@ function handleSearch() {
     })
   }
 }
-function share(code, name) {
-  ShareAnalysis(code, name).then(msg => {
-    //message.info(msg)
-    notify.info({
-      avatar: () =>
-          h(NAvatar, {
-            size: 'small',
-            round: false,
-            src: icon.value
-          }),
-      title: '分享到社区',
-      duration: 1000 * 30,
-      content: () => {
-        return h('div', {
-          style: {
-            'text-align': 'left',
-            'font-size': '14px',
-          }
-        }, {default: () => msg})
-      },
-    })
-  })
-}
 
 function saveAsMarkdown(code, name) {
   SaveAsMarkdown(code, name).then(result => {
@@ -379,13 +356,6 @@ function deleteAIResponseResult(id){
           @click="saveAsMarkdown(editorDataRef.stockCode,editorDataRef.stockName)"
         >
           保存为Markdown文件
-        </n-button>
-        <n-button
-          size="tiny"
-          type="error"
-          @click="share(editorDataRef.stockCode,editorDataRef.stockName)"
-        >
-          分享到项目社区
         </n-button>
       </n-flex>
     </template>

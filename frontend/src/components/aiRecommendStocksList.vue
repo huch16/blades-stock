@@ -5,7 +5,6 @@ import {
   GetConfig,
   DeleteAiRecommendStocks,
   UpdateAiRecommendStocksAlert,
-  ShareAnalysis,
   SyncRecommendStocksFromIntelligence
 } from "../../wailsjs/go/main/App";
 import {NAvatar, NButton, NEllipsis, NSwitch, NTag, NText, useMessage, useNotification, NSpace, NEmpty} from "naive-ui";

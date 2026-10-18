@@ -55,18 +55,6 @@
                   quaternary
                   circle
                   size="small"
-                  title="分享到社区"
-                  :loading="shareLoading"
-                  @click="shareAiToCommunity"
-                >
-                  <template #icon>
-                    <NIcon :component="ShareSocialOutline" />
-                  </template>
-                </NButton>
-                <NButton
-                  quaternary
-                  circle
-                  size="small"
                   title="关闭"
                   @click="closePanel"
                 >
@@ -417,18 +405,6 @@
                               </template>
                               导出图
                             </NButton>
-                            <NButton
-                              quaternary
-                              size="tiny"
-                              class="msg-share-btn"
-                              :loading="shareLoading"
-                              @click="shareAiContent(group.assistantMsg)"
-                            >
-                              <template #icon>
-                                <NIcon :component="ShareSocialOutline" />
-                              </template>
-                              分享
-                            </NButton>
                           </div>
                         </div>
                       </div>
@@ -604,7 +580,6 @@ import {
   SparklesOutline,
   PersonCircleOutline,
   CopyOutline,
-  ShareSocialOutline,
   ImageOutline,
   ChevronDownOutline,
   ChevronForwardOutline,
@@ -616,7 +591,6 @@ import {
   GetConfig,
   SaveAiAssistantSession,
   GetAiAssistantSession,
-  ShareText,
   AbortChatWithAgent,
   SaveAIResponseResult,
   SaveImage
@@ -771,7 +745,6 @@ watch(aiConfigId, (val) => {
 const canSend = computed(() => !!inputValue.value.trim())
 const scrollbarRef = ref(null)
 const darkTheme = ref(false)
-const shareLoading = ref(false)
 const exportImageKey = ref('')
 const shareTipVisible = ref(false)
 const shareTipText = ref('')
@@ -913,56 +886,6 @@ async function copyAiContent(msg) {
   } catch (e) {
     message.error('复制失败，请手动选择文本')
   }
-}
-
-function shareTextToCommunity(text, title) {
-  if (shareLoading.value) return
-  shareLoading.value = true
-  shareTipText.value = '正在分享到社区...'
-  shareTipVisible.value = true
-  ShareText(text, title)
-    .then((msg) => {
-      shareTipText.value = msg
-      shareTipVisible.value = true
-    })
-    .catch((err) => {
-      shareTipText.value = '分享失败: ' + (err?.message ?? err)
-      shareTipVisible.value = true
-    })
-    .finally(() => {
-      shareLoading.value = false
-    })
-}
-
-function shareAiContent(msg) {
-  const text = (msg?.content ?? '').trim()
-  if (!text) {
-    shareTipText.value = '暂无可分享的 AI 正文内容'
-    shareTipVisible.value = true
-    return
-  }
-  shareTextToCommunity(text, 'Blades Stock AI Agent助手')
-}
-
-function getLastAssistantContent() {
-  for (let i = messages.value.length - 1; i >= 0; i--) {
-    const m = messages.value[i]
-    if (m?.role === 'assistant') {
-      const text = (m?.content ?? '').trim()
-      if (text) return text
-    }
-  }
-  return ''
-}
-
-function shareAiToCommunity() {
-  const text = getLastAssistantContent()
-  if (!text) {
-    shareTipText.value = '暂无可分享的 AI 回复内容'
-    shareTipVisible.value = true
-    return
-  }
-  shareTextToCommunity(text, 'Blades Stock AI Agent助手')
 }
 
 async function exportAiReplyImage(assistantIndex, evt) {
@@ -2127,7 +2050,6 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   text-align: left;
 }
-.msg-share-btn,
 .msg-copy-btn,
 .msg-export-img-btn,
 .msg-toggle-btn {
@@ -2139,7 +2061,6 @@ onBeforeUnmount(() => {
   border: 1px solid var(--n-primary-color);
   transition: color 0.2s, border-color 0.2s, background-color 0.2s;
 }
-.msg-share-btn:hover,
 .msg-copy-btn:hover,
 .msg-export-img-btn:hover,
 .msg-toggle-btn:hover {
@@ -2147,7 +2068,6 @@ onBeforeUnmount(() => {
   background-color: var(--n-primary-color);
   color: #fff;
 }
-.message-item.user .msg-bubble .msg-share-btn,
 .message-item.user .msg-bubble .msg-copy-btn,
 .message-item.user .msg-bubble .msg-export-img-btn,
 .message-item.user .msg-bubble .msg-toggle-btn {
@@ -2155,7 +2075,6 @@ onBeforeUnmount(() => {
   background-color: rgba(255, 255, 255, 0.22);
   border-color: rgba(255, 255, 255, 0.65);
 }
-.message-item.user .msg-bubble .msg-share-btn:hover,
 .message-item.user .msg-bubble .msg-copy-btn:hover,
 .message-item.user .msg-bubble .msg-export-img-btn:hover,
 .message-item.user .msg-bubble .msg-toggle-btn:hover {
