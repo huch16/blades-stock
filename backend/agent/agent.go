@@ -63,7 +63,7 @@ func (PlanTrace) TableName() string {
 	}
 
 func classifyComplexity(question string) AgentMode {
-	// 针对已完整注入客观数据/样本列表的共振推演与专项研报，直接采用 Direct 模式快速合成，避免漫长无效的外部工具循环
+	// 针对已完整注入客观数据/样本列表的共振推演、排雷诊断与专项研报，直接采用 Direct 模式快速合成，避免漫长无效的外部工具循环与超时
 	if strings.Contains(question, "【AI 形态选股列表共振推演与操盘计划】") ||
 		strings.Contains(question, "【AI 选股策略共振推演与实战指导报告】") ||
 		strings.Contains(question, "【个股量价形态 AI 实战推演】") ||
@@ -73,7 +73,12 @@ func classifyComplexity(question string) AgentMode {
 		strings.Contains(question, "【ETF轮动多Agent决策与投委会打分表】") ||
 		strings.Contains(question, "【Serenity式产业分析框架】") ||
 		strings.Contains(question, "【全市场核心ETF池实时监测】") ||
-		strings.Contains(question, "【预采集参考数据】") {
+		strings.Contains(question, "【预采集参考数据】") ||
+		strings.Contains(question, "【盘前自选股与持仓综合排雷诊断清单】") ||
+		strings.Contains(question, "【盘前自选股与持仓综合排雷诊断】") ||
+		strings.Contains(question, "【股票盘中异动归因与排雷排查】") ||
+		strings.Contains(question, "排雷诊断清单") ||
+		strings.Contains(question, "综合排雷诊断") {
 		return AgentModeDirect
 	}
 

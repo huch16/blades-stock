@@ -774,6 +774,11 @@ async function saveConfig() {
       markClean()
       // 保存成功后刷新 Store (F-08/F-32)
       await aiConfigStore.loadConfigs()
+      // 广播全局 AI 模型配置变更与默认模型同步事件，通知所有悬浮助手、分析抽屉与研报模块
+      EventsEmit("aiConfigsUpdated", {
+        defaultAiConfigId: defaultAiConfigId.value,
+        aiConfigs: aiConfigs.value
+      })
     } else {
       message.error(res)
     }

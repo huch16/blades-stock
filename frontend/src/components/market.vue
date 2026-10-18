@@ -75,6 +75,50 @@ const loading = ref(true)
 const analysisStatus = ref('')
 const aiConfigs = ref([])
 const sysPromptOptions = ref([])
+
+async function refreshAiConfigs(preferredId) {
+  try {
+    const res = await GetAiConfigs()
+    const list = Array.isArray(res) ? res : []
+    aiConfigs.value = list.map((c, index) => {
+      const id = c.ID != null ? Number(c.ID) : (c.id != null ? Number(c.id) : index)
+      const name = c.name ?? c.Name ?? ''
+      const modelName = c.modelName ?? c.ModelName ?? ''
+      return {
+        ...c,
+        ID: id,
+        name: name,
+        modelName: modelName,
+        displayName: name + (modelName ? ' [' + modelName + ']' : '')
+      }
+    })
+    if (aiConfigs.value.length > 0) {
+      if (preferredId != null && aiConfigs.value.some(item => item.ID === Number(preferredId))) {
+        aiConfigId.value = Number(preferredId)
+      } else if (aiConfigId.value != null && aiConfigs.value.some(item => item.ID === aiConfigId.value)) {
+        // 维持当前选中
+      } else {
+        aiConfigId.value = aiConfigs.value[0].ID
+      }
+    } else {
+      aiConfigId.value = null
+    }
+  } catch (e) {
+    console.error('market.vue refreshAiConfigs error:', e)
+  }
+}
+
+function onSettingsUpdated(cfg) {
+  if (cfg) {
+    const prefId = cfg.aiConfigId ?? cfg.defaultAiConfigId
+    refreshAiConfigs(prefId)
+  }
+}
+
+function onAiConfigsUpdated(payload) {
+  const prefId = payload?.defaultAiConfigId
+  refreshAiConfigs(prefId)
+}
 const userPromptOptions = ref([])
 const promptTemplates = ref([])
 const industryRanks = ref([])
@@ -117,12 +161,9 @@ onBeforeMount(() => {
     userPromptOptions.value = promptTemplates.value.filter(item => item.type === '模型用户Prompt')
   })
 
-  GetAiConfigs().then(res=>{
-    aiConfigs.value = res
-    if (res && res.length > 0) {
-      aiConfigId.value = res[0].ID
-    }
-  })
+  refreshAiConfigs()
+  EventsOn('updateSettings', onSettingsUpdated)
+  EventsOn('aiConfigsUpdated', onAiConfigsUpdated)
   GetTelegraphList("财联社电报").then((res) => {
     if (Array.isArray(res) && res.length > 0) {
       telegraphList.value = res
@@ -175,6 +216,8 @@ onBeforeUnmount(() => {
   EventsOff("newSinaNews")
   EventsOff("tradingViewNews")
   EventsOff("summaryStockNews")
+  EventsOff("updateSettings", onSettingsUpdated)
+  EventsOff("aiConfigsUpdated", onAiConfigsUpdated)
   stopTradingTimers()
   if (tradingCheckInterval.value) {
     clearInterval(tradingCheckInterval.value)
@@ -1479,7 +1522,7 @@ function openMarketIntelligence(type) {
         <n-select
           v-model:value="aiConfigId"
           style="width: 32%"
-          label-field="name"
+          label-field="displayName"
           value-field="ID"
           :options="aiConfigs"
           placeholder="请选择AI模型服务配置"

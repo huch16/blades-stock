@@ -205,19 +205,22 @@ watch(
   }
 )
 
-async function loadAiConfigs() {
+async function loadAiConfigs(preferredId) {
   try {
     const configs = await GetAiConfigs()
     aiConfigs.value = Array.isArray(configs) ? configs : []
 
-    const saved = localStorage.getItem('market_intelligence_ai_config_id')
-    const savedId = saved ? parseInt(saved, 10) : 0
-
     const validIds = aiConfigs.value.map(c => (c.ID != null ? Number(c.ID) : Number(c.id)))
-    if (savedId && validIds.includes(savedId)) {
-      selectedAiConfigId.value = savedId
-    } else if (validIds.length > 0) {
-      selectedAiConfigId.value = validIds[0]
+    if (preferredId != null && validIds.includes(Number(preferredId))) {
+      selectedAiConfigId.value = Number(preferredId)
+    } else {
+      const saved = localStorage.getItem('market_intelligence_ai_config_id')
+      const savedId = saved ? parseInt(saved, 10) : 0
+      if (savedId && validIds.includes(savedId)) {
+        selectedAiConfigId.value = savedId
+      } else if (validIds.length > 0) {
+        selectedAiConfigId.value = validIds[0]
+      }
     }
     aiConfigReady.value = true
   } catch (e) {
@@ -381,16 +384,32 @@ if (typeof window !== 'undefined') {
   window.addEventListener('show-market-intelligence-serenity', onWinShowSerenity)
 }
 
+function onDrawerSettingsUpdated(cfg) {
+  if (cfg) {
+    const prefId = cfg.aiConfigId ?? cfg.defaultAiConfigId
+    loadAiConfigs(prefId)
+  }
+}
+
+function onDrawerAiConfigsUpdated(payload) {
+  const prefId = payload?.defaultAiConfigId
+  loadAiConfigs(prefId)
+}
+
 onMounted(() => {
   loadTheme()
   loadAiConfigs()
   loadLifecycle()
+  EventsOn('updateSettings', onDrawerSettingsUpdated)
+  EventsOn('aiConfigsUpdated', onDrawerAiConfigsUpdated)
 })
 
 onBeforeUnmount(() => {
   EventsOff('marketIntelligenceReport')
   EventsOff('show-market-intelligence')
   EventsOff('show-market-intelligence-serenity')
+  EventsOff('updateSettings', onDrawerSettingsUpdated)
+  EventsOff('aiConfigsUpdated', onDrawerAiConfigsUpdated)
   if (typeof window !== 'undefined') {
     if (onWinShowIntel) window.removeEventListener('show-market-intelligence', onWinShowIntel)
     if (onWinShowSerenity) window.removeEventListener('show-market-intelligence-serenity', onWinShowSerenity)

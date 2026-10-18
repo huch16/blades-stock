@@ -847,7 +847,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, h, watch } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed, h, watch } from 'vue'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { NButton, NIcon, NTag, NSpace, NPopconfirm, useMessage, NText, NCard, NRadioGroup, NRadio, NInputNumber, NSelect, NAlert, NCode, NSwitch } from 'naive-ui'
 import {
   SearchOutline,
@@ -1819,6 +1820,13 @@ onMounted(async () => {
   await loadAiConfigs()
   await loadPromptTemplates()
   await loadTaskList()
+  EventsOn('updateSettings', loadAiConfigs)
+  EventsOn('aiConfigsUpdated', loadAiConfigs)
+})
+
+onBeforeUnmount(() => {
+  EventsOff('updateSettings', loadAiConfigs)
+  EventsOff('aiConfigsUpdated', loadAiConfigs)
 })
 </script>
 

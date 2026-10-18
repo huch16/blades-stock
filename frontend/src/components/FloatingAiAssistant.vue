@@ -819,14 +819,66 @@ function ensureSummaryEvent() {
   hasSummaryEvent = true
 }
 
+async function refreshAiConfigs(preferredId) {
+  try {
+    const res = await GetAiConfigs()
+    const list = Array.isArray(res) ? res : []
+    aiConfigOptions.value = list.map((c, index) => {
+      const id = c.ID != null ? Number(c.ID) : (c.id != null ? Number(c.id) : index)
+      const name = c.name ?? c.Name ?? ''
+      const modelName = c.modelName ?? c.ModelName ?? ''
+      return {
+        label: name + (modelName ? ' [' + modelName + ']' : ''),
+        value: id,
+        modelName: modelName
+      }
+    })
+    if (aiConfigOptions.value.length) {
+      if (preferredId != null && aiConfigOptions.value.some(opt => opt.value === Number(preferredId))) {
+        aiConfigId.value = Number(preferredId)
+      } else if (aiConfigId.value != null && aiConfigOptions.value.some(opt => opt.value === aiConfigId.value)) {
+        // 当前选中的 ID 仍有效，保留
+      } else {
+        const lastModelId = localStorage.getItem(STORAGE_KEY_MODEL_ID)
+        if (lastModelId) {
+          const foundId = Number(lastModelId)
+          const isValid = aiConfigOptions.value.some(opt => opt.value === foundId)
+          aiConfigId.value = isValid ? foundId : aiConfigOptions.value[0].value
+        } else {
+          aiConfigId.value = aiConfigOptions.value[0].value
+        }
+      }
+    } else {
+      aiConfigId.value = null
+    }
+  } catch (err) {
+    console.error('FloatingAiAssistant refreshAiConfigs error:', err)
+  }
+}
+
+function onSettingsUpdated(cfg) {
+  if (cfg) {
+    const prefId = cfg.aiConfigId ?? cfg.defaultAiConfigId
+    refreshAiConfigs(prefId)
+  }
+}
+
+function onAiConfigsUpdated(payload) {
+  const prefId = payload?.defaultAiConfigId
+  refreshAiConfigs(prefId)
+}
+
 onBeforeUnmount(() => {
   EventsOff(AI_ASSISTANT_EVENT)
   EventsOff(PROMPT_TEMPLATES_CHANGED)
+  EventsOff('updateSettings', onSettingsUpdated)
+  EventsOff('aiConfigsUpdated', onAiConfigsUpdated)
   hasSummaryEvent = false
 })
 
 watch(panelVisible, (v) => {
   if (v) {
+    refreshAiConfigs()
     nextTick(scrollToBottom)
   }
 })
@@ -838,31 +890,10 @@ onBeforeMount(()=> {
 } )
 onMounted(() => {
   EventsOn(PROMPT_TEMPLATES_CHANGED, loadPromptTemplates)
+  EventsOn('updateSettings', onSettingsUpdated)
+  EventsOn('aiConfigsUpdated', onAiConfigsUpdated)
   loadHistory()
-  GetAiConfigs().then(res => {
-    const list = Array.isArray(res) ? res : []
-    aiConfigOptions.value = list.map((c, index) => {
-      const id = c.ID != null ? Number(c.ID) : (c.id != null ? Number(c.id) : index)
-      const name = c.name ?? c.Name ?? ''
-      const modelName = c.modelName ?? c.ModelName ?? ''
-      return {
-        label: name + (modelName ? ' [' + modelName + ']' : ''),
-        value: id
-      }
-    })
-    if (aiConfigOptions.value.length) {
-      // 优先使用 localStorage 中保存的上一次模型 ID
-      const lastModelId = localStorage.getItem(STORAGE_KEY_MODEL_ID)
-      if (lastModelId) {
-        const foundId = Number(lastModelId)
-        // 检查该 ID 是否仍然可用
-        const isValid = aiConfigOptions.value.some(opt => opt.value === foundId)
-        aiConfigId.value = isValid ? foundId : aiConfigOptions.value[0].value
-      } else {
-        aiConfigId.value = aiConfigOptions.value[0].value
-      }
-    }
-  })
+  refreshAiConfigs()
   loadPromptTemplates()
   GetVersionInfo().then(res => {
     if (res?.icon) appIcon.value = res.icon

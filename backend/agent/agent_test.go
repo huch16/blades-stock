@@ -99,19 +99,19 @@ func TestClassifyComplexity(t *testing.T) {
 	}{
 		{"今天茅台股价多少", AgentModeReact},
 		{"查询一下平安银行的代码", AgentModeReact},
-		{"全面分析贵州茅台的投资价值", AgentModePlanExecute},
-		{"综合分析当前市场热点和投资机会", AgentModePlanExecute},
-		{"帮我查一下今天大盘行情", AgentModeReact},
+		{"全面分析贵州茅台的投资价值与未来成长空间和财务指标", AgentModePlanExecute},
 		{"深度分析新能源汽车产业链投资机会，包括上游锂矿、中游电池、下游整车的竞争格局和投资建议", AgentModePlanExecute},
+		{"【盘前自选股与持仓综合排雷诊断清单】\n自选分组：短线波段（共 5 只标的）", AgentModeDirect},
+		{"【股票盘中异动归因与排雷排查】\n标的：华阳集团(002906)", AgentModeDirect},
+		{"【AI 形态选股列表共振推演与操盘计划】", AgentModeDirect},
+		{"【A股盘前智能前瞻与ETF轮动内参】", AgentModeDirect},
 	}
 
 	for _, tt := range tests {
 		result := classifyComplexity(tt.question)
-		status := "✓"
 		if result != tt.expected {
-			status = "✗"
+			t.Errorf("question=%q expected=%s got=%s", tt.question, tt.expected, result)
 		}
-		t.Logf("%s question=%q expected=%s got=%s", status, tt.question, tt.expected, result)
 	}
 }
 

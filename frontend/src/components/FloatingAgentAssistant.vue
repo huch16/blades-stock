@@ -718,12 +718,7 @@ const agentModeOptions = [
   { label: '🧠 规划模式', value: 'plan_execute' },
 ]
 
-watch(agentMode, (val) => {
-  if (val === 'react') showHint('⚡ 快速模式推荐使用DeepSeek最新版')
-  else if (val === 'plan_execute') showHint('🧠 规划模式推荐使用GLM最新版')
-})
-
-watch(aiConfigId, (val) => {
+function applySmartModelDefaults(val) {
   const label = modelLabelForConfig(val).toLowerCase()
   const labelCompact = label.replace(/[\s_-]/g, '')
   if (label.includes('deepseek-chat')) {
@@ -739,6 +734,15 @@ watch(aiConfigId, (val) => {
   } else if (label.includes('glm')) {
     showHint('🧠 GLM模型推荐使用规划模式')
   }
+}
+
+watch(agentMode, (val) => {
+  if (val === 'react') showHint('⚡ 快速模式推荐使用DeepSeek最新版')
+  else if (val === 'plan_execute') showHint('🧠 规划模式推荐使用GLM最新版')
+})
+
+watch(aiConfigId, (val) => {
+  applySmartModelDefaults(val)
 })
 
 
@@ -1040,6 +1044,7 @@ function saveHistory() {
 function openPanel() {
   panelVisible.value = true
   refreshPerceptionSnapshot()
+  refreshAiConfigs()
   if (!sessionId.value) {
     sessionId.value = Date.now().toString()
   }
@@ -1508,26 +1513,9 @@ function formatDuration(ns) {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-onMounted(() => {
-  EventsOn(AGENT_EVENT, onAgentMessage)
-  EventsOn('openFloatingAgentWithQuestion', (payload) => {
-    panelVisible.value = true
-    const text = typeof payload === 'string' ? payload : (payload?.question || '')
-    const targetAgentMode = typeof payload === 'object' && payload?.agentMode ? payload.agentMode : ''
-    if (text) {
-      inputValue.value = text
-      setTimeout(() => {
-        if (inputValue.value.trim()) {
-          if (isStreamLoad.value) {
-            abortStream(false)
-          }
-          sendMessage(targetAgentMode)
-        }
-      }, 150)
-    }
-  })
-  loadHistory()
-  GetAiConfigs().then(res => {
+async function refreshAiConfigs(preferredId) {
+  try {
+    const res = await GetAiConfigs()
     const list = Array.isArray(res) ? res : []
     aiConfigOptions.value = list.map((c, index) => {
       const id = c.ID != null ? Number(c.ID) : (c.id != null ? Number(c.id) : index)
@@ -1535,20 +1523,78 @@ onMounted(() => {
       const modelName = c.modelName ?? c.ModelName ?? ''
       return {
         label: name + (modelName ? ' [' + modelName + ']' : ''),
-        value: id
+        value: id,
+        modelName: modelName
       }
     })
     if (aiConfigOptions.value.length) {
-      const lastModelId = localStorage.getItem(STORAGE_KEY_MODEL_ID)
-      if (lastModelId) {
-        const foundId = Number(lastModelId)
-        const isValid = aiConfigOptions.value.some(opt => opt.value === foundId)
-        aiConfigId.value = isValid ? foundId : aiConfigOptions.value[0].value
+      if (preferredId != null && aiConfigOptions.value.some(opt => opt.value === Number(preferredId))) {
+        aiConfigId.value = Number(preferredId)
+      } else if (aiConfigId.value != null && aiConfigOptions.value.some(opt => opt.value === aiConfigId.value)) {
+        applySmartModelDefaults(aiConfigId.value)
       } else {
-        aiConfigId.value = aiConfigOptions.value[0].value
+        const lastModelId = localStorage.getItem(STORAGE_KEY_MODEL_ID)
+        if (lastModelId) {
+          const foundId = Number(lastModelId)
+          const isValid = aiConfigOptions.value.some(opt => opt.value === foundId)
+          aiConfigId.value = isValid ? foundId : aiConfigOptions.value[0].value
+        } else {
+          aiConfigId.value = aiConfigOptions.value[0].value
+        }
       }
+    } else {
+      aiConfigId.value = null
     }
-  })
+  } catch (err) {
+    console.error('refreshAiConfigs error:', err)
+  }
+}
+
+function onSettingsUpdated(cfg) {
+  if (cfg) {
+    const prefId = cfg.aiConfigId ?? cfg.defaultAiConfigId
+    refreshAiConfigs(prefId)
+  }
+}
+
+function onAiConfigsUpdated(payload) {
+  const prefId = payload?.defaultAiConfigId
+  refreshAiConfigs(prefId)
+}
+
+function handleOpenFloatingAgentWithQuestion(payload) {
+  panelVisible.value = true
+  const text = typeof payload === 'string' ? payload : (payload?.question || '')
+  let targetAgentMode = typeof payload === 'object' && payload?.agentMode ? payload.agentMode : ''
+  if (!targetAgentMode && (
+    text.includes('排雷诊断') ||
+    text.includes('综合排雷') ||
+    text.includes('异动归因与排雷') ||
+    text.includes('异动 AI 归因排雷推演') ||
+    text.includes('共振推演')
+  )) {
+    targetAgentMode = 'direct'
+  }
+  if (text) {
+    inputValue.value = text
+    setTimeout(() => {
+      if (inputValue.value.trim()) {
+        if (isStreamLoad.value) {
+          abortStream(false)
+        }
+        sendMessage(targetAgentMode)
+      }
+    }, 150)
+  }
+}
+
+onMounted(() => {
+  EventsOn(AGENT_EVENT, onAgentMessage)
+  EventsOn('openFloatingAgentWithQuestion', handleOpenFloatingAgentWithQuestion)
+  EventsOn('updateSettings', onSettingsUpdated)
+  EventsOn('aiConfigsUpdated', onAiConfigsUpdated)
+  loadHistory()
+  refreshAiConfigs()
 })
 
 watch(aiConfigId, (newId) => {
@@ -1560,6 +1606,8 @@ watch(aiConfigId, (newId) => {
 onBeforeUnmount(() => {
   EventsOff(AGENT_EVENT)
   EventsOff('openFloatingAgentWithQuestion')
+  EventsOff('updateSettings', onSettingsUpdated)
+  EventsOff('aiConfigsUpdated', onAiConfigsUpdated)
 })
 </script>
 

@@ -855,9 +855,15 @@ onBeforeMount(() => {
   EventsOn('agent-message', handleAgentMessage)
 })
 
+async function onChatSettingsUpdated() {
+  await aiConfigStore.loadConfigs()
+}
+
 onMounted(async () => {
   loadSessionsFromStorage()
   await aiConfigStore.loadConfigs()
+  EventsOn('updateSettings', onChatSettingsUpdated)
+  EventsOn('aiConfigsUpdated', onChatSettingsUpdated)
 
   GetConfig().then((res) => {
     if (res.darkTheme) {
@@ -882,6 +888,8 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   EventsOff('agent-message')
+  EventsOff('updateSettings', onChatSettingsUpdated)
+  EventsOff('aiConfigsUpdated', onChatSettingsUpdated)
 })
 </script>
 
