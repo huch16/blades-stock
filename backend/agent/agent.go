@@ -574,10 +574,18 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 	}
 
 	// 超时驱动：优先环境变量 MCP_TIMEOUT_SECONDS，再读取 SettingConfig.McpTimeout，兜底 8s。
-	// 对于远程 HTTP MCP，连接超时严格限制在 3s 内，避免远程断网导致整个 Agent 流程阻塞几十秒。
+	// 对于远程 HTTP MCP，连接超时严格限制在 2s 内，且一旦失败立即触发 5 分钟断路熔断，避免不可达的远程服务阻塞 Agent 会话。
 	clientTimeout := data.GetSettingConfig().GetMcpTimeout()
-	if transport == bladesmc.TransportHTTP && clientTimeout > 3*time.Second {
-		clientTimeout = 3 * time.Second
+	if transport == bladesmc.TransportHTTP {
+		if clientTimeout > 2*time.Second {
+			clientTimeout = 2 * time.Second
+		}
+		circuitbreaker.Configure("mcp:"+server.Name, circuitbreaker.Config{
+			Name:             "mcp:" + server.Name,
+			FailureThreshold: 1,
+			Cooldown:         5 * time.Minute,
+			HalfOpenMax:      1,
+		})
 	}
 
 	mcpClient, err := bladesmc.NewClient(bladesmc.ClientConfig{

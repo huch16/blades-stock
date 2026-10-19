@@ -39,6 +39,7 @@ type StreamMessage struct {
 	ReasoningContent string              `json:"reasoning_content"`
 	Actions          []types.AgentAction `json:"actions,omitempty"`
 	Metrics          *AgentRunMetrics    `json:"metrics,omitempty"`
+	ModelName        string              `json:"model_name,omitempty"`
 }
 
 type StockAiAgent struct {
@@ -338,6 +339,25 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			Content:          "",
 			ReasoningContent: "[STATUS]🤔 正在理解问题并制定分析计划...",
 		}
+
+		ctx = WithFallbackNotifier(ctx, func(curModel, nextModel string, err error) {
+			reason := "服务异常或网络超时"
+			if IsPermanentAuthError(err) {
+				reason = "API Key 鉴权失败 (HTTP 401/403)"
+			}
+			ch <- &StreamMessage{
+				Role:             "assistant",
+				Content:          "",
+				ReasoningContent: fmt.Sprintf("[STATUS]⚠️ 主模型 [%s] %s，正在自动降级切换至备用模型 [%s] 继续分析...", curModel, reason, nextModel),
+				ModelName:        nextModel,
+			}
+			ch <- &StreamMessage{
+				Role:             "assistant",
+				Content:          "",
+				ReasoningContent: fmt.Sprintf("[STEP]🔄 容灾切换：主模型 [%s] 异常(%s)，已无缝切换为备用模型 [%s]\n", curModel, reason, nextModel),
+				ModelName:        nextModel,
+			}
+		})
 
 		var fullResponse strings.Builder
 		var toolNames []string

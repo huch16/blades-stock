@@ -1470,6 +1470,9 @@ function onAgentMessage(msg) {
 
   const last = messages.value[messages.value.length - 1]
   if (last && last.role === 'assistant') {
+    if (msg?.model_name || msg?.modelName) {
+      last.modelName = (msg.model_name || msg.modelName) + ' (容灾降级)'
+    }
     if (msg?.reasoning_content) {
       const rc = msg.reasoning_content
       if (rc.startsWith('[STATUS]')) {

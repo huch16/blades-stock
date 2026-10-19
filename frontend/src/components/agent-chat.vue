@@ -585,6 +585,9 @@ function handleAgentMessage(data: StreamChunk) {
   if (!targetMsg) return
 
   if (data.role === 'assistant') {
+    if ((data as any).model_name || (data as any).modelName) {
+      targetMsg.modelName = ((data as any).model_name || (data as any).modelName) + ' (容灾降级)'
+    }
     // 状态更新
     if (data.reasoning_content) {
       const rc = data.reasoning_content
