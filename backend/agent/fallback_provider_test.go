@@ -155,3 +155,44 @@ func TestIsPermanentAuthError(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatFallbackReason(t *testing.T) {
+	cases := []struct {
+		errStr   string
+		expected string
+	}{
+		{
+			errStr:   `POST "https://aigw.woha.men/v1/chat/completions": 403 Forbidden {"message":"Invalid token. Please check your API key.","type":"token_rejected","code":"token_rejected"}`,
+			expected: "API Key 鉴权失败 (HTTP 401/403: Invalid token. Please check your API key.)",
+		},
+		{
+			errStr:   `404 Not Found: {"error":{"message":"The model 'gemini-3.8-flash' does not exist"}}`,
+			expected: "模型不存在或网关未映射 (HTTP 404: The model 'gemini-3.8-flash' does not exist)",
+		},
+		{
+			errStr:   `HTTP 400: {"error":{"message":"tools parameter is not supported for this model"}}`,
+			expected: "请求参数异常或网关不支持Tools (HTTP 400: tools parameter is not supported for this model)",
+		},
+		{
+			errStr:   `429 Too Many Requests: {"error":{"message":"Rate limit exceeded"}}`,
+			expected: "网关限流或额度耗尽 (HTTP 429: Rate limit exceeded)",
+		},
+		{
+			errStr:   `502 Bad Gateway: {"message":"Bad Gateway"}`,
+			expected: "网关服务器异常 (HTTP 5xx: Bad Gateway)",
+		},
+		{
+			errStr:   `context deadline exceeded`,
+			expected: "模型响应超时 (超过设定时限)",
+		},
+	}
+
+	for _, c := range cases {
+		err := errors.New(c.errStr)
+		res := FormatFallbackReason(err)
+		if res != c.expected {
+			t.Errorf("FormatFallbackReason(%q) = %q, expected %q", c.errStr, res, c.expected)
+		}
+	}
+}
+

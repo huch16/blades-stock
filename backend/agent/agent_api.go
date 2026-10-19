@@ -341,14 +341,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		}
 
 		ctx = WithFallbackNotifier(ctx, func(curModel, nextModel string, err error) {
-			reason := "服务异常或网络超时"
-			if IsPermanentAuthError(err) {
-				reason = "API Key 鉴权失败 (HTTP 401/403)"
-			}
+			reason := FormatFallbackReason(err)
 			ch <- &StreamMessage{
 				Role:             "assistant",
 				Content:          "",
-				ReasoningContent: fmt.Sprintf("[STATUS]⚠️ 主模型 [%s] %s，正在自动降级切换至备用模型 [%s] 继续分析...", curModel, reason, nextModel),
+				ReasoningContent: fmt.Sprintf("[STATUS]⚠️ 主模型 [%s] 异常：%s，正在自动降级切换至备用模型 [%s] 继续分析...", curModel, reason, nextModel),
 				ModelName:        nextModel,
 			}
 			ch <- &StreamMessage{

@@ -603,44 +603,30 @@ function openMarketIntelligence(type) {
         tab="市场快讯"
       >
         <n-grid
-          :cols="1"
-          :y-gap="0"
+          :cols="foreignNewsList.length ? 3 : 2"
+          :x-gap="12"
+          :y-gap="12"
         >
           <n-gi>
-            <AnalyzeMartket
-              :dark-theme="darkTheme"
-              :chart-height="300"
-              :k-days="1"
-              :name="'最近24小时热词'"
+            <news-list
+              :news-list="telegraphList"
+              :header-title="'财联社电报'"
+              @update:message="ReFlesh"
             />
           </n-gi>
           <n-gi>
-            <n-grid
-              :cols="foreignNewsList.length?3:2"
-              :y-gap="0"
-            >
-              <n-gi>
-                <news-list
-                  :news-list="telegraphList"
-                  :header-title="'财联社电报'"
-                  @update:message="ReFlesh"
-                />
-              </n-gi>
-              <n-gi>
-                <news-list
-                  :news-list="sinaNewsList"
-                  :header-title="'新浪财经'"
-                  @update:message="ReFlesh"
-                />
-              </n-gi>
-              <n-gi v-if="foreignNewsList.length>0">
-                <news-list
-                  :news-list="foreignNewsList"
-                  :header-title="'外媒'"
-                  @update:message="ReFlesh"
-                />
-              </n-gi>
-            </n-grid>
+            <news-list
+              :news-list="sinaNewsList"
+              :header-title="'新浪财经'"
+              @update:message="ReFlesh"
+            />
+          </n-gi>
+          <n-gi v-if="foreignNewsList.length > 0">
+            <news-list
+              :news-list="foreignNewsList"
+              :header-title="'外媒'"
+              @update:message="ReFlesh"
+            />
           </n-gi>
         </n-grid>
       </n-tab-pane>

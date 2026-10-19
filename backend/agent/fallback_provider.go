@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -45,6 +46,90 @@ func IsPermanentAuthError(err error) bool {
 		strings.Contains(s, "invalid_api_key") ||
 		strings.Contains(s, "unauthorized") ||
 		strings.Contains(s, "forbidden")
+}
+
+// FormatFallbackReason 解析并格式化模型调用失败的具体原因，避免粗暴掩盖为“服务异常或网络超时”
+func FormatFallbackReason(err error) string {
+	if err == nil {
+		return "未知异常"
+	}
+	s := err.Error()
+	sLower := strings.ToLower(s)
+
+	// 1. 尝试从常见 JSON 报错体中提取精炼的 message
+	// 例如: {"message":"Invalid token. Please check your API key.","type":"token_rejected","code":"token_rejected"}
+	extractJsonMsg := func(raw string) string {
+		start := strings.Index(raw, "{")
+		end := strings.LastIndex(raw, "}")
+		if start >= 0 && end > start {
+			var parsed struct {
+				Error struct {
+					Message string `json:"message"`
+					Type    string `json:"type"`
+					Code    any    `json:"code"`
+				} `json:"error"`
+				Message string `json:"message"`
+			}
+			jsonPart := raw[start : end+1]
+			if err := json.Unmarshal([]byte(jsonPart), &parsed); err == nil {
+				if parsed.Error.Message != "" {
+					return parsed.Error.Message
+				}
+				if parsed.Message != "" {
+					return parsed.Message
+				}
+			}
+		}
+		return ""
+	}
+
+	detail := extractJsonMsg(s)
+
+	// 2. 分类判定与精准提示
+	switch {
+	case strings.Contains(sLower, "404") || strings.Contains(sLower, "model_not_found") || strings.Contains(sLower, "does not exist"):
+		if detail != "" {
+			return fmt.Sprintf("模型不存在或网关未映射 (HTTP 404: %s)", detail)
+		}
+		return "模型名称不存在或网关未映射该模型 (HTTP 404)"
+
+	case IsPermanentAuthError(err):
+		if detail != "" {
+			return fmt.Sprintf("API Key 鉴权失败 (HTTP 401/403: %s)", detail)
+		}
+		return "API Key 鉴权失败或已过期 (HTTP 401/403)"
+
+	case strings.Contains(sLower, "400") || strings.Contains(sLower, "invalid_request_error") || strings.Contains(sLower, "parameters"):
+		if detail != "" {
+			return fmt.Sprintf("请求参数异常或网关不支持Tools (HTTP 400: %s)", detail)
+		}
+		return "请求参数错误或模型不支持Function Calling工具链 (HTTP 400)"
+
+	case strings.Contains(sLower, "429") || strings.Contains(sLower, "rate_limit") || strings.Contains(sLower, "quota"):
+		if detail != "" {
+			return fmt.Sprintf("网关限流或额度耗尽 (HTTP 429: %s)", detail)
+		}
+		return "调用频次超限或账户余额不足 (HTTP 429)"
+
+	case strings.Contains(sLower, "500") || strings.Contains(sLower, "502") || strings.Contains(sLower, "503") || strings.Contains(sLower, "504"):
+		if detail != "" {
+			return fmt.Sprintf("网关服务器异常 (HTTP 5xx: %s)", detail)
+		}
+		return "AI网关服务器异常 (HTTP 5xx)"
+
+	case strings.Contains(sLower, "deadline exceeded") || strings.Contains(sLower, "timeout") || strings.Contains(sLower, "timed out"):
+		return "模型响应超时 (超过设定时限)"
+
+	default:
+		if detail != "" {
+			return detail
+		}
+		// 截取前 80 个字符避免 UI 撑爆
+		if len(s) > 80 {
+			return s[:80] + "..."
+		}
+		return s
+	}
 }
 
 // CleanFallbackModelName 从附带 BaseUrl 的名称中提取清晰的模型名
