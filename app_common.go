@@ -120,8 +120,10 @@ func (a *App) GetAllStocks(page int, pageSize int, name string, technicalIndicat
 
 // ChatWithAgent 执行 AI 智能体对话（桌面端通过 Wails EventsEmit 实时推流）
 func (a *App) ChatWithAgent(question string, aiConfigId int, sysPromptId *int, memoryMode bool, memoryCount int, thinkingMode bool, agentMode string, sessionId string) {
-	a.agentService.ChatWithAgentCustom(func(event string, payload any) {
-		runtime.EventsEmit(a.ctx, event, payload)
+	go a.agentService.ChatWithAgentCustom(func(event string, payload any) {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, event, payload)
+		}
 	}, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, sessionId)
 }
 

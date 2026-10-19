@@ -71,7 +71,14 @@ func (h *SSEHub) Broadcast(event string, data any) {
 		select {
 		case ch <- msg:
 		default:
-			// 慢客户端跳过，防止阻塞全局广播
+			// 关键事件（如智能体消息、状态变更、结束信号等）进行缓冲投递，绝不允许随意丢弃
+			go func(c chan []byte, m []byte) {
+				select {
+				case c <- m:
+				case <-time.After(1 * time.Second):
+					// 超时 1s 后放弃，防止 goroutine 泄漏
+				}
+			}(ch, msg)
 		}
 	}
 }
@@ -114,7 +121,7 @@ func HandleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no") // 禁用 Nginx 缓冲
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	clientChan := make(chan []byte, 100)
+	clientChan := make(chan []byte, 1024)
 	globalSSEHub.addClient(clientChan)
 	defer globalSSEHub.removeClient(clientChan)
 

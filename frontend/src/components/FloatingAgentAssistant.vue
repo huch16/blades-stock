@@ -972,10 +972,57 @@ async function exportAiReplyImage(assistantIndex, evt) {
   }
 }
 
+let watchdogTimer = null
+let agentListenerBound = false
+
+function ensureAgentEventListener() {
+  try {
+    EventsOn(AGENT_EVENT, onAgentMessage)
+    agentListenerBound = true
+  } catch (e) {
+    console.error('[FloatingAgentAssistant] failed to bind agent-message listener:', e)
+  }
+}
+
+function stopWatchdog() {
+  if (watchdogTimer) {
+    clearTimeout(watchdogTimer)
+    watchdogTimer = null
+  }
+}
+
+function startWatchdog() {
+  stopWatchdog()
+  // 阶段1 (20s): 若未收到内容，提示用户正在调优与容灾
+  watchdogTimer = setTimeout(() => {
+    if (isStreamLoad.value) {
+      const last = messages.value[messages.value.length - 1]
+      if (last && last.role === 'assistant' && !last.rawContent) {
+        if (!last.statusText) {
+          last.statusText = '⚠️ 正在调优模型与容灾链路，推演耗时较长，请稍候...'
+        }
+      }
+      // 阶段2 (75s): 若仍无任何响应，解除 loading 并给出明确诊断建议
+      watchdogTimer = setTimeout(() => {
+        if (isStreamLoad.value) {
+          const lastMsg = messages.value[messages.value.length - 1]
+          if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.rawContent) {
+            isStreamLoad.value = false
+            stopFormatTimer()
+            lastMsg.statusText = ''
+            lastMsg.content = '⚠️ **分析响应超时（75秒未收到数据包）**\n\n- **可能原因**：当前选中的模型 API Key 无效或未生效（如 Gemini 403）、模型网关不可达或网络中断。\n- **建议操作**：请在下方模型切换栏中切换为 **MiniMax-M3** 或其他正常模型后重新提问；或者在【系统设置】->【AI配置】中更新 API Key。'
+          }
+        }
+      }, 55000)
+    }
+  }, 20000)
+}
+
 function abortStream(showTip = true) {
   if (!isStreamLoad.value) return
   isAborted.value = true
   isStreamLoad.value = false
+  stopWatchdog()
   stopFormatTimer()
     const last = messages.value[messages.value.length - 1]
     if (last && last.role === 'assistant') {
@@ -1119,6 +1166,8 @@ function sendMessage(overrideAgentMode = '') {
     return
   }
 
+  ensureAgentEventListener()
+
   messages.value.push({
     role: 'user',
     content: text,
@@ -1145,6 +1194,7 @@ function sendMessage(overrideAgentMode = '') {
   isStreamLoad.value = true
   isAborted.value = false
   sentFromFloating.value = true
+  startWatchdog()
   startFormatTimer()
   saveHistory()
   nextTick(() => {
@@ -1160,7 +1210,19 @@ function sendMessage(overrideAgentMode = '') {
     scrollToBottom()
   })
   const modeToUse = overrideAgentMode || (agentMode.value === 'auto' ? '' : agentMode.value)
-  ChatWithAgent(text, configId, null, memoryMode.value, memoryCount.value, thinkingMode.value, modeToUse, sessionId.value || "")
+  const p = ChatWithAgent(text, configId, null, memoryMode.value, memoryCount.value, thinkingMode.value, modeToUse, sessionId.value || "")
+  if (p && typeof p.catch === 'function') {
+    p.catch((err) => {
+      console.error('[FloatingAgentAssistant] ChatWithAgent error:', err)
+      isStreamLoad.value = false
+      stopWatchdog()
+      stopFormatTimer()
+      const last = messages.value[messages.value.length - 1]
+      if (last && last.role === 'assistant') {
+        last.content = `❌ 通信异常或请求失败: ${err?.message || err || '未知错误'}`
+      }
+    })
+  }
 }
 
 function startNewChat() {
@@ -1426,6 +1488,7 @@ function onAgentMessage(msg) {
     isStreamLoad.value = false
     sentFromFloating.value = false
     isAborted.value = false
+    stopWatchdog()
     stopFormatTimer()
     const last = messages.value[messages.value.length - 1]
     if (last && last.role === 'assistant') {

@@ -545,6 +545,16 @@ func getMCPTools() []bladesTools.Tool {
 }
 
 func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
+	isHTTP := server.URL != "" && server.Command == ""
+	if isHTTP {
+		circuitbreaker.Configure("mcp:"+server.Name, circuitbreaker.Config{
+			Name:             "mcp:" + server.Name,
+			FailureThreshold: 1,
+			Cooldown:         10 * time.Minute,
+			HalfOpenMax:      1,
+		})
+	}
+
 	breaker := circuitbreaker.Get("mcp:" + server.Name)
 	if !breaker.Allow() {
 		logger.SugaredLogger.Warnf("MCP服务 [%s] 断路器处于开启(熔断)状态，直接跳过连接", server.Name)
@@ -574,18 +584,12 @@ func connectMCPServer(server models.MCPServer) []bladesTools.Tool {
 	}
 
 	// 超时驱动：优先环境变量 MCP_TIMEOUT_SECONDS，再读取 SettingConfig.McpTimeout，兜底 8s。
-	// 对于远程 HTTP MCP，连接超时严格限制在 2s 内，且一旦失败立即触发 5 分钟断路熔断，避免不可达的远程服务阻塞 Agent 会话。
+	// 对于远程 HTTP MCP，连接超时严格限制在 1.5s 内，且一旦失败立即触发 10 分钟断路熔断，避免不可达的远程服务阻塞 Agent 会话。
 	clientTimeout := data.GetSettingConfig().GetMcpTimeout()
 	if transport == bladesmc.TransportHTTP {
-		if clientTimeout > 2*time.Second {
-			clientTimeout = 2 * time.Second
+		if clientTimeout > 1500*time.Millisecond {
+			clientTimeout = 1500 * time.Millisecond
 		}
-		circuitbreaker.Configure("mcp:"+server.Name, circuitbreaker.Config{
-			Name:             "mcp:" + server.Name,
-			FailureThreshold: 1,
-			Cooldown:         5 * time.Minute,
-			HalfOpenMax:      1,
-		})
 	}
 
 	mcpClient, err := bladesmc.NewClient(bladesmc.ClientConfig{

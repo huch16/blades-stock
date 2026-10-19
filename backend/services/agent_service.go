@@ -47,8 +47,10 @@ func (s *AgentService) SetDefaultEmitter(emitter MessageEmitter) {
 }
 
 // ChatWithAgent 执行 AI Agent 智能会话推演（使用默认发射器向外推流）
+// 采用非阻塞 goroutine 启动推演，确保 Web 模式下 HTTP RPC 请求瞬间响应，
+// 彻底杜绝 HTTP 连接被长达数十秒的 LLM 推演挂死引发 Nginx/Cloudflare 504 Gateway Timeout 或浏览器断连。
 func (s *AgentService) ChatWithAgent(question string, aiConfigId int, sysPromptId *int, memoryMode bool, memoryCount int, thinkingMode bool, agentMode string, sessionId string) {
-	s.ChatWithAgentCustom(s.defaultEmitter, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, sessionId)
+	go s.ChatWithAgentCustom(s.defaultEmitter, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, sessionId)
 }
 
 // ChatWithAgentCustom 执行 AI Agent 会话并支持自定义发射器（桌面模式使用 Wails EventsEmit）

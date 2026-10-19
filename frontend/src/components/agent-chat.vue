@@ -854,7 +854,7 @@ function clearCurrentHistory() {
 
 // ========== 生命周期 ==========
 onBeforeMount(() => {
-  EventsOff('agent-message')
+  EventsOff('agent-message', handleAgentMessage)
   EventsOn('agent-message', handleAgentMessage)
 })
 
@@ -890,7 +890,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  EventsOff('agent-message')
+  EventsOff('agent-message', handleAgentMessage)
   EventsOff('updateSettings', onChatSettingsUpdated)
   EventsOff('aiConfigsUpdated', onChatSettingsUpdated)
 })

@@ -99,8 +99,24 @@ class WebEventBus {
     this.attachSSEListener(event)
   }
 
-  public off(eventName: string, ...additionalEventNames: string[]): void {
-    const targets = [eventName, ...additionalEventNames]
+  public off(eventName: string, callbackOrNextEvent?: Function | string, ...rest: (Function | string)[]): void {
+    if (typeof callbackOrNextEvent === 'function') {
+      const list = this.listeners.get(eventName)
+      if (list) {
+        this.listeners.set(eventName, list.filter(item => item.callback !== callbackOrNextEvent))
+      }
+      return
+    }
+
+    const targets = [eventName]
+    if (typeof callbackOrNextEvent === 'string') {
+      targets.push(callbackOrNextEvent)
+    }
+    for (const item of rest) {
+      if (typeof item === 'string') {
+        targets.push(item)
+      }
+    }
     for (const name of targets) {
       this.listeners.delete(name)
     }
@@ -324,8 +340,8 @@ export function initUniversalBridge(): void {
       EventsOnce: (eventName: string, callback: Function) => {
         webEventBus.onMultiple(eventName, callback, 1)
       },
-      EventsOff: (eventName: string, ...additionalEventNames: string[]) => {
-        webEventBus.off(eventName, ...additionalEventNames)
+      EventsOff: (eventName: string, ...additionalArgs: any[]) => {
+        webEventBus.off(eventName, additionalArgs[0], ...additionalArgs.slice(1))
       },
       EventsOffAll: () => {
         webEventBus.offAll()
