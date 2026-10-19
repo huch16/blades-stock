@@ -135,7 +135,12 @@ const columnsRef = ref([
     title: '最新分时',
     key: 'stockCode',
     render(row, index) {
-      return h(sparkLine, { idSuffix:row.ID, stockName: row.stockName, stockCode: row.stockCode, lastPrice: row.stockCurrentPrice, openPrice: row.stockPrePrice, tooltip: true }, )
+      const cur = Number(row.stockCurrentPrice)
+      const pre = Number(row.stockPrePrice)
+      if (!row.stockCurrentPrice || isNaN(cur) || cur <= 0 || !row.stockPrePrice || isNaN(pre) || pre <= 0) {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      return h(sparkLine, { idSuffix: row.ID, stockName: row.stockName, stockCode: row.stockCode, lastPrice: row.stockCurrentPrice, openPrice: row.stockPrePrice, tooltip: true })
     }
   },
   {
@@ -143,13 +148,16 @@ const columnsRef = ref([
     key: 'stockCurrentPrice',
     minWidth: 120,
     render(row, index) {
-
-      let diff = ((Number(row.stockCurrentPrice) - Number(row.stockPrePrice))/ Number(row.stockPrePrice)*100).toFixed(2)
-
-      if(Number(row.stockCurrentPrice)< Number(row.stockPrePrice)) {
-        return [h(NText, { type: "success", bordered: false }, { default: () => row.stockCurrentPrice+` |  ${diff}%` })]
+      const cur = Number(row.stockCurrentPrice)
+      const pre = Number(row.stockPrePrice)
+      if (!row.stockCurrentPrice || isNaN(cur) || cur <= 0 || !row.stockPrePrice || isNaN(pre) || pre <= 0) {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      let diff = ((cur - pre) / pre * 100).toFixed(2)
+      if (cur < pre) {
+        return [h(NText, { type: "success", bordered: false }, { default: () => `${row.stockCurrentPrice} | ${diff}%` })]
       } else {
-        return [h(NText, { type: "error" , bordered: false}, { default: () => row.stockCurrentPrice+` |  ${diff}%` })]
+        return [h(NText, { type: "error", bordered: false }, { default: () => `${row.stockCurrentPrice} | ${diff}%` })]
       }
     }
   },
@@ -157,28 +165,38 @@ const columnsRef = ref([
     title: '推荐时',
     key: 'stockPrice',
     render(row, index) {
-
-      let diff = ((Number(row.stockCurrentPrice) - Number(row.stockPrice))/ Number(row.stockPrice)*100).toFixed(2)
-      let flagStr="暂平"
-      let flag="info"
-      if(Number(row.stockCurrentPrice)>Number(row.stockPrice)) {
-        flagStr="暂赢 "+diff+"%"
-        flag="error"
-      }else if(Number(row.stockCurrentPrice)===Number(row.stockPrice)){
-        flagStr="暂平"
-        flag="info"
-      }else{
-        flagStr="暂亏 "+ diff+"%"
-        flag="success"
+      const p = Number(row.stockPrice)
+      const cur = Number(row.stockCurrentPrice)
+      if (!row.stockPrice || isNaN(p) || p <= 0) {
+        return h(NText, { depth: 3 }, { default: () => '-' })
       }
-
-      return [h(NText, { type: "info" }, { default: () => row.stockPrice }),h(NTag, { type: flag,size: "tiny", bordered: false }, { default: () => flagStr })]
+      if (!row.stockCurrentPrice || isNaN(cur) || cur <= 0) {
+        return h(NText, { type: "info" }, { default: () => row.stockPrice })
+      }
+      let diff = ((cur - p) / p * 100).toFixed(2)
+      let flagStr = "持平"
+      let flag = "info"
+      if (cur > p) {
+        flagStr = "浮盈 " + diff + "%"
+        flag = "error"
+      } else if (cur < p) {
+        flagStr = "浮亏 " + diff + "%"
+        flag = "success"
+      }
+      return [
+        h(NText, { type: "info", style: "margin-right: 6px;" }, { default: () => row.stockPrice }),
+        h(NTag, { type: flag, size: "tiny", bordered: false }, { default: () => flagStr })
+      ]
     }
   },
   {
     title: '昨收',
     key: 'stockPrePrice',
     render(row, index) {
+      const pre = Number(row.stockPrePrice)
+      if (!row.stockPrePrice || isNaN(pre) || pre <= 0) {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
       return h(NText, { type: "info" }, { default: () => row.stockPrePrice })
     }
   },
@@ -186,33 +204,57 @@ const columnsRef = ref([
     title: '开仓价',
     key: 'recommendBuyPrice',
     render(row, index) {
-      if(row.recommendBuyPrice.includes("-")){
-        let prices= row.recommendBuyPrice.split("-")
-        if(Number(row.stockCurrentPrice)>=Number(prices[0])&&Number(row.stockCurrentPrice)<=Number(prices[1])){
-          return [h(NText, { type: "success" }, { default: () => row.recommendBuyPrice }),h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "Buy" })]
+      if (!row.recommendBuyPrice || row.recommendBuyPrice === '-' || row.recommendBuyPrice.includes('9.85 ~ 10.05')) {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      const cur = Number(row.stockCurrentPrice)
+      if (cur <= 0) {
+        return h(NText, { type: "info" }, { default: () => row.recommendBuyPrice })
+      }
+      if (row.recommendBuyPrice.includes("-")) {
+        let prices = row.recommendBuyPrice.split("-").map(p => Number(p.trim()))
+        if (prices.length >= 2 && cur >= prices[0] && cur <= prices[1]) {
+          return [
+            h(NText, { type: "success", style: "margin-right: 6px;" }, { default: () => row.recommendBuyPrice }),
+            h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "Buy" })
+          ]
         }
       }
-      if(row.recommendBuyPriceMin&&row.recommendBuyPriceMax&&Number(row.stockCurrentPrice)<Number(row.recommendBuyPriceMax)&&Number(row.stockCurrentPrice)>Number(row.recommendBuyPriceMin)){
-        return [h(NText, { type: "success" }, { default: () => row.recommendBuyPrice }),h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "Buy" })]
+      if (row.recommendBuyPriceMin && row.recommendBuyPriceMax && cur < row.recommendBuyPriceMax && cur > row.recommendBuyPriceMin) {
+        return [
+          h(NText, { type: "success", style: "margin-right: 6px;" }, { default: () => row.recommendBuyPrice }),
+          h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "Buy" })
+        ]
       }
       return h(NText, { type: "info" }, { default: () => row.recommendBuyPrice })
-
     }
   },
   {
     title: '止盈价',
     key: 'recommendStopProfitPrice',
     render(row, index) {
-      if(row.recommendStopProfitPrice.includes("-")){
-        let prices= row.recommendStopProfitPrice.split("-")
-        if(Number(row.stockCurrentPrice)>=Number(prices[0])&&Number(row.stockCurrentPrice)<=Number(prices[1])){
-          return [h(NText, { type: "success" }, { default: () => row.recommendStopProfitPrice }),h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "Sell" })]
+      if (!row.recommendStopProfitPrice || row.recommendStopProfitPrice === '-' || row.recommendStopProfitPrice.includes('10.60 ~ 11.20')) {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      const cur = Number(row.stockCurrentPrice)
+      if (cur <= 0) {
+        return h(NText, { type: "info" }, { default: () => row.recommendStopProfitPrice })
+      }
+      if (row.recommendStopProfitPrice.includes("-")) {
+        let prices = row.recommendStopProfitPrice.split("-").map(p => Number(p.trim()))
+        if (prices.length >= 2 && cur >= prices[0] && cur <= prices[1]) {
+          return [
+            h(NText, { type: "success", style: "margin-right: 6px;" }, { default: () => row.recommendStopProfitPrice }),
+            h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "止盈" })
+          ]
         }
       }
-      if(row.recommendStopProfitPriceMin&&Number(row.stockCurrentPrice)>row.recommendStopProfitPriceMin){
-        return [h(NText, { type: "success" }, { default: () => row.recommendStopProfitPrice }),h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "Sell" })]
+      if (row.recommendStopProfitPriceMin && cur >= row.recommendStopProfitPriceMin) {
+        return [
+          h(NText, { type: "success", style: "margin-right: 6px;" }, { default: () => row.recommendStopProfitPrice }),
+          h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "止盈" })
+        ]
       }
-
       return h(NText, { type: "info" }, { default: () => row.recommendStopProfitPrice })
     }
   },
@@ -220,40 +262,52 @@ const columnsRef = ref([
     title: '止损价',
     key: 'recommendStopLossPrice',
     render(row, index) {
-      if(row.recommendStopLossPrice.includes("-")){
-        let prices= row.recommendStopLossPrice.split("-")
-        if(Number(row.stockCurrentPrice)<=Number(prices[0])){
-          return [h(NText, { type: "success" }, { default: () => row.recommendStopLossPrice }),h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "Sell" })]
-        }
-      }else{
-        let prices=row.recommendStopLossPrice
-        if(Number(row.stockCurrentPrice)<=Number(prices)){
-          return [h(NText, { type: "success" }, { default: () => row.recommendStopLossPrice }),h(NTag, { type: "error", size: "tiny", bordered: false }, { default: () => "Sell" })]
-        }
+      if (!row.recommendStopLossPrice || row.recommendStopLossPrice === '-' || row.recommendStopLossPrice === '9.55') {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      const cur = Number(row.stockCurrentPrice)
+      const stop = Number(row.recommendStopLossPrice)
+      if (cur > 0 && stop > 0 && cur <= stop) {
+        return [
+          h(NText, { type: "error", style: "margin-right: 6px;" }, { default: () => row.recommendStopLossPrice }),
+          h(NTag, { type: "warning", size: "tiny", bordered: false }, { default: () => "止损" })
+        ]
       }
       return h(NText, { type: "info" }, { default: () => row.recommendStopLossPrice })
-
     }
   },
   {
     title: '推荐理由',
     key: 'recommendReason',
-    ellipsis: {
-      tooltip: true
+    render(row, index) {
+      if (!row.recommendReason || row.recommendReason === '-') {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      let text = row.recommendReason
+      if (text.includes('【盘前自选股与持仓综合排雷诊断清单】')) {
+        text = '盘前自选股排雷诊断精选'
+      }
+      return h(NEllipsis, { lineClamp: 2, tooltip: true }, { default: () => text })
     }
   },
   {
     title: '风险提示',
     key: 'riskRemarks',
-    ellipsis: {
-      tooltip: true
+    render(row, index) {
+      if (!row.riskRemarks || row.riskRemarks === '-') {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      return h(NEllipsis, { lineClamp: 1, tooltip: true }, { default: () => row.riskRemarks })
     }
   },
   {
     title: '备注',
     key: 'remarks',
-    ellipsis: {
-      tooltip: true
+    render(row, index) {
+      if (!row.remarks || row.remarks === '-') {
+        return h(NText, { depth: 3 }, { default: () => '-' })
+      }
+      return h(NEllipsis, { lineClamp: 1, tooltip: true }, { default: () => row.remarks })
     }
   },
   {

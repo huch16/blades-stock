@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -104,8 +105,92 @@ func ExtractAndSaveRecommendationsFromReport(report *MarketIntelligenceReport) (
 	return saveDraftsToDatabase(drafts)
 }
 
+// CleanDirtyRecommendStocks 清理并修复数据库中历史残留的虚假兜底数据（如 9.85~10.05 模版、0.00 行情、排雷清单误录入等）
+func CleanDirtyRecommendStocks() error {
+	if db.Dao == nil {
+		return nil
+	}
+	// 1. 删除误将“排雷诊断清单/自选观察池/Prompt大段文字”作为推荐理由的错误记录
+	db.Dao.Where("recommend_reason LIKE ? OR recommend_reason LIKE ? OR recommend_reason LIKE ?",
+		"%排雷诊断清单%", "%自选观察池%", "%持仓与自选风险分级清单%").
+		Delete(&models.AiRecommendStocks{})
+
+	// 2. 找到所有开仓价包含 9.85 ~ 10.05 或现价为 0.00 / 空的记录，尝试拉取真实行情回填，若无法获取则清空虚假指标
+	var dirtyList []models.AiRecommendStocks
+	db.Dao.Where("stock_price = '0.00' OR stock_price = '' OR stock_current_price = '0.00' OR stock_current_price = '' OR recommend_buy_price LIKE '%9.85 ~ 10.05%'").
+		Find(&dirtyList)
+
+	if len(dirtyList) == 0 {
+		return nil
+	}
+
+	var codes []string
+	for _, item := range dirtyList {
+		codes = append(codes, data.FormatMarketStockCode(item.StockCode))
+	}
+
+	stockDataApi := data.NewStockDataApi()
+	stockInfos, _ := stockDataApi.GetStockCodeRealTimeData(codes...)
+	infoMap := make(map[string]data.StockInfo)
+	if stockInfos != nil {
+		for _, info := range *stockInfos {
+			clean := models.CleanStockCode(info.Code)
+			infoMap[clean] = info
+		}
+	}
+
+	for _, item := range dirtyList {
+		clean := models.CleanStockCode(item.StockCode)
+		if info, ok := infoMap[clean]; ok && info.Price != "" && info.Price != "0.00" {
+			curPrice, _ := strconv.ParseFloat(info.Price, 64)
+			if curPrice > 0 {
+				buyMin := math.Round(curPrice*0.985*100) / 100
+				buyMax := math.Round(curPrice*1.005*100) / 100
+				stopLoss := math.Round(curPrice*0.955*100) / 100
+				stopProfitMin := math.Round(curPrice*1.06*100) / 100
+				stopProfitMax := math.Round(curPrice*1.12*100) / 100
+
+				item.StockName = info.Name
+				item.StockPrice = info.Price
+				item.StockCurrentPrice = info.Price
+				item.StockClosePrice = info.Price
+				item.StockPrePrice = info.PreClose
+				item.RecommendBuyPrice = fmt.Sprintf("%.2f ~ %.2f", buyMin, buyMax)
+				item.RecommendBuyPriceMin = buyMin
+				item.RecommendBuyPriceMax = buyMax
+				item.RecommendStopProfitPrice = fmt.Sprintf("%.2f ~ %.2f", stopProfitMin, stopProfitMax)
+				item.RecommendStopProfitPriceMin = stopProfitMin
+				item.RecommendStopProfitPriceMax = stopProfitMax
+				item.RecommendStopLossPrice = fmt.Sprintf("%.2f", stopLoss)
+				item.RiskRemarks = fmt.Sprintf("若跌破建议止损价位 %.2f 请严格执行纪律；注意大盘整体情绪共振", stopLoss)
+				item.Remarks = "真实行情量化回补"
+				db.Dao.Save(&item)
+				continue
+			}
+		}
+		// 无法获取真实价格，清空虚假指标
+		item.StockPrice = ""
+		item.StockCurrentPrice = ""
+		item.StockPrePrice = ""
+		item.RecommendBuyPrice = ""
+		item.RecommendBuyPriceMin = 0
+		item.RecommendBuyPriceMax = 0
+		item.RecommendStopProfitPrice = ""
+		item.RecommendStopProfitPriceMin = 0
+		item.RecommendStopProfitPriceMax = 0
+		item.RecommendStopLossPrice = ""
+		item.RiskRemarks = ""
+		item.Remarks = ""
+		db.Dao.Save(&item)
+	}
+	return nil
+}
+
 // SyncRecommendStocksFromAllIntelligence 一键从所有已有研报、ETF动量池、市场异动中聚合并补全推荐股票
 func SyncRecommendStocksFromAllIntelligence(ctx context.Context) (int, error) {
+	// 先执行一次脏数据自动修复与排雷清理
+	_ = CleanDirtyRecommendStocks()
+
 	draftsMap := make(map[string]*StockRecommendationDraft)
 
 	// 1. 扫描当前内存缓存中的最新研报
@@ -151,21 +236,49 @@ func SyncRecommendStocksFromAllIntelligence(ctx context.Context) (int, error) {
 		}
 	}
 
-	// 3. 从数据库已保存的历史 AI 报告 (ai_response_result) 倒序扫描最近 10 条
+	// 3. 从数据库已保存的历史 AI 报告 (ai_response_result) 倒序扫描最近 10 条真实个股分析
 	var recentResponses []models.AIResponseResult
 	if db.Dao != nil {
 		db.Dao.Order("id desc").Limit(10).Find(&recentResponses)
 		for _, item := range recentResponses {
 			cleanCode := models.CleanStockCode(item.StockCode)
-			if cleanCode != "" && len(cleanCode) == 6 && !strings.Contains(item.StockName, "复盘") && !strings.Contains(item.StockName, "大盘") {
-				if _, exists := draftsMap[cleanCode]; !exists {
-					draftsMap[cleanCode] = &StockRecommendationDraft{
-						Code:      cleanCode,
-						Name:      item.StockName,
-						ModelName: item.ModelName,
-						Reason:    fmt.Sprintf("历史深度分析总结: %s", item.Question),
-						Rating:    "推荐",
+			if cleanCode == "" || len(cleanCode) != 6 {
+				continue
+			}
+			// 过滤掉复盘、大盘概览、或者带有“排雷/诊断/自选/持仓”的非推荐报告
+			qLower := strings.ToLower(item.Question)
+			if strings.Contains(qLower, "排雷") ||
+				strings.Contains(qLower, "自选") ||
+				strings.Contains(qLower, "持仓") ||
+				strings.Contains(qLower, "清单") ||
+				strings.Contains(qLower, "复盘") ||
+				strings.Contains(qLower, "大盘") ||
+				strings.Contains(qLower, "前瞻") ||
+				strings.Contains(qLower, "内参") ||
+				strings.Contains(qLower, "诊断") ||
+				strings.Contains(item.StockName, "复盘") ||
+				strings.Contains(item.StockName, "大盘") ||
+				len([]rune(item.Question)) > 60 {
+				continue
+			}
+
+			if _, exists := draftsMap[cleanCode]; !exists {
+				reasonText := strings.TrimSpace(item.Question)
+				if reasonText == "" {
+					reasonText = fmt.Sprintf("AI 专项深度量化分析优选标的：%s", item.StockName)
+				} else {
+					reasonRunes := []rune(reasonText)
+					if len(reasonRunes) > 40 {
+						reasonText = string(reasonRunes[:40]) + "..."
 					}
+					reasonText = fmt.Sprintf("历史深度分析优选: %s", reasonText)
+				}
+				draftsMap[cleanCode] = &StockRecommendationDraft{
+					Code:      cleanCode,
+					Name:      item.StockName,
+					ModelName: item.ModelName,
+					Reason:    reasonText,
+					Rating:    "推荐",
 				}
 			}
 		}
@@ -195,10 +308,10 @@ func saveDraftsToDatabase(drafts []*StockRecommendationDraft) ([]*models.AiRecom
 
 	var codes []string
 	for _, d := range drafts {
-		codes = append(codes, d.Code)
+		codes = append(codes, data.FormatMarketStockCode(d.Code))
 	}
 
-	// 批量拉取实时行情以获得准确价格
+	// 批量拉取真实行情以获得准确价格
 	stockDataApi := data.NewStockDataApi()
 	stockInfos, _ := stockDataApi.GetStockCodeRealTimeData(codes...)
 	infoMap := make(map[string]data.StockInfo)
@@ -227,8 +340,8 @@ func saveDraftsToDatabase(drafts []*StockRecommendationDraft) ([]*models.AiRecom
 		stockName := d.Name
 		curPrice := 0.0
 		preClose := 0.0
-		curPriceStr := "0.00"
-		prePriceStr := "0.00"
+		curPriceStr := ""
+		prePriceStr := ""
 
 		if info, ok := infoMap[d.Code]; ok {
 			if stockName == "" || stockName == d.Code {
@@ -236,23 +349,46 @@ func saveDraftsToDatabase(drafts []*StockRecommendationDraft) ([]*models.AiRecom
 			}
 			curPrice, _ = strconv.ParseFloat(info.Price, 64)
 			preClose, _ = strconv.ParseFloat(info.PreClose, 64)
-			curPriceStr = info.Price
-			prePriceStr = info.PreClose
+			if curPrice > 0 {
+				curPriceStr = fmt.Sprintf("%.2f", curPrice)
+			}
+			if preClose > 0 {
+				prePriceStr = fmt.Sprintf("%.2f", preClose)
+			}
 		}
 
-		if curPrice <= 0 {
+		if curPrice <= 0 && preClose > 0 {
 			curPrice = preClose
-		}
-		if curPrice <= 0 {
-			curPrice = 10.0 // 兜底基准价格防除零
+			curPriceStr = prePriceStr
 		}
 
-		// 量化推演建议买入区间、止损价（-4%）与止盈价（+8%）
-		buyMin := curPrice * 0.985
-		buyMax := curPrice * 1.005
-		stopLoss := curPrice * 0.955
-		stopProfitMin := curPrice * 1.06
-		stopProfitMax := curPrice * 1.12
+		// 用户准则：“如果不能获得准确数据，就不需要列出这些指标。”
+		// 严禁填入虚拟 10.0 兜底价格；若无有效准确行情，开仓/止损/止盈指标一律留空，不展示虚假数据
+		var buyMin, buyMax, stopLoss, stopProfitMin, stopProfitMax float64
+		var buyPriceStr, stopProfitStr, stopLossStr string
+
+		if curPrice > 0 {
+			buyMin = math.Round(curPrice*0.985*100) / 100
+			buyMax = math.Round(curPrice*1.005*100) / 100
+			stopLoss = math.Round(curPrice*0.955*100) / 100
+			stopProfitMin = math.Round(curPrice*1.06*100) / 100
+			stopProfitMax = math.Round(curPrice*1.12*100) / 100
+
+			buyPriceStr = fmt.Sprintf("%.2f ~ %.2f", buyMin, buyMax)
+			stopProfitStr = fmt.Sprintf("%.2f ~ %.2f", stopProfitMin, stopProfitMax)
+			stopLossStr = fmt.Sprintf("%.2f", stopLoss)
+		}
+
+		riskRemarks := ""
+		if stopLoss > 0 {
+			riskRemarks = fmt.Sprintf("若跌破建议止损价位 %.2f 请严格执行纪律；注意大盘整体情绪共振", stopLoss)
+		}
+		remarks := ""
+		if d.BkName != "" {
+			remarks = fmt.Sprintf("板块/题材: %s", d.BkName)
+		} else if d.ModelName != "" {
+			remarks = fmt.Sprintf("由 %s 量化驱动提炼", d.ModelName)
+		}
 
 		rec := &models.AiRecommendStocks{
 			ModelName:                   d.ModelName,
@@ -266,16 +402,16 @@ func saveDraftsToDatabase(drafts []*StockRecommendationDraft) ([]*models.AiRecom
 			StockClosePrice:             curPriceStr,
 			StockPrePrice:               prePriceStr,
 			RecommendReason:             d.Reason,
-			RecommendBuyPrice:           fmt.Sprintf("%.2f ~ %.2f", buyMin, buyMax),
+			RecommendBuyPrice:           buyPriceStr,
 			RecommendBuyPriceMin:        buyMin,
 			RecommendBuyPriceMax:        buyMax,
-			RecommendStopProfitPrice:    fmt.Sprintf("%.2f ~ %.2f", stopProfitMin, stopProfitMax),
+			RecommendStopProfitPrice:    stopProfitStr,
 			RecommendStopProfitPriceMin: stopProfitMin,
 			RecommendStopProfitPriceMax: stopProfitMax,
-			RecommendStopLossPrice:      fmt.Sprintf("%.2f", stopLoss),
-			RiskRemarks:                 "若跌破建议止损价位请严格执行纪律；注意大盘整体情绪共振",
-			Remarks:                     "由 blades-stock 智能研报与量化矩阵自动汇聚生成",
-			EnableAlert:                 true,
+			RecommendStopLossPrice:      stopLossStr,
+			RiskRemarks:                 riskRemarks,
+			Remarks:                     remarks,
+			EnableAlert:                 stopLoss > 0,
 		}
 
 		if err := data.NewAiRecommendStocksService().CreateAiRecommendStocks(rec); err != nil {

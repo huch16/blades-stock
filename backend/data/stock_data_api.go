@@ -364,8 +364,37 @@ func (receiver StockDataApi) GetStockBaseInfo() {
 
 }
 
+// FormatMarketStockCode 给纯6位股票/ETF代码自适应补充交易所前缀（sh/sz/bj）
+func FormatMarketStockCode(code string) string {
+	clean := models.CleanStockCode(code)
+	if clean == "" {
+		return strings.ToLower(code)
+	}
+	lower := strings.ToLower(code)
+	if strutil.HasPrefixAny(lower, []string{"sh", "sz", "bj", "hk"}) {
+		return lower
+	}
+	if strutil.HasPrefixAny(clean, []string{"60", "688", "51", "58"}) {
+		return "sh" + clean
+	}
+	if strutil.HasPrefixAny(clean, []string{"00", "30", "15", "16", "18"}) {
+		return "sz" + clean
+	}
+	if strutil.HasPrefixAny(clean, []string{"4", "8", "92"}) {
+		return "bj" + clean
+	}
+	return "sh" + clean
+}
+
 func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]StockInfo, error) {
-	StockCodes = ConvertTushareCodeToStockCodes(StockCodes)
+	normalizedCodes := make([]string, 0, len(StockCodes))
+	for _, c := range StockCodes {
+		c = strings.TrimSpace(c)
+		if c != "" {
+			normalizedCodes = append(normalizedCodes, FormatMarketStockCode(c))
+		}
+	}
+	StockCodes = ConvertTushareCodeToStockCodes(normalizedCodes)
 
 	stockInfos := make([]StockInfo, 0)
 

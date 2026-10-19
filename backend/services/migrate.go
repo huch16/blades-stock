@@ -80,6 +80,9 @@ func AutoMigrateAll() {
 	// 8. 播种系统默认高胜率经验结晶知识库
 	SeedDefaultKnowledgeCrystalsIfEmpty()
 
+	// 9. 自动自愈清理历史遗留的虚假推荐指标与排雷Prompt脏数据
+	_ = agent.CleanDirtyRecommendStocks()
+
 	logger.SugaredLogger.Info("[Database] All tables migrated and initialized successfully.")
 }
 
