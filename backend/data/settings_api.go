@@ -942,6 +942,12 @@ func UpdateConfig(s *SettingConfig) string {
 		return "保存失败: 配置数据为空"
 	}
 	for i, cfg := range s.AiConfigs {
+		if cfg != nil {
+			cfg.BaseUrl = strings.TrimRight(strings.TrimSpace(cfg.BaseUrl), "/")
+			cfg.Name = strings.TrimSpace(cfg.Name)
+			cfg.ModelName = strings.TrimSpace(cfg.ModelName)
+			cfg.ApiKey = strings.TrimSpace(cfg.ApiKey)
+		}
 		if msg := validateAIConfig(cfg); msg != "" {
 			return fmt.Sprintf("保存失败: 第 %d 项 %s", i+1, msg)
 		}

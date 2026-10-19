@@ -230,7 +230,7 @@ func (s *SettingsService) ExportConfigString() string {
 
 // FetchAiModels 获取支持的 OpenAI 兼容模型列表
 func (s *SettingsService) FetchAiModels(baseUrl, apiKey string) []string {
-	baseUrl = strutil.Trim(baseUrl)
+	baseUrl = strings.TrimRight(strutil.Trim(baseUrl), "/")
 	apiKey = strutil.Trim(apiKey)
 	if baseUrl == "" {
 		return []string{}
@@ -275,7 +275,7 @@ func (s *SettingsService) FetchAiModels(baseUrl, apiKey string) []string {
 
 // TestAiConnection 测试与目标 LLM 服务的连通性
 func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) string {
-	baseUrl = strutil.Trim(baseUrl)
+	baseUrl = strings.TrimRight(strutil.Trim(baseUrl), "/")
 	apiKey = strutil.Trim(apiKey)
 	modelName = strutil.Trim(modelName)
 	if baseUrl == "" {
@@ -347,7 +347,7 @@ func parseOpenAIErrorBody(body []byte) string {
 
 // FetchAiModelInfo 获取指定模型详细配置
 func (s *SettingsService) FetchAiModelInfo(baseUrl, apiKey, modelName string) *AiModelInfo {
-	baseUrl = strutil.Trim(baseUrl)
+	baseUrl = strings.TrimRight(strutil.Trim(baseUrl), "/")
 	modelName = strutil.Trim(modelName)
 	if baseUrl == "" || modelName == "" {
 		return nil

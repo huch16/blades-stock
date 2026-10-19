@@ -105,74 +105,6 @@ const formRef = ref(null)
 const basicExpanded = ref(['basic', 'datasource', 'notify', 'ai'])
 
 // ========================
-// 表单状态追踪 (F-01: 未保存提示/恢复默认/取消修改)
-// ========================
-const originalFormValue = ref({})
-const isFormDirty = computed(() => {
-  return JSON.stringify(formValue.value) !== JSON.stringify(originalFormValue.value)
-})
-function markClean() {
-  originalFormValue.value = JSON.parse(JSON.stringify(formValue.value))
-}
-async function cancelChanges() {
-  if (!isFormDirty.value) return
-  const confirm = await confirmDialog({
-    title: '放弃未保存的修改？',
-    content: '当前有未保存的修改，确定要放弃并恢复到最后保存的状态吗？',
-    positiveText: '确定放弃',
-    negativeText: '继续编辑',
-    type: 'warning'
-  })
-  if (confirm) {
-    formValue.value = JSON.parse(JSON.stringify(originalFormValue.value))
-    message.info('已恢复到最后保存的状态')
-  }
-}
-async function resetToDefaults() {
-  const confirm = await confirmDialog({
-    title: '确认恢复默认值？',
-    content: '这将把所有设置重置为出厂默认值，当前未保存的修改将丢失。',
-    positiveText: '确认重置',
-    negativeText: '取消',
-    type: 'warning'
-  })
-  if (!confirm) return
-  GetConfig().then(res => {
-        formValue.value = {
-          ID: res.ID,
-          tushareToken: res.tushareToken,
-          emApiKey: res.emApiKey || '',
-          tickFlowAPIKey: res.tickFlowAPIKey || '',
-          dingPush: { enable: res.dingPushEnable, dingRobot: res.dingRobot },
-          localPush: { enable: res.localPushEnable },
-          updateBasicInfoOnStart: res.updateBasicInfoOnStart,
-          refreshInterval: res.refreshInterval,
-          enableDanmu: res.enableDanmu,
-          browserPath: res.browserPath,
-          enableNews: res.enableNews,
-          darkTheme: res.darkTheme,
-          enableFund: res.enableFund,
-          enablePushNews: res.enablePushNews,
-          enableOnlyPushRedNews: res.enableOnlyPushRedNews,
-          httpProxy: res.httpProxy,
-          httpProxyEnabled: res.httpProxyEnabled,
-          disableBrowserSearch: res.disableBrowserSearch ?? false,
-          enableAgent: res.enableAgent,
-          qgqpBId: res.qgqpBId,
-          akshareServiceUrl: res.akshareServiceUrl || 'http://115.190.72.22:8089',
-          aDataServiceUrl: res.aDataServiceUrl || 'http://115.190.72.22:8000',
-          defaultDataSource: res.defaultDataSource || 'adata',
-          embeddingEnabled: !!res.embeddingEnabled,
-          embeddingModelName: res.embeddingModelName || '',
-          embeddingBaseUrl: res.embeddingBaseUrl || '',
-          embeddingApiKey: res.embeddingApiKey || '',
-        }
-        markClean()
-        message.success('已恢复默认值，请点击「保存设置」生效')
-      }).catch(err => message.error('重置失败: ' + (err?.message || err)))
-}
-
-// ========================
 // AI 配置元数据（非业务字段，不入库）
 // ========================
 interface ConfigMeta {
@@ -247,6 +179,133 @@ const formValue = ref({
   embeddingBaseUrl: '',
   embeddingApiKey: '',
 })
+
+// ========================
+// 表单状态追踪 (F-01: 全量配置状态追踪，含 AI 配置、提示词与开关)
+// ========================
+function getFullFormSnapshot() {
+  return JSON.stringify({
+    form: formValue.value,
+    openAiEnable: !!openAiEnable.value,
+    defaultAiConfigId: defaultAiConfigId.value ?? 0,
+    aiPrompt: aiPrompt.value || '',
+    questionTemplate: questionTemplate.value || '',
+    crawlTimeOut: crawlTimeOut.value || 30,
+    kDays: kDays.value || 30,
+    aiConfigs: (aiConfigs.value || []).map(c => ({
+      ID: c.ID,
+      name: c.name,
+      baseUrl: c.baseUrl,
+      apiKey: c.apiKey,
+      modelName: c.modelName,
+      temperature: c.temperature,
+      maxTokens: c.maxTokens,
+      timeOut: c.timeOut,
+      httpProxy: c.httpProxy,
+      httpProxyEnabled: c.httpProxyEnabled,
+      thinking: c.thinking,
+      llmConcurrencyLimit: c.llmConcurrencyLimit,
+      subAgentTimeout: c.subAgentTimeout,
+      embeddingEnabled: c.embeddingEnabled,
+      embeddingModelName: c.embeddingModelName,
+      embeddingBaseUrl: c.embeddingBaseUrl,
+      embeddingApiKey: c.embeddingApiKey,
+    }))
+  })
+}
+
+const originalFormSnapshot = ref('')
+const isFormDirty = computed(() => {
+  if (!originalFormSnapshot.value) return false
+  return getFullFormSnapshot() !== originalFormSnapshot.value
+})
+
+function markClean() {
+  originalFormSnapshot.value = getFullFormSnapshot()
+}
+
+async function cancelChanges() {
+  if (!isFormDirty.value) return
+  const confirm = await confirmDialog({
+    title: '放弃未保存的修改？',
+    content: '当前有未保存的修改，确定要放弃并恢复到最后保存的状态吗？',
+    positiveText: '确定放弃',
+    negativeText: '继续编辑',
+    type: 'warning'
+  })
+  if (confirm && originalFormSnapshot.value) {
+    try {
+      const snap = JSON.parse(originalFormSnapshot.value)
+      if (snap.form) formValue.value = JSON.parse(JSON.stringify(snap.form))
+      openAiEnable.value = !!snap.openAiEnable
+      defaultAiConfigId.value = snap.defaultAiConfigId ?? 0
+      aiPrompt.value = snap.aiPrompt || ''
+      questionTemplate.value = snap.questionTemplate || ''
+      crawlTimeOut.value = snap.crawlTimeOut || 30
+      kDays.value = snap.kDays || 30
+      aiConfigs.value = (snap.aiConfigs || []).map(c => new data.AIConfig(c))
+      aiConfigs.value.forEach(c => { (c as any)._nameTouched = true })
+      message.info('已恢复到最后保存的状态')
+    } catch (e) {
+      console.error('cancelChanges parse error', e)
+    }
+  }
+}
+
+async function resetToDefaults() {
+  const confirm = await confirmDialog({
+    title: '确认恢复默认值？',
+    content: '这将把所有设置重置为出厂默认值，当前未保存的修改将丢失。',
+    positiveText: '确认重置',
+    negativeText: '取消',
+    type: 'warning'
+  })
+  if (!confirm) return
+  GetConfig().then(res => {
+    formValue.value = {
+      ID: res.ID,
+      tushareToken: res.tushareToken,
+      emApiKey: res.emApiKey || '',
+      tickFlowAPIKey: res.tickFlowAPIKey || '',
+      dingPush: { enable: res.dingPushEnable, dingRobot: res.dingRobot },
+      localPush: { enable: res.localPushEnable },
+      updateBasicInfoOnStart: res.updateBasicInfoOnStart,
+      refreshInterval: res.refreshInterval,
+      enableDanmu: res.enableDanmu,
+      browserPath: res.browserPath,
+      enableNews: res.enableNews,
+      darkTheme: res.darkTheme,
+      enableFund: res.enableFund,
+      enablePushNews: res.enablePushNews,
+      enableOnlyPushRedNews: res.enableOnlyPushRedNews,
+      httpProxy: res.httpProxy,
+      httpProxyEnabled: res.httpProxyEnabled,
+      disableBrowserSearch: res.disableBrowserSearch ?? false,
+      enableAgent: res.enableAgent,
+      qgqpBId: res.qgqpBId,
+      backtestAccuracyThreshold: res.backtestAccuracyThreshold || 5.0,
+      backtestVerifyDays: res.backtestVerifyDays || 2,
+      backtestEnabled: res.backtestEnabled ?? true,
+      akshareServiceUrl: res.akshareServiceUrl || 'http://115.190.72.22:8089',
+      aDataServiceUrl: res.aDataServiceUrl || 'http://115.190.72.22:8000',
+      defaultDataSource: res.defaultDataSource || 'adata',
+      embeddingEnabled: !!res.embeddingEnabled,
+      embeddingModelName: res.embeddingModelName || '',
+      embeddingBaseUrl: res.embeddingBaseUrl || '',
+      embeddingApiKey: res.embeddingApiKey || '',
+    }
+    openAiEnable.value = res.openAiEnable
+    aiConfigs.value = (res.aiConfigs || []).map(c => new data.AIConfig(c))
+    aiConfigs.value.forEach(c => { (c as any)._nameTouched = true })
+    defaultAiConfigId.value = res.aiConfigId ?? 0
+    aiPrompt.value = res.prompt || ''
+    questionTemplate.value = res.questionTemplate || '{{stockName}}分析和总结'
+    crawlTimeOut.value = res.crawlTimeOut || 30
+    kDays.value = res.kDays || 30
+    markClean()
+    message.success('已恢复默认值，请点击「保存设置」生效')
+  }).catch(err => message.error('重置失败: ' + (err?.message || err)))
+}
 
 // ========================
 // 表单校验规则 (F-01)
@@ -713,19 +772,44 @@ onBeforeUnmount(() => {
 })
 
 async function saveConfig() {
-  // 表单校验 (F-01)
+  // 表单基础校验 (F-01)
   try {
-    await formRef.value?.validate()
-  } catch {
-    message.warning('请检查表单中的必填项')
-    return
+    if (formRef.value) {
+      await formRef.value.validate()
+    }
+  } catch (valErr) {
+    if (Array.isArray(valErr) && valErr.length > 0 && valErr[0]?.[0]?.message) {
+      message.warning('请检查表单：' + valErr[0][0].message)
+      return
+    }
   }
 
-  // 数值范围校验 (F-09/F-16)
-  for (const cfg of aiConfigs.value) {
-    if (cfg.temperature < 0 || cfg.temperature > 2) { message.warning(`Temperature 应在 0-2 之间`); return }
-    if (cfg.maxTokens < 1 || cfg.maxTokens > 256000) { message.warning(`MaxTokens 应在 1-256000 之间`); return }
-    if (cfg.timeOut && (cfg.timeOut < 5 || cfg.timeOut > 3600)) { message.warning(`Timeout 应在 5-3600 秒之间`); return }
+  // AI 配置必填项及数值范围深度校验 (F-09/F-16)
+  for (let i = 0; i < aiConfigs.value.length; i++) {
+    const cfg = aiConfigs.value[i]
+    const idxText = `第 ${i + 1} 项 AI 配置`
+    if (!cfg.name || !cfg.name.trim()) {
+      message.warning(`${idxText}「配置名称」不能为空`)
+      return
+    }
+    if (!cfg.baseUrl || !cfg.baseUrl.trim()) {
+      message.warning(`${idxText}「接口地址」不能为空`)
+      return
+    }
+    if (!cfg.modelName || !cfg.modelName.trim()) {
+      message.warning(`${idxText}「模型名称」不能为空`)
+      return
+    }
+    // 自动清理前后空格与末尾斜杠
+    cfg.baseUrl = cfg.baseUrl.trim().replace(/\/+$/, '')
+    cfg.name = cfg.name.trim()
+    cfg.modelName = cfg.modelName.trim()
+    if (cfg.apiKey) {
+      cfg.apiKey = cfg.apiKey.trim()
+    }
+    if (cfg.temperature < 0 || cfg.temperature > 2) { message.warning(`${idxText} Temperature 应在 0-2 之间`); return }
+    if (cfg.maxTokens < 1 || cfg.maxTokens > 256000) { message.warning(`${idxText} MaxTokens 应在 1-256000 之间`); return }
+    if (cfg.timeOut && (cfg.timeOut < 5 || cfg.timeOut > 3600)) { message.warning(`${idxText} Timeout 应在 5-3600 秒之间`); return }
   }
 
   console.log('开始保存设置', formValue.value);
@@ -1340,7 +1424,7 @@ function importConfig() {
       </n-flex>
     </n-card>
 
-    <n-form ref="formRef" :rules="formRules" :label-placement="'left'" :label-align="'left'">
+    <n-form ref="formRef" :model="formValue" :rules="formRules" :label-placement="'left'" :label-align="'left'">
       <n-collapse v-model:expanded-names="basicExpanded" accordion>
         <n-collapse-item name="basic">
           <template #header>

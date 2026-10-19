@@ -544,7 +544,7 @@
                 placeholder="输入消息，回车发送..."
                 :autosize="{ minRows: 2, maxRows: 4 }"
                 :disabled="isStreamLoad"
-                @keydown.enter.exact.prevent="sendMessage"
+                @keydown.enter.exact.prevent="() => sendMessage()"
               />
               <NButton
                 v-if="isStreamLoad"
@@ -559,7 +559,7 @@
                 type="primary"
                 :loading="isStreamLoad"
                 :disabled="isStreamLoad || !canSend"
-                @click="sendMessage"
+                @click="() => sendMessage()"
               >
                 发送
               </NButton>
@@ -1209,8 +1209,19 @@ function sendMessage(overrideAgentMode = '') {
     }
     scrollToBottom()
   })
-  const modeToUse = overrideAgentMode || (agentMode.value === 'auto' ? '' : agentMode.value)
-  const p = ChatWithAgent(text, configId, null, memoryMode.value, memoryCount.value, thinkingMode.value, modeToUse, sessionId.value || "")
+  const safeOverride = typeof overrideAgentMode === 'string' ? overrideAgentMode.trim() : ''
+  const modeToUse = safeOverride || (agentMode.value === 'auto' ? '' : String(agentMode.value || ''))
+  const safeAgentMode = typeof modeToUse === 'string' ? modeToUse : ''
+  const p = ChatWithAgent(
+    text,
+    configId,
+    null,
+    !!memoryMode.value,
+    Number(memoryCount.value) || 0,
+    !!thinkingMode.value,
+    safeAgentMode,
+    sessionId.value || ""
+  )
   if (p && typeof p.catch === 'function') {
     p.catch((err) => {
       console.error('[FloatingAgentAssistant] ChatWithAgent error:', err)

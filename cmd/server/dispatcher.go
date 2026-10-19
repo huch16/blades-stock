@@ -126,6 +126,14 @@ func (d *RPCDispatcher) HandleRPC(w http.ResponseWriter, r *http.Request) {
 		if argIdx < len(rawArgs) {
 			paramVal := reflect.New(paramType)
 			if err := json.Unmarshal(rawArgs[argIdx], paramVal.Interface()); err != nil {
+				// 容错增强：若目标是 string 类型，但前端传入了非 string 的 JSON（例如空对象 {}、布尔值或数值），优雅降级为空字符串，杜绝 400 崩溃
+				if paramType.Kind() == reflect.String {
+					logger.SugaredLogger.Warnf("[RPCDispatcher] Param %d for %s expected string, got %s, defaulting to empty string", argIdx, path, string(rawArgs[argIdx]))
+					paramVal.Elem().SetString("")
+					callArgs[i] = paramVal.Elem()
+					argIdx++
+					continue
+				}
 				logger.SugaredLogger.Errorf("[RPCDispatcher] Param %d unmarshal error for %s: %v", argIdx, path, err)
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]any{
