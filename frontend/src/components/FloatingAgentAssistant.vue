@@ -1008,6 +1008,7 @@ let watchdogTimer = null
 let agentListenerBound = false
 
 function ensureAgentEventListener() {
+  if (agentListenerBound) return
   try {
     EventsOn(AGENT_EVENT, onAgentMessage)
     agentListenerBound = true
@@ -1698,7 +1699,7 @@ function handleOpenFloatingAgentWithQuestion(payload) {
 }
 
 onMounted(() => {
-  EventsOn(AGENT_EVENT, onAgentMessage)
+  ensureAgentEventListener()
   EventsOn('openFloatingAgentWithQuestion', handleOpenFloatingAgentWithQuestion)
   EventsOn('updateSettings', onSettingsUpdated)
   EventsOn('aiConfigsUpdated', onAiConfigsUpdated)
@@ -1713,8 +1714,9 @@ watch(aiConfigId, (newId) => {
 })
 
 onBeforeUnmount(() => {
-  EventsOff(AGENT_EVENT)
-  EventsOff('openFloatingAgentWithQuestion')
+  EventsOff(AGENT_EVENT, onAgentMessage)
+  agentListenerBound = false
+  EventsOff('openFloatingAgentWithQuestion', handleOpenFloatingAgentWithQuestion)
   EventsOff('updateSettings', onSettingsUpdated)
   EventsOff('aiConfigsUpdated', onAiConfigsUpdated)
 })

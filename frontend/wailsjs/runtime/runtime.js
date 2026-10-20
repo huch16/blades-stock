@@ -36,7 +36,20 @@ export function LogFatal(message) {
     window.runtime.LogFatal(message);
 }
 
+const _boundDesktopEventCallbacks = new Map();
+
 export function EventsOnMultiple(eventName, callback, maxCallbacks) {
+    if (typeof callback === 'function') {
+        let set = _boundDesktopEventCallbacks.get(eventName);
+        if (!set) {
+            set = new Set();
+            _boundDesktopEventCallbacks.set(eventName, set);
+        }
+        if (set.has(callback)) {
+            return; // 幂等防重：完全相同的回调函数已绑定，绝不重复向宿主压入注册！
+        }
+        set.add(callback);
+    }
     return window.runtime.EventsOnMultiple(eventName, callback, maxCallbacks);
 }
 
@@ -45,10 +58,25 @@ export function EventsOn(eventName, callback) {
 }
 
 export function EventsOff(eventName, ...additionalEventNames) {
+    if (typeof additionalEventNames[0] === 'function') {
+        const cb = additionalEventNames[0];
+        const set = _boundDesktopEventCallbacks.get(eventName);
+        if (set) {
+            set.delete(cb);
+        }
+    } else {
+        _boundDesktopEventCallbacks.delete(eventName);
+        for (const name of additionalEventNames) {
+            if (typeof name === 'string') {
+                _boundDesktopEventCallbacks.delete(name);
+            }
+        }
+    }
     return window.runtime.EventsOff(eventName, ...additionalEventNames);
 }
 
 export function EventsOffAll() {
+  _boundDesktopEventCallbacks.clear();
   return window.runtime.EventsOffAll();
 }
 

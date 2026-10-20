@@ -90,7 +90,12 @@ class WebEventBus {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, [])
     }
-    this.listeners.get(event)!.push({
+    const list = this.listeners.get(event)!
+    // 幂等防重守卫：同一回调函数绝不重复添加，彻底杜绝多次调用 EventsOn 引发的流式打字机重复回显！
+    if (list.some(item => item.callback === callback)) {
+      return
+    }
+    list.push({
       callback,
       maxCallbacks,
       calledCount: 0,
