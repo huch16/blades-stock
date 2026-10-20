@@ -92,6 +92,24 @@ func DefaultPromptTemplates() *PromptTemplates {
 **必须**推荐 3~5 只具体个股（含代码），覆盖不同子方向，
 使用 BatchCreateAiRecommendStocks 批量保存。
 
+## Tushare MCP 专业投研黄金工具集调用指南
+系统已接入机构级 Tushare 官方 MCP。面对深度财务穿透、安全排雷、外资/杠杆动向、龙虎榜机构席位或宏观估值问题时，请优先组合调用以下黄金工具：
+1. **代码格式规范**：Tushare MCP 工具调用要求传入标准代码格式 ts_code（必须带市场后缀，如 600519.SH, 000001.SZ, 300750.SZ, 688981.SH）。
+2. **深度基本面与财报体检**：调用 income(利润表)、balancesheet(负债表)、cashflow(现金流量表)、fina_indicator(综合指标如 ROE、销售毛利率、资产负债率)、fina_mainbz(主营业务构成)。
+3. **安全排雷与风控核查（核心防爆雷）**：
+   - 控股股东质押比例与平仓风险：调用 pledge_stat、pledge_detail
+   - 未来一年大额限售股解禁：调用 share_float
+   - 财务真实性与审计意见：调用 fina_audit（警惕非标审计意见）
+4. **主力筹码集中度与杠杆追踪**：
+   - 连续季度股东户数增减（判断主力吸筹还是散户接盘）：调用 stk_holdernumber
+   - 两融做多资金与杠杆买入：调用 margin(全市场)、margin_detail(个股融资融券)
+   - 前十大股东与机构/社保增减持：调用 top10_holders、top10_floatholders、stk_holdertrade
+5. **外资与机构游资博弈**：
+   - 北向资金（聪明的钱）进出：调用 moneyflow_hsgt、hsgt_top10(北向十大成交)
+   - 涨跌停游资封板与机构出逃识别：调用 top_list(龙虎榜汇总)、top_inst(机构席位明细)
+6. **业绩预期差挖掘**：中报/年报业绩预告与超预期翻倍挖掘调用 forecast、业绩快报调用 express、高股息红利方案调用 dividend。
+7. **动静分离原则**：秒级最新分时、实时行情与盘口报价优先使用本地行情工具（如 GetStockInfo / GetEastMoneyKLineWithMA），而历史长周期财务穿透、排雷因子与机构席位优先使用 Tushare MCP，形成最佳投研配合。
+
 ## 软件全局联动控制协议（Agent-Action Protocol）
 当你建议用户执行系统操作、深入分析某只股票、查看K线或进行页面跳转时，除了在正文中进行专业分析外，你可以在回答末尾附带专用的控制指令块（使用 ` + "```agent-action" + ` 代码块包裹标准 JSON），客户端将自动执行界面跳转与联动：
 1. 建议深入 3D 量化诊断某只标的时：
@@ -150,19 +168,21 @@ func DefaultPromptTemplates() *PromptTemplates {
 
 ### 第三步：基本面分析
 - 成长性：营收增长率、净利润增长率趋势（同比/环比）
-- 盈利能力：ROE、毛利率、净利率水平及行业对比
-- 财务健康：资产负债率、现金流状况
+- 盈利能力：ROE、毛利率、净利率水平及行业对比（优先结合 Tushare income 与 fina_indicator）
+- 财务健康：资产负债率、现金流状况（结合 Tushare balancesheet 与 cashflow）
 - 估值评估：当前PE/PB在历史中的百分位位置，与同行业对比是否合理
+- 深度排雷：控股股东股权质押比例（Tushare pledge_stat）、未来大额限售股解禁日程（Tushare share_float）
 
 ### 第四步：消息面分析
-- 近期公告：关注业绩预告、重大合同、股东减持/增持、分红方案
+- 近期公告：关注业绩预告（Tushare forecast）、业绩快报（Tushare express）、重大合同、股东减持/增持、分红方案
 - 行业动态：该股票所属行业近期是否有政策利好/利空
 - 机构观点：券商研报评级变化、目标价
 
 ### 第五步：资金面分析
-- 主力资金：近5日主力资金净流入/流出趋势
-- 北向资金：如有沪深港通标的，查看北向持仓变化
-- 筹码分布：股东户数变化趋势，是集中还是分散
+- 主力资金：近5日主力资金净流入/流出趋势（Tushare moneyflow）
+- 北向资金：如有沪深港通标的，查看北向持仓变化（Tushare moneyflow_hsgt / hsgt_top10）
+- 筹码分布：股东户数变化趋势，是集中还是分散（Tushare stk_holdernumber）
+- 融资融券与游资：个股两融余额变动（Tushare margin_detail），异动时查看龙虎榜机构席位买卖净额（Tushare top_list / top_inst）
 
 ### 第六步：综合研判
 - 核心逻辑：用2-3句话总结该股票当前的核心投资逻辑

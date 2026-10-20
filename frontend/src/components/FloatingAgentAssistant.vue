@@ -482,6 +482,38 @@
                 size="small"
                 round
                 :bordered="false"
+                type="error"
+                class="quick-chip"
+                title="调用 Tushare pledge_stat/share_float/stk_holdernumber 进行深度防爆雷排查"
+                @click="handleQuickChip('请调用Tushare MCP进行深度排雷核查(重点检查控股股东质押比例、未来限售解禁日程、股东户数集中度与两融主力资金): ')"
+              >
+                🛡️ 深度排雷
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                type="info"
+                class="quick-chip"
+                title="调用 Tushare income/balancesheet/fina_indicator 进行真实ROE与毛利趋势体检"
+                @click="handleQuickChip('请调用Tushare MCP进行深度财报体检(分析近3年营收净利增长、真实ROE走势、毛利率及经营现金流健康度): ')"
+              >
+                📊 财报体检
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
+                class="quick-chip"
+                title="调用 Tushare top_list/top_inst 穿透龙虎榜机构专用席位买卖"
+                @click="handleQuickChip('请调用Tushare MCP查询最新龙虎榜(top_list)及机构席位买入明细(top_inst)，分析机构资金博弈方向: ')"
+              >
+                🐉 龙虎机构
+              </NTag>
+              <NTag
+                size="small"
+                round
+                :bordered="false"
                 class="quick-chip"
                 @click="handleQuickChip('VectorBT 策略回测: ')"
               >
