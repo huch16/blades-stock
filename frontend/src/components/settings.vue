@@ -139,6 +139,35 @@ const kDays = ref(30)
 
 const aiConfigExpandedNames = ref([])
 
+// ==========================================
+// 投研提示词预设方案库 (强化 Tushare MCP 与三维风控)
+// ==========================================
+const QUESTION_TEMPLATE_PRESETS = {
+  comprehensive: `请对 {{stockName}}[{{stockCode}}] 进行全维度深度量化投研与排雷体检：\n1. 基本面与排雷体检：调用 Tushare pledge_stat 核查控股股东质押比例，share_float 检查未来一年限售解禁日程，fina_indicator 查询近3年真实 ROE 与毛利率趋势，cashflow 检验经营现金流健康度，排除财务暴雷隐患；\n2. 资金与机构席位追踪：调用 stk_holdernumber 穿透近3季度股东户数是集中还是发散（主力吸筹/出逃判定），margin_detail 查看两融杠杆多空动态，异动时调用 top_list 与 top_inst 穿透龙虎榜机构专用席位买卖净额；\n3. 财报预期差与前瞻：调用 forecast 与 express 挖掘近期业绩预告是否超预期，结合 K 线趋势给出量化评分、操作建议与第一止损位。`,
+  antirisk: `请对 {{stockName}}[{{stockCode}}] 进行严密的基本面防爆雷体检：\n1. 股权质押排雷：调用 Tushare pledge_stat 检查控股股东最新质押比例及平仓风险；\n2. 限售解禁排雷：调用 Tushare share_float 筛查未来 3~12 个月内是否有大额限售股解禁；\n3. 财务真实性：调用 fina_indicator 与 cashflow 对比营收净利增速与经营现金流匹配度，排除财务造假嫌疑。`,
+  funds: `请重点穿透 {{stockName}}[{{stockCode}}] 的资金博弈与筹码结构：\n1. 筹码集中度：调用 Tushare stk_holdernumber 穿透近3季度股东户数是集中还是发散（主力吸筹/出货判定）；\n2. 机构席位追踪：调用 Tushare top_list 与 top_inst 检索近期龙虎榜是否有机构专用席位大额买入；\n3. 杠杆多空对比：结合两融 margin_detail 杠杆做多资金流向与超大单主力净流，给出多空力量对比。`,
+  simple: `{{stockName}}[{{stockCode}}] 全方位量化诊断与投资分析总结`,
+}
+
+const SYSTEM_PROMPT_PRESETS = {
+  tushare_mentor: `你是一位拥有20年证券实操经验的资深量化投研专家与投资导师，秉持“风险控制第一，数据穿透为本”的原则。\n在分析个股、板块或宏观市场时，必须通过工具调用获取真实客观的数据（严禁凭记忆编造数据）：\n1. 涉及基本面体检与排雷时，优先组合调用 Tushare MCP 黄金工具：质押平仓风险（pledge_stat）、未来大额限售解禁（share_float）、真实ROE与销售毛利率（fina_indicator）、经营现金流质量（cashflow）、非标审计意见（fina_audit）；\n2. 涉及资金与机构筹码时，优先调用：股东户数连续季度吸筹/分散趋势（stk_holdernumber）、两融杠杆买入（margin_detail）、北向资金（moneyflow_hsgt / hsgt_top10），异动个股穿透龙虎榜机构专用席位买卖净额（top_list / top_inst）；\n3. 涉及财报前瞻与预期差时，调用业绩预告（forecast）与业绩快报（express）挖掘超预期增长潜能；\n4. 任何操作建议均须附带第一支撑位、止损位与核心风险警示。`,
+  standard: `你是一个专业股票助手，擅长结合量化数据、技术指标、资金流向和基本面信息，为用户提供客观严谨的投资分析和建议。`,
+}
+
+function applyQuestionTemplatePreset(key: keyof typeof QUESTION_TEMPLATE_PRESETS) {
+  if (QUESTION_TEMPLATE_PRESETS[key]) {
+    questionTemplate.value = QUESTION_TEMPLATE_PRESETS[key]
+    message.success('已填入个股分析模板，请点击右上角「保存设置」生效')
+  }
+}
+
+function applySystemPromptPreset(key: keyof typeof SYSTEM_PROMPT_PRESETS) {
+  if (SYSTEM_PROMPT_PRESETS[key]) {
+    aiPrompt.value = SYSTEM_PROMPT_PRESETS[key]
+    message.success('已填入系统提示词模板，请点击右上角「保存设置」生效')
+  }
+}
+
 // ========================
 // 其他设置状态
 // ========================
@@ -1737,14 +1766,30 @@ function importConfig() {
               <n-divider title-placement="left">默认提示词设置</n-divider>
             </n-gi>
             <n-form-item-gi :span="12" v-if="openAiEnable" label="默认系统提示词" path="openAI.prompt">
-              <n-input v-model:value="aiPrompt" type="textarea" :show-count="true"
-                       placeholder="请输入系统提示词" :autosize="{ minRows: 4, maxRows: 8 }"/>
+              <div style="width: 100%;">
+                <n-space size="small" style="margin-bottom: 6px;">
+                  <n-text depth="3" style="font-size: 12px;">快捷预设：</n-text>
+                  <n-button size="tiny" secondary type="primary" @click="applySystemPromptPreset('tushare_mentor')">🎓 机构级投研导师 (强化Tushare)</n-button>
+                  <n-button size="tiny" secondary @click="applySystemPromptPreset('standard')">🤖 标准智能助手</n-button>
+                </n-space>
+                <n-input v-model:value="aiPrompt" type="textarea" :show-count="true"
+                         placeholder="请输入系统提示词" :autosize="{ minRows: 4, maxRows: 8 }"/>
+              </div>
             </n-form-item-gi>
             <n-form-item-gi :span="12" v-if="openAiEnable" label="默认个股分析提示词"
                             path="openAI.questionTemplate">
-              <n-input v-model:value="questionTemplate" type="textarea" :show-count="true"
-                       placeholder="请输入个股分析提示词:例如{{stockName}}[{{stockCode}}]分析和总结"
-                       :autosize="{ minRows: 4, maxRows: 8 }"/>
+              <div style="width: 100%;">
+                <n-space size="small" style="margin-bottom: 6px; flex-wrap: wrap;">
+                  <n-text depth="3" style="font-size: 12px;">快捷模板：</n-text>
+                  <n-button size="tiny" secondary type="primary" @click="applyQuestionTemplatePreset('comprehensive')">🛡️ 全维排雷与投研 (推荐)</n-button>
+                  <n-button size="tiny" secondary type="error" @click="applyQuestionTemplatePreset('antirisk')">🔍 深度防爆雷</n-button>
+                  <n-button size="tiny" secondary type="warning" @click="applyQuestionTemplatePreset('funds')">💰 资金与龙虎榜</n-button>
+                  <n-button size="tiny" secondary @click="applyQuestionTemplatePreset('simple')">⚡ 经典简约</n-button>
+                </n-space>
+                <n-input v-model:value="questionTemplate" type="textarea" :show-count="true"
+                         placeholder="请输入个股分析提示词:例如{{stockName}}[{{stockCode}}]分析和总结"
+                         :autosize="{ minRows: 4, maxRows: 8 }"/>
+              </div>
             </n-form-item-gi>
 
             <n-gi :span="24" v-if="openAiEnable">
