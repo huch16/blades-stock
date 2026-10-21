@@ -84,7 +84,7 @@ func (l *StockDataLoader) LoadKLineData(stockCode string, days int) (
 	var kLines *[]data.KLineData
 
 	cfg := data.GetSettingConfig()
-	if cfg.Settings.DefaultDataSource == "adata" {
+	if cfg != nil && cfg.Settings != nil && cfg.Settings.DefaultDataSource == "adata" && !strings.Contains(cfg.Settings.ADataServiceUrl, "115.190.72.22") {
 		adateClient := data.NewAdataClient()
 		adataResult, adataErr := adateClient.GetKLineData(stockCode, "", "")
 		if adataErr == nil && len(adataResult) > 0 {

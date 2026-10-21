@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,25 +24,36 @@ var (
 // InitTradingCalendar 初始化交易日历缓存
 // 优先从 AData 获取，失败则尝试 Baostock，最终降级到周末判断
 func InitTradingCalendar() {
-	// 优先：AData（8000端口，稳定运行）
-	if cache := tryTradingCalendarSource("adata", func() (map[string]bool, error) {
-		adataClient := NewAdataClient()
-		days, err := adataClient.GetTradeCalendarDays()
-		if err != nil {
-			return nil, err
+	// 优先：AData（8000端口，需配置有效服务地址）
+	adataUrl := ""
+	if cfg := GetSettingConfig(); cfg != nil && cfg.Settings != nil {
+		adataUrl = strings.TrimSpace(cfg.Settings.ADataServiceUrl)
+	}
+	if adataUrl == "" {
+		adataUrl = ADataServiceURL()
+	}
+
+	// 若指向已知离线服务器 115.190.72.22，直接跳过，避免网络超时挂起
+	if !strings.Contains(adataUrl, "115.190.72.22") {
+		if cache := tryTradingCalendarSource("adata", func() (map[string]bool, error) {
+			adataClient := NewAdataClient()
+			days, err := adataClient.GetTradeCalendarDays()
+			if err != nil {
+				return nil, err
+			}
+			cache := make(map[string]bool, len(days))
+			for _, day := range days {
+				cache[day] = true
+			}
+			return cache, nil
+		}); cache != nil {
+			tradingDayCacheMu.Lock()
+			tradingDayCache = cache
+			tradingDayInited = true
+			tradingDayCacheMu.Unlock()
+			logger.SugaredLogger.Infof("InitTradingCalendar: AData 已加载交易日历，共 %d 个交易日", len(cache))
+			return
 		}
-		cache := make(map[string]bool, len(days))
-		for _, day := range days {
-			cache[day] = true
-		}
-		return cache, nil
-	}); cache != nil {
-		tradingDayCacheMu.Lock()
-		tradingDayCache = cache
-		tradingDayInited = true
-		tradingDayCacheMu.Unlock()
-		logger.SugaredLogger.Infof("InitTradingCalendar: AData 已加载交易日历，共 %d 个交易日", len(cache))
-		return
 	}
 
 	// 降级：Baostock（8090端口）

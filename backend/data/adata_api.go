@@ -25,8 +25,8 @@ func NewAdataClient() *AdataClient {
 		u = ADataServiceURL()
 	}
 	return &AdataClient{
-		baseURL: u,
-		client:  resty.New().SetTimeout(30 * time.Second),
+		baseURL: strings.TrimRight(u, "/"),
+		client:  resty.New().SetTimeout(2 * time.Second),
 	}
 }
 
@@ -42,6 +42,11 @@ type adataValueResponse struct {
 }
 
 func (c *AdataClient) get(path string) ([]map[string]any, error) {
+	// 熔断保护：已知失联的默认远程主机 (115.190.72.22) 快速失败，杜绝等待 30 秒超时阻塞 Agent 会话
+	if strings.Contains(c.baseURL, "115.190.72.22") {
+		return nil, fmt.Errorf("AData 远程微服务 %s 当前处于离线维护状态，请在系统设置中更新地址或使用原生直连行情源", c.baseURL)
+	}
+
 	r, err := c.client.R().
 		SetHeader("User-Agent", "blades-stock/1.0").
 		Get(c.baseURL + path)
@@ -66,6 +71,9 @@ func (c *AdataClient) get(path string) ([]map[string]any, error) {
 }
 
 func (c *AdataClient) Ping() error {
+	if strings.Contains(c.baseURL, "115.190.72.22") {
+		return fmt.Errorf("AData 默认远程服务器不可达: %s", c.baseURL)
+	}
 	var resp struct {
 		Status string `json:"status"`
 	}
@@ -81,7 +89,17 @@ func (c *AdataClient) Ping() error {
 }
 
 func (c *AdataClient) GetMarketCurrent(codeList []string) ([]map[string]any, error) {
-	codes := strings.Join(codeList, ",")
+	var validCodes []string
+	for _, code := range codeList {
+		trimmed := strings.TrimSpace(code)
+		if trimmed != "" {
+			validCodes = append(validCodes, trimmed)
+		}
+	}
+	if len(validCodes) == 0 {
+		return []map[string]any{}, nil
+	}
+	codes := strings.Join(validCodes, ",")
 	return c.get(fmt.Sprintf("/api/stock/market_current?code_list=%s", url.QueryEscape(codes)))
 }
 

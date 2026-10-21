@@ -56,7 +56,7 @@ type Settings struct {
 	BacktestEnabled           bool    `json:"backtestEnabled" gorm:"column:backtest_enabled;default:true"`
 	AkshareServiceUrl         string  `json:"akshareServiceUrl" gorm:"column:akshare_service_url;default:http://115.190.72.22:8089"`
 	ADataServiceUrl           string  `json:"aDataServiceUrl" gorm:"column:adata_service_url;default:http://115.190.72.22:8000"`
-	DefaultDataSource         string  `json:"defaultDataSource" gorm:"column:default_data_source;default:adata"`
+	DefaultDataSource         string  `json:"defaultDataSource" gorm:"column:default_data_source;default:eastmoney"`
 	EmbeddingEnabled          bool    `json:"embeddingEnabled" gorm:"column:embedding_enabled;default:false"`
 	EmbeddingModelName        string  `json:"embeddingModelName" gorm:"column:embedding_model_name"`
 	EmbeddingBaseUrl          string  `json:"embeddingBaseUrl" gorm:"column:embedding_base_url"`
