@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { h, onBeforeUnmount, onMounted, ref, computed, reactive, nextTick, watch } from "vue";
+import { useRouter } from "vue-router";
 import {
   NCard, NTabs, NTabPane, NGrid, NGi, NForm, NFormItem, NFormItemGi,
   NInput, NInputNumber, NSwitch, NSelect, NButton, NButtonGroup,
   NSpace, NFlex, NDivider, NTag, NTooltip, NIcon, NModal, NSpin,
   NStatistic, NAlert, NPopconfirm, useMessage, useDialog
 } from "naive-ui";
+import { ArrowBackOutline } from "@vicons/ionicons5";
 import { data, models } from "../../wailsjs/go/models";
 import type { AIConfig } from "../../wailsjs/go/models";
 import { EventsEmit } from "../../wailsjs/runtime";
@@ -36,6 +38,7 @@ import {
   GetDistillationStats
 } from "../../wailsjs/go/main/App";
 
+const router = useRouter();
 const message = useMessage();
 const dialog = useDialog();
 const aiConfigStore = useAiConfigStore();
@@ -48,6 +51,23 @@ const isWebMode = ref(!isWails());
 const currentAuthToken = ref(getAuthToken());
 const pingLatency = ref<number | null>(null);
 const checkingPing = ref(false);
+
+function goBackToMain() {
+  router.push({ name: 'stock' });
+}
+
+function navigateTo(routeName: string) {
+  router.push({ name: routeName });
+}
+
+const tabNameMap: Record<string, string> = {
+  system: '基础与运行环境',
+  market: '行情与量化数据源',
+  ai: 'AI模型与智能体矩阵',
+  notify: '预警与消息推送',
+  backup: '数据资产与灾备中心'
+};
+const activeTabTitle = computed(() => tabNameMap[activeTab.value] || '设置控制中枢');
 
 async function checkServerPing() {
   if (isWails()) {
@@ -359,13 +379,15 @@ function getPlatformName(baseUrl: string): string {
 
 async function fetchAiModels(aiConfig: any, index: number, opts: { silent?: boolean } = {}) {
   const meta = ensureConfigMeta(index);
-  if (!aiConfig.baseUrl) {
+  const baseUrl = (aiConfig.baseUrl || '').trim();
+  const apiKey = (aiConfig.apiKey || '').trim() || 'none';
+  if (!baseUrl) {
     if (!opts.silent) message.warning('请先填写接口地址 (BaseUrl)');
     return;
   }
   meta.loadingModels = true;
   try {
-    const list: string[] = await FetchAiModels(aiConfig.baseUrl, aiConfig.apiKey || '', aiConfig.httpProxyEnabled ? aiConfig.httpProxy : '');
+    const list: string[] = await FetchAiModels(baseUrl, apiKey);
     if (list && list.length > 0) {
       meta.modelOptions = list.map(m => ({ label: m, value: m }));
       if (!opts.silent) message.success(`成功拉取 ${list.length} 个可用模型`);
@@ -384,26 +406,27 @@ async function fetchAiModels(aiConfig: any, index: number, opts: { silent?: bool
 
 async function testAiConfig(aiConfig: any, index: number) {
   const meta = ensureConfigMeta(index);
-  if (!aiConfig.baseUrl) {
-    message.warning('请先填写接口地址');
+  const baseUrl = (aiConfig.baseUrl || '').trim();
+  const apiKey = (aiConfig.apiKey || '').trim() || 'none';
+  const modelName = (aiConfig.modelName || '').trim();
+
+  if (!baseUrl) {
+    message.warning('请先填写接口地址 (Base URL)');
+    return;
+  }
+  if (!modelName) {
+    message.warning('请先填写或选择模型名称 (Model Identifier)');
     return;
   }
   meta.testing = true;
+  const startTime = Date.now();
   try {
-    const cfg = {
-      ...aiConfig,
-      maxTokens: Number(aiConfig.maxTokens) || 4096,
-      temperature: Number(aiConfig.temperature) || 0.7,
-      timeOut: Number(aiConfig.timeOut) || 300,
-      thinking: Boolean(aiConfig.thinking),
-      httpProxy: aiConfig.httpProxyEnabled ? aiConfig.httpProxy : '',
-      httpProxyEnabled: Boolean(aiConfig.httpProxyEnabled)
-    };
-    const res = await TestAiConnection(cfg);
-    if (res?.success) {
-      message.success(`连接测试成功！模型响应耗时: ${res.latencyMs || 0} ms`);
+    const errMsg = await TestAiConnection(baseUrl, apiKey, modelName);
+    const latency = Date.now() - startTime;
+    if (errMsg) {
+      message.error(`连接测试失败: ${errMsg}`);
     } else {
-      message.error(`连接测试失败: ${res?.error || '无返回响应'}`);
+      message.success(`连接测试成功！模型 [${modelName}] 响应正常 (耗时: ${latency} ms)`);
     }
   } catch (err: any) {
     message.error('测试异常: ' + (err?.message || err));
@@ -488,23 +511,34 @@ function wizardSelectTemplate(tpl: AiConfigTemplate) {
 }
 
 async function wizardTestConnection() {
+  const baseUrl = (wizardForm.value.baseUrl || '').trim();
+  const apiKey = (wizardForm.value.apiKey || '').trim() || 'none';
+  const modelName = (wizardForm.value.modelName || '').trim();
+
+  if (!baseUrl) {
+    message.warning('请先填写接口地址');
+    return;
+  }
+  if (!modelName) {
+    message.warning('请先填写模型名称');
+    return;
+  }
   wizardTesting.value = true;
   wizardTestResult.value = null;
+  const startTime = Date.now();
   try {
-    const res = await TestAiConnection({
-      ...wizardForm.value,
-      ID: 0,
-      thinking: Boolean(wizardForm.value.thinking)
-    });
-    if (res?.success) {
-      wizardTestResult.value = `✅ 连接成功！响应延迟: ${res.latencyMs || 0} ms`;
-      message.success('连通性测试通过！');
+    const errMsg = await TestAiConnection(baseUrl, apiKey, modelName);
+    const latency = Date.now() - startTime;
+    if (errMsg) {
+      wizardTestResult.value = `❌ 连接失败: ${errMsg}`;
+      message.error(`连通性测试未通过: ${errMsg}`);
     } else {
-      wizardTestResult.value = `❌ 连接失败: ${res?.error || '无详细错误'}`;
-      message.error('连通性测试未通过，请检查配置');
+      wizardTestResult.value = `✅ 连接测试成功！模型 [${modelName}] 响应正常 (耗时: ${latency} ms)`;
+      message.success('连通性测试通过！');
     }
   } catch (err: any) {
     wizardTestResult.value = `❌ 异常: ${err?.message || err}`;
+    message.error('测试异常: ' + (err?.message || err));
   } finally {
     wizardTesting.value = false;
   }
@@ -851,10 +885,15 @@ async function saveConfig() {
   isSaving.value = true;
   const configToSave: any = {
     ...formValue.value,
+    localPushEnable: Boolean(formValue.value.localPush?.enable),
+    dingPushEnable: Boolean(formValue.value.dingPush?.enable),
+    dingRobot: formValue.value.dingPush?.dingRobot || '',
     openAiEnable: openAiEnable.value,
     aiConfigId: defaultAiConfigId.value || 0,
     prompt: aiPrompt.value,
     questionTemplate: questionTemplate.value,
+    crawlTimeOut: formValue.value.crawlTimeOut || 60,
+    kDays: formValue.value.kDays || 90,
     aiConfigs: aiConfigs.value.map(c => ({
       ...c,
       ID: c.ID || 0,
@@ -984,11 +1023,11 @@ async function loadConfig() {
       tickFlowAPIKey: res.tickFlowAPIKey || '',
       qgqpBId: res.qgqpBId || '',
       dingPush: {
-        enable: Boolean(res.dingPush?.enable),
-        dingRobot: res.dingPush?.dingRobot || ''
+        enable: Boolean(res.dingPushEnable ?? res.dingPush?.enable),
+        dingRobot: res.dingRobot || res.dingPush?.dingRobot || ''
       },
       localPush: {
-        enable: res.localPush?.enable !== false
+        enable: (res.localPushEnable ?? res.localPush?.enable) !== false
       },
       updateBasicInfoOnStart: Boolean(res.updateBasicInfoOnStart),
       refreshInterval: res.refreshInterval || 1,
@@ -1017,12 +1056,16 @@ async function loadConfig() {
       kDays: res.kDays || 90
     };
 
-    openAiEnable.value = Boolean(res.openAI?.enable);
-    defaultAiConfigId.value = res.openAI?.defaultAiConfigId || res.aiConfigId || null;
-    aiPrompt.value = res.openAI?.prompt || SYSTEM_PROMPT_PRESETS.tushare_mentor;
-    questionTemplate.value = res.openAI?.questionTemplate || QUESTION_TEMPLATE_PRESETS.comprehensive;
+    openAiEnable.value = Boolean(res.openAiEnable ?? res.openAI?.enable);
+    aiPrompt.value = res.prompt ?? res.openAI?.prompt ?? SYSTEM_PROMPT_PRESETS.tushare_mentor;
+    questionTemplate.value = res.questionTemplate ?? res.openAI?.questionTemplate ?? QUESTION_TEMPLATE_PRESETS.comprehensive;
 
-    const cfgs = (res.openAI?.aiConfigs || []).map((c: any) => ({
+    // 核心修复：优先从根属性读取 aiConfigs，全面移入数据库中的既有模型配置，兜底支持嵌套结构
+    const rawConfigs = (Array.isArray(res.aiConfigs) && res.aiConfigs.length > 0)
+      ? res.aiConfigs
+      : (Array.isArray(res.openAI?.aiConfigs) ? res.openAI.aiConfigs : []);
+
+    const cfgs = rawConfigs.map((c: any) => ({
       ID: c.ID || 0,
       name: c.name || 'AI 配置',
       baseUrl: c.baseUrl || 'https://api.minimax.chat/v1',
@@ -1045,9 +1088,7 @@ async function loadConfig() {
     aiConfigs.value = cfgs;
     cfgs.forEach((_: any, idx: number) => ensureConfigMeta(idx));
 
-    if (!defaultAiConfigId.value && cfgs.length > 0) {
-      defaultAiConfigId.value = cfgs[0].ID;
-    }
+    defaultAiConfigId.value = res.aiConfigId ?? res.openAI?.defaultAiConfigId ?? (cfgs[0]?.ID || null);
 
     markClean();
   } catch (err: any) {
@@ -1080,7 +1121,38 @@ onBeforeUnmount(() => {
 <template>
   <div class="settings-container">
     <!-- ============================================== -->
-    <!-- 顶部：平台运行环境感知与双模状态栏             -->
+    <!-- 顶部：全局导航、面包屑与工作区快捷入口         -->
+    <!-- ============================================== -->
+    <div class="settings-nav-header">
+      <div class="nav-header-left">
+        <n-button type="primary" strong secondary size="small" class="back-home-btn" @click="goBackToMain">
+          <template #icon>
+            <n-icon><ArrowBackOutline /></n-icon>
+          </template>
+          ← 返回自选主看板
+        </n-button>
+        <div class="header-breadcrumbs">
+          <span class="bc-root" @click="goBackToMain">工作站</span>
+          <span class="bc-sep">/</span>
+          <span class="bc-mid">控制中枢</span>
+          <span class="bc-sep">/</span>
+          <span class="bc-current">⚙️ 系统设置 ({{ activeTabTitle }})</span>
+        </div>
+      </div>
+      <div class="nav-header-quick-links">
+        <span class="quick-nav-label">工作区直达：</span>
+        <n-button-group size="tiny">
+          <n-button quaternary @click="navigateTo('stock')">📈 股票自选</n-button>
+          <n-button quaternary @click="navigateTo('market')">📊 市场全景</n-button>
+          <n-button quaternary @click="navigateTo('agent')">🤖 AI 智能体</n-button>
+          <n-button quaternary @click="navigateTo('research')">💡 深度投研</n-button>
+          <n-button quaternary @click="navigateTo('fund')">💰 基金追踪</n-button>
+        </n-button-group>
+      </div>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- 平台运行环境感知与双模状态栏                   -->
     <!-- ============================================== -->
     <div class="runtime-status-bar">
       <div class="runtime-left">
@@ -1859,6 +1931,10 @@ onBeforeUnmount(() => {
     <!-- ============================================== -->
     <div class="sticky-action-bar">
       <div class="bar-left">
+        <n-button size="small" type="primary" quaternary @click="goBackToMain" class="bar-back-btn">
+          ← 返回主界面
+        </n-button>
+        <n-divider vertical style="margin: 0 12px 0 4px;" />
         <transition name="fade">
           <div v-if="isFormDirty" class="dirty-badge">
             <span class="dirty-indicator-dot"></span>
@@ -2018,8 +2094,72 @@ onBeforeUnmount(() => {
   flex-direction: column;
   min-height: calc(100vh - 64px);
   position: relative;
-  padding: 16px 20px 80px 20px;
+  padding: 14px 20px 130px 20px;
   box-sizing: border-box;
+}
+
+/* 顶部全局导航与面包屑控制条 */
+.settings-nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: rgba(128, 128, 128, 0.04);
+  border: 1px solid rgba(128, 128, 128, 0.12);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.nav-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.back-home-btn {
+  font-weight: 600;
+}
+
+.header-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.bc-root {
+  cursor: pointer;
+  opacity: 0.65;
+  transition: color 0.2s;
+}
+.bc-root:hover {
+  opacity: 1;
+  color: #18a058;
+}
+
+.bc-sep {
+  opacity: 0.35;
+  font-size: 11px;
+}
+
+.bc-mid {
+  opacity: 0.65;
+}
+
+.bc-current {
+  font-weight: 600;
+  color: #18a058;
+}
+
+.nav-header-quick-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-nav-label {
+  font-size: 12px;
+  opacity: 0.65;
 }
 
 /* 顶部状态栏 */
@@ -2247,23 +2387,27 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
-/* 悬浮吸底操作栏 */
+/* 悬浮吸底操作栏 (位于 App.vue 底部主导航栏之上，二者互不遮挡) */
 .sticky-action-bar {
   position: fixed;
-  bottom: 0;
+  bottom: 50px;
   left: 0;
   right: 0;
-  height: 60px;
-  background: rgba(28, 28, 30, 0.88);
+  height: 56px;
+  background: rgba(28, 28, 30, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid rgba(128, 128, 128, 0.2);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 28px;
-  z-index: 1000;
+  padding: 0 24px;
+  z-index: 100;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.bar-back-btn {
+  font-weight: 500;
 }
 
 .bar-left {

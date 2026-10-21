@@ -302,9 +302,14 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 	client.SetBaseURL(baseUrl)
 	client.SetTimeout(20 * time.Second)
 
+	// 若系统启用了全局 HTTP 代理，透传给测试客户端
+	if cfg := data.GetSettingConfig(); cfg != nil && cfg.HttpProxyEnabled && strings.TrimSpace(cfg.HttpProxy) != "" {
+		client.SetProxy(strings.TrimSpace(cfg.HttpProxy))
+	}
+
 	payload := map[string]any{
 		"model":      modelName,
-		"max_tokens": 1,
+		"max_tokens": 16,
 		"stream":     false,
 		"messages": []map[string]string{
 			{"role": "user", "content": "ping"},
