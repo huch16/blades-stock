@@ -181,7 +181,7 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":    "healthy",
 			"timestamp": time.Now().Unix(),
-			"version":   "1.4.0",
+			"version":   "1.6.0",
 		})
 	})
 

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Release](https://img.shields.io/badge/Release-v1.4.0-blue.svg?style=flat-square)](https://github.com/huch16/blades-stock/releases)
+[![Release](https://img.shields.io/badge/Release-v1.6.0-blue.svg?style=flat-square)](https://github.com/huch16/blades-stock/releases)
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8.svg?style=flat-square&logo=go)](https://golang.org/)
 [![Wails](https://img.shields.io/badge/Wails-v2.12.0-red.svg?style=flat-square)](https://wails.io/)
 [![Vue](https://img.shields.io/badge/Vue-3.5%2B-4FC08D.svg?style=flat-square&logo=vuedotjs)](https://vuejs.org/)
@@ -247,7 +247,7 @@ Blades Stock 采用标准 OpenAI 兼容协议，支持自由接入任意大模�
 | **LM Studio** | `http://localhost:1234/v1` | **留空即可** | 本地载入的模型标识 | 本地可视化加载开源大模型 |
 | **vLLM / 私有部署** | `http://your-server:8000/v1` | 视集群鉴权而定 | 对应部署服务名 | 企业私有化算力集群 |
 
-> **提示**：v1.4.0 版本放宽了最大上下文至 `256,000` Tokens，超时时间上限扩展，避免长文研报与复杂工具推理中断。
+> **提示**：v1.6.0 版本重构了工业级《设置与控制中枢》（Settings Command Center），支持多大模型厂商向导预设、脏检查实时高亮与 Ctrl+S 全局保存，并放宽了最大上下文至 `256,000` Tokens，超时时间上限扩展，避免长文研报与复杂工具推理中断。
 
 ### 2. 联网搜索引擎配置
 系统内置 SearXNG 隐私聚合搜索路由：

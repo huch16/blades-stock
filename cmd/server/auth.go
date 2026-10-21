@@ -147,7 +147,7 @@ func HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		"data": map[string]any{
 			"needInit":     serverToken == "",
 			"authRequired": true,
-			"version":      "1.4.0",
+			"version":      "1.6.0",
 		},
 	})
 }
