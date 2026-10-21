@@ -368,6 +368,8 @@ export function NewsPush(arg1:any):Promise<void>;
 
 export function OpenURL(arg1:string):Promise<void>;
 
+export function PruneOldBackups(arg1:number,arg2:number,arg3:number):Promise<string>;
+
 export function QuitApp():Promise<void>;
 
 export function ReFleshTelegraphList(arg1:string):Promise<any>;
@@ -471,3 +473,5 @@ export function UpdateSkill(arg1:models.Skill):Promise<string>;
 export function UpdateTradingRecord(arg1:data.TradingRecord):Promise<void>;
 
 export function ValidateCronExpr(arg1:string):Promise<string>;
+
+export function VerifyBackupIntegrity(arg1:string):Promise<string>;

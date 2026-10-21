@@ -48,6 +48,35 @@ func IsPermanentAuthError(err error) bool {
 		strings.Contains(s, "forbidden")
 }
 
+var (
+	globalDeadModelMu       sync.RWMutex
+	globalDeadModelCooldown = make(map[string]time.Time) // modelIdentifier -> cooldownUntil
+)
+
+// MarkModelPermanentFailure 记录某个模型发生永久鉴权失败，进入 30 分钟全局熔断冷却隔离
+func MarkModelPermanentFailure(modelIdentifier string) {
+	globalDeadModelMu.Lock()
+	defer globalDeadModelMu.Unlock()
+	clean := CleanFallbackModelName(modelIdentifier)
+	globalDeadModelCooldown[clean] = time.Now().Add(30 * time.Minute)
+	globalDeadModelCooldown[modelIdentifier] = time.Now().Add(30 * time.Minute)
+	logger.SugaredLogger.Warnf("🚫 [Fallback] 模型 [%s] 发生永久鉴权错误(401/403)，已自动进入全局熔断隔离池 (冷却30分钟)", clean)
+}
+
+// IsModelInCooldown 检查模型是否处于全局熔断冷却期
+func IsModelInCooldown(modelIdentifier string) bool {
+	globalDeadModelMu.RLock()
+	defer globalDeadModelMu.RUnlock()
+	clean := CleanFallbackModelName(modelIdentifier)
+	if until, ok := globalDeadModelCooldown[clean]; ok && time.Now().Before(until) {
+		return true
+	}
+	if until, ok := globalDeadModelCooldown[modelIdentifier]; ok && time.Now().Before(until) {
+		return true
+	}
+	return false
+}
+
 // FormatFallbackReason 解析并格式化模型调用失败的具体原因，避免粗暴掩盖为“服务异常或网络超时”
 func FormatFallbackReason(err error) string {
 	if err == nil {
@@ -224,6 +253,7 @@ func (f *FallbackModelProvider) Generate(ctx context.Context, req *blades.ModelR
 			f.mu.Lock()
 			f.permanentlyFailed[idx] = true
 			f.mu.Unlock()
+			MarkModelPermanentFailure(curName)
 		}
 
 		// 寻找下一个备选模型
@@ -307,6 +337,7 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 							f.mu.Lock()
 							f.permanentlyFailed[idx] = true
 							f.mu.Unlock()
+							MarkModelPermanentFailure(curName)
 						}
 
 						// 永久粘性提升 activeIdx 为下一个可用模型，后续 Agent ReAct 步骤直接以此模型启动，杜绝死锁等待
@@ -359,8 +390,9 @@ func BuildFallbackProvidersFromDB(ctx context.Context, currentConfig data.AIConf
 			continue
 		}
 		cfg := *cfgPtr
-		// 跳过当前主配置和空 Key
-		if cfg.ID == currentConfig.ID || strings.TrimSpace(cfg.ApiKey) == "" {
+		modelKey := fmt.Sprintf("%s(%s)", cfg.ModelName, cfg.BaseUrl)
+		// 跳过当前主配置、空 Key 或已处于全局熔断隔离池的失效模型
+		if cfg.ID == currentConfig.ID || strings.TrimSpace(cfg.ApiKey) == "" || IsModelInCooldown(modelKey) || IsModelInCooldown(cfg.ModelName) {
 			continue
 		}
 

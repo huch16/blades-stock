@@ -223,6 +223,16 @@ func (s *SettingsService) ImportIntelligentBackup(content string) string {
 	return data.NewSettingsApi().ImportIntelligentBackup(content)
 }
 
+// VerifyBackupIntegrity 对指定的备份文件执行工业级完整性与格式有效性校验
+func (s *SettingsService) VerifyBackupIntegrity(fileName string) string {
+	return data.NewSettingsApi().VerifyBackupIntegrity(fileName)
+}
+
+// PruneOldBackups 智能滚动修剪过期的历史备份
+func (s *SettingsService) PruneOldBackups(maxSnapshots, maxBundles, maxAgeDays int) string {
+	return data.NewSettingsApi().PruneOldBackups(maxSnapshots, maxBundles, maxAgeDays)
+}
+
 // ExportConfigString 导出配置 JSON 字符串
 func (s *SettingsService) ExportConfigString() string {
 	return data.NewSettingsApi().Export()

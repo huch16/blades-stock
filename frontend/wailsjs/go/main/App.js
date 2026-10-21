@@ -722,6 +722,10 @@ export function OpenURL(arg1) {
   return window['go']['main']['App']['OpenURL'](arg1);
 }
 
+export function PruneOldBackups(arg1, arg2, arg3) {
+  return window['go']['main']['App']['PruneOldBackups'](arg1, arg2, arg3);
+}
+
 export function QuitApp() {
   return window['go']['main']['App']['QuitApp']();
 }
@@ -928,4 +932,8 @@ export function UpdateTradingRecord(arg1) {
 
 export function ValidateCronExpr(arg1) {
   return window['go']['main']['App']['ValidateCronExpr'](arg1);
+}
+
+export function VerifyBackupIntegrity(arg1) {
+  return window['go']['main']['App']['VerifyBackupIntegrity'](arg1);
 }

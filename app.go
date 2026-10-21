@@ -1769,6 +1769,16 @@ func (a *App) ImportIntelligentBackup(content string) string {
 	return a.settingsService.ImportIntelligentBackup(content)
 }
 
+// VerifyBackupIntegrity 对指定的备份文件执行工业级完整性与格式有效性校验
+func (a *App) VerifyBackupIntegrity(fileName string) string {
+	return a.settingsService.VerifyBackupIntegrity(fileName)
+}
+
+// PruneOldBackups 智能滚动修剪过期的历史备份
+func (a *App) PruneOldBackups(maxSnapshots, maxBundles, maxAgeDays int) string {
+	return a.settingsService.PruneOldBackups(maxSnapshots, maxBundles, maxAgeDays)
+}
+
 func (a *App) ShareAnalysis(stockCode, stockName string) string {
 	return a.settingsService.ShareAnalysis(stockCode, stockName)
 }

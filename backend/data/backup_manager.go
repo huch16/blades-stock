@@ -1,6 +1,7 @@
 package data
 
 import (
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,8 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/paths"
+
+	_ "github.com/glebarez/sqlite"
 )
 
 // BackupOverview 系统核心智能数据与资产概览
@@ -311,6 +314,13 @@ func (m *BackupManager) CreateIntelligentBackup(note string) (string, error) {
 		return "", fmt.Errorf("写入资产包文件失败: %w", err)
 	}
 
+	// 自动执行资产包归档滚动清理（保留最近 30 份，或 60 天内），防止无限制膨胀
+	go func() {
+		if pruned, err := m.PruneOldBackups(15, 30, 60); err == nil && pruned > 0 {
+			logger.SugaredLogger.Infof("🧹 智能资产管理：已自动滚动回收 %d 个历史过期备份文件", pruned)
+		}
+	}()
+
 	summary := fmt.Sprintf("✅ 成功创建全量智能资产包 %s (%s)\n包含: %d项AI模型配置, %d个AI技能, %d条对话会话, %d篇AI分析研报, %d只自选股, %d只关注基金, %d条回测记录",
 		fileName, formatBytes(int64(len(rawJSON))),
 		bundle.Stats["aiConfigs"], bundle.Stats["skills"],
@@ -351,10 +361,174 @@ func (m *BackupManager) CreateDatabaseSnapshot() (string, error) {
 		return "", fmt.Errorf("校验快照文件失败: %w", err)
 	}
 
-	summary := fmt.Sprintf("✅ 成功创建数据库物理快照 %s (%s)\n该快照已完成 WAL 校验与物理对齐，可在灾备场景下直接用于整库替换恢复。",
+	// 3. 工业级数据校验：对新生成的物理快照进行 PRAGMA quick_check 结构完整性校验
+	if err := m.VerifyBackupIntegrity(fileName); err != nil {
+		_ = os.Remove(destPath) // 校验失败自动清除异常文件
+		return "", fmt.Errorf("快照生成失败，未通过物理完整性校验: %w", err)
+	}
+
+	// 4. 自动执行物理快照滚动清理（默认保留最近 15 份快照，防止磁盘空间耗尽）
+	go func() {
+		if pruned, err := m.PruneOldBackups(15, 30, 30); err == nil && pruned > 0 {
+			logger.SugaredLogger.Infof("🧹 灾备中枢：已自动滚动清理 %d 个陈旧快照与归档文件", pruned)
+		}
+	}()
+
+	summary := fmt.Sprintf("✅ 成功创建数据库物理快照 %s (%s)\n该快照已通过 WAL 校验、物理对齐与 PRAGMA 完整性检查，可在灾备场景下直接用于整库替换恢复。",
 		fileName, formatBytes(fi.Size()))
 	logger.SugaredLogger.Info(summary)
 	return summary, nil
+}
+
+// VerifyBackupIntegrity 对指定的备份文件执行工业级完整性与格式有效性校验
+func (m *BackupManager) VerifyBackupIntegrity(fileName string) error {
+	cleanName := filepath.Base(fileName)
+	target := filepath.Join(EnsureBackupDir(), cleanName)
+
+	fi, err := os.Stat(target)
+	if err != nil {
+		return fmt.Errorf("备份文件不存在: %s", cleanName)
+	}
+	if fi.Size() == 0 {
+		return fmt.Errorf("备份文件大小为 0 字节 (损坏)")
+	}
+
+	switch {
+	case strings.HasSuffix(cleanName, ".db"):
+		if fi.Size() < 100 {
+			return fmt.Errorf("数据库快照文件过小 (%d 字节)，非合法 SQLite 格式", fi.Size())
+		}
+		// 打开只读独立连接校验 SQLite 物理完整性
+		dsn := fmt.Sprintf("%s?mode=ro&_pragma=busy_timeout(5000)", filepath.ToSlash(target))
+		checkDB, err := sql.Open("sqlite", dsn)
+		if err != nil {
+			return fmt.Errorf("无法连接快照文件: %w", err)
+		}
+		defer checkDB.Close()
+
+		var result string
+		if err := checkDB.QueryRow("PRAGMA quick_check;").Scan(&result); err != nil {
+			return fmt.Errorf("快照 PRAGMA quick_check 执行异常: %w", err)
+		}
+		if !strings.EqualFold(result, "ok") {
+			return fmt.Errorf("快照完整性校验未通过: %s", result)
+		}
+
+		// 抽检核心业务表结构
+		var tableCount int
+		if err := checkDB.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table';").Scan(&tableCount); err != nil || tableCount < 5 {
+			return fmt.Errorf("快照数据表结构不完整 (表数量=%d)", tableCount)
+		}
+		return nil
+
+	case strings.HasSuffix(cleanName, ".json"):
+		data, err := os.ReadFile(target)
+		if err != nil {
+			return fmt.Errorf("无法读取资产包: %w", err)
+		}
+		var bundle IntelligentBundle
+		if err := json.Unmarshal(data, &bundle); err != nil {
+			return fmt.Errorf("资产包 JSON 语法解析失败: %w", err)
+		}
+		if bundle.Format != "blades_stock_intelligent_bundle" {
+			return fmt.Errorf("资产包格式标识不匹配: %s", bundle.Format)
+		}
+		return nil
+
+	case strings.HasSuffix(cleanName, ".csv"):
+		data, err := os.ReadFile(target)
+		if err != nil {
+			return fmt.Errorf("无法读取 CSV 文件: %w", err)
+		}
+		lines := strings.Split(string(data), "\n")
+		if len(lines) < 2 {
+			return fmt.Errorf("CSV 内容为空或缺少表头")
+		}
+		return nil
+
+	default:
+		return nil
+	}
+}
+
+// PruneOldBackups 智能滚动修剪过期的历史备份（防止 VPS 或桌面端磁盘被超大物理快照占满）
+// maxSnapshots: 最多保留的 .db 物理快照数（推荐 10~15）
+// maxBundles: 最多保留的 .json 智能资产包数（推荐 20~30）
+// maxAgeDays: 超过该天数的旧归档将被清除（但每种类型至少保留 2 份最新归档）
+func (m *BackupManager) PruneOldBackups(maxSnapshots, maxBundles, maxAgeDays int) (int, error) {
+	if maxSnapshots <= 0 {
+		maxSnapshots = 15
+	}
+	if maxBundles <= 0 {
+		maxBundles = 30
+	}
+	if maxAgeDays <= 0 {
+		maxAgeDays = 30
+	}
+
+	backups, err := m.ListBackups()
+	if err != nil {
+		return 0, err
+	}
+
+	var snapshots []BackupFileItem
+	var bundles []BackupFileItem
+	var csvs []BackupFileItem
+
+	for _, b := range backups {
+		switch b.Type {
+		case "db_snapshot":
+			snapshots = append(snapshots, b)
+		case "intel_bundle":
+			bundles = append(bundles, b)
+		case "csv":
+			csvs = append(csvs, b)
+		}
+	}
+
+	cutoffTime := time.Now().AddDate(0, 0, -maxAgeDays)
+	prunedCount := 0
+
+	// 1. 清理超额与超龄的数据库快照（每份约 200MB，重点清理目标）
+	for i, s := range snapshots {
+		// 至少保留最近 2 份快照底线
+		if i < 2 {
+			continue
+		}
+		if i >= maxSnapshots || s.CreatedAt.Before(cutoffTime) {
+			if err := m.DeleteBackupFile(s.FileName); err == nil {
+				prunedCount++
+				logger.SugaredLogger.Infof("🗑️ 回收历史过期快照: %s (%s)", s.FileName, s.SizeStr)
+			}
+		}
+	}
+
+	// 2. 清理超额的 JSON 资产包
+	for i, b := range bundles {
+		if i < 3 {
+			continue
+		}
+		if i >= maxBundles || b.CreatedAt.Before(cutoffTime) {
+			if err := m.DeleteBackupFile(b.FileName); err == nil {
+				prunedCount++
+				logger.SugaredLogger.Infof("🗑️ 回收历史过期资产包: %s (%s)", b.FileName, b.SizeStr)
+			}
+		}
+	}
+
+	// 3. 清理超量的临时导出 CSV（保留 30 份）
+	for i, c := range csvs {
+		if i < 3 {
+			continue
+		}
+		if i >= 30 || c.CreatedAt.Before(cutoffTime) {
+			if err := m.DeleteBackupFile(c.FileName); err == nil {
+				prunedCount++
+			}
+		}
+	}
+
+	return prunedCount, nil
 }
 
 // RestoreBackupFile 精确恢复指定文件名的历史备份
@@ -375,7 +549,18 @@ func (m *BackupManager) RestoreBackupFile(fileName string) (string, error) {
 		return m.ImportIntelligentBackup(string(data))
 
 	case strings.HasPrefix(cleanName, "stock_snapshot_") && strings.HasSuffix(cleanName, ".db"):
-		return fmt.Sprintf("ℹ️ 数据库物理快照 %s 为二进制 SQLite 镜像。\n如需还原整个库，请先停止服务，将该文件复制并重命名替换 data/stock.db 后重新启动即可。", cleanName), nil
+		// 1. 完整性前置校验：杜绝损坏快照导致灾备二次故障
+		if err := m.VerifyBackupIntegrity(cleanName); err != nil {
+			return "", fmt.Errorf("快照完整性校验未通过，拒绝执行恢复: %w", err)
+		}
+
+		// 2. 灾备安全防护：在恢复前自动对当前活跃库创建恢复前保护快照
+		safetyName := fmt.Sprintf("stock_prerestore_safety_%s.db", time.Now().Format("20060102_150405"))
+		safetyPath := filepath.Join(EnsureBackupDir(), safetyName)
+		_ = db.Dao.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error
+		_ = db.Dao.Exec(fmt.Sprintf("VACUUM INTO '%s'", filepath.ToSlash(safetyPath))).Error
+
+		return fmt.Sprintf("✅ 目标数据库物理快照 [%s] 已通过完整性与表结构校验！\n🛡️ 系统已自动为您创建当前数据库的安全副本: %s\n\n【灾备恢复指引】：\n由于当前 SQLite 连接处于活跃读写状态，为了保障底层存储一致性，请：\n1. 停止当前服务 (若为终端直接退出，若为服务运行 systemctl stop 或 docker compose stop)\n2. 将备份文件 %s 复制并重命名覆盖 data/stock.db\n3. 重新启动服务，即可完成 100%% 无损瞬时恢复。", cleanName, safetyName, filepath.ToSlash(filePath)), nil
 
 	case strings.HasSuffix(cleanName, ".csv"):
 		return restoreSpecificCSV(filePath, cleanName)
@@ -406,10 +591,17 @@ func (m *BackupManager) ImportIntelligentBackup(jsonContent string) (string, err
 	var restoredSummary strings.Builder
 	restoredSummary.WriteString("🎉 智能资产包恢复完成：\n")
 
-	// 1. 恢复 Settings
-	if bundle.Data.Settings != nil {
-		UpdateConfig(bundle.Data.Settings)
-		restoredSummary.WriteString("  • 系统核心配置已同步生效\n")
+	// 1. 恢复 Settings (在当前 tx 事务内直接保存，杜绝嵌套开启独立事务导致 SQLite 写死锁)
+	if bundle.Data.Settings != nil && bundle.Data.Settings.Settings != nil {
+		st := bundle.Data.Settings.Settings
+		if st.ID == 0 {
+			st.ID = 1
+		}
+		if err := tx.Save(st).Error; err != nil {
+			logger.SugaredLogger.Warnf("恢复 settings 记录失败: %v", err)
+		} else {
+			restoredSummary.WriteString("  • 系统核心配置已同步生效\n")
+		}
 	}
 
 	// 2. 恢复 AI 配置

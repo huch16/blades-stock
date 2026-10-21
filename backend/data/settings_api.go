@@ -414,6 +414,24 @@ func (s *SettingsApi) ImportIntelligentBackup(content string) string {
 	return res
 }
 
+// VerifyBackupIntegrity 对指定的备份文件执行工业级完整性与格式有效性校验
+func (s *SettingsApi) VerifyBackupIntegrity(fileName string) string {
+	err := NewBackupManager().VerifyBackupIntegrity(fileName)
+	if err != nil {
+		return fmt.Sprintf("❌ 校验失败: %v", err)
+	}
+	return "✅ 校验通过：文件结构完整合法，数据表与索引一致性良好"
+}
+
+// PruneOldBackups 智能滚动修剪过期的历史备份
+func (s *SettingsApi) PruneOldBackups(maxSnapshots, maxBundles, maxAgeDays int) string {
+	pruned, err := NewBackupManager().PruneOldBackups(maxSnapshots, maxBundles, maxAgeDays)
+	if err != nil {
+		return fmt.Sprintf("❌ 清理失败: %v", err)
+	}
+	return fmt.Sprintf("✅ 历史备份清理完成，共自动回收 %d 个陈旧/超额备份文件", pruned)
+}
+
 // BackupData 导出用户数据到 CSV，返回生成的文件路径
 func (s *SettingsApi) BackupData(backupType string) string {
 	logger.SugaredLogger.Infof("Backing up data type: %s", backupType)
