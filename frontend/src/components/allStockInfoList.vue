@@ -42,7 +42,6 @@ onBeforeMount(() => {
 })
 
 onMounted(() => {
-  console.log('all-stock-info-list mounted')
   loadStocks(1, paginationReactive.pageSize)
   loadFilters()
 })
@@ -242,7 +241,6 @@ function loadStocks(page, pageSize) {
     }
     
     GetAllStockInfoList(query).then((res) => {
-      console.log('GetAllStockInfoList result:', res)
       if (res &&  res.list) {
         dataRef.value = res.list || []
         paginationReactive.page = res.page || 1
@@ -266,7 +264,6 @@ function loadStocks(page, pageSize) {
 function loadFilters() {
   // 加载交易所列表
   GetAllMarkets().then(res => {
-    console.log('GetAllMarkets result:', res)
     if (res && res.length > 0) {
       marketsRef.value = (res || []).map(market => ({
         label: market,
@@ -279,7 +276,6 @@ function loadFilters() {
 
   // 加载行业列表
   GetAllIndustries().then(res => {
-    console.log('GetAllIndustries result:', res)
     if (res && res.length > 0) {
       industriesRef.value = (res || []).map(industry => ({
         label: industry,

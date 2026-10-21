@@ -47,7 +47,6 @@ function loadMore(){
     let day=parse(list.value[list.value.length-1].date, 'yyyy-MM-dd', new Date())
     let nextMonth=addMonths(day,1)
     let ym = format(nextMonth, 'yyyy-MM');
-    console.log(ym)
     InvestCalendarTimeLine(ym).then(res => {
       if (res.length==0){
         message.warning("没有更多数据了")

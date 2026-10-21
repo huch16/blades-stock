@@ -163,7 +163,6 @@ const data = reactive({
   loading: true,
   analysisStatus: "",
   analysisAborted: false,
-  enableDanmu: false,
   darkTheme: false,
   changePercent: 0
 })
@@ -176,10 +175,6 @@ const currentGroupId = ref(0)
 
 const theme = computed(() => {
   return data.darkTheme ? 'dark' : 'light'
-})
-
-const danmakuColor = computed(() => {
-  return data.darkTheme ? 'color:#fff' : 'color:#000'
 })
 
 const icon = ref('');
@@ -343,9 +338,6 @@ onBeforeMount(() => {
   GetConfig().then(result => {
     if (result.openAiEnable) {
       data.openAiEnable = true
-    }
-    if (result.enableDanmu) {
-      data.enableDanmu = true
     }
     if (result.darkTheme) {
       data.darkTheme = true

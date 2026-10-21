@@ -22,7 +22,6 @@ const options =  ref([])
 const message=useMessage()
 function getNotice(stockCodes) {
   StockNotice(stockCodes).then(result => {
-    console.log(result)
     list.value = result
   })
 }

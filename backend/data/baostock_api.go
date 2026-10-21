@@ -26,10 +26,16 @@ type BaostockApi struct {
 
 // NewBaostockApi 创建客户端
 func NewBaostockApi() *BaostockApi {
+	u := BaostockServiceURL()
+	// 熔断保护：已知失联的默认远程主机 (115.190.72.22) 快速失败，杜绝 30 秒超时阻塞。
+	timeout := 30 * time.Second
+	if strings.Contains(u, "115.190.72.22") {
+		timeout = 2 * time.Second
+	}
 	return &BaostockApi{
-		baseURL: BaostockServiceURL(),
+		baseURL: u,
 		client: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: timeout,
 		},
 	}
 }

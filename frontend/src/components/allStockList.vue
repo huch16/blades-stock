@@ -32,7 +32,6 @@ onBeforeMount(() => {
 })
 
 onMounted(() => {
-  console.log('stock-list mounted')
   loadStocks(1, paginationReactive.pageSize)
   loadGroupList()
 })
@@ -467,7 +466,6 @@ function loadStocks(page, pageSize) {
   if (!loadingRef.value) {
     loadingRef.value = true
     GetAllStocks(page, pageSize, paginationReactive.keyword, technicalIndicatorReactive).then((res) => {
-      console.log(res)
       if (res && res.result && res.result.data) {
         dataRef.value = res.result.data
         paginationReactive.page = page
@@ -501,14 +499,12 @@ function handleSearch() {
   loadStocks(1, paginationReactive.pageSize)
 }
 function handleUpdateVal(value) {
-  console.log('handleUpdateVal', value)
   if (value === '') {
     optionsReactive.splice(1, optionsReactive.length - 1)
   } else {
     GetAllStockInfoList({
       searchKeyWord: value
     }).then((res) => {
-      console.log('GetAllStockInfoList result:', res)
       if (res  && res.list) {
         optionsReactive.splice(1, optionsReactive.length - 1)
         optionsReactive.push(...res.list.map(item => {
@@ -534,7 +530,6 @@ const modalDataRef = reactive({
   remarks: "",
 })
 function showKline(row) {
-  console.log('showKline', row)
   modalDataRef.title = row.SECURITY_NAME_ABBR
   modalDataRef.stockCode = getStockCode(row.SECUCODE)
   modalDataRef.stockName = row.SECURITY_NAME_ABBR

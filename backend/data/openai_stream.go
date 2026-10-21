@@ -37,15 +37,8 @@ func (o *OpenAi) NewSummaryStockNewsStreamWithTools(userQuestion string, sysProm
 		}()
 		defer close(ch)
 
-		sysPrompt := ""
-		if sysPromptId == nil || *sysPromptId == 0 {
-			sysPrompt = o.Prompt
-		} else {
-			sysPrompt = o.Prompt
-		}
-		if sysPrompt == "" {
-			sysPrompt = o.Prompt
-		}
+		// sysPromptId 尚未连接到数据库技能表，当前始终使用配置中的 Prompt。
+		sysPrompt := o.Prompt
 
 		sysPrompt += `
 
@@ -196,15 +189,7 @@ func (o *OpenAi) NewSummaryStockNewsStream(userQuestion string, sysPromptId *int
 		}()
 		defer close(ch)
 
-		sysPrompt := ""
-		if sysPromptId == nil || *sysPromptId == 0 {
-			sysPrompt = o.Prompt
-		} else {
-			sysPrompt = o.Prompt
-		}
-		if sysPrompt == "" {
-			sysPrompt = o.Prompt
-		}
+		sysPrompt := o.Prompt
 
 		msg := []map[string]interface{}{
 			{
@@ -370,15 +355,7 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 		}()
 		defer close(ch)
 
-		sysPrompt := ""
-		if sysPromptId == nil || *sysPromptId == 0 {
-			sysPrompt = o.Prompt
-		} else {
-			sysPrompt = o.Prompt
-		}
-		if sysPrompt == "" {
-			sysPrompt = o.Prompt
-		}
+		sysPrompt := o.Prompt
 
 		msg := []map[string]interface{}{
 			{

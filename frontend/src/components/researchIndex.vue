@@ -32,7 +32,6 @@ onUnmounted(() => {
 });
 
 EventsOn("changeResearchTab", async (msg) => {
-  console.log("changeResearchTab", msg)
   updateTab(msg.name)
 })
 function updateTab(name) {

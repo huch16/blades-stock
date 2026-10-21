@@ -32,7 +32,6 @@ onMounted(() => {
     startDate: paginationReactive.range[0],
     endDate: paginationReactive.range[1]
   }).then((data) => {
-    console.log( data)
     dataRef.value = data.data
     paginationReactive.page = 1
     paginationReactive.pageCount = data.pageCount

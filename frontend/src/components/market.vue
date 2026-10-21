@@ -254,8 +254,6 @@ onUnmounted(() => {
 
 });
 EventsOn("changeMarketTab", async (msg) => {
-  //message.info(msg.name)
-  console.log(msg.name)
   updateTab(msg.name)
 })
 

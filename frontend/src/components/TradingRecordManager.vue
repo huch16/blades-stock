@@ -338,7 +338,6 @@ function triggerAiPortfolioAudit() {
 
 
 function formatRowTradingTime(row) {
-  console.log('formatRowTradingTime:', row)
   const t = row.TradingTime
   if (t == null || t === '') return '-'
   let date
@@ -464,7 +463,6 @@ function handleSearch() {
 function fetchStatistics() {
   GetTradingRecordStatistics()
     .then((res) => {
-      console.log('统计数据返回:', res)
       if (res) {
         statisticsRef.value = res
       }
@@ -527,7 +525,6 @@ function handleAdd() {
   if (formData.Direction === '买入' && formData.StockCode) {
     CheckFrequentTrading(formData.StockCode)
       .then((res) => {
-        console.log('检查频繁交易结果:', res)
         const canTrade = res.canTrade
         const msg = res.msg
         if (!canTrade) {

@@ -14,7 +14,6 @@ const options =  ref([])
 function getIndustryResearchReport(value) {
   message.loading("正在刷新数据...")
   IndustryResearchReport(value).then(result => {
-    console.log(result)
     list.value = result
   })
 }
@@ -45,7 +44,6 @@ function openWin(code) {
 function EMDictCodeList(keyVal){
   if (keyVal){
     EMDictCode('016').then(result => {
-      console.log(result)
         options.value=result.filter((value,index,array) => value.bkName.includes(keyVal)||value.firstLetter.includes(keyVal)||value.bkCode.includes(keyVal)).map(item => {
           return {
             label: item.bkName+" - "+item.bkCode,

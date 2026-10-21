@@ -1466,7 +1466,6 @@ const aiConfigOptions=ref([])
 const loadAiConfigs = async () => {
   try {
     const configs = await GetAiConfigs()
-    console.log('aiConfigOptions', configs)
     aiConfigOptions.value = configs.map(c => ({
       label: c.name+"["+c.modelName+"]",
       value: c.ID
@@ -1579,7 +1578,6 @@ const handleEdit = async (row) => {
   editingTask.value = true
   try {
     const task = await GetCronTaskByID(row.id)
-    console.log("task",task)
     if (task) {
       // 先重置表单和 Cron 配置器
       resetForm()
@@ -1599,7 +1597,6 @@ const handleEdit = async (row) => {
       // 解析 Cron 表达式并回填到配置器
       parseCronExpression(formData.cronExpr)
 
-      console.log("task.params",task.params)
       // 如果是股票分析任务，解析参数到表单
       if (task.taskType === 'stock_analysis' && task.params) {
         try {
