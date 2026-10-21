@@ -35,8 +35,13 @@ export default defineConfig({
           if (id.includes('/echarts/')) return 'vendor-echarts'
           if (id.includes('lightweight-charts')) return 'vendor-charts'
           
-          // 2. Markdown 与 CodeMirror 编辑器 (统一打包消除循环引用)
-          if (id.includes('md-editor-v3') || id.includes('@vavt') || id.includes('codemirror') || id.includes('@codemirror') || id.includes('@lezer')) {
+          // 2. 代码高亮与 CodeMirror 底层引擎
+          if (id.includes('codemirror') || id.includes('@codemirror') || id.includes('@lezer')) {
+            return 'vendor-codemirror'
+          }
+
+          // 3. Markdown 渲染与扩展库
+          if (id.includes('md-editor-v3') || id.includes('@vavt')) {
             return 'vendor-markdown'
           }
           

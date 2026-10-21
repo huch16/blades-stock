@@ -875,6 +875,8 @@ func checkUSHolidayAPI(date string) (isHoliday bool, apiOk bool) {
 	return result.IsHoliday, true
 }
 func MonitorFundPrices(a *App) {
+	defer PanicHandler()
+
 	// 检查 A 股是否开市（基金交易时间与 A 股一致）
 	if !isTradingTime(time.Now()) {
 		// logger.SugaredLogger.Debugf("当前 A 股未开市，跳过基金价格监控") // suppressed to reduce noise
@@ -898,6 +900,8 @@ func MonitorFundPrices(a *App) {
 
 // MonitorAiRecommendStockPrices 监控 AI 推荐股票的价格，当股价达到预警线时发送通知
 func MonitorAiRecommendStockPrices(a *App) {
+	defer PanicHandler()
+
 	isAStockOpen := isTradingTime(time.Now())
 	isHKStockOpen := IsHKTradingTime(time.Now())
 	isUSStockOpen := IsUSTradingTime(time.Now())
@@ -1051,6 +1055,8 @@ func MonitorAiRecommendStockPrices(a *App) {
 
 // MonitorFollowedStockCostPrices 监控自选股的持仓成本价，当股价低于成本价时发送预警
 func MonitorFollowedStockCostPrices(a *App) {
+	defer PanicHandler()
+
 	isAStockOpen := isTradingTime(time.Now())
 	isHKStockOpen := IsHKTradingTime(time.Now())
 	isUSStockOpen := IsUSTradingTime(time.Now())

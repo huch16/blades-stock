@@ -119,6 +119,8 @@ func OnSecondInstanceLaunch(secondInstanceData options.SecondInstanceData) {
 }
 
 func MonitorStockPrices(a *App) {
+	defer PanicHandler()
+
 	// 检查是否至少有一个市场开市
 	isAStockOpen := isTradingTime(time.Now())
 	isHKStockOpen := IsHKTradingTime(time.Now())

@@ -26,8 +26,7 @@
     "tdesign-icons-vue-next": "^0.3.7",
     "vue": "^3.5.33",
     "vue-json-pretty": "^2.6.0",
-    "vue-router": "^4.6.4",
-    "vue3-danmaku": "^1.6.7"
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

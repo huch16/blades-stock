@@ -530,24 +530,46 @@ func GetSentimentDescription(category models.SentimentType) string {
 }
 
 func SaveAnalyzeSentimentWithFreqWeight(frequencies []models.WordFreqWithWeight) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Warnf("SaveAnalyzeSentimentWithFreqWeight panic recovered: %v", r)
+		}
+	}()
+
+	if len(frequencies) == 0 {
+		return
+	}
 
 	sort.Slice(frequencies, func(i, j int) bool {
 		return frequencies[i].Frequency > frequencies[j].Frequency
 	})
-	wordAnalyzes := make([]models.WordAnalyze, 0)
-	for _, freq := range frequencies[:10] {
+	limit := 10
+	if len(frequencies) < limit {
+		limit = len(frequencies)
+	}
+	wordAnalyzes := make([]models.WordAnalyze, 0, limit)
+	for _, freq := range frequencies[:limit] {
 		wordAnalyze := models.WordAnalyze{
 			WordFreqWithWeight: freq,
 		}
 		wordAnalyzes = append(wordAnalyzes, wordAnalyze)
 	}
-	db.Dao.CreateInBatches(wordAnalyzes, 1000)
+	if db.Dao != nil && len(wordAnalyzes) > 0 {
+		db.Dao.CreateInBatches(wordAnalyzes, 1000)
+	}
 }
 
 func SaveStockSentimentAnalysis(result models.SentimentResult) {
-	db.Dao.Create(&models.SentimentResultAnalyze{
-		SentimentResult: result,
-	})
+	defer func() {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Warnf("SaveStockSentimentAnalysis panic recovered: %v", r)
+		}
+	}()
+	if db.Dao != nil {
+		db.Dao.Create(&models.SentimentResultAnalyze{
+			SentimentResult: result,
+		})
+	}
 }
 
 func NewsAnalyze(text string, save bool) (models.SentimentResult, []models.WordFreqWithWeight) {

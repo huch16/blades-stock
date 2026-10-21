@@ -60,9 +60,10 @@ ENV BLADES_LOG_DIR=/app/logs
 ENV PORT=8000
 ENV HOST=0.0.0.0
 
-# 从前置阶段拷贝编译产物
+# 从前置阶段拷贝编译产物与初始基准股票库
 COPY --from=backend-builder /blades-stock-server /app/blades-stock-server
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
+COPY build/*.json /app/build/
 
 # 挂载数据持久化目录与日志目录
 VOLUME ["/app/data", "/app/logs"]
