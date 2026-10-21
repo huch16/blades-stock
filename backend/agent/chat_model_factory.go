@@ -113,6 +113,11 @@ func isGeminiGoogleAI(baseLower, modelLower string) bool {
 	return false
 }
 
+// CreateChatModel 是 createChatModel 的公开包装，供外部直接安全创建 ModelProvider
+func CreateChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelProvider, error) {
+	return createChatModel(ctx, aiConfig)
+}
+
 func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelProvider, error) {
 	baseURL := normalizeChatModelBaseURL(aiConfig.BaseUrl)
 	baseLower := strings.ToLower(baseURL)
@@ -171,6 +176,11 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 		}
 		if aiConfig.Thinking {
 			extraFields["reasoning_effort"] = "medium"
+		} else {
+			if strings.Contains(baseLower, "minimax") || strings.Contains(strings.ToLower(aiConfig.ModelName), "minimax") {
+				extraFields["thinking"] = map[string]any{"type": "disabled"}
+				extraFields["reasoning_effort"] = "none"
+			}
 		}
 		reqOpts := []openaiOption.RequestOption{
 			sanitizeToolsMiddleware(),

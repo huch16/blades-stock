@@ -567,38 +567,87 @@ func PreFetchStockAnalysisData(stockCode string) string {
 		return ""
 	}
 	api := data.NewStockDataApi()
-	var parts []string
+
+	var (
+		realtimeStr string
+		financeMd   string
+		qtrMd       string
+		valMd       string
+		predMd      string
+		wg          sync.WaitGroup
+	)
+
+	wg.Add(5)
 
 	// 1. 实时行情与最新价
-	if info, err := api.GetStockCodeRealTimeData(stockCode); err == nil && info != nil && len(*info) > 0 {
-		s := (*info)[0]
-		changePercent := s.ChangePercent
-		changePrice := s.ChangePrice
-		parts = append(parts, fmt.Sprintf("【实时行情】%s(%s) 当前价:%s 涨跌幅:%.2f%% 涨跌额:%.2f 开盘:%s 最高:%s 最低:%s 昨收:%s 成交量:%s 成交额:%s",
-			s.Name, s.Code, s.Price, changePercent, changePrice, s.Open, s.High, s.Low, s.PreClose, s.Volume, s.Amount))
-	}
+	go func() {
+		defer wg.Done()
+		defer func() { _ = recover() }()
+		if info, err := api.GetStockCodeRealTimeData(stockCode); err == nil && info != nil && len(*info) > 0 {
+			s := (*info)[0]
+			changePercent := s.ChangePercent
+			changePrice := s.ChangePrice
+			realtimeStr = fmt.Sprintf("【实时行情】%s(%s) 当前价:%s 涨跌幅:%.2f%% 涨跌额:%.2f 开盘:%s 最高:%s 最低:%s 昨收:%s 成交量:%s 成交额:%s",
+				s.Name, s.Code, s.Price, changePercent, changePrice, s.Open, s.High, s.Low, s.PreClose, s.Volume, s.Amount)
+		}
+	}()
 
 	// 2. 最新财务指标
-	financeMd := api.GetStockLatestFinanceToMarkdown(stockCode)
-	if financeMd != "" && !strings.HasPrefix(financeMd, "获取") {
-		parts = append(parts, financeMd)
-	}
+	go func() {
+		defer wg.Done()
+		defer func() { _ = recover() }()
+		res := api.GetStockLatestFinanceToMarkdown(stockCode)
+		if res != "" && !strings.HasPrefix(res, "获取") {
+			financeMd = res
+		}
+	}()
 
 	// 3. 季度财务表现 (ROE, 毛利率等)
-	qtrMd := api.GetStockQtrMainFinanceToMarkdown(stockCode)
-	if qtrMd != "" && !strings.HasPrefix(qtrMd, "获取") {
-		parts = append(parts, qtrMd)
-	}
+	go func() {
+		defer wg.Done()
+		defer func() { _ = recover() }()
+		res := api.GetStockQtrMainFinanceToMarkdown(stockCode)
+		if res != "" && !strings.HasPrefix(res, "获取") {
+			qtrMd = res
+		}
+	}()
 
 	// 4. 估值分位点 (PE/PB 历史百分位)
-	valMd := api.GetStockValuationPercentileToMarkdown(stockCode)
-	if valMd != "" && !strings.HasPrefix(valMd, "获取") {
-		parts = append(parts, valMd)
-	}
+	go func() {
+		defer wg.Done()
+		defer func() { _ = recover() }()
+		res := api.GetStockValuationPercentileToMarkdown(stockCode)
+		if res != "" && !strings.HasPrefix(res, "获取") {
+			valMd = res
+		}
+	}()
 
 	// 5. 机构一致性盈利预测
-	predMd := api.GetStockPredictSummaryToMarkdown(stockCode)
-	if predMd != "" && !strings.HasPrefix(predMd, "获取") {
+	go func() {
+		defer wg.Done()
+		defer func() { _ = recover() }()
+		res := api.GetStockPredictSummaryToMarkdown(stockCode)
+		if res != "" && !strings.HasPrefix(res, "获取") {
+			predMd = res
+		}
+	}()
+
+	wg.Wait()
+
+	var parts []string
+	if realtimeStr != "" {
+		parts = append(parts, realtimeStr)
+	}
+	if financeMd != "" {
+		parts = append(parts, financeMd)
+	}
+	if qtrMd != "" {
+		parts = append(parts, qtrMd)
+	}
+	if valMd != "" {
+		parts = append(parts, valMd)
+	}
+	if predMd != "" {
 		parts = append(parts, predMd)
 	}
 
@@ -681,7 +730,7 @@ func (s *AgentService) NewChatStreamCustom(emitter MessageEmitter, stock, stockC
 
 		sysPrompt := ""
 		if agentMode == string(agent.AgentModeDirect) {
-			sysPrompt = "你现在是顶级证券投资顾问与量化宏观专家“财智”。所有核心客观盘面数据、估值百分位与详尽财务指标已在用户输入中完整提供，无需额外调用外部工具。请直接基于输入中的真实数据，从技术面、基本面、消息面、资金面四个维度输出结构清晰、多空判断明确的深度研报，严禁在正文中生成任何伪造的工具调用标签。"
+			sysPrompt = "你现在是顶级证券投资顾问与量化宏观专家“财智”。所有核心客观盘面数据、估值百分位与详尽财务指标已在用户输入中完整提供，无需额外调用外部工具。请直接基于输入中的真实数据，从技术面、基本面、消息面、资金面四个维度输出结构清晰、多空判断明确的深度研报，严禁在正文中生成任何伪造的工具调用标签。请突出核心逻辑与量化矛盾，语言干练利落，总字数控制在 1500~2000 字以内，确保专业度与交付效率。"
 		}
 
 		for msg := range agent.NewStockAiAgentApi().ChatWithContext(ctx, analysisQuestion, aiConfigId, sysPromptId, false, 0, think, agentMode, sysPrompt) {

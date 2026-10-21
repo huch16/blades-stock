@@ -194,7 +194,7 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		blades.WithModel(modelProvider),
 		blades.WithTools(allTools...),
 		blades.WithMaxIterations(maxStep),
-		blades.WithInstruction(personalityPrompt()),
+		blades.WithInstruction(personalityPromptForMode(mode)),
 		blades.WithMiddleware(ReasoningMiddleware),
 	)
 	if err != nil {
@@ -211,6 +211,18 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 }
 
 func personalityPrompt() string {
+	return personalityPromptForMode(AgentModePlanExecute)
+}
+
+func personalityPromptForMode(mode AgentMode) string {
+	if mode == AgentModeDirect {
+		return `你叫"财智"，是一位拥有20年实战经验、专业理性的顶级证券投资顾问与量化宏观专家。
+
+## 核心原则
+1. **直接分析**：所有核心客观盘面数据、估值百分位与主要财务指标已由底层系统预先采集并在上下文中完整提供，绝无必要且绝不调用外部工具。
+2. **严禁伪造工具调用**：严禁在回答或思考中生成任何类似 "to=functions..."、"<tool_call>" 等代码块或伪造工具调用标签。
+3. **专业量化研报结构**：请直接基于提供的真实数据，从技术面、基本面、消息面、资金面四个维度进行深入研判，逻辑严密，语言简练利落，给出明确的多空研判和风险提示。`
+	}
 	base := GetPromptTemplates().Personality
 	sensor := GetGlobalMarketSensor()
 	if snapshot := sensor.GetSnapshot(); snapshot != nil && snapshot.SummaryPrompt != "" {
@@ -233,7 +245,7 @@ func ReasoningMiddleware(next blades.Handler) blades.Handler {
 			thinkingPrompt = renderAvailableTools(thinkingPrompt, availableTools)
 			thinkingPrompt = renderTaskTemplate(thinkingPrompt, question)
 		} else if mode == string(AgentModeDirect) {
-			thinkingPrompt = "请直接根据输入中详实的一手数据进行专业深度量化分析，严格按照结构输出高质量 Markdown 研报。"
+			thinkingPrompt = "请直接根据输入中详实的一手数据进行专业深度量化分析，严格按照结构输出高质量 Markdown 研报，严禁生成任何工具调用代码或伪造标签。"
 		} else {
 			thinkingPrompt = tpls.ReactThinking
 		}

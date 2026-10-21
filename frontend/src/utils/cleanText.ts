@@ -104,8 +104,44 @@ export function collapseConsecutiveDuplicates(text: string, minBlock = 400): str
   return s + trailing
 }
 
+// salvageRawContent 尝试从全量原始输出中挽救被意外包裹在 <think> 或思维标签中的有效分析正文。
+export function salvageRawContent(raw: string): string {
+  if (!raw || !raw.trim()) return ''
+  let s = raw
+  // 1. 如果有 </think> 且后面有非空白内容，优先取其后
+  const idx = s.lastIndexOf('</think>')
+  if (idx >= 0) {
+    const after = s.slice(idx + 8).trim()
+    if (after.length > 50) {
+      return after
+    }
+  }
+  // 2. 剥离所有的 <think> 和 </think> 等标签
+  s = s.replace(/<think[\s\S]*?>/gi, '').replace(/<\/think>/gi, '')
+  s = s.replace(/<thinking[\s\S]*?>/gi, '').replace(/<\/thinking>/gi, '')
+  s = s.trim()
+
+  // 3. 寻找 Markdown 研报正文标志性开头
+  const markers = ['# ', '## ', '一、', '1. ', '【', '综上所述', '结论先行']
+  for (const marker of markers) {
+    const pos = s.indexOf(marker)
+    if (pos >= 0) {
+      return s.slice(pos).trim()
+    }
+  }
+  return s
+}
+
 // cleanFinalContent is applied once when streaming finishes: strip reasoning
 // blocks first, then collapse a repeated answer if the model emitted one.
 export function cleanFinalContent(raw: string): string {
-  return collapseConsecutiveDuplicates(cleanThinkBlocks(raw), 400)
+  const cleaned = collapseConsecutiveDuplicates(cleanThinkBlocks(raw), 400)
+  // 防空兜底：若过滤后为空，但原始文本包含大量字符，智能挽救正文内容
+  if (!cleaned.trim() && raw && raw.trim().length > 100) {
+    const salvaged = salvageRawContent(raw)
+    if (salvaged) {
+      return collapseConsecutiveDuplicates(salvaged, 400)
+    }
+  }
+  return cleaned
 }

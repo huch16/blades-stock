@@ -325,12 +325,14 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
-		// parallel pre-fetch: for multi-group questions, run sub-agents
-		// concurrently to gather data before the main agent loop.
-		if prefetched := preFetchInParallel(ctx, question, stockAiAgent.instance.AllTools, stockAiAgent.instance.AIConfig); prefetched != nil {
-			parallelCtx := buildParallelContext(prefetched)
-			if parallelCtx != "" {
-				sysPrompt = parallelCtx + "\n\n" + sysPrompt
+		// parallel pre-fetch: 仅在非 direct 且包含实际工具时才进行子 Agent 并发探索。
+		// direct 模式下数据已由 Go 原生毫秒级采集，且 tools=0，严禁启动子 Agent 避免 60 秒无意义等待！
+		if agentMode != string(AgentModeDirect) && len(stockAiAgent.instance.AllTools) > 0 {
+			if prefetched := preFetchInParallel(ctx, question, stockAiAgent.instance.AllTools, stockAiAgent.instance.AIConfig); prefetched != nil {
+				parallelCtx := buildParallelContext(prefetched)
+				if parallelCtx != "" {
+					sysPrompt = parallelCtx + "\n\n" + sysPrompt
+				}
 			}
 		}
 

@@ -154,8 +154,46 @@ func isCollapseJunk(j string) bool {
 	return true
 }
 
+// salvageRawContent 尝试从全量原始输出中挽救被意外包裹在 <think> 或思维标签中的有效分析正文。
+// 仅当常规清洗后内容为空，但原始输出存在实质内容时调用。
+func salvageRawContent(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	s := raw
+	// 1. 如果有 </think> 且后面有非空白内容，优先取其后
+	if idx := strings.LastIndex(s, "</think>"); idx >= 0 {
+		after := strings.TrimSpace(s[idx+8:])
+		if len(after) > 50 {
+			return after
+		}
+	}
+	// 2. 剥离所有的 <think> 和 </think> 等标签
+	s = strings.ReplaceAll(s, "<think>", "")
+	s = strings.ReplaceAll(s, "</think>", "")
+	s = strings.ReplaceAll(s, "<thinking>", "")
+	s = strings.ReplaceAll(s, "</thinking>", "")
+	s = strings.TrimSpace(s)
+
+	// 3. 寻找 Markdown 研报正文标志性开头（如 # 标题、一、等）
+	for _, marker := range []string{"# ", "## ", "一、", "1. ", "【", "综上所述", "结论先行"} {
+		if pos := strings.Index(s, marker); pos >= 0 {
+			return strings.TrimSpace(s[pos:])
+		}
+	}
+	return s
+}
+
 // cleanFinalContent is applied once after streaming completes: strip reasoning
 // blocks first, then collapse a repeated answer if the model emitted one.
 func cleanFinalContent(raw string) string {
-	return collapseConsecutiveDuplicates(cleanThinkBlocks(raw), 400)
+	cleaned := collapseConsecutiveDuplicates(cleanThinkBlocks(raw), 400)
+	// 防空兜底：若过滤后为空，但原始文本包含大量字符，智能挽救正文内容
+	if strings.TrimSpace(cleaned) == "" && len(strings.TrimSpace(raw)) > 100 {
+		salvaged := salvageRawContent(raw)
+		if salvaged != "" {
+			return collapseConsecutiveDuplicates(salvaged, 400)
+		}
+	}
+	return cleaned
 }
