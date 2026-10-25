@@ -762,6 +762,40 @@ func (s *AgentService) GetAIResponseResult(stockCode string) string {
 }
 
 // -----------------------------------------------------------------------------
+// 买方认知假说沉淀与历史演进 (Stock Thesis Ledger & Cognitive Deposition)
+// -----------------------------------------------------------------------------
+
+// GetStockThesis 查询标的买方认知假说与最新判定
+func (s *AgentService) GetStockThesis(stockCode string) (*models.StockThesisLedger, error) {
+	return data.NewStockThesisApi().GetStockThesis(stockCode)
+}
+
+// GetStockThesisHistory 获取标的历史认知演化时间线
+func (s *AgentService) GetStockThesisHistory(stockCode string, limit int) ([]models.StockVerdictHistory, error) {
+	return data.NewStockThesisApi().GetStockThesisHistory(stockCode, limit)
+}
+
+// SaveStockThesis 手动保存或调整买方认知假说
+func (s *AgentService) SaveStockThesis(stockCode, stockName, verdict, verdictText, coreThesis, keyCatalysts, riskFactors, modelName string) error {
+	thesis := &models.StockThesisLedger{
+		StockCode:    stockCode,
+		StockName:    stockName,
+		Verdict:      verdict,
+		VerdictText:  verdictText,
+		CoreThesis:   coreThesis,
+		KeyCatalysts: keyCatalysts,
+		RiskFactors:  riskFactors,
+		ModelName:    modelName,
+	}
+	return data.NewStockThesisApi().SaveStockThesis(thesis)
+}
+
+// GetAllStockTheses 获取全量标的认知状态映射表 (供自选列表极速匹配)
+func (s *AgentService) GetAllStockTheses() (map[string]models.StockThesisLedger, error) {
+	return data.NewStockThesisApi().GetAllStockTheses()
+}
+
+// -----------------------------------------------------------------------------
 // 技能治理与审批流兼容性桩 (Skill Governance Compatibility)
 // -----------------------------------------------------------------------------
 

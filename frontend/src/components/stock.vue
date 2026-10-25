@@ -34,6 +34,9 @@ import {
   UpdateGroup,
   UpdateGroupSort,
   BatchGreet,
+  GetStockThesis,
+  GetStockThesisHistory,
+  GetAllStockTheses,
 } from '../../wailsjs/go/main/App'
 import StockCard from './StockCard.vue'
 import StockDiagnosisDrawer from './StockDiagnosisDrawer.vue'
@@ -42,11 +45,17 @@ import { cleanFinalContent } from '../utils/cleanText'
 import {
   NAvatar,
   NButton,
+  NCard,
+  NEmpty,
   NFlex,
   NForm,
   NFormItem,
   NInputNumber,
+  NTag,
   NText,
+  NTimeline,
+  NTimelineItem,
+  NTooltip,
   useDialog,
   useMessage,
   useNotification
@@ -171,6 +180,57 @@ const aiAnalysisTimeout = ref(null)
 
 
 const currentGroupId = ref(0)
+
+// 买方认知档案与判定账本
+const thesesMap = ref<Record<string, any>>({})
+const activeThesis = ref<any>(null)
+const thesisHistoryList = ref<any[]>([])
+const showThesisHistoryModal = ref(false)
+
+function getVerdictType(verdict?: string) {
+  switch (verdict) {
+    case 'THESIS_STRENGTHENED':
+      return 'success'
+    case 'NEW_THESIS':
+      return 'info'
+    case 'THESIS_WEAKENED':
+      return 'warning'
+    case 'THESIS_BROKEN':
+      return 'error'
+    default:
+      return 'default'
+  }
+}
+
+function loadAllTheses() {
+  GetAllStockTheses().then((res: any) => {
+    thesesMap.value = res || {}
+  }).catch(() => {})
+}
+
+async function fetchActiveThesis(code: string) {
+  if (!code) {
+    activeThesis.value = null
+    return
+  }
+  try {
+    const res = await GetStockThesis(code)
+    activeThesis.value = res || null
+  } catch {
+    activeThesis.value = null
+  }
+}
+
+async function viewThesisHistory(code: string) {
+  if (!code) return
+  try {
+    const list = await GetStockThesisHistory(code, 30)
+    thesisHistoryList.value = list || []
+    showThesisHistoryModal.value = true
+  } catch (err: any) {
+    message.error('获取认知历史失败: ' + (err?.message || err))
+  }
+}
 
 
 const theme = computed(() => {
@@ -493,6 +553,7 @@ onMounted(() => {
   nextTick(() => {
     initDraggableTabs();
   });
+  loadAllTheses();
 
   message.loading("Loading...")
   GetFollowList(currentGroupId.value).then(result => {
@@ -1972,6 +2033,7 @@ function aiReCheckStock(stock, stockCode) {
   data.code = stockCode
   data.loading = true
   modalShow4.value = true
+  fetchActiveThesis(stockCode)
   data.analysisStatus = "正在连接AI服务..."
   data.analysisAborted = false
   message.loading("ai检测中...", {
@@ -2008,6 +2070,7 @@ function aiReCheckStock(stock, stockCode) {
 }
 
 function aiCheckStock(stock, stockCode) {
+  fetchActiveThesis(stockCode)
   GetAIResponseResult(stockCode).then(result => {
     if (result.content) {
       data.modelName = result.modelName
@@ -2442,6 +2505,7 @@ watch(modalShow6, (newVal) => {
       <n-grid :x-gap="8" :cols="3" :y-gap="8">
         <n-gi :id="result['股票代码']+'_gi'" v-for="result in sortedResults" :key="result.key" style="margin-left: 2px;">
           <StockCard :result="result" :open-ai-enable="data.openAiEnable" :group-list="groupList"
+            :thesis="thesesMap[result['股票代码']] || thesesMap[result.key] || thesesMap[result.StockCode]"
             @remove-monitor="removeMonitor"
             @ai-check-stock="aiCheckStock"
             @set-cost="setStock"
@@ -2462,6 +2526,7 @@ watch(modalShow6, (newVal) => {
       <n-grid :x-gap="8" :cols="3" :y-gap="8">
         <n-gi :id="result['股票代码']+'_gi'" v-for="result in groupResults" :key="result.key" style="margin-left: 2px;">
           <StockCard :result="result" :show-spark-line="true" :group-id="group.ID" :open-ai-enable="data.openAiEnable" :group-list="groupList"
+            :thesis="thesesMap[result['股票代码']] || thesesMap[result.key] || thesesMap[result.StockCode]"
             @remove-monitor="removeMonitor"
             @ai-check-stock="aiCheckStock"
             @set-cost="setStock"
@@ -2652,6 +2717,40 @@ watch(modalShow6, (newVal) => {
 
   <n-modal transform-origin="center" v-model:show="modalShow4" preset="card" style="width: 800px;max-width: calc(100vw - 32px);"
            :title="'['+data.name+']AI分析'">
+    <!-- 🎯 买方认知档案沉淀卡片 -->
+    <n-card
+      v-if="activeThesis && activeThesis.verdictText"
+      size="small"
+      :bordered="true"
+      style="margin-bottom: 12px; background: rgba(24, 160, 88, 0.05); border-left: 4px solid #18a058; text-align: left;"
+    >
+      <n-flex justify="space-between" align="center" style="margin-bottom: 6px;">
+        <n-flex align="center">
+          <span style="font-weight: bold; font-size: 13px;">🎯 买方认知档案</span>
+          <n-tag :type="getVerdictType(activeThesis.verdict)" size="small" round :bordered="false">
+            {{ activeThesis.verdictText }}
+          </n-tag>
+          <n-text depth="3" style="font-size: 11px;">
+            更新于 {{ activeThesis.updatedAt ? new Date(activeThesis.updatedAt).toLocaleDateString() : '' }}
+          </n-text>
+        </n-flex>
+        <n-button size="tiny" type="primary" secondary @click="viewThesisHistory(data.code)">
+          📈 认知演进历史
+        </n-button>
+      </n-flex>
+      <div v-if="activeThesis.coreThesis" style="font-size: 12px; margin-bottom: 4px; line-height: 1.5;">
+        <strong style="color: #18a058;">核心假说：</strong>{{ activeThesis.coreThesis }}
+      </div>
+      <n-flex size="small" style="font-size: 11px;">
+        <span v-if="activeThesis.keyCatalysts" style="color: #f0a020;">
+          <strong>跟踪催化：</strong>{{ activeThesis.keyCatalysts }}
+        </span>
+        <span v-if="activeThesis.riskFactors" style="color: #d03050; margin-left: 8px;">
+          <strong>证伪条件：</strong>{{ activeThesis.riskFactors }}
+        </span>
+      </n-flex>
+    </n-card>
+
     <n-spin size="small" :show="data.loading && !data.airesult">
       <MdEditor v-if="enableEditor" :toolbars="toolbars" ref="mdEditorRef" style="height: 440px;max-height: 60vh;text-align: left"
                 :modelValue="data.airesult" :theme="theme">
@@ -2766,6 +2865,42 @@ watch(modalShow6, (newVal) => {
     :stock-code="diagnosisStockCode"
     :stock-name="diagnosisStockName"
   />
+
+  <!-- 买方认知历史演进时间线弹窗 -->
+  <n-modal
+    v-model:show="showThesisHistoryModal"
+    preset="card"
+    style="width: 650px; max-width: calc(100vw - 32px); text-align: left;"
+    title="📈 买方认知演进时间线"
+  >
+    <div style="max-height: 60vh; overflow-y: auto; padding-right: 8px;">
+      <n-empty v-if="!thesisHistoryList || thesisHistoryList.length === 0" description="暂无历史认知演化记录" />
+      <n-timeline v-else>
+        <n-timeline-item
+          v-for="item in thesisHistoryList"
+          :key="item.id"
+          :type="getVerdictType(item.verdict)"
+          :title="item.verdictText || item.verdict"
+          :time="new Date(item.createdAt).toLocaleString()"
+        >
+          <div style="font-size: 12px; margin-top: 4px; line-height: 1.5;">
+            <div v-if="item.coreThesis" style="margin-bottom: 2px;">
+              <strong>核心逻辑：</strong>{{ item.coreThesis }}
+            </div>
+            <div v-if="item.keyCatalysts" style="color: #f0a020; margin-bottom: 2px;">
+              <strong>验证催化：</strong>{{ item.keyCatalysts }}
+            </div>
+            <div v-if="item.riskFactors" style="color: #d03050; margin-bottom: 2px;">
+              <strong>证伪条件：</strong>{{ item.riskFactors }}
+            </div>
+            <n-text depth="3" style="font-size: 11px;">
+              模型: {{ item.modelName || '默认' }} · 触发: {{ item.triggerEvent || '系统' }}
+            </n-text>
+          </div>
+        </n-timeline-item>
+      </n-timeline>
+    </div>
+  </n-modal>
 </template>
 
 <style scoped>

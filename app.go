@@ -1550,6 +1550,36 @@ func (a *App) DiagnoseStock(stockCode string) (*quant.StockDiagnosisResult, erro
 	return a.quantService.DiagnoseStock(stockCode)
 }
 
+// GetStockThesis 查询标的买方认知档案及最新判定
+func (a *App) GetStockThesis(stockCode string) (*models.StockThesisLedger, error) {
+	return data.NewStockThesisApi().GetStockThesis(stockCode)
+}
+
+// GetStockThesisHistory 获取标的历史认知演化时间线
+func (a *App) GetStockThesisHistory(stockCode string, limit int) ([]models.StockVerdictHistory, error) {
+	return data.NewStockThesisApi().GetStockThesisHistory(stockCode, limit)
+}
+
+// SaveStockThesis 手动保存或调整买方认知假说
+func (a *App) SaveStockThesis(stockCode, stockName, verdict, verdictText, coreThesis, keyCatalysts, riskFactors, modelName string) error {
+	thesis := &models.StockThesisLedger{
+		StockCode:    stockCode,
+		StockName:    stockName,
+		Verdict:      verdict,
+		VerdictText:  verdictText,
+		CoreThesis:   coreThesis,
+		KeyCatalysts: keyCatalysts,
+		RiskFactors:  riskFactors,
+		ModelName:    modelName,
+	}
+	return data.NewStockThesisApi().SaveStockThesis(thesis)
+}
+
+// GetAllStockTheses 获取全量标的认知状态映射表 (供自选列表极速匹配)
+func (a *App) GetAllStockTheses() (map[string]models.StockThesisLedger, error) {
+	return data.NewStockThesisApi().GetAllStockTheses()
+}
+
 // TriggerAIReportBacktest 手动或自动触发 AI 报告历史回测与胜率检验
 func (a *App) TriggerAIReportBacktest(limit int) (*quant.AIReportBacktestResult, error) {
 	return a.quantService.TriggerAIReportBacktest(limit)

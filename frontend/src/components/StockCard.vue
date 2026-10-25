@@ -7,8 +7,24 @@ const props = defineProps({
   showSparkLine: { type: Boolean, default: false },
   groupId: { type: Number, default: null },
   openAiEnable: { type: Boolean, default: false },
-  groupList: { type: Array, default: () => [] }
+  groupList: { type: Array, default: () => [] },
+  thesis: { type: Object, default: null }
 })
+
+function getVerdictType(verdict) {
+  switch (verdict) {
+    case 'THESIS_STRENGTHENED':
+      return 'success'
+    case 'NEW_THESIS':
+      return 'info'
+    case 'THESIS_WEAKENED':
+      return 'warning'
+    case 'THESIS_BROKEN':
+      return 'error'
+    default:
+      return 'default'
+  }
+}
 
 function focusStock() {
   if (props.result && props.result['股票代码']) {
@@ -259,6 +275,27 @@ const emit = defineEmits([
       </n-collapse-item>
     </n-collapse>
     <template #header-extra>
+      <n-tooltip v-if="thesis && thesis.verdictText" trigger="hover">
+        <template #trigger>
+          <n-tag
+            size="tiny"
+            round
+            :bordered="false"
+            :type="getVerdictType(thesis.verdict)"
+            style="cursor: pointer; font-size: 11px; font-weight: 500; margin-right: 6px;"
+            @click.stop="emit('ai-check-stock', result['股票名称'], result['股票代码'])"
+          >
+            {{ thesis.verdictText }}
+          </n-tag>
+        </template>
+        <div style="max-width: 260px; font-size: 12px; line-height: 1.5; text-align: left;">
+          <div style="font-weight: bold; margin-bottom: 4px; color: #18a058;">🎯 买方认知假说</div>
+          <div>{{ thesis.coreThesis || '暂无详细假说描述' }}</div>
+          <div v-if="thesis.keyCatalysts" style="margin-top: 4px; color: #f0a020;">
+            <strong>催化：</strong>{{ thesis.keyCatalysts }}
+          </div>
+        </div>
+      </n-tooltip>
       <n-tag
         size="small"
         :bordered="false"

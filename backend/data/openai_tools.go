@@ -919,16 +919,27 @@ func (o *OpenAi) SaveAIResponseResult(stockCode, stockName, result, chatId, ques
 	if !models.IsStockReportCode(stockCode) {
 		logger.SugaredLogger.Warnf("SaveAIResponseResult: 非个股代码，不计入回测追踪: code=%q name=%q question=%q", stockCode, stockName, question)
 	}
-	err := db.Dao.Create(&models.AIResponseResult{
+	reportRecord := models.AIResponseResult{
 		StockCode: stockCode,
 		StockName: stockName,
 		ModelName: o.Model,
 		Content:   result,
 		ChatId:    chatId,
 		Question:  question,
-	}).Error
+	}
+	err := db.Dao.Create(&reportRecord).Error
 	if err != nil {
 		logger.SugaredLogger.Errorf("failed to save ai response result: %v", err)
+	} else if models.IsStockReportCode(stockCode) {
+		// 异步沉淀买方认知假说与历史演进轨迹
+		go func(code, name, content, model string, repId uint) {
+			defer func() {
+				if r := recover(); r != nil {
+					logger.SugaredLogger.Errorf("recover in ExtractAndUpdateThesisFromReport: %v", r)
+				}
+			}()
+			NewStockThesisApi().ExtractAndUpdateThesisFromReport(code, name, content, model, repId)
+		}(stockCode, stockName, result, o.Model, reportRecord.ID)
 	}
 }
 

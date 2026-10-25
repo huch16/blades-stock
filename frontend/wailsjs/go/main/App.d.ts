@@ -475,3 +475,12 @@ export function UpdateTradingRecord(arg1:data.TradingRecord):Promise<void>;
 export function ValidateCronExpr(arg1:string):Promise<string>;
 
 export function VerifyBackupIntegrity(arg1:string):Promise<string>;
+
+export function GetStockThesis(arg1:string):Promise<any>;
+
+export function GetStockThesisHistory(arg1:string,arg2:number):Promise<any>;
+
+export function SaveStockThesis(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<void>;
+
+export function GetAllStockTheses():Promise<Record<string, any>>;
+

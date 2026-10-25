@@ -35,6 +35,8 @@ func AutoMigrateAll() {
 
 	// 2. 资讯舆情与全景研判
 	db.Dao.AutoMigrate(&models.AIResponseResult{})
+	db.Dao.AutoMigrate(&models.StockThesisLedger{})
+	db.Dao.AutoMigrate(&models.StockVerdictHistory{})
 	db.Dao.AutoMigrate(&models.StockInfoHK{})
 	db.Dao.AutoMigrate(&models.StockInfoUS{})
 	db.Dao.AutoMigrate(&models.Tags{})

@@ -937,3 +937,20 @@ export function ValidateCronExpr(arg1) {
 export function VerifyBackupIntegrity(arg1) {
   return window['go']['main']['App']['VerifyBackupIntegrity'](arg1);
 }
+
+export function GetStockThesis(arg1) {
+  return window['go']['main']['App']['GetStockThesis'](arg1);
+}
+
+export function GetStockThesisHistory(arg1, arg2) {
+  return window['go']['main']['App']['GetStockThesisHistory'](arg1, arg2);
+}
+
+export function SaveStockThesis(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['SaveStockThesis'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+}
+
+export function GetAllStockTheses() {
+  return window['go']['main']['App']['GetAllStockTheses']();
+}
+

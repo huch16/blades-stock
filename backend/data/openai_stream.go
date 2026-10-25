@@ -400,6 +400,37 @@ func (o *OpenAi) NewChatStream(stock, stockCode, userQuestion string, sysPromptI
 			replaceTemplates["costPrice"] = convertor.ToString(followedStock.CostPrice)
 		}
 
+		// 注入买方认知假说与历史基准
+		thesisLedger, _ := NewStockThesisApi().GetStockThesis(stockCode)
+		if thesisLedger != nil && thesisLedger.VerdictText != "" {
+			thesisBenchmark := fmt.Sprintf(
+				"【该标的买方历史认知基准】：\n- 上次判定：【%s】(更新于 %s)\n- 核心逻辑：%s\n- 验证催化：%s\n- 证伪条件：%s\n\n请在研报中对上述历史认知进行检验，并在报告末尾按照以下规范输出本次检验结论：\n### 🎯 买方认知沉淀与假说检验\n- **本次判定**：[逻辑强化 / 维持现状 / 逻辑削弱 / 逻辑证伪 / 新论点]\n- **核心逻辑**：(用精炼的1-2句话概括当前最核心的驱动逻辑)\n- **验证催化**：(下一阶段需要跟踪验证的关键数据或催化事件)\n- **证伪条件**：(出现何种信号意味着当前逻辑打破)",
+				thesisLedger.VerdictText,
+				thesisLedger.UpdatedAt.Format("2006-01-02"),
+				thesisLedger.CoreThesis,
+				thesisLedger.KeyCatalysts,
+				thesisLedger.RiskFactors,
+			)
+			msg = append(msg, map[string]interface{}{
+				"role":    "user",
+				"content": "请调取该标的买方历史认知基准与检验规范",
+			})
+			msg = append(msg, map[string]interface{}{
+				"role":    "assistant",
+				"content": thesisBenchmark,
+			})
+		} else {
+			thesisGuidance := "【买方认知档案首次建档提示】：该标的尚未建立认知档案，请在报告末尾建立初始档案：\n### 🎯 买方认知沉淀与假说检验\n- **本次判定**：新论点\n- **核心逻辑**：(用精炼的1-2句话概括核心投资假说)\n- **验证催化**：(下一阶段需要跟踪验证的关键数据或催化事件)\n- **证伪条件**：(出现何种信号意味着当前逻辑打破)"
+			msg = append(msg, map[string]interface{}{
+				"role":    "user",
+				"content": "请调取买方认知档案建档规范",
+			})
+			msg = append(msg, map[string]interface{}{
+				"role":    "assistant",
+				"content": thesisGuidance,
+			})
+		}
+
 		question := ""
 		if userQuestion == "" {
 			question = strutil.ReplaceWithMap(o.QuestionTemplate, replaceTemplates)
