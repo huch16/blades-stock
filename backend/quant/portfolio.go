@@ -245,6 +245,11 @@ func FromSignals(
 				pf.shares[i] = 0
 				pf.status[i] = 0
 
+				tradeReturn := 0.0
+				if pos.EntryCash > 0 {
+					tradeReturn = pnl / pos.EntryCash
+				}
+
 				pf.trades = append(pf.trades, Trade{
 					ID:         pf.tradeID,
 					EntryIndex: pos.EntryIndex,
@@ -255,7 +260,7 @@ func FromSignals(
 					Size:       pos.Size,
 					TradeType:  pos.TradeType,
 					PnL:        pnl,
-					Return:     pnl / pos.EntryCash,
+					Return:     tradeReturn,
 					ExitReason: exitReason,
 				})
 				pf.tradeID++
@@ -312,6 +317,11 @@ func FromSignals(
 		pf.equity[n-1] = pf.cash[n-1]
 		pf.value[n-1] = pf.cash[n-1]
 
+		lastTradeReturn := 0.0
+		if pos.EntryCash > 0 {
+			lastTradeReturn = pnl / pos.EntryCash
+		}
+
 		pf.trades = append(pf.trades, Trade{
 			ID:         pf.tradeID,
 			EntryIndex: pos.EntryIndex,
@@ -322,7 +332,7 @@ func FromSignals(
 			Size:       pos.Size,
 			TradeType:  pos.TradeType,
 			PnL:        pnl,
-			Return:     pnl / pos.EntryCash,
+			Return:     lastTradeReturn,
 			ExitReason: "end_of_data",
 		})
 	}
@@ -417,6 +427,14 @@ type Stats struct {
 	TotalDays        int     // 总天数
 }
 
+// sanitizeFloat 确保数值非 NaN 且非 Inf，避免 JSON 序列化崩溃与前端渲染异常
+func sanitizeFloat(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0.0
+	}
+	return v
+}
+
 // GetStats 获取组合统计（参考 VectorBT stats 属性）
 func (pf *Portfolio) GetStats() *Stats {
 	n := len(pf.value)
@@ -426,14 +444,21 @@ func (pf *Portfolio) GetStats() *Stats {
 
 	initCash := pf.config.InitCash
 	finalValue := pf.value[n-1]
-	totalReturn := (finalValue - initCash) / initCash
+	totalReturn := 0.0
+	if initCash > 0 {
+		totalReturn = (finalValue - initCash) / initCash
+	}
 
-	// 年化收益率（假设252交易日）
+	// 年化收益率（假设252交易日，防范底数为负数导致 Pow 返回 NaN）
 	totalDays := n
 	years := float64(totalDays) / 252.0
 	annualReturn := 0.0
 	if years > 0 {
-		annualReturn = math.Pow(1+totalReturn, 1/years) - 1
+		if 1+totalReturn > 0 {
+			annualReturn = math.Pow(1+totalReturn, 1/years) - 1
+		} else {
+			annualReturn = -1.0
+		}
 	}
 
 	// 最大回撤
@@ -532,25 +557,25 @@ func (pf *Portfolio) GetStats() *Stats {
 	}
 
 	return &Stats{
-		TotalReturn:       totalReturn,
-		AnnualReturn:      annualReturn,
-		SharpeRatio:       sharpe,
-		MaxDrawdown:       maxDD * initCash,
-		MaxDrawdownPct:    maxDD * 100,
-		WinRate:           winRate,
-		ProfitFactor:      profitFactor,
+		TotalReturn:       sanitizeFloat(totalReturn),
+		AnnualReturn:      sanitizeFloat(annualReturn),
+		SharpeRatio:       sanitizeFloat(sharpe),
+		MaxDrawdown:       sanitizeFloat(maxDD * initCash),
+		MaxDrawdownPct:    sanitizeFloat(maxDD * 100),
+		WinRate:           sanitizeFloat(winRate),
+		ProfitFactor:      sanitizeFloat(profitFactor),
 		TotalTrades:       len(pf.trades),
 		WinTrades:         winTrades,
 		LoseTrades:        loseTrades,
-		AvgWin:            avgWin,
-		AvgLose:           avgLose,
-		AvgHoldingDays:    avgHoldingDays,
+		AvgWin:            sanitizeFloat(avgWin),
+		AvgLose:           sanitizeFloat(avgLose),
+		AvgHoldingDays:    sanitizeFloat(avgHoldingDays),
 		MaxConsecutiveWin: maxConsecutiveWin,
 		MaxConsecutiveLose: maxConsecutiveLose,
-		CalmarRatio:       calmar,
-		SortinoRatio:      sortino,
-		Volatility:        vol,
-		FinalValue:        finalValue,
+		CalmarRatio:       sanitizeFloat(calmar),
+		SortinoRatio:      sanitizeFloat(sortino),
+		Volatility:        sanitizeFloat(vol),
+		FinalValue:        sanitizeFloat(finalValue),
 		InitCash:          initCash,
 		TotalDays:         totalDays,
 	}
