@@ -396,6 +396,8 @@ func GetAllTools() []bladesTools.Tool {
 	allTools = append(allTools, tools.GetRunVectorizedBacktestTool())
 	allTools = append(allTools, tools.GetDiagnoseStockTool())
 	allTools = append(allTools, tools.GetVectorGridSearchTool())
+	allTools = append(allTools, tools.GetStockThesisTool())
+	allTools = append(allTools, tools.SaveStockThesisTool())
 
 	mcpTools := getMCPTools()
 	if len(mcpTools) > 0 {
@@ -429,6 +431,8 @@ func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesT
 	allTools = append(allTools, tools.GetRunVectorizedBacktestTool())
 	allTools = append(allTools, tools.GetDiagnoseStockTool())
 	allTools = append(allTools, tools.GetVectorGridSearchTool())
+	allTools = append(allTools, tools.GetStockThesisTool())
+	allTools = append(allTools, tools.SaveStockThesisTool())
 
 	mcpTools := getMCPTools()
 	if len(mcpTools) > 0 {

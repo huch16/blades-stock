@@ -8,15 +8,19 @@ import {
   NFlex,
   NTag,
   NDivider,
+  NEmpty,
   NGrid,
   NGridItem,
+  NModal,
   NStatistic,
   NProgress,
   NAlert,
   NButton,
+  NTimeline,
+  NTimelineItem,
   useMessage
 } from 'naive-ui'
-import { DiagnoseStock } from '../../wailsjs/go/main/App'
+import { DiagnoseStock, GetStockThesis, GetStockThesisHistory } from '../../wailsjs/go/main/App'
 import { EventsEmit } from '../../wailsjs/runtime/runtime'
 import { setCurrentStock } from '../utils/stockContextBus'
 
@@ -34,6 +38,38 @@ const diagnosisData = ref(null)
 const activeCode = ref(props.stockCode)
 const activeName = ref(props.stockName)
 const recentStocks = ref([])
+
+// 买方认知档案
+const thesisData = ref(null)
+const thesisHistoryList = ref([])
+const showThesisHistory = ref(false)
+
+function getVerdictType(verdict) {
+  switch (verdict) {
+    case 'THESIS_STRENGTHENED':
+      return 'success'
+    case 'NEW_THESIS':
+      return 'info'
+    case 'THESIS_WEAKENED':
+      return 'warning'
+    case 'THESIS_BROKEN':
+      return 'error'
+    default:
+      return 'default'
+  }
+}
+
+async function openThesisHistory(code) {
+  const target = code || activeCode.value || props.stockCode
+  if (!target) return
+  try {
+    const list = await GetStockThesisHistory(target, 30)
+    thesisHistoryList.value = list || []
+    showThesisHistory.value = true
+  } catch (err) {
+    message.error('获取认知历史失败: ' + (err?.message || err))
+  }
+}
 
 // 幂等防抖：同一股票 30 秒内不重复请求
 const diagnosing = ref(false)
@@ -102,6 +138,14 @@ async function fetchDiagnosis(targetCode) {
   lastDiagnosisTime.set(code, now)
   diagnosing.value = true
   loading.value = true
+
+  // 并发拉取买方认知假说档案
+  GetStockThesis(code).then(res => {
+    thesisData.value = res || null
+  }).catch(() => {
+    thesisData.value = null
+  })
+
   try {
     const res = await DiagnoseStock(code)
     if (res) {
@@ -178,6 +222,67 @@ function askAgentAssistant() {
         v-else-if="diagnosisData"
         class="diagnosis-container"
       >
+        <!-- 🎯 买方认知假说与演化档案 -->
+        <NCard
+          v-if="thesisData && thesisData.verdictText"
+          size="small"
+          embedded
+          class="thesis-card"
+          style="margin-bottom: 10px; border-left: 4px solid #18a058; background: rgba(24, 160, 88, 0.05);"
+        >
+          <template #header>
+            <NFlex
+              justify="space-between"
+              align="center"
+            >
+              <NFlex
+                align="center"
+                :size="8"
+              >
+                <span style="font-weight: 700; font-size: 13px;">🎯 买方投资假说 (Thesis Ledger)</span>
+                <NTag
+                  size="small"
+                  round
+                  :bordered="false"
+                  :type="getVerdictType(thesisData.verdict)"
+                >
+                  {{ thesisData.verdictText }}
+                </NTag>
+              </NFlex>
+              <NButton
+                size="tiny"
+                secondary
+                type="primary"
+                @click="openThesisHistory(activeCode)"
+              >
+                📈 认知演化
+              </NButton>
+            </NFlex>
+          </template>
+          <div style="font-size: 12px; line-height: 1.6; margin-bottom: 6px;">
+            <strong style="color: #18a058;">核心假说：</strong>{{ thesisData.coreThesis }}
+          </div>
+          <NFlex
+            v-if="thesisData.keyCatalysts || thesisData.riskFactors"
+            vertical
+            :size="4"
+            style="font-size: 11px;"
+          >
+            <div
+              v-if="thesisData.keyCatalysts"
+              style="color: #f0a020;"
+            >
+              <strong>跟踪催化：</strong>{{ thesisData.keyCatalysts }}
+            </div>
+            <div
+              v-if="thesisData.riskFactors"
+              style="color: #d03050;"
+            >
+              <strong>证伪条件：</strong>{{ thesisData.riskFactors }}
+            </div>
+          </NFlex>
+        </NCard>
+
         <!-- 核心评分卡片 -->
         <NCard
           size="small"
@@ -469,6 +574,54 @@ function askAgentAssistant() {
       </div>
     </NDrawerContent>
   </NDrawer>
+
+  <!-- 认知演化历史时间线弹窗 -->
+  <NModal
+    v-model:show="showThesisHistory"
+    preset="card"
+    style="width: 580px; max-width: calc(100vw - 32px); text-align: left;"
+    title="📈 买方认知演进时间线"
+  >
+    <div style="max-height: 55vh; overflow-y: auto; padding-right: 8px;">
+      <NEmpty
+        v-if="!thesisHistoryList || thesisHistoryList.length === 0"
+        description="暂无历史认知演化记录"
+      />
+      <NTimeline v-else>
+        <NTimelineItem
+          v-for="item in thesisHistoryList"
+          :key="item.id"
+          :type="getVerdictType(item.verdict)"
+          :title="item.verdictText || item.verdict"
+          :time="new Date(item.createdAt).toLocaleString()"
+        >
+          <div style="font-size: 12px; margin-top: 4px; line-height: 1.5;">
+            <div
+              v-if="item.coreThesis"
+              style="margin-bottom: 2px;"
+            >
+              <strong>核心逻辑：</strong>{{ item.coreThesis }}
+            </div>
+            <div
+              v-if="item.keyCatalysts"
+              style="color: #f0a020; margin-bottom: 2px;"
+            >
+              <strong>验证催化：</strong>{{ item.keyCatalysts }}
+            </div>
+            <div
+              v-if="item.riskFactors"
+              style="color: #d03050; margin-bottom: 2px;"
+            >
+              <strong>证伪条件：</strong>{{ item.riskFactors }}
+            </div>
+            <div style="font-size: 11px; color: #888; margin-top: 2px;">
+              模型: {{ item.modelName || '默认' }} · 触发: {{ item.triggerEvent || '系统' }}
+            </div>
+          </div>
+        </NTimelineItem>
+      </NTimeline>
+    </div>
+  </NModal>
 </template>
 
 <style scoped>

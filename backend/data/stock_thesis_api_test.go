@@ -58,6 +58,47 @@ func TestExtractThesisFromContent(t *testing.T) {
 	if thesis3 != "800G/1.6T高速光模块全球市占率领先" {
 		t.Errorf("Unexpected thesis3: %s", thesis3)
 	}
+
+	// 4. 测试带 Emoji、引用符、多标点、复杂前缀输出
+	sampleEmoji := `
+> ### 🎯 买方认知沉淀与假说检验
+> 1. **本次判定**：🟢 逻辑强化
+> 2. **核心投资逻辑**：海外算力芯片需求持续超预期，订单能见度延伸至明年
+> 3. **重点跟踪催化**：关注三季报毛利率以及算力供应链出货进度
+> 4. **关键证伪条件**：若北美云厂商下调资本开支预算或大客户砍单
+`
+	v4, vText4, thesis4, cat4, risk4 := api.ExtractThesisFromContent(sampleEmoji)
+	if v4 != models.VerdictThesisStrengthen || vText4 != "逻辑强化" {
+		t.Errorf("Expected VerdictThesisStrengthen, got %s (%s)", v4, vText4)
+	}
+	if thesis4 != "海外算力芯片需求持续超预期，订单能见度延伸至明年" {
+		t.Errorf("Unexpected thesis4: %s", thesis4)
+	}
+	if cat4 != "关注三季报毛利率以及算力供应链出货进度" {
+		t.Errorf("Unexpected cat4: %s", cat4)
+	}
+	if risk4 != "若北美云厂商下调资本开支预算或大客户砍单" {
+		t.Errorf("Unexpected risk4: %s", risk4)
+	}
+
+	// 5. 测试逻辑证伪提取
+	sampleBroken := `
+### 研判总结
+该股已经跌破关键趋势线，原有成长逻辑被破坏。
+- 逻辑判定: 🔴 逻辑证伪
+- 驱动逻辑: 行业竞争加剧导致产品价格大幅腰斩
+- 证伪指标: 单季度扣非净利润转负
+`
+	v5, vText5, thesis5, _, risk5 := api.ExtractThesisFromContent(sampleBroken)
+	if v5 != models.VerdictThesisBroken || vText5 != "逻辑证伪" {
+		t.Errorf("Expected VerdictThesisBroken, got %s (%s)", v5, vText5)
+	}
+	if thesis5 != "行业竞争加剧导致产品价格大幅腰斩" {
+		t.Errorf("Unexpected thesis5: %s", thesis5)
+	}
+	if risk5 != "单季度扣非净利润转负" {
+		t.Errorf("Unexpected risk5: %s", risk5)
+	}
 }
 
 func TestStockThesisApi_DatabaseOperations(t *testing.T) {

@@ -146,6 +146,20 @@ func (api *StockThesisApi) SaveStockThesis(thesis *models.StockThesisLedger) err
 	return nil
 }
 
+// CleanExtractText 清理抽取到的文本（去除 markdown 字符、列表符号、emoji 及冗余标点）
+func (api *StockThesisApi) CleanExtractText(raw string) string {
+	raw = strings.TrimSpace(raw)
+	// 去除行首的引用号、破折号、星号、有序列表序号（例如 "1. ", "2) ", "- ", "> "）
+	// 注意避免错误去除形如 "800G光模块" 或 "3D先进封装" 中的数字
+	rePrefix := regexp.MustCompile(`^(?:[>\-*•\+]|\d+[\.\)）]|\[\s*\]|\s)+`)
+	raw = rePrefix.ReplaceAllString(raw, "")
+	// 剔除常见的判定状态 emoji 与修饰符
+	reEmoji := regexp.MustCompile(`[🟢🔴🟡🔵🟠🎯✨🔥⚠️✅❌]`)
+	raw = reEmoji.ReplaceAllString(raw, "")
+	raw = strings.Trim(raw, "*_`'\"[]【】()（）:： \t\r\n")
+	return strings.TrimSpace(raw)
+}
+
 // ExtractThesisFromContent 从 AI 研报中解析买方认知结论
 func (api *StockThesisApi) ExtractThesisFromContent(content string) (verdict, verdictText, coreThesis, keyCatalysts, riskFactors string) {
 	if strings.TrimSpace(content) == "" {
@@ -153,50 +167,47 @@ func (api *StockThesisApi) ExtractThesisFromContent(content string) (verdict, ve
 	}
 
 	// 1. 尝试使用正则定位结构化模块
-	// 匹配: - **本次判定**：[XXX] 或 本次判定: XXX
-	reVerdict := regexp.MustCompile(`(?i)(?:本次判定|判定结果|逻辑判定)[*：:\s]+[\[【（(]?([^\n\r，。\]】）)]+)`)
+	// 匹配: - **本次判定**：[XXX] 或 本次判定: 🟢 逻辑强化 等多格式变体
+	reVerdict := regexp.MustCompile(`(?i)(?:本次判定|判定结果|逻辑判定|定性判定|假说判定|投资结论|最终判定)[*：:\s]+[\[【（(>]*([^\n\r，。\]】）]+)`)
 	if match := reVerdict.FindStringSubmatch(content); len(match) > 1 {
-		raw := strings.TrimSpace(match[1])
-		raw = strings.Trim(raw, "*_`[]【】()（） ")
+		raw := api.CleanExtractText(match[1])
 		verdict, verdictText = api.mapVerdictCode(raw)
 	}
 
 	// 匹配核心逻辑
-	reThesis := regexp.MustCompile(`(?i)(?:核心逻辑|投资假说|核心假说)[*：:\s]+([^\n\r]+)`)
+	reThesis := regexp.MustCompile(`(?i)(?:核心逻辑|投资假说|核心假说|驱动逻辑|核心投资逻辑|主要逻辑|核心驱动)[*：:\s]+([^\n\r]+)`)
 	if match := reThesis.FindStringSubmatch(content); len(match) > 1 {
-		coreThesis = strings.TrimSpace(match[1])
-		coreThesis = strings.Trim(coreThesis, "*_` ")
+		coreThesis = api.CleanExtractText(match[1])
 	}
 
 	// 匹配验证催化
-	reCatalyst := regexp.MustCompile(`(?i)(?:验证催化|关键催化|重点跟踪|催化剂)[*：:\s]+([^\n\r]+)`)
+	reCatalyst := regexp.MustCompile(`(?i)(?:验证催化|关键催化|重点跟踪|催化剂|后续催化|跟踪催化|催化因素)[*：:\s]+([^\n\r]+)`)
 	if match := reCatalyst.FindStringSubmatch(content); len(match) > 1 {
-		keyCatalysts = strings.TrimSpace(match[1])
-		keyCatalysts = strings.Trim(keyCatalysts, "*_` ")
+		keyCatalysts = api.CleanExtractText(match[1])
 	}
 
 	// 匹配证伪条件
-	reRisk := regexp.MustCompile(`(?i)(?:证伪条件|核心风险|破坏条件)[*：:\s]+([^\n\r]+)`)
+	reRisk := regexp.MustCompile(`(?i)(?:证伪条件|核心风险|破坏条件|证伪指标|风险与证伪|证伪信号|风险提示)[*：:\s]+([^\n\r]+)`)
 	if match := reRisk.FindStringSubmatch(content); len(match) > 1 {
-		riskFactors = strings.TrimSpace(match[1])
-		riskFactors = strings.Trim(riskFactors, "*_` ")
+		riskFactors = api.CleanExtractText(match[1])
 	}
 
 	// 2. 兜底判定识别
 	if verdict == "" {
-		if strings.Contains(content, "逻辑强化") || strings.Contains(content, "强化逻辑") || strings.Contains(content, "多头强化") {
+		switch {
+		case strings.Contains(content, "逻辑强化") || strings.Contains(content, "强化逻辑") || strings.Contains(content, "多头强化"):
 			verdict = models.VerdictThesisStrengthen
 			verdictText = "逻辑强化"
-		} else if strings.Contains(content, "逻辑削弱") || strings.Contains(content, "削弱逻辑") || strings.Contains(content, "动能衰减") {
+		case strings.Contains(content, "逻辑削弱") || strings.Contains(content, "削弱逻辑") || strings.Contains(content, "动能衰减") || strings.Contains(content, "风险积聚"):
 			verdict = models.VerdictThesisWeaken
 			verdictText = "逻辑削弱"
-		} else if strings.Contains(content, "逻辑证伪") || strings.Contains(content, "假说证伪") || strings.Contains(content, "彻底证伪") {
+		case strings.Contains(content, "逻辑证伪") || strings.Contains(content, "假说证伪") || strings.Contains(content, "彻底证伪") || strings.Contains(content, "逻辑打破"):
 			verdict = models.VerdictThesisBroken
 			verdictText = "逻辑证伪"
-		} else if strings.Contains(content, "新论点") || strings.Contains(content, "首次建档") || strings.Contains(content, "首次覆盖") {
+		case strings.Contains(content, "新论点") || strings.Contains(content, "首次建档") || strings.Contains(content, "首次覆盖") || strings.Contains(content, "新假说"):
 			verdict = models.VerdictNewThesis
 			verdictText = "新论点"
-		} else {
+		default:
 			verdict = models.VerdictNoChange
 			verdictText = "维持现状"
 		}
@@ -224,15 +235,15 @@ func (api *StockThesisApi) ExtractThesisFromContent(content string) (verdict, ve
 }
 
 func (api *StockThesisApi) mapVerdictCode(raw string) (string, string) {
-	raw = strings.TrimSpace(raw)
+	raw = api.CleanExtractText(raw)
 	switch {
 	case strings.Contains(raw, "强化"):
 		return models.VerdictThesisStrengthen, "逻辑强化"
 	case strings.Contains(raw, "削弱"):
 		return models.VerdictThesisWeaken, "逻辑削弱"
-	case strings.Contains(raw, "证伪"):
+	case strings.Contains(raw, "证伪") || strings.Contains(raw, "打破") || strings.Contains(raw, "破位"):
 		return models.VerdictThesisBroken, "逻辑证伪"
-	case strings.Contains(raw, "新论点") || strings.Contains(raw, "新假说") || strings.Contains(raw, "首次"):
+	case strings.Contains(raw, "新论点") || strings.Contains(raw, "新假说") || strings.Contains(raw, "首次") || strings.Contains(raw, "建档"):
 		return models.VerdictNewThesis, "新论点"
 	default:
 		return models.VerdictNoChange, "维持现状"

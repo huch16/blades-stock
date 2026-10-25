@@ -40,6 +40,14 @@ var (
 func getSCManager() *sessionSlidingManager {
 	scManagerOnce.Do(func() {
 		scManager = &sessionSlidingManager{items: make(map[string]*SessionSliding)}
+		// 启动后台定时 GC 协程，每小时清理闲置超过 24 小时的滑动上下文，防止 24/7 常驻服务内存膨胀
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for range ticker.C {
+				scManager.GC(24 * time.Hour)
+			}
+		}()
 	})
 	return scManager
 }

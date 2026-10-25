@@ -298,6 +298,27 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			bladeHistory = append([]*blades.Message{blades.SystemMessage(analysisMem)}, bladeHistory...)
 		}
 
+		// inject structured buy-side stock thesis ledger (买方认知档案与逻辑演进基准)
+		if stockCode != "" {
+			thesisApi := data.NewStockThesisApi()
+			if thesis, _ := thesisApi.GetStockThesis(stockCode); thesis != nil && thesis.CoreThesis != "" {
+				nameStr := thesis.StockName
+				if nameStr == "" {
+					nameStr = stockName
+				}
+				thesisPrompt := fmt.Sprintf("【当前买方认知档案 (Thesis Ledger)】\n- 标的：%s (%s)\n- 最新判定：%s (%s)\n- 核心投资假说：%s",
+					nameStr, thesis.StockCode, thesis.VerdictText, thesis.Verdict, thesis.CoreThesis)
+				if thesis.KeyCatalysts != "" {
+					thesisPrompt += fmt.Sprintf("\n- 重点跟踪催化：%s", thesis.KeyCatalysts)
+				}
+				if thesis.RiskFactors != "" {
+					thesisPrompt += fmt.Sprintf("\n- 关键证伪条件：%s", thesis.RiskFactors)
+				}
+				thesisPrompt += "\n👉 认知连续性提示：请以既有认知假说为基准展开增量推演。若分析发现该标的逻辑出现显著变化（强化/削弱/证伪/新假说），请在结论中清晰对照前期假说并输出【买方认知沉淀与假说检验】小节。"
+				bladeHistory = append([]*blades.Message{blades.SystemMessage(thesisPrompt)}, bladeHistory...)
+			}
+		}
+
 		// inject long-term facts + reflection lessons so the quality loop's
 		// output actually reaches future conversations (write side only used to
 		// store; this is the missing read-side wiring of MemoryPrompt).
