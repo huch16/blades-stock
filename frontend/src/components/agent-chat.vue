@@ -760,7 +760,7 @@ function handleSend() {
     0,
     false,
     agentMode.value === 'auto' ? '' : agentMode.value,
-    ''
+    currentSessionId.value || ''
   ).catch((err: any) => {
     console.error('ChatWithAgent error', err)
     assistantMsg.content = `❌ 服务调用失败：${err?.message || err}`

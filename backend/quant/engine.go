@@ -71,13 +71,16 @@ func DefaultBacktestConfig() *BacktestConfig {
 // ToPortfolioConfig 转换为 PortfolioConfig
 func (bc *BacktestConfig) ToPortfolioConfig() *PortfolioConfig {
 	return &PortfolioConfig{
-		InitCash:    bc.InitCash,
-		Fees:        bc.Fees,
-		Slippage:    bc.Slippage,
-		StopLoss:    bc.StopLoss,
-		TakeProfit:  bc.TakeProfit,
-		TrailStop:   bc.TrailStop,
+		InitCash:     bc.InitCash,
+		Fees:         bc.Fees,
+		Slippage:     bc.Slippage,
+		StopLoss:     bc.StopLoss,
+		TakeProfit:   bc.TakeProfit,
+		TrailStop:    bc.TrailStop,
 		ShortEnabled: bc.ShortEnabled,
+		Size:         1.0,
+		SizeType:     SizeTypePercent,
+		UseExitClose: true,
 	}
 }
 
