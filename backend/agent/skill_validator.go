@@ -49,12 +49,12 @@ func IsValidToolGroup(name string) bool {
 	return validToolGroupSet[name]
 }
 
-// ValidateSkillToolGroups 扫描 DB 中所有 Skill.ToolGroups，凡包含非法名 → log.Fatal。
+// ValidateSkillToolGroups 扫描 DB 中所有 Skill.ToolGroups，凡包含非法名 → 记录警告日志（避免因配置错误导致应用闪退）。
 // 设计：在 AutoMigrate 后、SeedDefaultSkills 后调用一次。
 //
 // 失败模式：
-//   - 非法 ToolGroup → log.Fatalf（启动失败，避免 typo 永远沉默）
-//   - 空 ToolGroups 字段 → 仅 Warn（合法但可能没注入工具）
+//   - 非法 ToolGroup → logger.Warnf（平滑容错，避免意外崩溃）
+//   - 空 ToolGroups 字段 → 仅 Debug（合法但可能没注入工具）
 func ValidateSkillToolGroups() {
 	var skills []models.Skill
 	if err := db.Dao.Find(&skills).Error; err != nil {
@@ -63,7 +63,7 @@ func ValidateSkillToolGroups() {
 	}
 	for _, s := range skills {
 		if err := ValidateOneSkillToolGroups(s); err != nil {
-			logger.SugaredLogger.Fatalf("Skill '%s' (ID=%d) has invalid ToolGroups: %v",
+			logger.SugaredLogger.Warnf("Skill '%s' (ID=%d) has invalid ToolGroups: %v",
 				s.Name, s.ID, err)
 		}
 	}

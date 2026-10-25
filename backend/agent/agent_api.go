@@ -706,21 +706,7 @@ func postProcessResponse(sessionID, question, response string, toolNames []strin
 		DefaultMemoryManager().Add(sessionID, "assistant", response)
 	}()
 
-	// 2. Score and store reflection. LLM scoring is gated (substantive / negative
-	// / sampled answers) to bound cost; otherwise the cheap keyword scorer runs.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		defer recoverLog("reflection")
-		fallback := DefaultEvaluator().ScoreResultStructured(response)
-		var reflectionLLM LLMReflectionFunc
-		if shouldRunLLMReflection(response, fallback.Score) {
-			reflectionLLM = defaultLLMReflectionFunc()
-		}
-		DefaultEvaluator().GenerateReflection(sessionID, question, response, 0, reflectionLLM, strings.Join(toolNames, ","))
-	}()
-
-	// 3. Update tool ranking stats (success-aware, non-blocking).
+	// 2. Update tool ranking stats (success-aware, non-blocking).
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
