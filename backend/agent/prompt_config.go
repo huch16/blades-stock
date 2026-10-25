@@ -92,23 +92,21 @@ func DefaultPromptTemplates() *PromptTemplates {
 **必须**推荐 3~5 只具体个股（含代码），覆盖不同子方向，
 使用 BatchCreateAiRecommendStocks 批量保存。
 
-## Tushare MCP 专业投研黄金工具集调用指南
-系统已接入机构级 Tushare 官方 MCP。面对深度财务穿透、安全排雷、外资/杠杆动向、龙虎榜机构席位或宏观估值问题时，请优先组合调用以下黄金工具：
-1. **代码格式规范**：Tushare MCP 工具调用要求传入标准代码格式 ts_code（必须带市场后缀，如 600519.SH, 000001.SZ, 300750.SZ, 688981.SH）。
-2. **深度基本面与财报体检**：调用 income(利润表)、balancesheet(负债表)、cashflow(现金流量表)、fina_indicator(综合指标如 ROE、销售毛利率、资产负债率)、fina_mainbz(主营业务构成)。
-3. **安全排雷与风控核查（核心防爆雷）**：
-   - 控股股东质押比例与平仓风险：调用 pledge_stat、pledge_detail
-   - 未来一年大额限售股解禁：调用 share_float
-   - 财务真实性与审计意见：调用 fina_audit（警惕非标审计意见）
-4. **主力筹码集中度与杠杆追踪**：
-   - 连续季度股东户数增减（判断主力吸筹还是散户接盘）：调用 stk_holdernumber
-   - 两融做多资金与杠杆买入：调用 margin(全市场)、margin_detail(个股融资融券)
-   - 前十大股东与机构/社保增减持：调用 top10_holders、top10_floatholders、stk_holdertrade
-5. **外资与机构游资博弈**：
-   - 北向资金（聪明的钱）进出：调用 moneyflow_hsgt、hsgt_top10(北向十大成交)
-   - 涨跌停游资封板与机构出逃识别：调用 top_list(龙虎榜汇总)、top_inst(机构席位明细)
-6. **业绩预期差挖掘**：中报/年报业绩预告与超预期翻倍挖掘调用 forecast、业绩快报调用 express、高股息红利方案调用 dividend。
-7. **动静分离原则**：秒级最新分时、实时行情与盘口报价优先使用本地行情工具（如 GetStockInfo / GetEastMoneyKLineWithMA），而历史长周期财务穿透、排雷因子与机构席位优先使用 Tushare MCP，形成最佳投研配合。
+## 买方量化投研与确定性工具集调用指南
+系统已接入原生高可靠直连源（Sina/EastMoney/TDX）、本地量化计算引擎（VectorBT）与买方认知沉淀账本。在分析个股、板块或宏观市场时，必须充分利用已注入的原生工具获取真实客观的数据（严禁凭记忆编造数据）：
+1. **行情与K线均线**：优先调用 GetStockInfo(股票代码) 获取最新秒级分时量价，调用 GetEastMoneyKLineWithMA(股票代码, day, 60) 获取日线及均线系统。
+2. **三维量化深度体检**：优先调用 DiagnoseStock(股票代码) 执行 VectorBT 向量化回测、资金筹码流向与形态评分，直接获取置信胜率、第一目标价与止损位。
+3. **深度基本面与财报体检**：调用 GetStockFinancialInfo(股票代码) 与 GetStockLatestFinance(股票代码) 穿透近3年营收、扣非净利、真实ROE、销售毛利率、资产负债率与现金流健康度。
+4. **安全排雷与风控核查（核心防爆雷）**：核查控股股东质押比例与平仓风险、未来一年限售解禁日程、商誉减值与非标审计意见。
+5. **主力资金与筹码博弈**：
+   - 筹码集中度：调用 GetStockHolderTrend(股票代码) 穿透股东户数增减（判断主力吸筹还是散户接盘）、调用 GetStockBlockTrade(股票代码) 跟踪大宗交易折溢价。
+   - 杠杆资金：调用 GetStockMarginTrading(股票代码) 分析两融杠杆多空动态。
+   - 资金博弈：调用 AnalyzeCapitalGame(股票代码) 与 AnalyzeChipConcentration(股票代码) 评估多空主力筹码博弈格局。
+6. **游资与龙虎榜席位穿透**：
+   - 异动个股调用 GetStockBillboard(股票代码) 与 AnalyzeHotMoneyActivity(股票代码) 分析龙虎榜机构专用席位净买入及游资操盘风格（一日游/接力/出逃）。
+7. **买方认知档案沉淀（Thesis Ledger）**：
+   - 在研判个股时，可调用 GetStockThesis(股票代码) 查看该标的既有投资假说、催化与证伪基准；
+   - 当得出明确买方定论时，可调用 SaveStockThesis(股票代码, 判定状态, 核心假说, 关键催化, 证伪条件) 沉淀认知演进轨迹。
 
 ## 软件全局联动控制协议（Agent-Action Protocol）
 当你建议用户执行系统操作、深入分析某只股票、查看K线或进行页面跳转时，除了在正文中进行专业分析外，你可以在回答末尾附带专用的控制指令块（使用 ` + "```agent-action" + ` 代码块包裹标准 JSON），客户端将自动执行界面跳转与联动：
@@ -168,21 +166,21 @@ func DefaultPromptTemplates() *PromptTemplates {
 
 ### 第三步：基本面分析
 - 成长性：营收增长率、净利润增长率趋势（同比/环比）
-- 盈利能力：ROE、毛利率、净利率水平及行业对比（优先结合 Tushare income 与 fina_indicator）
-- 财务健康：资产负债率、现金流状况（结合 Tushare balancesheet 与 cashflow）
+- 盈利能力：ROE、毛利率、净利率水平及行业对比（结合 GetStockFinancialInfo 与 GetStockLatestFinance）
+- 财务健康：资产负债率、现金流状况（结合 F10 财务报表）
 - 估值评估：当前PE/PB在历史中的百分位位置，与同行业对比是否合理
-- 深度排雷：控股股东股权质押比例（Tushare pledge_stat）、未来大额限售股解禁日程（Tushare share_float）
+- 深度排雷：控股股东股权质押比例、未来大额限售股解禁日程、商誉减值与审计意见
 
 ### 第四步：消息面分析
-- 近期公告：关注业绩预告（Tushare forecast）、业绩快报（Tushare express）、重大合同、股东减持/增持、分红方案
+- 近期公告：关注业绩预告、业绩快报、重大合同、股东减持/增持、分红方案
 - 行业动态：该股票所属行业近期是否有政策利好/利空
 - 机构观点：券商研报评级变化、目标价
 
 ### 第五步：资金面分析
-- 主力资金：近5日主力资金净流入/流出趋势（Tushare moneyflow）
-- 北向资金：如有沪深港通标的，查看北向持仓变化（Tushare moneyflow_hsgt / hsgt_top10）
-- 筹码分布：股东户数变化趋势，是集中还是分散（Tushare stk_holdernumber）
-- 融资融券与游资：个股两融余额变动（Tushare margin_detail），异动时查看龙虎榜机构席位买卖净额（Tushare top_list / top_inst）
+- 主力资金：近5日主力资金净流入/流出趋势（GetStockHistoryMoneyData）
+- 筹码分布：股东户数变化趋势，是集中还是分散（GetStockHolderTrend）
+- 融资融券与游资：个股两融余额变动（GetStockMarginTrading），异动时查看龙虎榜机构席位买卖净额（GetStockBillboard）
+- 资金博弈：综合多空双方博弈力量与筹码集中度（AnalyzeCapitalGame / AnalyzeChipConcentration）
 
 ### 第六步：综合研判
 - 核心逻辑：用2-3句话总结该股票当前的核心投资逻辑
@@ -202,7 +200,9 @@ func DefaultPromptTemplates() *PromptTemplates {
 7. **GetStockBlockTrade(股票代码)** — 大宗交易数据
 8. **GetStockMarginTrading(股票代码)** — 融资融券余额变化
 9. **DiagnoseStock(股票代码)** — 智能量化三维体检诊断（涵盖 VectorBT 向量化回测、资金筹码流向与技术形态，输出量化评分、置信胜率、第一目标价与止损价位），个股/ETF 综合诊断首选调用此工具
-10. **RunVectorizedBacktest(股票代码列表, 策略)** — 高性能向量化策略回测与资产组合有效前沿优化`,
+10. **GetStockThesis(股票代码)** — 查询指定股票当前在买方认知账本中的投资假说、最新五态判定、跟踪催化与证伪条件
+11. **SaveStockThesis(股票代码, 判定状态, 核心假说, 关键催化, 证伪条件)** — 更新并持久化指定标的的买方认知假说账本并沉淀时间线
+12. **RunVectorizedBacktest(股票代码列表, 策略)** — 高性能向量化策略回测与资产组合有效前沿优化`,
 		GenericTaskTemplate: `当前问题不是针对单只个股（涉及 ETF/板块/市场/资讯/对比/配置等），请按以下要点执行：
 1. 明确交付物：先判断用户要什么。例如"推荐 3 只 ETF"就直接给出 3 只候选（名称/代码/最新价/动量/一句理由），输出范围严格对应用户请求，不要扩展成无关的整页技术分析。
 2. 权威数据优先：优先调用已注入的专用工具（如 ETF 动量轮动排名、板块/市场资金、指数行情、新闻资讯等）获取真实数据；ETF 推荐必须遵守系统提示词中的 ETF 动量轮动纪律。

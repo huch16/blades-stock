@@ -110,28 +110,28 @@ async function handleWebLogout() {
 // 投研提示词预设库
 // ========================
 const SYSTEM_PROMPT_PRESETS = {
-  tushare_mentor: `你是一位拥有20年证券实操经验的资深量化投研专家与投资导师，秉持“风险控制第一，数据穿透为本”的原则。
+  quant_mentor: `你是一位拥有20年证券实操经验的资深买方量化投研专家与投资导师，秉持“风险控制第一，数据穿透为本，认知沉淀为核”的原则。
 在分析个股、板块或宏观市场时，必须通过工具调用获取真实客观的数据（严禁凭记忆编造数据）：
-1. 涉及基本面体检与排雷时，优先组合调用 Tushare MCP 黄金工具：质押平仓风险（pledge_stat）、未来大额限售解禁（share_float）、真实ROE与销售毛利率（fina_indicator）、经营现金流质量（cashflow）、非标审计意见（fina_audit）；
-2. 涉及资金与机构筹码时，优先调用：股东户数连续季度吸筹/分散趋势（stk_holdernumber）、两融杠杆买入（margin_detail）、北向资金（moneyflow_hsgt / hsgt_top10），异动个股穿透龙虎榜机构专用席位买卖净额（top_list / top_inst）；
-3. 涉及财报前瞻与预期差时，调用业绩预告（forecast）与业绩快报（express）挖掘超预期增长潜能；
-4. 任何操作建议均须附带第一支撑位、止损位与核心风险警示。`,
+1. 涉及基本面体检与排雷时，全面核查控股股东质押平仓风险、未来大额限售解禁日程、近3年真实ROE与销售毛利率、经营现金流质量及审计意见，排除财务暴雷隐患；
+2. 涉及资金与机构筹码时，穿透近3季度股东户数吸筹/发散趋势（主力吸筹/出货判定）、两融杠杆多空动态，异动个股穿透龙虎榜机构专用席位买卖净额与游资风格；
+3. 涉及量化走势与策略时，结合 VectorBT 矩阵回测评分、支撑阻力位与量价形态给出量化胜率和第一止损位；
+4. 严格遵循买方假说沉淀范式：对核心逻辑给出明确判定（逻辑强化、发现新逻辑、逻辑无变化、逻辑边际走弱、核心逻辑破裂），明确跟踪催化剂与证伪条件。`,
   standard: `你是一个专业股票助手，擅长结合量化数据、技术指标、资金流向和基本面信息，为用户提供客观严谨的投资分析和建议。`
 };
 
 const QUESTION_TEMPLATE_PRESETS = {
-  comprehensive: `请对 {{stockName}}[{{stockCode}}] 进行全维度深度量化投研与排雷体检：
-1. 基本面与排雷体检：调用 Tushare pledge_stat 核查控股股东质押比例，share_float 检查未来一年限售解禁日程，fina_indicator 查询近3年真实 ROE 与毛利率趋势，cashflow 检验经营现金流健康度，排除财务暴雷隐患；
-2. 资金与机构席位追踪：调用 stk_holdernumber 穿透近3季度股东户数是集中还是发散（主力吸筹/出逃判定），margin_detail 查看两融杠杆多空动态，异动时调用 top_list 与 top_inst 穿透龙虎榜机构专用席位买卖净额；
-3. 财报预期差与前瞻：调用 forecast 与 express 挖掘近期业绩预告是否超预期，结合 K 线趋势给出量化评分、操作建议与第一止损位。`,
+  comprehensive: `请对 {{stockName}}[{{stockCode}}] 进行全维度深度量化投研、排雷体检与买方假说沉淀：
+1. 基本面与排雷体检：核查控股股东质押比例、未来一年限售解禁日程、近3年真实 ROE 与毛利率趋势、经营现金流健康度，排除财务暴雷隐患；
+2. 资金与机构席位追踪：穿透近3季度股东户数集中度（主力吸筹/出逃判定）、两融杠杆资金动向，异动时穿透龙虎榜机构专用席位买卖净额与游资动向；
+3. 智能量化与买方假说沉淀：结合 VectorBT 量化评分、均线趋势与量价关系给出量化建议与止损位，并在报告末尾提炼买方核心假说、重点跟踪催化与关键证伪条件。`,
   antirisk: `请对 {{stockName}}[{{stockCode}}] 进行严密的基本面防爆雷体检：
-1. 股权质押排雷：调用 Tushare pledge_stat 检查控股股东最新质押比例及平仓风险；
-2. 限售解禁排雷：调用 Tushare share_float 筛查未来 3~12 个月内是否有大额限售股解禁；
-3. 财务真实性：调用 fina_indicator 与 cashflow 对比营收净利增速与经营现金流匹配度，排除财务造假嫌疑。`,
+1. 股权质押排雷：核查控股股东最新质押比例及平仓风险；
+2. 限售解禁排雷：筛查未来 3~12 个月内是否有大额限售股解禁；
+3. 财务真实性：对比营收净利增速与经营现金流匹配度，排除财务造假嫌疑。`,
   funds: `请重点穿透 {{stockName}}[{{stockCode}}] 的资金博弈与筹码结构：
-1. 筹码集中度：调用 Tushare stk_holdernumber 穿透近3季度股东户数是集中还是发散（主力吸筹/出货判定）；
-2. 机构席位追踪：调用 Tushare top_list 与 top_inst 检索近期龙虎榜是否有机构专用席位大额买入；
-3. 杠杆多空对比：结合两融 margin_detail 杠杆做多资金流向与超大单主力净流，给出多空力量对比。`,
+1. 筹码集中度：穿透近3季度股东户数是集中还是发散（主力吸筹/出货判定）；
+2. 机构席位追踪：检索近期龙虎榜是否有机构专用席位大额买入与游资营业部动向；
+3. 杠杆多空对比：结合两融杠杆做多资金流向与超大单主力净流，给出多空力量对比。`,
   simple: `{{stockName}}[{{stockCode}}] 全方位量化诊断与投资分析总结`
 };
 
@@ -1057,7 +1057,7 @@ async function loadConfig() {
     };
 
     openAiEnable.value = Boolean(res.openAiEnable ?? res.openAI?.enable);
-    aiPrompt.value = res.prompt ?? res.openAI?.prompt ?? SYSTEM_PROMPT_PRESETS.tushare_mentor;
+    aiPrompt.value = res.prompt ?? res.openAI?.prompt ?? SYSTEM_PROMPT_PRESETS.quant_mentor;
     questionTemplate.value = res.questionTemplate ?? res.openAI?.questionTemplate ?? QUESTION_TEMPLATE_PRESETS.comprehensive;
 
     // 核心修复：优先从根属性读取 aiConfigs，全面移入数据库中的既有模型配置，兜底支持嵌套结构
@@ -1290,8 +1290,8 @@ onBeforeUnmount(() => {
             <n-card size="small" class="settings-card highlight-card">
               <template #header>
                 <div class="card-header-flex">
-                  <span class="card-title">📈 Tushare Pro 权威金融大数据中枢</span>
-                  <n-tag type="primary" size="tiny" round>核心排雷与机构席位</n-tag>
+                  <span class="card-title">📈 Tushare Pro 备用行情直连源 (HTTP REST)</span>
+                  <n-tag type="info" size="tiny" round>备用日线与分时数据源</n-tag>
                 </div>
               </template>
               <n-grid :cols="24" :x-gap="20" :y-gap="12">
@@ -1300,11 +1300,11 @@ onBeforeUnmount(() => {
                     v-model:value="formValue.tushareToken"
                     type="password"
                     show-password-on="click"
-                    placeholder="在此输入您的 Tushare Pro 访问令牌 (Token)"
+                    placeholder="在此输入您的 Tushare Pro 访问令牌 (Token)（选填，用于基础K线备用直连）"
                     clearable
                   />
                   <template #feedback>
-                    <span class="field-feedback">用于质押排雷 (pledge_stat)、限售解禁 (share_float)、股东户数与龙虎榜机构专用席位穿透</span>
+                    <span class="field-feedback">选填项。系统核心量化回测、财务指标与龙虎榜席位已由原生直连引擎与东财F10承载</span>
                   </template>
                 </n-form-item-gi>
 
@@ -1583,8 +1583,8 @@ onBeforeUnmount(() => {
                   <div class="prompt-header-tools">
                     <span class="prompt-hint">一键应用标准预设模板：</span>
                     <n-button-group size="tiny">
-                      <n-button type="primary" secondary @click="applySystemPromptPreset('tushare_mentor')">
-                        🎓 Tushare 量化投研导师
+                      <n-button type="primary" secondary @click="applySystemPromptPreset('quant_mentor')">
+                        🎓 买方量化投研导师
                       </n-button>
                       <n-button secondary @click="applySystemPromptPreset('standard')">
                         🤖 标准证券助手

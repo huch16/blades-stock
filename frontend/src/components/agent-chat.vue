@@ -462,7 +462,7 @@ const scenarioCards = [
 const quickKeywords = [
   '分析 000001 平安银行',
   '计算 场内ETF动量排名',
-  'Tushare 深度排雷 600519',
+  '深度量化排雷 600519',
   '筛选 低估值高股息股票',
   '查询最新龙虎榜机构席位',
   '半导体产业链最新热点',
@@ -472,8 +472,8 @@ const quickKeywords = [
 
 const quickChips = [
   { icon: '📊', label: '个股诊断', text: '请全面分析股票 ', tip: '输入代码或名称' },
-  { icon: '🛡️', label: '深度排雷', text: '请调用 Tushare MCP 对 [输入代码] 进行深度排雷：核查控股股东质押比例(pledge_stat)、未来一年解禁日程(share_float)、近3季度股东户数(stk_holdernumber)及两融资金。', tip: '防爆雷与筹码穿透' },
-  { icon: '📑', label: '财报体检', text: '请调用 Tushare MCP 深度体检 [输入代码] 的财务质量：查询近3年利润表(income)、真实ROE与销售毛利率(fina_indicator)、以及经营活动现金流净额(cashflow)。', tip: '基本面财务深度穿透' },
+  { icon: '🛡️', label: '深度排雷', text: '请对 [输入代码] 进行深度排雷：核查控股股东质押比例、未来一年解禁日程、近3季度股东户数及两融资金。', tip: '防爆雷与筹码穿透' },
+  { icon: '📑', label: '财报体检', text: '请深度体检 [输入代码] 的财务质量：分析近3年营业收入与扣非净利润、真实ROE与销售毛利率、以及经营活动现金流净额。', tip: '基本面财务深度穿透' },
   { icon: '🚀', label: 'ETF动量', text: '请计算当前场内主流ETF的21日加权动量排名并解读', tip: '动量轮动分析' },
   { icon: '🔍', label: '多头选股', text: '请筛选近期均线多头排列且量比大于1.5的强势股', tip: '技术指标选股' },
   { icon: '📰', label: '热点资讯', text: '检索今天A股市场最核心的概念热点与资金流向', tip: '市场情绪与风口' },
@@ -483,11 +483,11 @@ const quickChips = [
 const allScenarios = [
   { category: '个股研究', title: '全维度深度诊断', prompt: '请对 [股票代码/名称] 进行全方位诊断，包括基本面财务、K线趋势技术形态、资金进出动向及未来投资建议。' },
   { category: '个股研究', title: '支撑位与阻力位测算', prompt: '请分析 [股票代码] 的近期日K线走势，测算关键支撑位、压力位与止损参考点位。' },
-  { category: 'Tushare投研', title: '深度排雷与筹码穿透', prompt: '请调用 Tushare MCP，对 [股票代码] 进行深度排雷：查询控股股东质押比例(pledge_stat)、未来一年解禁(share_float)、近3季度股东户数趋势(stk_holdernumber)及主力资金净流入(moneyflow)，给出综合风控评级。' },
-  { category: 'Tushare投研', title: '财报体检与真实ROE验证', prompt: '请调用 Tushare MCP 深入体检 [股票代码] 的财务报表：对比近3年营业收入与扣非净利润(income)、ROE与销售净利率(fina_indicator)、分析经营现金流净额与净利润比值(cashflow)，验证其盈利真实性。' },
-  { category: 'Tushare投研', title: '龙虎榜机构席位追踪', prompt: '请调用 Tushare MCP 查询最近一个交易日的龙虎榜机构席位明细(top_inst)与上榜汇总(top_list)，重点筛选机构专用席位大额净买入的股票，分析机构真实建仓意图。' },
-  { category: 'Tushare投研', title: '业绩预告超预期挖掘', prompt: '请调用 Tushare forecast 接口，检索近期披露业绩预告中净利润同比大幅预增的公司，结合估值 daily_basic 给出性价比标的分析。' },
-  { category: 'Tushare投研', title: '宽基指数估值与权重穿透', prompt: '请调用 Tushare index_dailybasic 与 index_weight，分析当前沪深300与中证A500的市盈率PE、历史分位数及前五大成分股与板块权重分布。' },
+  { category: '买方量化投研', title: '深度排雷与筹码穿透', prompt: '请对 [股票代码] 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。' },
+  { category: '买方量化投研', title: '财报体检与真实ROE验证', prompt: '请深入体检 [股票代码] 的财务报表：对比近3年营业收入与扣非净利润、ROE与销售净利率、分析经营现金流净额与净利润比值，验证其盈利真实性。' },
+  { category: '买方量化投研', title: '龙虎榜机构席位追踪', prompt: '请查询最近一个交易日的龙虎榜机构席位明细与上榜汇总，重点筛选机构专用席位大额净买入的股票，分析机构真实建仓意图。' },
+  { category: '买方量化投研', title: '业绩预告超预期挖掘', prompt: '请检索近期披露业绩预告中净利润同比大幅预增的公司，结合估值百分位给出性价比标的分析。' },
+  { category: '买方量化投研', title: '宽基指数估值与权重穿透', prompt: '请分析当前沪深300与中证A500的市盈率PE、历史分位数及前五大成分股与板块权重分布。' },
   { category: '量化策略', title: 'ETF 加权动量轮动', prompt: '请获取主流场内ETF的21日加权动量排名表，按动量评分排序并给出当前轮动调仓建议。' },
   { category: '量化选股', title: '价值防守型选股', prompt: '请筛选市盈率PE<15、近三年股息率>3.5%、ROE>12%的高股息稳健型股票。' },
   { category: '量化选股', title: '强势突破型选股', prompt: '请利用量化策略筛选突破近期整理平台且放量上涨的标的。' },

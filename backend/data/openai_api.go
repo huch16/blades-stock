@@ -47,19 +47,19 @@ func (o OpenAi) String() string {
         o.BaseUrl, o.Model, o.MaxTokens, o.Temperature, o.Prompt, o.TimeOut, o.QuestionTemplate, o.CrawlTimeOut, o.KDays, o.BrowserPath)
 }
 
-// DefaultResearchSystemPrompt 是机构级专业投研导师系统提示词，强化 Tushare MCP 黄金工具与三维风控核查。
-const DefaultResearchSystemPrompt = `你是一位拥有20年证券实操经验的资深量化投研专家与投资导师，秉持“风险控制第一，数据穿透为本”的原则。
+// DefaultResearchSystemPrompt 是机构级买方量化投研导师系统提示词，强化确定性数据底座、VectorBT量化诊断与买方认知假说沉淀。
+const DefaultResearchSystemPrompt = `你是一位拥有20年证券实操经验的资深买方量化投研专家与投资导师，秉持“风险控制第一，数据穿透为本，认知沉淀为核”的原则。
 在分析个股、板块或宏观市场时，必须通过工具调用获取真实客观的数据（严禁凭记忆编造数据）：
-1. 涉及基本面体检与排雷时，优先组合调用 Tushare MCP 黄金工具：质押平仓风险（pledge_stat）、未来大额限售解禁（share_float）、真实ROE与销售毛利率（fina_indicator）、经营现金流质量（cashflow）、非标审计意见（fina_audit）；
-2. 涉及资金与机构筹码时，优先调用：股东户数连续季度吸筹/分散趋势（stk_holdernumber）、两融杠杆买入（margin_detail）、北向资金（moneyflow_hsgt / hsgt_top10），异动个股穿透龙虎榜机构专用席位买卖净额（top_list / top_inst）；
-3. 涉及财报前瞻与预期差时，调用业绩预告（forecast）与业绩快报（express）挖掘超预期增长潜能；
-4. 任何操作建议均须附带第一支撑位、止损位与核心风险警示。`
+1. 涉及基本面体检与排雷时，全面核查控股股东质押平仓风险、未来大额限售解禁日程、近3年真实ROE与销售毛利率、经营现金流质量及审计意见，排除财务暴雷隐患；
+2. 涉及资金与机构筹码时，穿透近3季度股东户数吸筹/发散趋势（主力吸筹/出货判定）、两融杠杆多空动态，异动个股穿透龙虎榜机构专用席位买卖净额与游资风格；
+3. 涉及量化走势与策略时，结合 VectorBT 矩阵回测评分、支撑阻力位与量价形态给出量化胜率和第一止损位；
+4. 严格遵循买方假说沉淀范式：对核心逻辑给出明确判定（逻辑强化、发现新逻辑、逻辑无变化、逻辑边际走弱、核心逻辑破裂），明确跟踪催化剂与证伪条件。`
 
-// DefaultStockAnalysisQuestionTemplate 是全维度深度个股分析与排雷提示词模板（涵盖基本面与排雷体检、资金与机构席位追踪、财报超预期挖掘）。
-const DefaultStockAnalysisQuestionTemplate = `请对 {{stockName}}[{{stockCode}}] 进行全维度深度量化投研与排雷体检：
-1. 基本面与排雷体检：调用 Tushare pledge_stat 核查控股股东质押比例，share_float 检查未来一年限售解禁日程，fina_indicator 查询近3年真实 ROE 与毛利率趋势，cashflow 检验经营现金流健康度，排除财务暴雷隐患；
-2. 资金与机构席位追踪：调用 stk_holdernumber 穿透近3季度股东户数是集中还是发散（主力吸筹/出逃判定），margin_detail 查看两融杠杆多空动态，异动时调用 top_list 与 top_inst 穿透龙虎榜机构专用席位买卖净额；
-3. 财报预期差与前瞻：调用 forecast 与 express 挖掘近期业绩预告是否超预期，结合 K 线趋势给出量化评分、操作建议与第一止损位。`
+// DefaultStockAnalysisQuestionTemplate 是全维度深度个股分析与排雷提示词模板（涵盖基本面与排雷体检、资金与机构席位追踪、买方假说沉淀）。
+const DefaultStockAnalysisQuestionTemplate = `请对 {{stockName}}[{{stockCode}}] 进行全维度深度量化投研、排雷体检与买方假说沉淀：
+1. 基本面与排雷体检：核查控股股东质押比例、未来一年限售解禁日程、近3年真实 ROE 与毛利率趋势、经营现金流健康度，排除财务暴雷隐患；
+2. 资金与机构席位追踪：穿透近3季度股东户数集中度（主力吸筹/出逃判定）、两融杠杆资金动向，异动时穿透龙虎榜机构专用席位买卖净额与游资动向；
+3. 智能量化与买方假说沉淀：结合 VectorBT 量化评分、均线趋势与量价关系给出量化建议与止损位，并在报告末尾提炼买方核心假说、重点跟踪催化与关键证伪条件。`
 
 // NewDeepSeekOpenAi creates an OpenAi client with a sensible default system prompt.
 func NewDeepSeekOpenAi(ctx context.Context, aiConfigId int) *OpenAi {
