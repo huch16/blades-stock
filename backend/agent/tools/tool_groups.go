@@ -459,3 +459,10 @@ func isValidToolGroup(g ToolGroup) bool {
 	}
 	return false
 }
+
+// GetToolGroup returns the ToolGroup assigned to a tool name (used for validation & testing).
+func GetToolGroup(toolName string) (ToolGroup, bool) {
+	g, ok := toolGroupMap[toolName]
+	return g, ok
+}
+
