@@ -863,41 +863,51 @@ async function saveConfig() {
       await formRef.value.validate();
     }
   } catch (valErr: any) {
-    if (Array.isArray(valErr) && valErr.length > 0 && valErr[0]?.[0]?.message) {
-      message.warning('请检查表单：' + valErr[0][0].message);
-      return;
+    let msg = '请检查表单必填项与格式';
+    if (Array.isArray(valErr) && valErr.length > 0) {
+      if (Array.isArray(valErr[0]) && valErr[0][0]?.message) {
+        msg = valErr[0][0].message;
+      } else if (valErr[0]?.message) {
+        msg = valErr[0].message;
+      }
+    } else if (valErr?.message) {
+      msg = valErr.message;
     }
+    message.warning(msg);
+    return;
   }
 
-  // 严格校验 AI 配置项
-  for (let i = 0; i < aiConfigs.value.length; i++) {
-    const cfg = aiConfigs.value[i];
-    if (!cfg.name || !cfg.name.trim()) {
-      message.warning(`第 ${i + 1} 项 AI 配置未填写配置名称`);
-      activeTab.value = 'ai';
-      return;
-    }
-    if (!cfg.baseUrl || !cfg.baseUrl.trim()) {
-      message.warning(`配置「${cfg.name}」未填写接口地址`);
-      activeTab.value = 'ai';
-      return;
-    }
-    if (!cfg.modelName || !cfg.modelName.trim()) {
-      message.warning(`配置「${cfg.name}」未填写模型名称`);
-      activeTab.value = 'ai';
-      return;
-    }
-    cfg.temperature = Number(cfg.temperature);
-    if (isNaN(cfg.temperature) || cfg.temperature < 0 || cfg.temperature > 2) {
-      cfg.temperature = 0.7;
-    }
-    cfg.maxTokens = Number(cfg.maxTokens);
-    if (isNaN(cfg.maxTokens) || cfg.maxTokens < 256) {
-      cfg.maxTokens = 4096;
-    }
-    cfg.timeOut = Number(cfg.timeOut);
-    if (isNaN(cfg.timeOut) || cfg.timeOut < 10) {
-      cfg.timeOut = 300;
+  // 严格校验 AI 配置项（仅在开启 AI 功能时执行，避免禁用状态下误拦截）
+  if (openAiEnable.value) {
+    for (let i = 0; i < aiConfigs.value.length; i++) {
+      const cfg = aiConfigs.value[i];
+      if (!cfg.name || !cfg.name.trim()) {
+        message.warning(`第 ${i + 1} 项 AI 配置未填写配置名称`);
+        activeTab.value = 'ai';
+        return;
+      }
+      if (!cfg.baseUrl || !cfg.baseUrl.trim()) {
+        message.warning(`配置「${cfg.name}」未填写接口地址`);
+        activeTab.value = 'ai';
+        return;
+      }
+      if (!cfg.modelName || !cfg.modelName.trim()) {
+        message.warning(`配置「${cfg.name}」未填写模型名称`);
+        activeTab.value = 'ai';
+        return;
+      }
+      cfg.temperature = Number(cfg.temperature);
+      if (isNaN(cfg.temperature) || cfg.temperature < 0 || cfg.temperature > 2) {
+        cfg.temperature = 0.7;
+      }
+      cfg.maxTokens = Number(cfg.maxTokens);
+      if (isNaN(cfg.maxTokens) || cfg.maxTokens < 256) {
+        cfg.maxTokens = 4096;
+      }
+      cfg.timeOut = Number(cfg.timeOut);
+      if (isNaN(cfg.timeOut) || cfg.timeOut < 10) {
+        cfg.timeOut = 300;
+      }
     }
   }
 
@@ -936,7 +946,11 @@ async function saveConfig() {
     }
     message.success(res || '设置保存成功！');
     markClean();
-    aiConfigStore.fetchAiConfigs();
+    try {
+      await aiConfigStore.loadConfigs();
+    } catch (storeErr) {
+      console.warn('[settings] aiConfigStore refresh warning:', storeErr);
+    }
     EventsEmit('config_updated');
     EventsEmit('updateSettings', configToSave);
   } catch (err: any) {
@@ -1110,7 +1124,11 @@ function importConfig() {
               }
               message.success('配置导入成功！已应用并同步数据库。');
               await loadConfig();
-              aiConfigStore.fetchAiConfigs();
+              try {
+                await aiConfigStore.loadConfigs();
+              } catch (storeErr) {
+                console.warn('[settings] aiConfigStore refresh warning:', storeErr);
+              }
               EventsEmit('config_updated');
               EventsEmit('updateSettings', normalizedConfig);
             } catch (importErr: any) {
@@ -1232,9 +1250,7 @@ async function loadConfig() {
 function handleKeydown(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
-    if (isFormDirty.value) {
-      saveConfig();
-    }
+    saveConfig();
   }
 }
 
@@ -2119,7 +2135,6 @@ onBeforeUnmount(() => {
             type="primary"
             strong
             :loading="isSaving"
-            :disabled="!isFormDirty"
             class="save-btn"
             @click="saveConfig"
           >

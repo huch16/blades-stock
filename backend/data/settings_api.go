@@ -960,12 +960,13 @@ func UpdateConfig(s *SettingConfig) string {
 		return "保存失败: 配置数据为空"
 	}
 	for i, cfg := range s.AiConfigs {
-		if cfg != nil {
-			cfg.BaseUrl = strings.TrimRight(strings.TrimSpace(cfg.BaseUrl), "/")
-			cfg.Name = strings.TrimSpace(cfg.Name)
-			cfg.ModelName = strings.TrimSpace(cfg.ModelName)
-			cfg.ApiKey = strings.TrimSpace(cfg.ApiKey)
+		if cfg == nil {
+			continue
 		}
+		cfg.BaseUrl = strings.TrimRight(strings.TrimSpace(cfg.BaseUrl), "/")
+		cfg.Name = strings.TrimSpace(cfg.Name)
+		cfg.ModelName = strings.TrimSpace(cfg.ModelName)
+		cfg.ApiKey = strings.TrimSpace(cfg.ApiKey)
 		if msg := validateAIConfig(cfg); msg != "" {
 			return fmt.Sprintf("保存失败: 第 %d 项 %s", i+1, msg)
 		}
@@ -1041,13 +1042,26 @@ func UpdateConfig(s *SettingConfig) string {
 				if result.Error != nil {
 					return result.Error
 				}
-				return updateAiConfigsTx(tx, s.AiConfigs)
+				if err := updateAiConfigsTx(tx, s.AiConfigs); err != nil {
+					return err
+				}
+				// 若未指定主模型ID，但存在有效配置，自动将第一项配置作为主模型并同步到 settings
+				if s.AiConfigID <= 0 && len(s.AiConfigs) > 0 && s.AiConfigs[0] != nil && s.AiConfigs[0].ID > 0 {
+					_ = tx.Model(&Settings{}).Where("1 = 1").Update("ai_config_id", s.AiConfigs[0].ID).Error
+				}
+				return nil
 			}
 			result := tx.Model(&Settings{}).Create(s.Settings)
 			if result.Error != nil {
 				return result.Error
 			}
-			return updateAiConfigsTx(tx, s.AiConfigs)
+			if err := updateAiConfigsTx(tx, s.AiConfigs); err != nil {
+				return err
+			}
+			if s.AiConfigID <= 0 && len(s.AiConfigs) > 0 && s.AiConfigs[0] != nil && s.AiConfigs[0].ID > 0 {
+				_ = tx.Model(&Settings{}).Where("1 = 1").Update("ai_config_id", s.AiConfigs[0].ID).Error
+			}
+			return nil
 		})
 
 		if err == nil {

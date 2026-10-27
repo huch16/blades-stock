@@ -117,6 +117,7 @@ export const useAiConfigStore = defineStore('aiConfig', () => {
     activeModelName,
     activeBaseUrl,
     loadConfigs,
+    fetchAiConfigs: loadConfigs,
     setActiveConfigId,
     refreshConfigs,
     addConfig,
