@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -165,22 +166,15 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 
 	default:
 		// max_tokens 是输出 token 上限，不是上下文窗口。
-		// MiniMax-M3(1M ctx) 的 API 限制 max_tokens≤524288，且实际输出不可能达到。
+		// blades/contrib/openai 中 MaxOutputTokens 会自动映射为 params.MaxCompletionTokens。
 		// 对所有 OpenAI 兼容模型统一 cap 到 32768，兼顾安全与实用性。
 		outputTok := maxTok
 		if outputTok <= 0 || outputTok > 32768 {
 			outputTok = 32768
 		}
-		extraFields := map[string]any{
-			"max_tokens": outputTok,
-		}
+		extraFields := map[string]any{}
 		if aiConfig.Thinking {
 			extraFields["reasoning_effort"] = "medium"
-		} else {
-			if strings.Contains(baseLower, "minimax") || strings.Contains(strings.ToLower(aiConfig.ModelName), "minimax") {
-				extraFields["thinking"] = map[string]any{"type": "disabled"}
-				extraFields["reasoning_effort"] = "none"
-			}
 		}
 		reqOpts := []openaiOption.RequestOption{
 			sanitizeToolsMiddleware(),
@@ -208,8 +202,10 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 	return wrapped, nil
 }
 
-// sanitizeToolsMiddleware 解决部分严格模型服务商（如 MiniMax 报错 2013 invalid params, function parameters is empty）
-// 对 function call 的 parameters 字段结构要求必须包含有效 object 和 properties 的兼容性问题。
+// sanitizeToolsMiddleware 解决部分严格模型服务商与网关的请求参数兼容性问题：
+// 1. 消除 max_tokens 与 max_completion_tokens 冲突（杜绝网关报 duplicate field `max_tokens`）
+// 2. 移除部分模型不兼容的 reasoning_effort="none" 或 thinking.type="disabled"（如 MiniMax-M3.1 报错 2013）
+// 3. 解决部分严格模型服务商（如 function call parameters 必须包含有效 object 和 properties）的问题
 func sanitizeToolsMiddleware() openaiOption.RequestOption {
 	return openaiOption.WithMiddleware(func(req *http.Request, nxt openaiOption.MiddlewareNext) (*http.Response, error) {
 		if req.Body == nil {
@@ -224,6 +220,28 @@ func sanitizeToolsMiddleware() openaiOption.RequestOption {
 		var bodyMap map[string]any
 		if err := json.Unmarshal(bodyBytes, &bodyMap); err == nil {
 			modified := false
+
+			// 1. 消除 max_tokens 与 max_completion_tokens 冲突
+			if _, hasTokens := bodyMap["max_tokens"]; hasTokens {
+				if _, hasComp := bodyMap["max_completion_tokens"]; hasComp {
+					delete(bodyMap, "max_tokens")
+					modified = true
+				}
+			}
+
+			// 2. 清理 MiniMax-M3.1 等自适应思考模型不兼容的 reasoning_effort="none" 或 thinking.type="disabled"
+			if rEffort, ok := bodyMap["reasoning_effort"].(string); ok && rEffort == "none" {
+				delete(bodyMap, "reasoning_effort")
+				modified = true
+			}
+			if th, ok := bodyMap["thinking"].(map[string]any); ok {
+				if tType, ok := th["type"].(string); ok && tType == "disabled" {
+					delete(bodyMap, "thinking")
+					modified = true
+				}
+			}
+
+			// 3. 规范化 tools parameters 结构
 			if rawTools, ok := bodyMap["tools"].([]any); ok && len(rawTools) > 0 {
 				for _, t := range rawTools {
 					toolMap, ok := t.(map[string]any)
@@ -260,6 +278,87 @@ func sanitizeToolsMiddleware() openaiOption.RequestOption {
 
 		req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		req.ContentLength = int64(len(bodyBytes))
-		return nxt(req)
+
+		resp, err := nxt(req)
+		if resp != nil && resp.StatusCode >= 400 {
+			respBytes, rErr := io.ReadAll(resp.Body)
+			if rErr == nil {
+				resp.Body.Close()
+				resp.Body = io.NopCloser(bytes.NewReader(respBytes))
+				logger.SugaredLogger.Errorf("❌ [HTTP %d] URL: %s | Resp: %s | Req: %s",
+					resp.StatusCode, req.URL.String(), string(respBytes), string(bodyBytes))
+			}
+		}
+
+		// 处理流式响应：清除网关可能附带的 : ping 等 SSE 注释与空行，防止 openai-go 抛出 unexpected end of JSON input
+		if resp != nil && resp.Body != nil && resp.StatusCode < 300 {
+			cType := strings.ToLower(resp.Header.Get("Content-Type"))
+			isStream := strings.Contains(cType, "event-stream")
+			if !isStream && bodyMap != nil {
+				if sVal, ok := bodyMap["stream"].(bool); ok && sVal {
+					isStream = true
+				}
+			}
+			if isStream {
+				resp.Body = newSSECleanReader(resp.Body)
+			}
+		}
+
+		return resp, err
 	})
+}
+
+// sseCleanReader 过滤 SSE 注释行（如 ": ping"、": keepalive"）与孤立空行，
+// 防止 openai-go/v3 的 eventStreamDecoder 分发空 Data 事件导致 json.Unmarshal 崩溃
+// 报 "unexpected end of JSON input"。
+type sseCleanReader struct {
+	reader  *bufio.Reader
+	closer  io.Closer
+	hasData bool
+	buf     bytes.Buffer
+}
+
+func newSSECleanReader(rc io.ReadCloser) io.ReadCloser {
+	return &sseCleanReader{
+		reader: bufio.NewReader(rc),
+		closer: rc,
+	}
+}
+
+func (r *sseCleanReader) Read(p []byte) (int, error) {
+	for r.buf.Len() == 0 {
+		line, err := r.reader.ReadBytes('\n')
+		if len(line) > 0 {
+			trimmed := bytes.TrimRight(line, "\r\n")
+			// 1. 如果是 SSE 注释（以 ':' 开头），完全跳过
+			if len(trimmed) > 0 && trimmed[0] == ':' {
+				continue
+			}
+			// 2. 如果是空行（事件块分隔符）
+			if len(trimmed) == 0 {
+				// 仅在当前事件块中确实包含有效 'data:' 时才下发事件分隔符
+				if r.hasData {
+					r.buf.Write(line)
+					r.hasData = false
+				}
+				continue
+			}
+			// 3. 标记是否包含 data 行
+			if bytes.HasPrefix(trimmed, []byte("data:")) {
+				r.hasData = true
+			}
+			r.buf.Write(line)
+		}
+		if err != nil {
+			if r.buf.Len() > 0 {
+				break
+			}
+			return 0, err
+		}
+	}
+	return r.buf.Read(p)
+}
+
+func (r *sseCleanReader) Close() error {
+	return r.closer.Close()
 }

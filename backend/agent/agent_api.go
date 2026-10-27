@@ -605,6 +605,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			lowerErr := strings.ToLower(agentErr.Error())
 			if strings.Contains(lowerErr, "401") || strings.Contains(lowerErr, "403") || strings.Contains(lowerErr, "token_rejected") || strings.Contains(lowerErr, "invalid token") || strings.Contains(lowerErr, "unauthorized") || strings.Contains(lowerErr, "invalid_api_key") {
 				errMsg = fmt.Sprintf("❌ AI服务鉴权失败 (HTTP 401/403)：API Key 无效或已过期。\n\n**可能原因**：当前所选大模型（配置ID：%d）的 API Key 未授权、余额不足或被平台拒绝 (token_rejected)。\n**解决方案**：请前往「系统设置 -> AI配置」检查并更新该模型的有效 API Key，或切换为可用模型（如 MiniMax-M3 / Nemotron 等）。\n\n(底层详情: %v)", aiConfigId, agentErr)
+			} else if strings.Contains(lowerErr, "400") || strings.Contains(lowerErr, "bad request") {
+				errMsg = fmt.Sprintf("❌ AI服务请求参数校验失败 (HTTP 400 Bad Request)。\n\n**可能原因**：网关或大模型服务端拒绝了请求参数（例如：参数重复定义、模型不支持特定思考模式或工具定义）。\n**解决方案**：系统已对常见网关参数自动执行容错过滤；若仍失败，请前往「系统设置 -> AI配置」检查该模型的配置（如检查 Base URL 格式、关闭 thinking 模式，或切换其他可用模型）。\n\n(底层详情: %v)", agentErr)
 			} else if _, ok := agentErr.(data.DegenerateOutputError); ok {
 				errMsg = "❌ 模型输出异常：检测到乱码(<unk>)流，已自动重试仍失败。\n\n**建议**：请重试一次；若反复出现，请切换 AI 配置中的模型。"
 			} else if strings.Contains(lowerErr, "unexpected end of json input") || lowerErr == "eof" || strings.Contains(lowerErr, "unexpected eof") {
