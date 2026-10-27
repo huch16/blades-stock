@@ -10,6 +10,7 @@ import (
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
+	"blades-stock/backend/quant"
 )
 
 // AutoMigrateAll 执行全系统完整数据库表结构迁移与默认种子数据初始化
@@ -67,22 +68,36 @@ func AutoMigrateAll() {
 	db.Dao.AutoMigrate(&evaluator.EvaluatorReport{})
 	db.Dao.AutoMigrate(&agent.KnowledgeCrystal{})
 
-	// 4. 底层 DB 核心记忆与表迁移
+	// 4. 自主智能体闭环：死后剖析对账、模拟盘资产净值、量化自进化与产业链图谱
+	db.Dao.AutoMigrate(&models.PostMortemAuditRecord{})
+	db.Dao.AutoMigrate(&models.PaperPortfolio{})
+	db.Dao.AutoMigrate(&models.PaperPosition{})
+	db.Dao.AutoMigrate(&models.PaperTradeOrder{})
+	db.Dao.AutoMigrate(&models.PaperDailyNAV{})
+	db.Dao.AutoMigrate(&models.AutoAlphaProposal{})
+	db.Dao.AutoMigrate(&models.IndustryNode{})
+	db.Dao.AutoMigrate(&models.IndustryEdge{})
+
+	// 5. 底层 DB 核心记忆与表迁移
 	db.AutoMigrate()
 
-	// 5. 播种系统默认精选 Skill (ETF 动量轮动 / Serenity 产业链分析)
+	// 6. 播种系统默认精选 Skill (ETF 动量轮动 / Serenity 产业链分析)
 	SeedDefaultSkills()
 
-	// 6. 播种股票基础信息基准库（A 股、港股、美股）
+	// 7. 播种股票基础信息基准库（A 股、港股、美股）
 	SeedStockBasicsIfEmpty()
 
-	// 7. 播种系统默认开箱即用 AI 大模型服务配置
+	// 8. 播种系统默认开箱即用 AI 大模型服务配置
 	SeedDefaultAIConfigsIfEmpty()
 
-	// 8. 播种系统默认高胜率经验结晶知识库
+	// 9. 播种系统默认高胜率经验结晶知识库
 	SeedDefaultKnowledgeCrystalsIfEmpty()
 
-	// 9. 自动自愈清理历史遗留的虚假推荐指标与排雷Prompt脏数据
+	// 10. 初始化智能体专属模拟盘账户与内置产业链图谱
+	_, _ = quant.NewPaperPortfolioManager().GetOrCreateDefaultPortfolio()
+	quant.NewIndustryKnowledgeGraph().SeedDefaultGraphIfEmpty()
+
+	// 11. 自动自愈清理历史遗留的虚假推荐指标与排雷Prompt脏数据
 	_ = agent.CleanDirtyRecommendStocks()
 
 	logger.SugaredLogger.Info("[Database] All tables migrated and initialized successfully.")

@@ -115,6 +115,14 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetAIAnalysisContent":        GroupAIAnalysis,
 	"GetStockThesis":              GroupAIAnalysis,
 	"SaveStockThesis":             GroupAIAnalysis,
+	"TriggerPostMortemAudit":       GroupAIAnalysis,
+	"GetPostMortemAuditHistory":   GroupAIAnalysis,
+	"GetPaperPortfolioSummary":    GroupAIAnalysis,
+	"ExecutePaperTrade":           GroupAIAnalysis,
+	"RunAutoAlphaExploration":     GroupAIAnalysis,
+	"GetAutoAlphaProposals":       GroupAIAnalysis,
+	"QuerySupplyChainCascade":     GroupStockAnalysis,
+	"GetIndustrySupplyGraph":      GroupStockAnalysis,
 	"GetBacktestStats":            GroupAIAnalysis,
 	"GetBacktestDetail":           GroupAIAnalysis,
 	"RunBacktest":                 GroupAIAnalysis,
@@ -338,7 +346,7 @@ var groupToolCaps = map[ToolGroup]int{
 	GroupScreening:     10,
 	GroupMoneyFlow:     4,
 	GroupNewsResearch:  14,
-	GroupAIAnalysis:    8,
+	GroupAIAnalysis:    14,
 	GroupOperations:    5,
 }
 
@@ -350,7 +358,7 @@ var coreToolByGroup = map[ToolGroup][]string{
 		"GetEastMoneyKLineWithMA", "GetStockConceptInfo", "GetStockValuationPercentile",
 		"GetStockRZRQInfo", "GetStockMarginTrading", "GetStockHolderTrend",
 		"GetStockBillboard", "AnalyzeHotMoneyActivity", "GetStockQtrMainFinance",
-		"GetStockOrgPredict", "GetETFHistorical",
+		"GetStockOrgPredict", "GetETFHistorical", "QuerySupplyChainCascade", "GetIndustrySupplyGraph",
 	},
 	GroupMarket: {
 		"GetMarketData", "GlobalStockIndexesReadable", "GetStockChanges", "GetChangeRank",
@@ -369,7 +377,7 @@ var coreToolByGroup = map[ToolGroup][]string{
 		"GetUplimitHotStocks", "GetUplimitHotPlates", "GetWallstreetcnLives",
 	},
 	GroupAIAnalysis: {
-		"FinancialQA", "AiRecommendStocks", "GetAIAnalysisHistory", "GetStockThesis", "SaveStockThesis", "RunBacktest", "RunVectorizedBacktest", "DiagnoseStock", "VectorBacktest", "VectorGridSearch",
+		"FinancialQA", "AiRecommendStocks", "GetAIAnalysisHistory", "GetStockThesis", "SaveStockThesis", "GetPaperPortfolioSummary", "ExecutePaperTrade", "TriggerPostMortemAudit", "GetPostMortemAuditHistory", "RunAutoAlphaExploration", "GetAutoAlphaProposals", "RunBacktest", "RunVectorizedBacktest", "DiagnoseStock", "VectorBacktest", "VectorGridSearch",
 	},
 	GroupOperations: {
 		"SetTradingPrice", "SendToDingDing", "GetFundInfo", "SearchFund",

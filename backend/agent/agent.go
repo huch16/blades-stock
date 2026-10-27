@@ -408,6 +408,14 @@ func GetAllTools() []bladesTools.Tool {
 	allTools = append(allTools, tools.GetVectorGridSearchTool())
 	allTools = append(allTools, tools.GetStockThesisTool())
 	allTools = append(allTools, tools.SaveStockThesisTool())
+	allTools = append(allTools, tools.TriggerPostMortemAuditTool())
+	allTools = append(allTools, tools.GetPostMortemAuditHistoryTool())
+	allTools = append(allTools, tools.GetPaperPortfolioSummaryTool())
+	allTools = append(allTools, tools.ExecutePaperTradeTool())
+	allTools = append(allTools, tools.RunAutoAlphaExplorationTool())
+	allTools = append(allTools, tools.GetAutoAlphaProposalsTool())
+	allTools = append(allTools, tools.QuerySupplyChainCascadeTool())
+	allTools = append(allTools, tools.GetIndustrySupplyGraphTool())
 
 	mcpTools := getMCPTools()
 	if len(mcpTools) > 0 {
@@ -443,6 +451,14 @@ func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesT
 	allTools = append(allTools, tools.GetVectorGridSearchTool())
 	allTools = append(allTools, tools.GetStockThesisTool())
 	allTools = append(allTools, tools.SaveStockThesisTool())
+	allTools = append(allTools, tools.TriggerPostMortemAuditTool())
+	allTools = append(allTools, tools.GetPostMortemAuditHistoryTool())
+	allTools = append(allTools, tools.GetPaperPortfolioSummaryTool())
+	allTools = append(allTools, tools.ExecutePaperTradeTool())
+	allTools = append(allTools, tools.RunAutoAlphaExplorationTool())
+	allTools = append(allTools, tools.GetAutoAlphaProposalsTool())
+	allTools = append(allTools, tools.QuerySupplyChainCascadeTool())
+	allTools = append(allTools, tools.GetIndustrySupplyGraphTool())
 
 	mcpTools := getMCPTools()
 	if len(mcpTools) > 0 {

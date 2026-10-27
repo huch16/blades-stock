@@ -2927,4 +2927,66 @@ func (a *App) GetKnowledgeCrystals(category string, limit int) ([]agent.Knowledg
 	return a.agentService.GetKnowledgeCrystals(a.ctx, category, limit)
 }
 
+// ============================================================================
+// 自主智能体闭环：死后剖析对账、模拟盘问责、策略自进化与产业链图谱
+// ============================================================================
+
+// GetPaperPortfolioStats 获取智能体专属模拟基金账户报表（净值NAV、持仓、夏普、回撤与胜率）
+func (a *App) GetPaperPortfolioStats() (*models.PaperPortfolioStats, error) {
+	mgr := quant.NewPaperPortfolioManager()
+	_, _ = mgr.UpdateDailyNAV()
+	return mgr.GetPortfolioStats()
+}
+
+// ExecutePaperTrade 执行模拟盘虚拟买入或卖出指令
+func (a *App) ExecutePaperTrade(side, stockCode, stockName string, price float64, shares int, stopLoss, takeProfit, targetWeight float64, reason string) (*models.PaperTradeOrder, error) {
+	mgr := quant.NewPaperPortfolioManager()
+	if strings.ToUpper(side) == "BUY" {
+		return mgr.ExecuteVirtualBuy(stockCode, stockName, price, stopLoss, takeProfit, targetWeight, reason)
+	}
+	return mgr.ExecuteVirtualSell(stockCode, price, shares, reason)
+}
+
+// RunDailyPostMortemAudit 触发 AI 推荐与买方立论的闭环胜率对账与死后剖析
+func (a *App) RunDailyPostMortemAudit(targetDate string) (*models.PostMortemAuditSummary, error) {
+	service := quant.NewPostMortemLoopService()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	return service.RunDailyAudit(ctx, targetDate)
+}
+
+// GetRecentPostMortemRecords 查询最近的决策胜率对账与死后剖析档案
+func (a *App) GetRecentPostMortemRecords(limit int) ([]models.PostMortemAuditRecord, error) {
+	service := quant.NewPostMortemLoopService()
+	return service.GetRecentAuditRecords(limit)
+}
+
+// RunAutoAlphaExploration 触发夜间量化因子与参数空间网格搜索进化
+func (a *App) RunAutoAlphaExploration(targetPool string) (*models.AutoAlphaProposal, error) {
+	var codes []string
+	if targetPool != "" {
+		for _, p := range strings.Split(targetPool, ",") {
+			c := strings.TrimSpace(p)
+			if c != "" {
+				codes = append(codes, c)
+			}
+		}
+	}
+	explorer := quant.NewAutoAlphaExplorer()
+	return explorer.ExploreETFMomentumParams(codes)
+}
+
+// GetAutoAlphaProposals 获取历史量化策略自进化提案
+func (a *App) GetAutoAlphaProposals(limit int) ([]models.AutoAlphaProposal, error) {
+	explorer := quant.NewAutoAlphaExplorer()
+	return explorer.GetActiveProposals(limit)
+}
+
+// QuerySupplyChainCascade 执行跨市场与产业链事件级联推演雷达
+func (a *App) QuerySupplyChainCascade(source, headline string) (*models.CascadeEventResult, error) {
+	graph := quant.NewIndustryKnowledgeGraph()
+	return graph.CascadeEventReasoning(source, headline)
+}
+
+
 
