@@ -186,13 +186,32 @@ const formValue = ref({
   backtestEnabled: true,
   akshareServiceUrl: 'http://115.190.72.22:8089',
   aDataServiceUrl: 'http://115.190.72.22:8000',
-  defaultDataSource: 'adata',
+  defaultDataSource: 'eastmoney',
   embeddingEnabled: false,
   embeddingModelName: '',
   embeddingBaseUrl: '',
   embeddingApiKey: '',
   crawlTimeOut: 60,
-  kDays: 90
+  kDays: 90,
+  mcpTimeout: 8,
+  toolRunBudget: 15,
+  toolDailyBudget: 200,
+  toolDailyCostUSD: 2.0
+});
+
+// 即时响应主题模式切换（无需等待保存，立即可视化预览高对比度效果）
+watch(() => formValue.value.darkTheme, (isDark) => {
+  if (typeof document !== 'undefined') {
+    if (isDark) {
+      document.documentElement.setAttribute('theme-mode', 'dark');
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('is-dark');
+    } else {
+      document.documentElement.setAttribute('theme-mode', 'light');
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('is-dark');
+    }
+  }
 });
 
 const defaultDataSourceOptions = [
@@ -894,6 +913,13 @@ async function saveConfig() {
     questionTemplate: questionTemplate.value,
     crawlTimeOut: formValue.value.crawlTimeOut || 60,
     kDays: formValue.value.kDays || 90,
+    backtestAccuracyThreshold: Number(formValue.value.backtestAccuracyThreshold) || 5.0,
+    backtestVerifyDays: Number(formValue.value.backtestVerifyDays) || 2,
+    backtestEnabled: Boolean(formValue.value.backtestEnabled),
+    mcpTimeout: Number(formValue.value.mcpTimeout) || 8,
+    toolRunBudget: Number(formValue.value.toolRunBudget) || 15,
+    toolDailyBudget: Number(formValue.value.toolDailyBudget) || 200,
+    toolDailyCostUSD: Number(formValue.value.toolDailyCostUSD) || 2.0,
     aiConfigs: aiConfigs.value.map(c => ({
       ...c,
       ID: c.ID || 0,
@@ -904,10 +930,15 @@ async function saveConfig() {
 
   try {
     const res = await UpdateConfig(configToSave);
+    if (typeof res === 'string' && (res.includes('失败') || res.includes('error') || res.includes('Error'))) {
+      message.error(res);
+      return;
+    }
     message.success(res || '设置保存成功！');
     markClean();
     aiConfigStore.fetchAiConfigs();
     EventsEmit('config_updated');
+    EventsEmit('updateSettings', configToSave);
   } catch (err: any) {
     message.error('保存失败: ' + (err?.message || err));
   } finally {
@@ -960,6 +991,20 @@ function exportConfig() {
       message.error('导出失败: 配置内容为空');
       return;
     }
+    if (typeof res === 'string') {
+      if (res.startsWith('导出成功:')) {
+        message.success(res);
+        return;
+      }
+      if (res === '取消导出') {
+        message.info('已取消导出');
+        return;
+      }
+      if (res.startsWith('导出失败:')) {
+        message.error(res);
+        return;
+      }
+    }
     const fileName = `blades-stock-config-${new Date().toISOString().slice(0, 10)}.json`;
     triggerBrowserDownload(fileName, res);
     message.success('配置文件导出成功！');
@@ -978,20 +1023,104 @@ function importConfig() {
     const reader = new FileReader();
     reader.onload = async (re) => {
       try {
-        const config = JSON.parse(re.target?.result as string);
+        const text = re.target?.result as string;
+        if (!text || !text.trim()) {
+          message.error('所选配置文件内容为空');
+          return;
+        }
+
+        let rawData: any;
+        try {
+          rawData = JSON.parse(text);
+        } catch (parseErr: any) {
+          message.error('JSON 语法解析失败，请检查文件是否损坏: ' + parseErr.message);
+          return;
+        }
+
+        // 智能兼容多种配置结构：
+        // 1. 全量智能资产包 { version, data: { settings, aiConfigs, ... } }
+        // 2. 标椎导出格式 { aiConfigs: [...], tushareToken: ..., refreshInterval: ... }
+        // 3. AI 模型列表数组 [ { name, baseUrl, ... } ]
+        // 4. 单一 Settings 嵌套对象
+        let targetSettings: any = null;
+        let targetAiConfigs: any[] = [];
+        let summaryText = '';
+
+        if (rawData?.data?.settings) {
+          targetSettings = rawData.data.settings?.Settings || rawData.data.settings;
+          targetAiConfigs = Array.isArray(rawData.data.settings?.aiConfigs)
+            ? rawData.data.settings.aiConfigs
+            : (Array.isArray(rawData.data.aiConfigs) ? rawData.data.aiConfigs : []);
+          summaryText = `全量智能资产包（包含系统参数与 ${targetAiConfigs.length} 项 AI 配置）`;
+        } else if (Array.isArray(rawData)) {
+          targetSettings = { ...formValue.value };
+          targetAiConfigs = rawData;
+          summaryText = `AI 模型配置列表（包含 ${targetAiConfigs.length} 项模型配置）`;
+        } else if (typeof rawData === 'object' && rawData !== null) {
+          targetSettings = rawData.Settings || rawData;
+          targetAiConfigs = Array.isArray(rawData.aiConfigs)
+            ? rawData.aiConfigs
+            : (Array.isArray(targetSettings.aiConfigs) ? targetSettings.aiConfigs : []);
+          summaryText = `系统配置文件（包含系统参数与 ${targetAiConfigs.length} 项 AI 配置）`;
+        } else {
+          message.error('无法识别的配置文件格式');
+          return;
+        }
+
         dialog.warning({
-          title: '确认导入配置文件',
-          content: `即将导入文件「${file.name}」，这将覆盖当前配置。确认继续吗？`,
-          positiveText: '确认导入',
+          title: '确认导入系统配置',
+          content: `已成功读取文件「${file.name}」(${Math.round(file.size / 1024)} KB)。\n识别为: ${summaryText}。\n\n确认导入并覆盖当前系统的配置参数吗？`,
+          positiveText: '确认导入覆盖',
           negativeText: '取消',
           onPositiveClick: async () => {
-            await UpdateConfig(config);
-            message.success('配置导入成功！');
-            await loadConfig();
+            const loadingMsg = message.loading('正在导入并持久化系统配置...', { duration: 0 });
+            try {
+              const normalizedConfig: any = {
+                ...formValue.value,
+                ...targetSettings,
+                localPushEnable: Boolean(targetSettings.localPushEnable ?? targetSettings.localPush?.enable ?? formValue.value.localPush?.enable),
+                dingPushEnable: Boolean(targetSettings.dingPushEnable ?? targetSettings.dingPush?.enable ?? formValue.value.dingPush?.enable),
+                dingRobot: targetSettings.dingRobot || targetSettings.dingPush?.dingRobot || formValue.value.dingPush?.dingRobot || '',
+                openAiEnable: targetSettings.openAiEnable !== undefined ? Boolean(targetSettings.openAiEnable) : openAiEnable.value,
+                aiConfigId: targetSettings.aiConfigId ?? defaultAiConfigId.value ?? 0,
+                prompt: targetSettings.prompt || aiPrompt.value,
+                questionTemplate: targetSettings.questionTemplate || questionTemplate.value,
+                crawlTimeOut: targetSettings.crawlTimeOut || formValue.value.crawlTimeOut || 60,
+                kDays: targetSettings.kDays || formValue.value.kDays || 90,
+                backtestAccuracyThreshold: Number(targetSettings.backtestAccuracyThreshold ?? formValue.value.backtestAccuracyThreshold) || 5.0,
+                backtestVerifyDays: Number(targetSettings.backtestVerifyDays ?? formValue.value.backtestVerifyDays) || 2,
+                backtestEnabled: targetSettings.backtestEnabled !== undefined ? Boolean(targetSettings.backtestEnabled) : formValue.value.backtestEnabled,
+                mcpTimeout: Number(targetSettings.mcpTimeout ?? formValue.value.mcpTimeout) || 8,
+                toolRunBudget: Number(targetSettings.toolRunBudget ?? formValue.value.toolRunBudget) || 15,
+                toolDailyBudget: Number(targetSettings.toolDailyBudget ?? formValue.value.toolDailyBudget) || 200,
+                toolDailyCostUSD: Number(targetSettings.toolDailyCostUSD ?? formValue.value.toolDailyCostUSD) || 2.0,
+                aiConfigs: targetAiConfigs.length > 0 ? targetAiConfigs.map(c => ({
+                  ...c,
+                  ID: c.ID || 0,
+                  thinking: Boolean(c.thinking),
+                  httpProxyEnabled: Boolean(c.httpProxyEnabled)
+                })) : aiConfigs.value
+              };
+
+              const res = await UpdateConfig(normalizedConfig);
+              loadingMsg.destroy();
+              if (typeof res === 'string' && (res.includes('失败') || res.includes('error') || res.includes('Error'))) {
+                message.error('导入失败: ' + res);
+                return;
+              }
+              message.success('配置导入成功！已应用并同步数据库。');
+              await loadConfig();
+              aiConfigStore.fetchAiConfigs();
+              EventsEmit('config_updated');
+              EventsEmit('updateSettings', normalizedConfig);
+            } catch (importErr: any) {
+              loadingMsg.destroy();
+              message.error('导入发生异常: ' + (importErr?.message || importErr));
+            }
           }
         });
       } catch (err: any) {
-        message.error('解析配置文件失败: ' + (err?.message || err));
+        message.error('读取配置文件失败: ' + (err?.message || err));
       }
     };
     reader.readAsText(file);
@@ -1047,13 +1176,17 @@ async function loadConfig() {
       backtestEnabled: res.backtestEnabled !== false,
       akshareServiceUrl: res.akshareServiceUrl || 'http://115.190.72.22:8089',
       aDataServiceUrl: res.aDataServiceUrl || 'http://115.190.72.22:8000',
-      defaultDataSource: res.defaultDataSource || 'adata',
+      defaultDataSource: res.defaultDataSource || 'eastmoney',
       embeddingEnabled: Boolean(res.embeddingEnabled),
       embeddingModelName: res.embeddingModelName || '',
       embeddingBaseUrl: res.embeddingBaseUrl || '',
       embeddingApiKey: res.embeddingApiKey || '',
       crawlTimeOut: res.crawlTimeOut || 60,
-      kDays: res.kDays || 90
+      kDays: res.kDays || 90,
+      mcpTimeout: res.mcpTimeout || 8,
+      toolRunBudget: res.toolRunBudget || 15,
+      toolDailyBudget: res.toolDailyBudget || 200,
+      toolDailyCostUSD: res.toolDailyCostUSD || 2.0
     };
 
     openAiEnable.value = Boolean(res.openAiEnable ?? res.openAI?.enable);
@@ -1119,7 +1252,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="settings-container">
+  <div :class="['settings-container', formValue.darkTheme ? 'is-dark' : 'is-light']">
     <!-- ============================================== -->
     <!-- 顶部：全局导航、面包屑与工作区快捷入口         -->
     <!-- ============================================== -->
@@ -1210,14 +1343,17 @@ onBeforeUnmount(() => {
         <n-tab-pane name="system" tab="🖥️ 基础与运行环境">
           <div class="tab-pane-content">
             <!-- 外观与界面交互 -->
-            <n-card title="外观与界面交互" size="small" class="settings-card">
+            <n-card title="界面视觉与主题风格" size="small" class="settings-card">
               <n-grid :cols="24" :x-gap="20" :y-gap="12">
-                <n-form-item-gi :span="8" label="界面主题风格">
+                <n-form-item-gi :span="8" label="界面主题风格（支持即时预览）">
                   <n-space align="center">
                     <n-switch v-model:value="formValue.darkTheme">
                       <template #checked>🌙 极致暗黑模式</template>
                       <template #unchecked>☀️ 亮色清新模式</template>
                     </n-switch>
+                    <n-tag size="tiny" :type="formValue.darkTheme ? 'info' : 'success'" round>
+                      {{ formValue.darkTheme ? '暗夜专注' : '高对比度清晰' }}
+                    </n-tag>
                   </n-space>
                 </n-form-item-gi>
 
@@ -1232,10 +1368,10 @@ onBeforeUnmount(() => {
                   </n-input-number>
                 </n-form-item-gi>
 
-                <n-form-item-gi :span="8" label="启动自动同步">
+                <n-form-item-gi :span="8" label="启动自动同步全市场标的">
                   <n-switch v-model:value="formValue.updateBasicInfoOnStart">
                     <template #checked>已开启（启动时更新全市场基础信息）</template>
-                    <template #unchecked>已关闭（加速启动）</template>
+                    <template #unchecked>已关闭（加速冷启动）</template>
                   </n-switch>
                 </n-form-item-gi>
               </n-grid>
@@ -1286,12 +1422,79 @@ onBeforeUnmount(() => {
         <!-- ------------------------------------------------ -->
         <n-tab-pane name="market" tab="📊 行情与量化数据源">
           <div class="tab-pane-content">
-            <!-- Tushare Pro 官方数据中枢 -->
+            <!-- 核心：默认行情分发引擎路由 -->
             <n-card size="small" class="settings-card highlight-card">
               <template #header>
                 <div class="card-header-flex">
-                  <span class="card-title">📈 Tushare Pro 备用行情直连源 (HTTP REST)</span>
-                  <n-tag type="info" size="tiny" round>备用日线与分时数据源</n-tag>
+                  <span class="card-title">🚀 默认行情引擎分发路由 (核心生产源)</span>
+                  <n-tag type="success" size="tiny" round>首选东方财富/新浪直连</n-tag>
+                </div>
+              </template>
+              <n-grid :cols="24" :x-gap="20" :y-gap="12">
+                <n-form-item-gi :span="8" label="默认行情分发引擎">
+                  <n-select
+                    v-model:value="formValue.defaultDataSource"
+                    :options="defaultDataSourceOptions"
+                  />
+                  <template #feedback>
+                    <span class="field-feedback">推荐使用 EastMoney 东方财富直连，内置秒级降级与容灾能力</span>
+                  </template>
+                </n-form-item-gi>
+
+                <n-form-item-gi :span="8" label="AData 远程微服务 (备用)">
+                  <n-input
+                    v-model:value="formValue.aDataServiceUrl"
+                    placeholder="http://115.190.72.22:8000"
+                  />
+                  <template #feedback>
+                    <span class="field-feedback">若远程节点脱机，系统将自动秒级熔断并退避至东财直连</span>
+                  </template>
+                </n-form-item-gi>
+
+                <n-form-item-gi :span="8" label="AKShare 远程微服务 (备用)">
+                  <n-input
+                    v-model:value="formValue.akshareServiceUrl"
+                    placeholder="http://115.190.72.22:8089"
+                  />
+                </n-form-item-gi>
+              </n-grid>
+            </n-card>
+
+            <!-- 东方财富与高频分时接口 -->
+            <n-card title="高频分时与盘口行情源" size="small" class="settings-card">
+              <n-grid :cols="24" :x-gap="20" :y-gap="12">
+                <n-form-item-gi :span="12" label="东方财富网页凭证唯一标识 (qgqp_b_id)">
+                  <n-input
+                    v-model:value="formValue.qgqpBId"
+                    placeholder="东财资金流与行情 cookie 标识"
+                    clearable
+                  />
+                  <template #feedback>
+                    <span class="field-feedback">可选，用于东方财富超大单资金博弈流与主力吸筹深度穿透</span>
+                  </template>
+                </n-form-item-gi>
+
+                <n-form-item-gi :span="12" label="TickFlow Level-2 API Key">
+                  <n-input
+                    v-model:value="formValue.tickFlowAPIKey"
+                    type="password"
+                    show-password-on="click"
+                    placeholder="输入 TickFlow 高频数据服务密钥"
+                    clearable
+                  />
+                  <template #feedback>
+                    <span class="field-feedback">选填，用于极速十档买卖盘与逐笔成交高频诊断</span>
+                  </template>
+                </n-form-item-gi>
+              </n-grid>
+            </n-card>
+
+            <!-- Tushare Pro 官方数据中枢 (选填备用) -->
+            <n-card size="small" class="settings-card">
+              <template #header>
+                <div class="card-header-flex">
+                  <span class="card-title">📈 Tushare Pro 官方备用数据源 (选填备用)</span>
+                  <n-tag type="info" size="tiny" round>选填备用</n-tag>
                 </div>
               </template>
               <n-grid :cols="24" :x-gap="20" :y-gap="12">
@@ -1318,67 +1521,17 @@ onBeforeUnmount(() => {
               </n-grid>
             </n-card>
 
-            <!-- 东方财富与高频分时接口 -->
-            <n-card title="高频分时与盘口行情源" size="small" class="settings-card">
+            <!-- 全局视图与资讯快讯 -->
+            <n-card title="全景投研视图与快讯广播" size="small" class="settings-card">
               <n-grid :cols="24" :x-gap="20" :y-gap="12">
-                <n-form-item-gi :span="12" label="东方财富网页凭证唯一标识 (qgqp_b_id)">
-                  <n-input
-                    v-model:value="formValue.qgqpBId"
-                    placeholder="东财资金流与行情 cookie 标识"
-                    clearable
-                  />
-                  <template #feedback>
-                    <span class="field-feedback">可选，用于东方财富超大单资金博弈流数据穿透</span>
-                  </template>
-                </n-form-item-gi>
-
-                <n-form-item-gi :span="12" label="TickFlow Level-2 API Key">
-                  <n-input
-                    v-model:value="formValue.tickFlowAPIKey"
-                    type="password"
-                    show-password-on="click"
-                    placeholder="输入 TickFlow 高频数据服务密钥"
-                    clearable
-                  />
-                  <template #feedback>
-                    <span class="field-feedback">用于极速十档买卖盘与逐笔委托量化诊断</span>
-                  </template>
-                </n-form-item-gi>
-              </n-grid>
-            </n-card>
-
-            <!-- 第三方开源量化服务与视图开关 -->
-            <n-card title="远程服务路由与投研视图" size="small" class="settings-card">
-              <n-grid :cols="24" :x-gap="20" :y-gap="12">
-                <n-form-item-gi :span="8" label="默认行情分发引擎">
-                  <n-select
-                    v-model:value="formValue.defaultDataSource"
-                    :options="defaultDataSourceOptions"
-                  />
-                </n-form-item-gi>
-
-                <n-form-item-gi :span="8" label="AKShare 远程微服务">
-                  <n-input
-                    v-model:value="formValue.akshareServiceUrl"
-                    placeholder="http://115.190.72.22:8089"
-                  />
-                </n-form-item-gi>
-
-                <n-form-item-gi :span="8" label="AData 远程微服务">
-                  <n-input
-                    v-model:value="formValue.aDataServiceUrl"
-                    placeholder="http://115.190.72.22:8000"
-                  />
-                </n-form-item-gi>
-
-                <n-form-item-gi :span="8" label="指数与基金投研跟踪">
+                <n-form-item-gi :span="12" label="指数与基金投研跟踪">
                   <n-switch v-model:value="formValue.enableFund">
                     <template #checked>已启用 ETF与公募基金矩阵</template>
                     <template #unchecked>已关闭</template>
                   </n-switch>
                 </n-form-item-gi>
 
-                <n-form-item-gi :span="8" label="实时资讯快讯条">
+                <n-form-item-gi :span="12" label="实时资讯滚动快讯条">
                   <n-switch v-model:value="formValue.enableNews">
                     <template #checked>顶部展示滚动快讯</template>
                     <template #unchecked>隐藏快讯条</template>
@@ -2096,16 +2249,334 @@ onBeforeUnmount(() => {
   position: relative;
   padding: 14px 20px 130px 20px;
   box-sizing: border-box;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* 顶部全局导航与面包屑控制条 */
+/* ==========================================================================
+   明亮模式 (Light Mode) — 针对刺眼/对比度低专项优化，杜绝泛白与低对比度
+   ========================================================================== */
+.settings-container.is-light {
+  color: #0f172a; /* Slate 900 */
+}
+
+.settings-container.is-light .settings-nav-header {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.settings-container.is-light .runtime-status-bar {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.settings-container.is-light .bc-root {
+  color: #334155;
+  font-weight: 500;
+  opacity: 1;
+}
+.settings-container.is-light .bc-root:hover {
+  color: #15803d;
+}
+
+.settings-container.is-light .bc-sep {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.settings-container.is-light .bc-mid {
+  color: #475569;
+  opacity: 1;
+}
+
+.settings-container.is-light .bc-current {
+  color: #15803d; /* Emerald 700 */
+  font-weight: 700;
+}
+
+.settings-container.is-light .quick-nav-label {
+  color: #475569;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.settings-container.is-light .storage-text {
+  color: #334155;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.settings-container.is-light .ping-badge {
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.settings-container.is-light .settings-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.settings-container.is-light .highlight-card {
+  border-left: 4px solid #16a34a;
+}
+
+.settings-container.is-light .card-title {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.settings-container.is-light .field-feedback {
+  color: #475569;
+  font-weight: 500;
+  opacity: 1;
+}
+
+.settings-container.is-light .section-desc {
+  color: #334155;
+  font-weight: 500;
+  opacity: 1;
+}
+
+.settings-container.is-light .prompt-hint {
+  color: #475569;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.settings-container.is-light .model-name {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.settings-container.is-light .model-idx {
+  color: #475569;
+  font-weight: 700;
+  opacity: 1;
+}
+
+.settings-container.is-light .modern-backup-table th {
+  background: #f1f5f9;
+  color: #1e293b;
+  font-weight: 700;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.settings-container.is-light .modern-backup-table td {
+  color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.settings-container.is-light .modern-backup-table tr:hover td {
+  background: #f8fafc;
+}
+
+.settings-container.is-light .sticky-action-bar {
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid #cbd5e1;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.settings-container.is-light .dirty-badge {
+  color: #d97706; /* Amber 600 */
+  font-weight: 600;
+}
+
+.settings-container.is-light .dirty-indicator-dot {
+  background: #d97706;
+}
+
+.settings-container.is-light .clean-badge {
+  color: #15803d; /* Emerald 700 */
+  font-weight: 600;
+}
+
+.settings-container.is-light .clean-indicator-dot {
+  background: #15803d;
+}
+
+.settings-container.is-light .wizard-tpl-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.settings-container.is-light .wizard-tpl-item:hover {
+  background: #f0fdf4;
+  border-color: #16a34a;
+}
+
+.settings-container.is-light .tpl-title {
+  color: #0f172a;
+}
+
+.settings-container.is-light .tpl-desc {
+  color: #475569;
+  opacity: 1;
+}
+
+/* ==========================================================================
+   暗黑模式 (Dark Mode) — 沉浸感与深色磨砂玻璃
+   ========================================================================== */
+.settings-container.is-dark {
+  color: #f8fafc; /* Slate 50 */
+}
+
+.settings-container.is-dark .settings-nav-header {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-container.is-dark .runtime-status-bar {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-container.is-dark .bc-root {
+  color: #94a3b8;
+  opacity: 1;
+}
+.settings-container.is-dark .bc-root:hover {
+  color: #4ade80;
+}
+
+.settings-container.is-dark .bc-sep {
+  color: #64748b;
+  opacity: 1;
+}
+
+.settings-container.is-dark .bc-mid {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.settings-container.is-dark .bc-current {
+  color: #4ade80;
+  font-weight: 700;
+}
+
+.settings-container.is-dark .quick-nav-label {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.settings-container.is-dark .storage-text {
+  color: #cbd5e1;
+  opacity: 1;
+}
+
+.settings-container.is-dark .ping-badge {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+}
+
+.settings-container.is-dark .settings-card {
+  background: #18181c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.settings-container.is-dark .highlight-card {
+  border-left: 4px solid #18a058;
+}
+
+.settings-container.is-dark .card-title {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.settings-container.is-dark .field-feedback {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.settings-container.is-dark .section-desc {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.settings-container.is-dark .prompt-hint {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.settings-container.is-dark .model-name {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.settings-container.is-dark .model-idx {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+.settings-container.is-dark .modern-backup-table th {
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-container.is-dark .modern-backup-table td {
+  color: #e2e8f0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-container.is-dark .modern-backup-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.settings-container.is-dark .sticky-action-bar {
+  background: rgba(24, 24, 28, 0.94);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.settings-container.is-dark .dirty-badge {
+  color: #f0a020;
+}
+
+.settings-container.is-dark .dirty-indicator-dot {
+  background: #f0a020;
+}
+
+.settings-container.is-dark .clean-badge {
+  color: #18a058;
+}
+
+.settings-container.is-dark .clean-indicator-dot {
+  background: #18a058;
+}
+
+.settings-container.is-dark .wizard-tpl-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.settings-container.is-dark .wizard-tpl-item:hover {
+  background: rgba(24, 160, 88, 0.12);
+  border-color: #18a058;
+}
+
+.settings-container.is-dark .tpl-title {
+  color: #f8fafc;
+}
+
+.settings-container.is-dark .tpl-desc {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+/* ==========================================================================
+   全局通用组件样式
+   ========================================================================== */
 .settings-nav-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 10px 16px;
-  background: rgba(128, 128, 128, 0.04);
-  border: 1px solid rgba(128, 128, 128, 0.12);
   border-radius: 8px;
   margin-bottom: 12px;
 }
@@ -2129,26 +2600,11 @@ onBeforeUnmount(() => {
 
 .bc-root {
   cursor: pointer;
-  opacity: 0.65;
   transition: color 0.2s;
-}
-.bc-root:hover {
-  opacity: 1;
-  color: #18a058;
 }
 
 .bc-sep {
-  opacity: 0.35;
   font-size: 11px;
-}
-
-.bc-mid {
-  opacity: 0.65;
-}
-
-.bc-current {
-  font-weight: 600;
-  color: #18a058;
 }
 
 .nav-header-quick-links {
@@ -2159,7 +2615,6 @@ onBeforeUnmount(() => {
 
 .quick-nav-label {
   font-size: 12px;
-  opacity: 0.65;
 }
 
 /* 顶部状态栏 */
@@ -2168,8 +2623,6 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: center;
   padding: 10px 16px;
-  background: rgba(128, 128, 128, 0.05);
-  border: 1px solid rgba(128, 128, 128, 0.15);
   border-radius: 8px;
   margin-bottom: 16px;
 }
@@ -2195,7 +2648,6 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  opacity: 0.85;
 }
 
 .status-dot {
@@ -2210,8 +2662,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  padding: 2px 8px;
-  background: rgba(128, 128, 128, 0.08);
+  padding: 3px 8px;
   border-radius: 4px;
 }
 
@@ -2247,11 +2698,6 @@ onBeforeUnmount(() => {
 
 .settings-card {
   border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.highlight-card {
-  border-left: 3px solid #18a058;
 }
 
 .card-header-flex {
@@ -2263,12 +2709,10 @@ onBeforeUnmount(() => {
 
 .card-title {
   font-size: 15px;
-  font-weight: 600;
 }
 
 .field-feedback {
   font-size: 12px;
-  opacity: 0.7;
 }
 
 .token-status-box {
@@ -2310,13 +2754,10 @@ onBeforeUnmount(() => {
 
 .model-idx {
   font-size: 13px;
-  font-weight: bold;
-  opacity: 0.6;
 }
 
 .model-name {
   font-size: 14px;
-  font-weight: 600;
 }
 
 .prompt-header-tools {
@@ -2328,7 +2769,6 @@ onBeforeUnmount(() => {
 
 .prompt-hint {
   font-size: 12px;
-  opacity: 0.7;
 }
 
 /* 灾备中心 */
@@ -2355,15 +2795,11 @@ onBeforeUnmount(() => {
 
 .modern-backup-table th {
   text-align: left;
-  padding: 8px 12px;
-  background: rgba(128, 128, 128, 0.05);
-  font-weight: 600;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.15);
+  padding: 9px 12px;
 }
 
 .modern-backup-table td {
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.08);
+  padding: 9px 12px;
 }
 
 .backup-name-cell {
@@ -2383,7 +2819,6 @@ onBeforeUnmount(() => {
 
 .section-desc {
   font-size: 12px;
-  opacity: 0.7;
   margin: 0;
 }
 
@@ -2394,16 +2829,13 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   height: 56px;
-  background: rgba(28, 28, 30, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(128, 128, 128, 0.2);
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 24px;
   z-index: 100;
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .bar-back-btn {
@@ -2419,16 +2851,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #f0a020;
   font-size: 13px;
-  font-weight: 500;
 }
 
 .dirty-indicator-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #f0a020;
   animation: pulse-dot 1.5s infinite;
 }
 
@@ -2442,7 +2871,6 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #18a058;
   font-size: 13px;
 }
 
@@ -2450,7 +2878,6 @@ onBeforeUnmount(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #18a058;
 }
 
 .save-btn {
@@ -2469,18 +2896,10 @@ onBeforeUnmount(() => {
 }
 
 .wizard-tpl-item {
-  border: 1px solid rgba(128, 128, 128, 0.2);
   border-radius: 6px;
   padding: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: rgba(128, 128, 128, 0.03);
-}
-
-.wizard-tpl-item:hover {
-  border-color: #18a058;
-  background: rgba(24, 160, 88, 0.08);
-  transform: translateY(-2px);
 }
 
 .tpl-item-header {
@@ -2497,7 +2916,6 @@ onBeforeUnmount(() => {
 
 .tpl-desc {
   font-size: 12px;
-  opacity: 0.75;
   margin: 0;
   line-height: 1.4;
 }

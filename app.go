@@ -1736,16 +1736,22 @@ func (a *App) ExportConfig() string {
 	file, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:                "导出配置文件",
 		CanCreateDirectories: true,
-		DefaultFilename:      "config.json",
+		DefaultFilename:      "blades-stock-config.json",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "JSON Files (*.json)", Pattern: "*.json"},
+		},
 	})
 	if err != nil {
 		logger.SugaredLogger.Errorf("导出配置文件失败:%s", err.Error())
-		return err.Error()
+		return "导出失败: " + err.Error()
+	}
+	if file == "" {
+		return "取消导出"
 	}
 	err = os.WriteFile(file, []byte(config), os.ModePerm)
 	if err != nil {
 		logger.SugaredLogger.Errorf("导出配置文件失败:%s", err.Error())
-		return err.Error()
+		return "导出失败: " + err.Error()
 	}
 	return "导出成功:" + file
 }

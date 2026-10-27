@@ -950,13 +950,13 @@ func validateAIConfig(cfg *AIConfig) string {
 	}
 
 	if cfg.EmbeddingEnabled && strings.TrimSpace(cfg.EmbeddingModelName) == "" {
-		return "Embedding 已启用但未配置模型名称"
+		cfg.EmbeddingModelName = "text-embedding-3-small"
 	}
 	return ""
 }
 
 func UpdateConfig(s *SettingConfig) string {
-	if s.Settings == nil {
+	if s == nil || s.Settings == nil {
 		return "保存失败: 配置数据为空"
 	}
 	for i, cfg := range s.AiConfigs {
@@ -971,7 +971,7 @@ func UpdateConfig(s *SettingConfig) string {
 		}
 	}
 	if s.EmbeddingEnabled && strings.TrimSpace(s.EmbeddingModelName) == "" {
-		return "保存失败: 向量模型已启用但未配置模型名称"
+		s.EmbeddingModelName = "text-embedding-3-small"
 	}
 	var err error
 	maxRetries := 5
@@ -982,58 +982,61 @@ func UpdateConfig(s *SettingConfig) string {
 			tx.Model(&Settings{}).Where("1=1").Updates(map[string]any{"iwencai_api_key": ""})
 			tx.Model(&Settings{}).Count(&count)
 			if count > 0 {
-				targetID := s.ID
-				if targetID == 0 {
-					var exist Settings
-					if err := tx.First(&exist).Error; err == nil && exist.ID > 0 {
-						targetID = exist.ID
-					}
-				}
-				query := tx.Model(&Settings{})
-				if targetID > 0 {
-					query = query.Where("id=?", targetID)
+				var exist Settings
+				var query *gorm.DB
+				if err := tx.First(&exist).Error; err == nil && exist.ID > 0 {
+					query = tx.Model(&Settings{}).Where("id = ?", exist.ID)
+				} else if s.ID > 0 {
+					query = tx.Model(&Settings{}).Where("id = ?", s.ID)
 				} else {
-					query = query.Where("1=1")
+					query = tx.Model(&Settings{}).Where("1 = 1")
 				}
 				result := query.Updates(map[string]any{
-					"local_push_enable":          s.LocalPushEnable,
-					"ding_push_enable":           s.DingPushEnable,
-					"ding_robot":                 s.DingRobot,
-					"update_basic_info_on_start": s.UpdateBasicInfoOnStart,
-					"refresh_interval":           s.RefreshInterval,
-					"open_ai_enable":             s.OpenAiEnable,
-					"ai_config_id":               s.AiConfigID,
-					"tushare_token":              s.TushareToken,
-					"prompt":                     s.Prompt,
-					"check_update":               s.CheckUpdate,
-					"update_channel":             s.UpdateChannel,
-					"question_template":          s.QuestionTemplate,
-					"crawl_time_out":             s.CrawlTimeOut,
-					"k_days":                     s.KDays,
-					"enable_danmu":               s.EnableDanmu,
-					"browser_path":               s.BrowserPath,
-					"enable_news":                s.EnableNews,
-					"dark_theme":                 s.DarkTheme,
-					"enable_fund":                s.EnableFund,
-					"enable_push_news":           s.EnablePushNews,
-					"enable_only_push_red_news":  s.EnableOnlyPushRedNews,
-					"http_proxy":                 s.HttpProxy,
-					"http_proxy_enabled":         s.HttpProxyEnabled,
-					"enable_agent":               s.EnableAgent,
-					"disable_browser_search":     s.DisableBrowserSearch,
-					"qgqp_b_id":                  s.QgqpBId,
-					"em_api_key":                 s.EmApiKey,
-					"tickflow_api_key":           s.TickFlowAPIKey,
-					"akshare_service_url":        s.AkshareServiceUrl,
-					"adata_service_url":          s.ADataServiceUrl,
-					"default_data_source":        s.DefaultDataSource,
-					"window_width":               s.WindowWidth,
-					"window_height":              s.WindowHeight,
-					"prompt_plaza_api_base":      s.PromptPlazaApiBase,
-					"embedding_enabled":          s.EmbeddingEnabled,
-					"embedding_model_name":       s.EmbeddingModelName,
-					"embedding_base_url":         s.EmbeddingBaseUrl,
-					"embedding_api_key":          s.EmbeddingApiKey,
+					"local_push_enable":           s.LocalPushEnable,
+					"ding_push_enable":            s.DingPushEnable,
+					"ding_robot":                  s.DingRobot,
+					"update_basic_info_on_start":  s.UpdateBasicInfoOnStart,
+					"refresh_interval":            s.RefreshInterval,
+					"open_ai_enable":              s.OpenAiEnable,
+					"ai_config_id":                s.AiConfigID,
+					"tushare_token":               s.TushareToken,
+					"prompt":                      s.Prompt,
+					"check_update":                s.CheckUpdate,
+					"update_channel":              s.UpdateChannel,
+					"question_template":           s.QuestionTemplate,
+					"crawl_time_out":              s.CrawlTimeOut,
+					"k_days":                      s.KDays,
+					"enable_danmu":                s.EnableDanmu,
+					"browser_path":                s.BrowserPath,
+					"enable_news":                 s.EnableNews,
+					"dark_theme":                  s.DarkTheme,
+					"enable_fund":                 s.EnableFund,
+					"enable_push_news":            s.EnablePushNews,
+					"enable_only_push_red_news":   s.EnableOnlyPushRedNews,
+					"http_proxy":                  s.HttpProxy,
+					"http_proxy_enabled":          s.HttpProxyEnabled,
+					"enable_agent":                s.EnableAgent,
+					"disable_browser_search":      s.DisableBrowserSearch,
+					"qgqp_b_id":                   s.QgqpBId,
+					"em_api_key":                  s.EmApiKey,
+					"tickflow_api_key":            s.TickFlowAPIKey,
+					"akshare_service_url":         s.AkshareServiceUrl,
+					"adata_service_url":           s.ADataServiceUrl,
+					"default_data_source":         s.DefaultDataSource,
+					"window_width":                s.WindowWidth,
+					"window_height":               s.WindowHeight,
+					"prompt_plaza_api_base":       s.PromptPlazaApiBase,
+					"embedding_enabled":           s.EmbeddingEnabled,
+					"embedding_model_name":        s.EmbeddingModelName,
+					"embedding_base_url":          s.EmbeddingBaseUrl,
+					"embedding_api_key":           s.EmbeddingApiKey,
+					"backtest_accuracy_threshold": s.BacktestAccuracyThreshold,
+					"backtest_verify_days":        s.BacktestVerifyDays,
+					"backtest_enabled":            s.BacktestEnabled,
+					"mcp_timeout":                 s.McpTimeout,
+					"tool_run_budget":             s.ToolRunBudget,
+					"tool_daily_budget":           s.ToolDailyBudget,
+					"tool_daily_cost_usd":         s.ToolDailyCostUSD,
 				})
 				if result.Error != nil {
 					return result.Error
@@ -1120,9 +1123,13 @@ func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
 				"thinking":             item.Thinking,
 				"llm_concurrency_limit": item.LLMConcurrencyLimit,
 				"sub_agent_timeout":     item.SubAgentTimeout,
-				"embedding_enabled":    item.EmbeddingEnabled,
-				"embedding_model_name": item.EmbeddingModelName,
-				"embedding_base_url":   item.EmbeddingBaseUrl,
+				"embedding_enabled":     item.EmbeddingEnabled,
+				"embedding_model_name":  item.EmbeddingModelName,
+				"embedding_base_url":    item.EmbeddingBaseUrl,
+				"rate_limit_per_second": item.RateLimitPerSecond,
+				"burst":                 item.Burst,
+				"daily_request_quota":   item.DailyRequestQuota,
+				"daily_cost_quota":      item.DailyCostQuota,
 			}).Error
 			if e != nil {
 				return
@@ -1138,8 +1145,13 @@ func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
 		if err != nil {
 			return err
 		}
+	} else if len(addAiConfigs) > 0 {
+		// 所有传入配置均为全新项，先清空旧配置，避免历史残留配置无法被覆盖删除
+		err = tx.Exec("DELETE FROM ai_config").Error
+		if err != nil {
+			return err
+		}
 	}
-	//logger.SugaredLogger.Infof("更新aiConfigs +%d", len(addAiConfigs))
 	//批量新增的配置
 	err = tx.CreateInBatches(addAiConfigs, len(addAiConfigs)).Error
 	return err
