@@ -1238,6 +1238,13 @@ func GetSettingConfig() *SettingConfig {
 	if settings.ToolDailyCostUSD <= 0 {
 		settings.ToolDailyCostUSD = 2.0
 	}
+	// 兜底防护：若提示词为空或受压测脏数据污染，自动采用买方投研标准模板
+	if strings.TrimSpace(settings.Prompt) == "" || strings.HasPrefix(settings.Prompt, "并发测试") {
+		settings.Prompt = DefaultResearchSystemPrompt
+	}
+	if strings.TrimSpace(settings.QuestionTemplate) == "" || strings.TrimSpace(settings.QuestionTemplate) == "{{stockName}}分析和总结" {
+		settings.QuestionTemplate = DefaultStockAnalysisQuestionTemplate
+	}
 	settingConfig.Settings = settings
 	settingConfig.AiConfigs = aiConfigs
 
