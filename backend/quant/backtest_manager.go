@@ -68,13 +68,12 @@ func (m *BacktestManager) RunAIReportBacktest(ctx context.Context, limit int) (*
 	// 保存结果
 	saved := 0
 	for _, br := range results {
-		if br.skipped {
-			continue
-		}
 		for _, rep := range reports {
 			if rep.ID == br.reportID {
 				m.saveReportBacktest(rep, br)
-				saved++
+				if !br.skipped {
+					saved++
+				}
 				break
 			}
 		}
@@ -522,6 +521,11 @@ func (m *BacktestManager) saveReportBacktest(r models.AIResponseResult, br aiRep
 	pred := extractPredictionFromReport(r.Content)
 	analysisDate := r.CreatedAt.Format("2006-01-02")
 
+	summary := br.summary
+	if br.skipped {
+		summary = fmt.Sprintf("已跳过: %s", br.skipReason)
+	}
+
 	result := &models.BacktestResult{
 		ReportID:     r.ID,
 		StockCode:    r.StockCode,
@@ -536,7 +540,7 @@ func (m *BacktestManager) saveReportBacktest(r models.AIResponseResult, br aiRep
 		MaxUpside:    br.maxUpside,
 		IsAccurate:   br.isAccurate,
 		Confidence:   pred.Confidence,
-		Summary:      br.summary,
+		Summary:      summary,
 	}
 	db.Dao.Where("report_id = ?", r.ID).Assign(result).FirstOrCreate(&models.BacktestResult{})
 }

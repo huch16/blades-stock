@@ -2,10 +2,10 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,6 +98,137 @@ func formatYuanAmount(raw string) string {
 		return fmt.Sprintf("%s%.2f 万元", prefix, val/1e4)
 	}
 	return fmt.Sprintf("%s%.2f 元", prefix, val)
+}
+
+// isValidMarketReport 严密校验模型返回内容，剔除上游网关报错文本、异常提示及无效短内容
+func isValidMarketReport(content string) (bool, string) {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return false, "模型未返回任何有效内容，请检查大模型配置或网络"
+	}
+	if strings.HasPrefix(trimmed, "❌") {
+		return false, trimmed
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.Contains(lower, "no longer available") ||
+		strings.Contains(lower, "please switch to") ||
+		strings.Contains(lower, "token_rejected") ||
+		strings.Contains(lower, "404 not found") ||
+		strings.Contains(lower, "502 bad gateway") ||
+		strings.Contains(lower, "503 service unavailable") ||
+		strings.Contains(lower, "service unavailable") ||
+		strings.Contains(lower, "antigravity") {
+		return false, fmt.Sprintf("模型上游网关返回异常提示：%s", trimmed)
+	}
+	if trimmed == "agent-DONE" || len([]rune(trimmed)) < 40 {
+		return false, fmt.Sprintf("模型返回内容过短（仅 %d 字），非有效研报：%s", len([]rune(trimmed)), trimmed)
+	}
+	return true, ""
+}
+
+// FormatUplimitHotToMarkdown 将复杂的涨停题材原始数据提炼为高信息密度的 Markdown 摘要，杜绝大 JSON 提示词爆炸
+func FormatUplimitHotToMarkdown(uplimitHot map[string]any) string {
+	if uplimitHot == nil {
+		return "暂无连板涨停数据"
+	}
+	dataMap, ok := uplimitHot["data"].(map[string]any)
+	if !ok {
+		return "涨停复盘数据整理中..."
+	}
+	var sb strings.Builder
+
+	// 1. 连板高度与梯队结构 (ban_info)
+	if maxCount, ok := dataMap["max_count"].(float64); ok && maxCount > 0 {
+		sb.WriteString(fmt.Sprintf("- **全市场空间板高度**：%d 连板\n", int(maxCount)))
+	}
+	if banInfo, ok := dataMap["ban_info"].(map[string]any); ok {
+		sb.WriteString("- **连板梯队分布**：")
+		var ladders []string
+		for i := 15; i >= 1; i-- {
+			key := strconv.Itoa(i)
+			if item, exists := banInfo[key]; exists {
+				if m, ok := item.(map[string]any); ok {
+					if cnt, ok := m["count"].(float64); ok && cnt > 0 {
+						ladders = append(ladders, fmt.Sprintf("%d板(%d家)", i, int(cnt)))
+					}
+				}
+			}
+		}
+		if len(ladders) > 0 {
+			sb.WriteString(strings.Join(ladders, " > ") + "\n")
+		} else {
+			sb.WriteString("无连板梯队数据\n")
+		}
+	}
+
+	// 2. 最强题材板块 TOP 5
+	if plates, ok := dataMap["plate"].([]any); ok && len(plates) > 0 {
+		sb.WriteString("- **核心主线题材热度 TOP 5**：\n")
+		for i, p := range plates {
+			if i >= 5 {
+				break
+			}
+			if arr, ok := p.([]any); ok && len(arr) >= 3 {
+				pName := fmt.Sprintf("%v", arr[0])
+				pScore := arr[2]
+				sb.WriteString(fmt.Sprintf("  %d. **%s** (资金聚焦热度分: %v)\n", i+1, pName, pScore))
+			}
+		}
+	}
+
+	// 3. 核心连板龙头标的 (plate_stocks)
+	if plateStocks, ok := dataMap["plate_stocks"].(map[string]any); ok {
+		type stockItem struct {
+			code      string
+			name      string
+			desc      string
+			keepTimes int
+			time      string
+		}
+		var topStocks []stockItem
+		seen := make(map[string]bool)
+		for _, v := range plateStocks {
+			if list, ok := v.([]any); ok {
+				for _, s := range list {
+					if sm, ok := s.(map[string]any); ok {
+						code := fmt.Sprintf("%v", sm["stock_code"])
+						if seen[code] {
+							continue
+						}
+						seen[code] = true
+						name := fmt.Sprintf("%v", sm["stock_name"])
+						desc := fmt.Sprintf("%v", sm["up_limit_desc"])
+						timeStr := fmt.Sprintf("%v", sm["up_limit_time"])
+						keepTimes := 0
+						if kt, ok := sm["up_limit_keep_times"].(float64); ok {
+							keepTimes = int(kt)
+						}
+						topStocks = append(topStocks, stockItem{code, name, desc, keepTimes, timeStr})
+					}
+				}
+			}
+		}
+		sort.Slice(topStocks, func(i, j int) bool {
+			return topStocks[i].keepTimes > topStocks[j].keepTimes
+		})
+		if len(topStocks) > 0 {
+			sb.WriteString("- **代表性高标与领涨标的**：\n")
+			limit := 8
+			if len(topStocks) < limit {
+				limit = len(topStocks)
+			}
+			for i := 0; i < limit; i++ {
+				stk := topStocks[i]
+				sb.WriteString(fmt.Sprintf("  - %s (%s): %s (封单时间 %s)\n", stk.name, stk.code, stk.desc, stk.time))
+			}
+		}
+	}
+
+	res := sb.String()
+	if strings.TrimSpace(res) == "" {
+		return "涨停复盘数据整理中..."
+	}
+	return res
 }
 
 // safeRuntimeEventsEmit 安全推流 Wails 桌面事件，避免在 Web / Server 模式或非 Wails 上下文下
@@ -341,18 +472,14 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 		if msg.ReasoningContent != "" {
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
-		if msg.Content != "" {
+		if msg.Content != "" && msg.Content != "agent-DONE" {
 			contentBuilder.WriteString(msg.Content)
 		}
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	rawContent := strings.TrimSpace(contentBuilder.String())
-	if rawContent == "" || strings.HasPrefix(rawContent, "❌") {
-		errMsg := rawContent
-		if errMsg == "" {
-			errMsg = "模型未返回任何有效内容，请检查大模型配置或网络"
-		}
+	if valid, errMsg := isValidMarketReport(rawContent); !valid {
 		return nil, fmt.Errorf("AI 生成盘前晨报失败: %s", errMsg)
 	}
 
@@ -483,18 +610,14 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 		if msg.ReasoningContent != "" {
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
-		if msg.Content != "" {
+		if msg.Content != "" && msg.Content != "agent-DONE" {
 			contentBuilder.WriteString(msg.Content)
 		}
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	rawContent := strings.TrimSpace(contentBuilder.String())
-	if rawContent == "" || strings.HasPrefix(rawContent, "❌") {
-		errMsg := rawContent
-		if errMsg == "" {
-			errMsg = "模型未返回任何有效内容，请检查大模型配置或网络"
-		}
+	if valid, errMsg := isValidMarketReport(rawContent); !valid {
 		return nil, fmt.Errorf("Serenity 产业链拆解生成失败: %s", errMsg)
 	}
 
@@ -545,64 +668,55 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 		statSummary.WriteString("全天涨跌统计正在归档中...\n")
 	}
 
-	// 涨停热点与连板板块
+	// 涨停热点与连板板块（转为高信息密度 Markdown 摘要，杜绝大 JSON 提示词爆炸）
 	uplimitHot := data.NewMarketNewsApi().GetUplimitHot(todayStr, 15)
-	var uplimitJSON string
-	if b, err := json.Marshal(uplimitHot); err == nil {
-		if md, err2 := data.JSONToMarkdownTable(b); err2 == nil && strings.TrimSpace(md) != "" {
-			uplimitJSON = md
-		} else {
-			uplimitJSON = string(b)
-		}
-	} else {
-		uplimitJSON = "涨停复盘数据整理中..."
-	}
+	uplimitSummary := FormatUplimitHotToMarkdown(uplimitHot)
 
-	// 2. 触发 AI 历史报告自动回测闭环检验
+	// 2. 异步触发近期研报回测闭环统计，避免阻塞当前研报生成响应
 	btMgr := quant.NewBacktestManager()
-	btSummary := "回测引擎检验中..."
-	if btRes, err := btMgr.RunAIReportBacktest(ctx, 50); err == nil && btRes.Processed > 0 {
-		btSummary = fmt.Sprintf("今日盘后回测检验已处理 %d 份近期AI研报，预测准确率 %.1f%% (准确 %d 份)",
-			btRes.Processed, btRes.AccuracyRate*100, btRes.Accurate)
-	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("RunAIReportBacktest recover: %v", r)
+			}
+		}()
+		_, _ = btMgr.RunAIReportBacktest(context.Background(), 50)
+	}()
+	btSummary := "历史研报量化回测样本库自动滚动校验中"
 
-	// 检索与盘后总结高度相关的经验结晶与避险案例
-	retrievedCrystals, _ := DefaultSemanticDistiller().SearchKnowledgeCrystals(ctx, "收盘复盘 涨跌分布 龙虎榜 资金博弈 避险警示", "", 2)
+	// 检索与盘后大盘相关的经验结晶与避险案例（限定 category 为 market_review，避免误混入无关个股案例）
+	retrievedCrystals, _ := DefaultSemanticDistiller().SearchKnowledgeCrystals(ctx, "A股大盘 收盘复盘 涨跌分布 龙虎榜 资金博弈", "market_review", 2)
 	crystalPrompt := DefaultSemanticDistiller().FormatCrystalsForPrompt(retrievedCrystals)
 
 	// 3. 组装收盘复盘 Prompt
 	prompt := fmt.Sprintf(`你现在是拥有20年实战经验的顶级A股量化私募投资总监“财智”。今天是 %s 收盘后。
-请基于今日盘面全景数据与量化指标，撰写一份深刻、严谨且指导性强的【A股全景收盘复盘与次日推演报告】：
+请基于今日一手盘面全景数据与量化指标，直接撰写【A股全景收盘复盘与次日推演报告】：
 
-【全天市场涨跌与量能分布】：
+【全天多空分布与市场情绪】：
 %s
 
 【涨停连板与题材热度概要】：
 %s
 
-【AI预测回测与量化跟踪】：
+【量化研报跟踪】：
 %s
 %s
-请按以下结构撰写深度复盘 Markdown 报告：
+请按以下结构直接输出结构化 Markdown 报告：
 ### 📊 一、全天行情概览与多空情绪定调
-- 大盘指数运行特征（放量/缩量、反弹/分歧、震荡区间）；
-- 赚钱效应评估与多空力量对比。
+- 涨跌家数比、多空力量对比与广谱赚钱效应评估。
 
 ### 🚀 二、核心主线与资金筹码博弈
-- 今日最强热点板块、领涨龙头与板块持续性推演；
-- 资金流向偏好（进攻型成长 vs 防御型红利/高股息）。
+- 今日连板梯队高度、最强题材热点与领涨龙头持续性推演。
 
-### 🧪 三、量化验证与AI预测胜率复盘
-- 结合回测数据，客观评估近期策略与研报判断的胜率闭环；
-- 提炼近期市场特征带来的启示与认知纠偏。
+### 🧪 三、量化启示与策略认知
+- 基于今日盘面特征的量化策略启示与认知纠偏。
 
 ### 🔮 四、明日走势推演与操作锦囊
-- 明日开盘剧本推演（高开冲高/低开探底/平开震荡）；
-- 应对方案与持仓风控金句。
+- 明日开盘剧本推演与持仓风控金句。
 
-【数据注入说明】：全天市场涨跌与量能分布、涨停连板与题材热度概要以及AI预测回测跟踪数据已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。`, todayStr, statSummary.String(), uplimitJSON, btSummary, crystalPrompt)
+【输出要求】：请直接开始输出 Markdown 研报正文，思考过程简短克制，严禁过度思考，确保正文完整输出。`, todayStr, statSummary.String(), uplimitSummary, btSummary, crystalPrompt)
 
-	sysPrompt := "你现在是拥有20年实战经验的顶级A股量化私募投资总监“财智”。所有核心盘面客观数据（涨跌家数比、量能分布、涨停连板题材、AI回测胜率）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的结构输出深度复盘与次日推演报告。"
+	sysPrompt := "你现在是顶级A股投资总监“财智”。所有核心盘面客观数据（涨跌家数比、连板梯队题材、多空情绪指标）已在输入中提供。请直接开始输出 Markdown 研报正文，严禁在思考过程中冗余推导，优先确保报告正文完整输出。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
@@ -613,18 +727,14 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 		if msg.ReasoningContent != "" {
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
-		if msg.Content != "" {
+		if msg.Content != "" && msg.Content != "agent-DONE" {
 			contentBuilder.WriteString(msg.Content)
 		}
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	rawContent := strings.TrimSpace(contentBuilder.String())
-	if rawContent == "" || strings.HasPrefix(rawContent, "❌") {
-		errMsg := rawContent
-		if errMsg == "" {
-			errMsg = "模型未返回任何有效内容，请检查大模型配置或网络"
-		}
+	if valid, errMsg := isValidMarketReport(rawContent); !valid {
 		return nil, fmt.Errorf("AI 生成收盘复盘失败: %s", errMsg)
 	}
 
@@ -695,18 +805,14 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		if msg.ReasoningContent != "" {
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
-		if msg.Content != "" {
+		if msg.Content != "" && msg.Content != "agent-DONE" {
 			contentBuilder.WriteString(msg.Content)
 		}
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
 	rawContent := strings.TrimSpace(contentBuilder.String())
-	if rawContent == "" || strings.HasPrefix(rawContent, "❌") {
-		errMsg := rawContent
-		if errMsg == "" {
-			errMsg = "模型未返回任何有效内容，请检查大模型配置或网络"
-		}
+	if valid, errMsg := isValidMarketReport(rawContent); !valid {
 		return nil, fmt.Errorf("生成ETF轮动分析报告失败: %s", errMsg)
 	}
 
@@ -765,7 +871,7 @@ func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *Marke
 		return nil
 	}
 
-	var item models.AIResponseResult
+	var items []models.AIResponseResult
 	var query *gorm.DB
 	switch reportType {
 	case "pre_market_briefing":
@@ -780,29 +886,34 @@ func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *Marke
 		query = db.Dao.Where("stock_code IN (?, ?) OR chat_id LIKE ?", "盘前前瞻", "收盘复盘", "%market%")
 	}
 
-	err := query.Order("created_at DESC").First(&item).Error
-	if err == nil && item.ID > 0 {
-		_, actions := types.ParseAndExtractActions(item.Content)
-		title := item.StockName
-		if title == "" {
-			title = "智能研报"
+	err := query.Order("created_at DESC").Limit(10).Find(&items).Error
+	if err == nil && len(items) > 0 {
+		for _, item := range items {
+			if valid, _ := isValidMarketReport(item.Content); !valid {
+				continue
+			}
+			_, actions := types.ParseAndExtractActions(item.Content)
+			title := item.StockName
+			if title == "" {
+				title = "智能研报"
+			}
+			if !strings.Contains(title, item.CreatedAt.Format("2006-01-02")) {
+				title = fmt.Sprintf("%s (%s)", title, item.CreatedAt.Format("2006-01-02"))
+			}
+			rep := &MarketIntelligenceReport{
+				Type:        reportType,
+				Title:       title,
+				Summary:     "历史智能分析报告存档",
+				Content:     item.Content,
+				Actions:     actions,
+				GeneratedAt: item.CreatedAt,
+				TradingDate: item.CreatedAt.Format("2006-01-02"),
+				Source:      item.ModelName,
+			}
+			// 回填内存缓存加速后续读取
+			cacheReport(rep)
+			return rep
 		}
-		if !strings.Contains(title, item.CreatedAt.Format("2006-01-02")) {
-			title = fmt.Sprintf("%s (%s)", title, item.CreatedAt.Format("2006-01-02"))
-		}
-		rep := &MarketIntelligenceReport{
-			Type:        reportType,
-			Title:       title,
-			Summary:     "历史智能分析报告存档",
-			Content:     item.Content,
-			Actions:     actions,
-			GeneratedAt: item.CreatedAt,
-			TradingDate: item.CreatedAt.Format("2006-01-02"),
-			Source:      item.ModelName,
-		}
-		// 回填内存缓存加速后续读取
-		cacheReport(rep)
-		return rep
 	}
 
 	return nil
