@@ -26,7 +26,8 @@ import {
   GetLatestMarketIntelligenceReportByType,
   GetMarketLifecycleStatus,
   GetAiConfigs,
-  GetConfig
+  GetConfig,
+  PurgeCorruptedMarketReports
 } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
@@ -128,8 +129,34 @@ function handleExecuteAction(act) {
   message.success('已触发系统联动！')
 }
 
+// 严密判断研报是否异常损坏或包含未完成中断信令
+function isCorruptedReport(rep) {
+  if (!rep || !rep.content) return false
+  const raw = String(rep.content).trim()
+  if (raw.length < 100) return true
+  if (
+    raw.includes('❌') ||
+    raw.includes('Agent 调用失败') ||
+    raw.includes('context canceled') ||
+    raw.includes('context deadline exceeded') ||
+    raw.includes('出现错误：502') ||
+    raw.includes('502 Bad Gateway') ||
+    raw.includes('bad gateway') ||
+    raw.includes('unexpected EOF') ||
+    raw.includes('unexpected end of JSON input')
+  ) {
+    return true
+  }
+  return false
+}
+
+const isReportCorrupted = computed(() => {
+  return isCorruptedReport(currentReport.value)
+})
+
 // 清理旧缓存或流式残留中的 [STATUS] 杂质
 const displayContent = computed(() => {
+  if (isReportCorrupted.value) return ''
   const raw = currentReport.value?.content || ''
   if (!raw) return ''
   return raw
@@ -257,11 +284,31 @@ async function loadLatestForTab(tabKey) {
         report = latest
       }
     }
-    if (report) {
-      reports.value[tabKey] = report
+    // 严密防线：若获取到的研报已被损坏或包含异常中断信令，自动拒收并尝试调用后端物理清理
+    if (report && isCorruptedReport(report)) {
+      console.warn('检测到残损或中断的历史研报记录，已自动过滤并触发底层物理清理:', report)
+      report = null
+      if (typeof PurgeCorruptedMarketReports === 'function') {
+        PurgeCorruptedMarketReports().catch(() => {})
+      }
     }
+    reports.value[tabKey] = report
   } catch (e) {
     console.warn('loadLatestForTab error:', e)
+  }
+}
+
+async function handlePurgeCorrupted() {
+  try {
+    let count = 0
+    if (typeof PurgeCorruptedMarketReports === 'function') {
+      count = await PurgeCorruptedMarketReports()
+    }
+    reports.value[currentTab.value] = null
+    message.success(`已深度扫描并彻底清理 ${count} 条残损历史记录`)
+    await refreshAll()
+  } catch (e) {
+    message.error('清理失败: ' + (e?.message || e))
   }
 }
 
@@ -284,6 +331,48 @@ function selectSerenityPreset(preset) {
   serenityTarget.value = preset
 }
 
+let pollTimer = null
+
+function startPollingForCompletion(tabKey, startTime) {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+  let attempts = 0
+  const maxAttempts = 36 // 最长轮询 180 秒 (36 * 5s)
+
+  pollTimer = setInterval(async () => {
+    attempts++
+    try {
+      let report = null
+      if (typeof GetLatestMarketIntelligenceReportByType === 'function') {
+        report = await GetLatestMarketIntelligenceReportByType(tabKey)
+      }
+      if (report && !isCorruptedReport(report)) {
+        const reportTime = new Date(report.generatedAt).getTime()
+        // 判定生成的研报时间是否在点击推演之后（容差 5 秒）
+        if (reportTime >= startTime - 5000) {
+          clearInterval(pollTimer)
+          pollTimer = null
+          reports.value[tabKey] = report
+          loading.value = false
+          message.success(`【${currentTitle.value}】后台大模型深度研报生成完成，已自动呈现在此！`)
+          return
+        }
+      }
+    } catch (e) {
+      console.warn('轮询研报生成状态中...', e)
+    }
+
+    if (attempts >= maxAttempts) {
+      clearInterval(pollTimer)
+      pollTimer = null
+      loading.value = false
+      message.warning('后台生成等待超时，请稍后刷新抽屉或检查大模型运行日志。')
+    }
+  }, 5000)
+}
+
 async function generate() {
   if (!selectedAiConfigId.value) {
     message.warning('请先选择 AI 配置')
@@ -291,6 +380,7 @@ async function generate() {
   }
 
   loading.value = true
+  const startTime = Date.now()
   message.info(`正在生成【${currentTitle.value}】，多Agent量化模型深度推演中...`)
 
   try {
@@ -309,17 +399,32 @@ async function generate() {
       )
     }
 
-    if (res) {
+    if (res && !isCorruptedReport(res)) {
       reports.value[currentTab.value] = res
       message.success(`【${currentTitle.value}】生成成功！`)
+      loading.value = false
     } else {
-      message.warning('生成完成，暂无内容返回，请检查所选大模型的 API Key 及配额是否有效。')
+      message.warning('生成完成，暂无有效内容返回，请检查所选大模型的 API Key 及配额是否有效。')
+      loading.value = false
     }
   } catch (err) {
     console.error('generate error:', err)
-    message.error(`研报生成失败: ${err?.message || err}。请检查 AI 配置是否有效，或切换其他大模型重试。`)
-  } finally {
-    loading.value = false
+    const errMsg = String(err?.message || err)
+    // 弹性容错机制：大模型深度推演因长文本容易触发反向代理（如 Nginx）的 60s 超时 (502)
+    // 但后端已通过解耦独立的 10 分钟 context 在后台继续推演，此时切入后台轮询等待
+    if (
+      errMsg.includes('502') ||
+      errMsg.includes('timeout') ||
+      errMsg.includes('Failed to fetch') ||
+      errMsg.includes('NetworkError') ||
+      errMsg.includes('context canceled')
+    ) {
+      message.loading('大模型深度推演耗时较长（通常需 40~90 秒），上游代理连接已断开，系统已自动转入后台持续生成中...', { duration: 8000 })
+      startPollingForCompletion(currentTab.value, startTime)
+    } else {
+      message.error(`研报生成失败: ${errMsg}。请检查 AI 配置是否有效，或切换其他大模型重试。`)
+      loading.value = false
+    }
   }
 }
 
@@ -344,9 +449,15 @@ function askAgentAssistant() {
 }
 
 EventsOn('marketIntelligenceReport', (incoming) => {
-  if (!incoming) return
+  if (!incoming || isCorruptedReport(incoming)) return
   if (reports.value[incoming.type] !== undefined) {
     reports.value[incoming.type] = incoming
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+    loading.value = false
+    message.success(`【${incoming.title || '智能研报'}】已由智能体实时同步！`)
   }
 })
 
@@ -405,6 +516,10 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
   EventsOff('marketIntelligenceReport')
   EventsOff('show-market-intelligence')
   EventsOff('show-market-intelligence-serenity')
@@ -557,19 +672,19 @@ onBeforeUnmount(() => {
         <div class="report-meta-bar">
           <div class="meta-left">
             <span
-              v-if="currentReport"
+              v-if="currentReport && !isReportCorrupted"
               class="meta-item"
             >
               📅 生成时间：<strong>{{ new Date(currentReport.generatedAt).toLocaleString() }}</strong>
             </span>
             <span
-              v-if="currentReport?.source"
+              v-if="currentReport?.source && !isReportCorrupted"
               class="meta-item meta-source"
             >
               来源：{{ currentReport.source }}
             </span>
             <span
-              v-if="!currentReport"
+              v-if="!currentReport || isReportCorrupted"
               class="meta-item meta-empty"
             >
               当前尚未生成该维度研报，点击右侧按钮立即推演
@@ -590,14 +705,49 @@ onBeforeUnmount(() => {
               :loading="loading"
               @click="generate"
             >
-              {{ currentReport ? '🔄 重新推演' : '🚀 立即生成' }}
+              {{ currentReport && !isReportCorrupted ? '🔄 重新推演' : '🚀 立即生成' }}
             </NButton>
           </div>
         </div>
 
+        <!-- 发现残损研报时的引导与清理卡片 -->
+        <div
+          v-if="isReportCorrupted"
+          class="corrupted-alert-card"
+        >
+          <div class="corrupted-alert-left">
+            <span class="corrupted-icon">⚠️</span>
+            <div class="corrupted-text">
+              <div class="corrupted-title">
+                检测到历史研报存在网络中断或网关超时截断 (502 / context canceled)
+              </div>
+              <div class="corrupted-desc">
+                系统已为您主动隔离拦截报错残卷，请点击右侧按钮重新启动大模型推演。
+              </div>
+            </div>
+          </div>
+          <NSpace>
+            <NButton
+              size="small"
+              type="primary"
+              :loading="loading"
+              @click="generate"
+            >
+              🚀 立即重新推演
+            </NButton>
+            <NButton
+              size="small"
+              secondary
+              @click="handlePurgeCorrupted"
+            >
+              🧹 物理清除残损记录
+            </NButton>
+          </NSpace>
+        </div>
+
         <!-- 5. 核心决策摘要卡片 (清晰醒目，适配暗黑) -->
         <div
-          v-if="currentReport?.summary"
+          v-if="currentReport?.summary && !isReportCorrupted"
           class="summary-card"
         >
           <div class="summary-header">
@@ -610,7 +760,7 @@ onBeforeUnmount(() => {
 
         <!-- 研报伴随系统联动动作项 (Agent-Action) -->
         <div
-          v-if="reportActions && reportActions.length > 0"
+          v-if="reportActions && reportActions.length > 0 && !isReportCorrupted"
           class="report-actions-container"
         >
           <div class="report-actions-title">
@@ -671,11 +821,11 @@ onBeforeUnmount(() => {
       <template #footer>
         <div class="drawer-footer-row">
           <span class="footer-hint">
-            {{ currentReport ? '🧠 由 blades-stock 量化矩阵引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
+            {{ currentReport && !isReportCorrupted ? '🧠 由 blades-stock 量化矩阵引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
           </span>
           <NSpace>
             <NButton
-              v-if="currentReport"
+              v-if="currentReport && !isReportCorrupted"
               secondary
               type="info"
               @click="askAgentAssistant"
@@ -683,7 +833,7 @@ onBeforeUnmount(() => {
               💬 针对本报告提问AI助手
             </NButton>
             <NButton
-              v-if="currentReport"
+              v-if="currentReport && !isReportCorrupted"
               tertiary
               @click="loadLatestForTab(currentTab)"
             >
@@ -694,7 +844,7 @@ onBeforeUnmount(() => {
               :loading="loading"
               @click="generate"
             >
-              {{ currentReport ? '重新推演' : '立即生成' }}
+              {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
             </NButton>
           </NSpace>
         </div>
@@ -708,6 +858,41 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* 残损拦截警告条 */
+.corrupted-alert-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.corrupted-alert-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.corrupted-icon {
+  font-size: 22px;
+}
+
+.corrupted-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #ef4444;
+}
+
+.corrupted-desc {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-top: 2px;
 }
 
 /* 顶部 4 维导航卡片 */

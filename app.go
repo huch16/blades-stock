@@ -2671,6 +2671,11 @@ func (a *App) GetLatestMarketIntelligenceReportByType(reportType string) *agent.
 	return a.agentService.GetLatestMarketIntelligenceReportByType(a.ctx, reportType)
 }
 
+// PurgeCorruptedMarketReports 清理数据库与内存中所有残损异常研报
+func (a *App) PurgeCorruptedMarketReports() int {
+	return a.agentService.PurgeCorruptedMarketReports(a.ctx)
+}
+
 // SearchCronTasks
 //
 //	@Description: 搜索定时任务

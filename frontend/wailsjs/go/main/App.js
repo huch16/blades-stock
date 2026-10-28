@@ -458,6 +458,10 @@ export function GetLatestMarketIntelligenceReportByType(arg1) {
   return window['go']['main']['App']['GetLatestMarketIntelligenceReportByType'](arg1);
 }
 
+export function PurgeCorruptedMarketReports() {
+  return window['go']['main']['App']['PurgeCorruptedMarketReports']();
+}
+
 export function GetLatestTradingDay() {
   return window['go']['main']['App']['GetLatestTradingDay']();
 }

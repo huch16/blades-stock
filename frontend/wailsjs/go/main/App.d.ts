@@ -236,6 +236,8 @@ export function GetLatestMarketIntelligenceReport():Promise<agent.MarketIntellig
 
 export function GetLatestMarketIntelligenceReportByType(arg1:string):Promise<agent.MarketIntelligenceReport>;
 
+export function PurgeCorruptedMarketReports():Promise<number>;
+
 export function GetLatestTradingDay():Promise<string>;
 
 export function GetMCPServerByID(arg1:number):Promise<models.MCPServer>;

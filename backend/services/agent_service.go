@@ -198,6 +198,11 @@ func (s *AgentService) GetLatestMarketIntelligenceReportByType(ctx context.Conte
 	return agent.NewMarketLifecycleService(ctx).GetLatestReportByType(reportType)
 }
 
+// PurgeCorruptedMarketReports 一键物理扫描并清理数据库与内存中所有残损研报
+func (s *AgentService) PurgeCorruptedMarketReports(ctx context.Context) int {
+	return agent.PurgeCorruptedReports()
+}
+
 // GenerateETFRotationReport 触发全市场 ETF 动量轮动决策分析研报
 func (s *AgentService) GenerateETFRotationReport(ctx context.Context, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
 	service := agent.NewMarketLifecycleService(ctx)

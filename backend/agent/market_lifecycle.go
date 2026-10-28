@@ -996,3 +996,30 @@ func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *Marke
 
 	return nil
 }
+
+// PurgeCorruptedReports 一键物理扫描并清理数据库与内存中所有因网络中断、超时、网关报错等产生的残损研报记录
+func PurgeCorruptedReports() int {
+	lifecycleReportCacheMu.Lock()
+	lifecycleLatestReport = nil
+	lifecycleReportsByType = make(map[string]*MarketIntelligenceReport)
+	lifecycleReportCacheMu.Unlock()
+
+	if db.Dao == nil {
+		return 0
+	}
+	var dirtyItems []models.AIResponseResult
+	err := db.Dao.Where("content LIKE ? OR content LIKE ? OR content LIKE ? OR content LIKE ? OR content LIKE ? OR content LIKE ?",
+		"%❌%", "%Agent 调用失败%", "%context canceled%", "%context deadline exceeded%", "%502 bad gateway%", "%出现错误：502%").
+		Find(&dirtyItems).Error
+	if err != nil || len(dirtyItems) == 0 {
+		return 0
+	}
+	count := 0
+	for _, item := range dirtyItems {
+		db.Dao.Delete(&item)
+		count++
+	}
+	logger.SugaredLogger.Infof("[MarketLifecycle] 已物理清洗 %d 条历史网络中断或网关超时产生的脏研报记录", count)
+	return count
+}
+
