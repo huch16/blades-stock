@@ -106,7 +106,8 @@ func isValidMarketReport(content string) (bool, string) {
 	if trimmed == "" {
 		return false, "模型未返回任何有效内容，请检查大模型配置或网络"
 	}
-	if strings.HasPrefix(trimmed, "❌") {
+	// 任何位置包含 ❌ 或“Agent 调用失败”均视为异常中断，严禁存库与呈现
+	if strings.Contains(trimmed, "❌") || strings.Contains(trimmed, "Agent 调用失败") {
 		return false, trimmed
 	}
 	lower := strings.ToLower(trimmed)
@@ -115,12 +116,18 @@ func isValidMarketReport(content string) (bool, string) {
 		strings.Contains(lower, "token_rejected") ||
 		strings.Contains(lower, "404 not found") ||
 		strings.Contains(lower, "502 bad gateway") ||
+		(strings.Contains(lower, "502") && (strings.Contains(lower, "error") || strings.Contains(lower, "错误") || strings.Contains(lower, "bad gateway"))) ||
+		strings.Contains(lower, "出现错误：502") ||
 		strings.Contains(lower, "503 service unavailable") ||
+		strings.Contains(lower, "504 gateway timeout") ||
 		strings.Contains(lower, "service unavailable") ||
+		strings.Contains(lower, "context canceled") ||
+		strings.Contains(lower, "context deadline exceeded") ||
+		strings.Contains(lower, "bad gateway") ||
 		strings.Contains(lower, "antigravity") {
 		return false, fmt.Sprintf("模型上游网关返回异常提示：%s", trimmed)
 	}
-	if trimmed == "agent-DONE" || len([]rune(trimmed)) < 40 {
+	if trimmed == "agent-DONE" || len([]rune(trimmed)) < 100 {
 		return false, fmt.Sprintf("模型返回内容过短（仅 %d 字），非有效研报：%s", len([]rune(trimmed)), trimmed)
 	}
 	return true, ""
@@ -464,7 +471,13 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	sysPrompt := "你现在是顶级券商首席策略分析师兼量化宏观专家“财智”。所有核心客观数据（隔夜外盘、ETF行情与纯数学动量矩阵、隔夜财经要闻）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的五维体系输出深度结构化的专业 Markdown 研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
+	var streamErr string
+
+	// 使用带合理超时 (10分钟) 的独立生成上下文，解耦 HTTP 请求临时断连，确保后台研报稳定生成与持久化
+	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -473,8 +486,17 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
 		if msg.Content != "" && msg.Content != "agent-DONE" {
+			// 若流中捕获到底层抛出的错误消息，绝不混入正文内容
+			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
+				streamErr = msg.Content
+				continue
+			}
 			contentBuilder.WriteString(msg.Content)
 		}
+	}
+
+	if streamErr != "" {
+		return nil, fmt.Errorf("AI 盘前晨报生成中断: %s", streamErr)
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
@@ -602,7 +624,12 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	sysPrompt := "你现在是专注于产业链瓶颈与卡脖子技术的研究专家“财智”。请直接根据输入中详实的一手异动与赛道信息，按照 Serenity 式产业研究框架输出深度结构化的 Markdown 产业链拆解研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
+	var streamErr string
+
+	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -611,8 +638,16 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
 		if msg.Content != "" && msg.Content != "agent-DONE" {
+			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
+				streamErr = msg.Content
+				continue
+			}
 			contentBuilder.WriteString(msg.Content)
 		}
+	}
+
+	if streamErr != "" {
+		return nil, fmt.Errorf("Serenity 产业链拆解生成中断: %s", streamErr)
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
@@ -719,7 +754,12 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	sysPrompt := "你现在是顶级A股投资总监“财智”。所有核心盘面客观数据（涨跌家数比、连板梯队题材、多空情绪指标）已在输入中提供。请直接开始输出 Markdown 研报正文，严禁在思考过程中冗余推导，优先确保报告正文完整输出。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
+	var streamErr string
+
+	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -728,8 +768,16 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
 		if msg.Content != "" && msg.Content != "agent-DONE" {
+			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
+				streamErr = msg.Content
+				continue
+			}
 			contentBuilder.WriteString(msg.Content)
 		}
+	}
+
+	if streamErr != "" {
+		return nil, fmt.Errorf("AI 生成收盘复盘中断: %s", streamErr)
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
@@ -797,7 +845,12 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	sysPrompt := "你现在是专注于量化对冲与ETF配置的首席基金经理“财智”。所有核心关注ETF池行情已在用户输入中提供，无需额外调用外部工具。请直接基于输入数据，按照 ETF 轮动决策流程输出完整的量化研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
+	var streamErr string
+
+	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -806,8 +859,16 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
 		if msg.Content != "" && msg.Content != "agent-DONE" {
+			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
+				streamErr = msg.Content
+				continue
+			}
 			contentBuilder.WriteString(msg.Content)
 		}
+	}
+
+	if streamErr != "" {
+		return nil, fmt.Errorf("生成ETF轮动分析报告中断: %s", streamErr)
 	}
 
 	finalReport, actions := cleanAndAssembleReport(reasoningBuilder.String(), contentBuilder.String())
@@ -851,7 +912,13 @@ func (s *MarketLifecycleService) GetLatestReport() *MarketIntelligenceReport {
 	latest := lifecycleLatestReport
 	lifecycleReportCacheMu.RUnlock()
 	if latest != nil {
-		return latest
+		if valid, _ := isValidMarketReport(latest.Content); valid {
+			return latest
+		}
+		// 内存缓存已污染，主动失效清除
+		lifecycleReportCacheMu.Lock()
+		lifecycleLatestReport = nil
+		lifecycleReportCacheMu.Unlock()
 	}
 	return s.GetLatestReportByType("pre_market_briefing")
 }
@@ -861,11 +928,20 @@ func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *Marke
 	lifecycleReportCacheMu.RLock()
 	if lifecycleReportsByType != nil {
 		if r, ok := lifecycleReportsByType[reportType]; ok && r != nil {
+			if valid, _ := isValidMarketReport(r.Content); valid {
+				lifecycleReportCacheMu.RUnlock()
+				return r
+			}
 			lifecycleReportCacheMu.RUnlock()
-			return r
+			lifecycleReportCacheMu.Lock()
+			delete(lifecycleReportsByType, reportType)
+			lifecycleReportCacheMu.Unlock()
+		} else {
+			lifecycleReportCacheMu.RUnlock()
 		}
+	} else {
+		lifecycleReportCacheMu.RUnlock()
 	}
-	lifecycleReportCacheMu.RUnlock()
 
 	if db.Dao == nil {
 		return nil
@@ -886,10 +962,12 @@ func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *Marke
 		query = db.Dao.Where("stock_code IN (?, ?) OR chat_id LIKE ?", "盘前前瞻", "收盘复盘", "%market%")
 	}
 
-	err := query.Order("created_at DESC").Limit(10).Find(&items).Error
+	err := query.Order("created_at DESC").Limit(15).Find(&items).Error
 	if err == nil && len(items) > 0 {
 		for _, item := range items {
-			if valid, _ := isValidMarketReport(item.Content); !valid {
+			if valid, errReason := isValidMarketReport(item.Content); !valid {
+				logger.SugaredLogger.Warnf("[MarketLifecycle] 检测到历史污染或异常研报快照 ID=%d (原因: %s)，自动从数据库物理清除", item.ID, errReason)
+				db.Dao.Delete(&item)
 				continue
 			}
 			_, actions := types.ParseAndExtractActions(item.Content)

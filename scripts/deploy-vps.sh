@@ -118,7 +118,8 @@ if [ "$HEALTHY" = true ]; then
     fi
     echo -e "${BLUE}------------------------------------------------------------------${NC}"
     echo -e " 💡 Nginx 反向代理提示：若使用 Nginx 反代，请将 proxy_pass 指向 http://127.0.0.1:${APP_PORT};"
-    echo -e "    并确保开启 SSE 流式推流配置 (proxy_buffering off;)"
+    echo -e "    特别注意：为防长研报生成超时 (502)，请配置 'proxy_read_timeout 600s; proxy_buffering off;'"
+    echo -e "    完整参考配置已就绪: scripts/nginx-blades-stock.conf"
     echo -e " 📊 数据持久化位置: $(pwd)/data"
     echo -e " 📝 运行日志查看:   docker compose logs -f blades-stock"
     echo -e " 🛑 停止服务:       docker compose down"
