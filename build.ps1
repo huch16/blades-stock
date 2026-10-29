@@ -29,9 +29,19 @@ function Build-Go {
     try {
         # P3.4: build-time 自动重建 graph manifest
         Rebuild-Graph
-        go build  -ldflags "-s -w -H=windowsgui" -o build/bin/blades-stock.exe .
-        if ($LASTEXITCODE -ne 0) { throw "go build failed" }
-        Write-Host "Go build OK: build/bin/blades-stock.exe" -ForegroundColor Green
+        $commit = (& git rev-parse --short HEAD) 2>$null
+        if ([string]::IsNullOrEmpty($commit)) { $commit = "dev" }
+        $version = "1.6.0"
+        $buildKey = "blades-stock-release-key"
+        $ldflags = "-s -w -H=windowsgui -X main.Version=$version -X main.VersionCommit=$commit -X main.BuildKey=$buildKey"
+        Write-Host "  Building desktop binary with tags desktop,production..." -ForegroundColor Gray
+        go build -tags "desktop,production" -ldflags $ldflags -o build/bin/blades-stock.exe .
+        if ($LASTEXITCODE -ne 0) { throw "go build blades-stock.exe failed" }
+        Write-Host "  Building server binary cmd/server..." -ForegroundColor Gray
+        go build -ldflags "-s -w -X main.Version=$version -X main.VersionCommit=$commit" -o build/bin/blades-stock-server.exe ./cmd/server
+        if ($LASTEXITCODE -ne 0) { throw "go build blades-stock-server.exe failed" }
+        Copy-DataDir
+        Write-Host "Go build OK: build/bin/blades-stock.exe & build/bin/blades-stock-server.exe" -ForegroundColor Green
     } finally {
         Pop-Location
     }
@@ -81,9 +91,19 @@ function Build-Wails {
     Write-Host "=== Building Wails Desktop ===" -ForegroundColor Cyan
     Push-Location $Root
     try {
-        $env:GOTOOLCHAIN = "go1.26.4"
+        $runtimeJs = "$Root\frontend\wailsjs\runtime\runtime.js"
+        $runtimeBackup = $null
+        if (Test-Path -LiteralPath $runtimeJs) {
+            $runtimeBackup = Get-Content -LiteralPath $runtimeJs -Raw -Encoding UTF8
+        }
+        $env:GOTOOLCHAIN = "go1.26.0"
         wails build -skipbindings -skipembedcreate 
         if ($LASTEXITCODE -ne 0) { throw "wails build failed" }
+        # 保护 runtime.js 的幂等防重机制
+        if ($runtimeBackup -and (Test-Path -LiteralPath $runtimeJs)) {
+            [System.IO.File]::WriteAllText($runtimeJs, $runtimeBackup, [System.Text.Encoding]::UTF8)
+            Write-Host "Protected custom runtime.js idempotency deduplication" -ForegroundColor Green
+        }
         Copy-DataDir
         Write-Host "Wails build OK" -ForegroundColor Green
     } finally {
