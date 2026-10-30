@@ -4,6 +4,31 @@
     <header class="chat-header">
       <div class="header-left">
         <n-button
+          type="primary"
+          size="small"
+          secondary
+          class="new-chat-btn"
+          @click="createNewSession"
+          title="开启新投研对话"
+        >
+          <template #icon>
+            <AddIcon />
+          </template>
+          ➕ 新对话
+        </n-button>
+        <n-button
+          size="small"
+          quaternary
+          class="clear-chat-btn"
+          @click="clearCurrentHistory"
+          title="清空当前会话消息"
+        >
+          <template #icon>
+            <DeleteIcon />
+          </template>
+          🗑️ 清空
+        </n-button>
+        <n-button
           quaternary
           size="small"
           class="session-drawer-btn"
@@ -16,31 +41,6 @@
           <span class="session-title-text">{{ currentSessionTitle }}</span>
           <span class="session-badge">{{ messages.length }}</span>
         </n-button>
-        <n-button
-          quaternary
-          circle
-          size="tiny"
-          @click="createNewSession"
-          title="新建对话"
-        >
-          <AddIcon />
-        </n-button>
-      </div>
-
-      <div class="header-center">
-        <!-- 模式快捷胶囊 -->
-        <div class="mode-capsule-group">
-          <button
-            v-for="opt in agentModeOptions"
-            :key="opt.value"
-            class="mode-capsule-btn"
-            :class="{ active: agentMode === opt.value }"
-            @click="agentMode = opt.value"
-            :title="opt.description"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
       </div>
 
       <div class="header-right">
@@ -55,27 +55,18 @@
           @update:value="onConfigChange"
         />
 
-        <n-tooltip placement="bottom" content="投研场景库">
-          <n-button
-            quaternary
-            circle
-            size="small"
-            @click="showScenarioModal = true"
-          >
+        <n-button
+          quaternary
+          size="small"
+          class="scenario-btn"
+          @click="showScenarioModal = true"
+          title="投研场景库"
+        >
+          <template #icon>
             <ViewListIcon />
-          </n-button>
-        </n-tooltip>
-
-        <n-tooltip placement="bottom" content="清空当前对话">
-          <n-button
-            quaternary
-            circle
-            size="small"
-            @click="clearCurrentHistory"
-          >
-            <DeleteIcon />
-          </n-button>
-        </n-tooltip>
+          </template>
+          场景库
+        </n-button>
 
         <n-tooltip placement="bottom" :content="isCompact ? '标准视图' : '紧凑视图'">
           <n-button
@@ -395,6 +386,7 @@ import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveS
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
 import { cleanFinalContent } from '@/utils/cleanText'
+import { copyToClipboard } from '@/utils/clipboard'
 import { consumePendingConsult } from '../utils/agentControlBus'
 import {
   useMessageAnchor,
@@ -908,11 +900,16 @@ function selectModalScenario(prompt: string) {
   if (textarea) textarea.focus()
 }
 
-function handleCopy(content: string) {
-  navigator.clipboard.writeText(content).then(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('内容已复制到剪贴板'))
-  }).catch(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
+async function handleCopy(content: string) {
+  const text = (content || '').trim()
+  if (!text) {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.warning('暂无可复制的内容'))
+    return
+  }
+  const ok = await copyToClipboard(text)
+  import('tdesign-vue-next').then(({ MessagePlugin }) => {
+    if (ok) MessagePlugin.success('内容已复制到剪贴板')
+    else MessagePlugin.error('复制失败，请手动选取文本')
   })
 }
 
@@ -921,20 +918,56 @@ function handleRetry(msgId: string) {
   const idx = curList.findIndex(m => m.id === msgId)
   if (idx === -1) return
   const msg = curList[idx]
-  if (msg.role === 'user') {
-    inputValue.value = msg.content
-    messages.value = curList.slice(0, idx)
-    handleSend()
+  let userText = ''
+  let sliceIdx = idx
+
+  if (msg.role === 'assistant') {
+    // 寻找前面最近一条对应的用户提问
+    for (let i = idx - 1; i >= 0; i--) {
+      if (curList[i].role === 'user') {
+        userText = curList[i].content
+        sliceIdx = i
+        break
+      }
+    }
+  } else if (msg.role === 'user') {
+    userText = msg.content
+    sliceIdx = idx
   }
+
+  if (!userText) {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.warning('未找到可重试的提问内容'))
+    return
+  }
+
+  inputValue.value = userText
+  messages.value = curList.slice(0, sliceIdx)
+  saveSessionsToStorage()
+  nextTick(() => {
+    handleSend()
+  })
 }
 
 function handleReference(msgId: string) {
   const msg = messages.value.find(m => m.id === msgId)
-  if (msg) {
-    const quote = msg.content.slice(0, 150)
-    inputValue.value += `\n> 引用：${quote}...\n`
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已引用到输入框'))
+  if (!msg) return
+  const raw = (msg.content || msg.rawContent || '').trim()
+  if (!raw) {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.warning('暂无内容可引用'))
+    return
   }
+  const quote = raw.slice(0, 180).replace(/\n+/g, ' ')
+  const author = msg.role === 'assistant' ? (msg.name || 'AI 智能体') : '我'
+  const prefix = inputValue.value.trim() ? inputValue.value.trim() + '\n\n' : ''
+  inputValue.value = `${prefix}> 引用【${author}】：${quote}...\n\n`
+  import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已引用到输入框'))
+  nextTick(() => {
+    const textarea = document.querySelector('.chat-input-cockpit textarea') as HTMLTextAreaElement
+    if (textarea) {
+      textarea.focus()
+      textarea.scrollTop = textarea.scrollHeight
+    }
+  })
 }
 
 function handleEdit(msg: ChatMessage) {
@@ -1028,6 +1061,16 @@ function extractThesisFromText(text: string, defaultCode?: string, defaultName?:
       code = codeMatch[1]
     } else if (lastConsultStock.value?.code) {
       code = lastConsultStock.value.code
+    } else {
+      // 从会话历史反向追溯最近提及的标准股票代码
+      for (let i = messages.value.length - 1; i >= 0; i--) {
+        const histText = messages.value[i].content || messages.value[i].rawContent || ''
+        const histMatch = histText.match(/(?:sh|sz|bj)?\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b(?:\.(?:SH|SZ|BJ))?/i)
+        if (histMatch) {
+          code = histMatch[1]
+          break
+        }
+      }
     }
   }
   if (!code) return null
@@ -1051,6 +1094,20 @@ function extractThesisFromText(text: string, defaultCode?: string, defaultName?:
     }
     if (!name && lastConsultStock.value?.name) {
       name = lastConsultStock.value.name
+    }
+    if (!name && code) {
+      // 从会话历史反向追溯股票名称
+      for (let i = messages.value.length - 1; i >= 0; i--) {
+        const histText = messages.value[i].content || messages.value[i].rawContent || ''
+        for (const pat of namePatterns) {
+          const match = histText.match(pat)
+          if (match && match[1] && match[1].length >= 2 && match[1].length <= 12) {
+            name = match[1].trim()
+            break
+          }
+        }
+        if (name) break
+      }
     }
   }
 
@@ -1463,7 +1520,8 @@ onBeforeUnmount(() => {
 
 /* 欢迎页卡片矩阵 */
 .welcome-workspace {
-  max-width: 900px;
+  max-width: 1200px;
+  width: 100%;
   margin: 20px auto 40px;
   display: flex;
   flex-direction: column;
@@ -1616,7 +1674,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 980px;
+  max-width: 1240px;
+  width: 100%;
   margin: 0 auto;
 }
 
@@ -1723,7 +1782,8 @@ onBeforeUnmount(() => {
   }
 
   .input-sender-box {
-    max-width: 980px;
+    max-width: 1240px;
+    width: 100%;
     margin: 0 auto;
 
     :deep(.t-chat-sender) {

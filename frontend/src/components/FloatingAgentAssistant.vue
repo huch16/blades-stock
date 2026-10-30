@@ -45,22 +45,26 @@
               <div class="panel-actions">
                 <NButton
                   size="small"
-                  quaternary
-                  title="切换至独立全屏投研工作台"
-                  @click="expandToFullScreen"
+                  type="primary"
+                  secondary
+                  title="开启新投研对话"
+                  @click="startNewChat"
                 >
                   <template #icon>
-                    <NIcon :component="ExpandOutline" />
+                    <NIcon :component="AddOutline" />
                   </template>
-                  独立全屏
+                  新对话
                 </NButton>
                 <NButton
                   size="small"
                   quaternary
-                  title="开始新对话"
-                  @click="startNewChat"
+                  title="清空当前会话"
+                  @click="clearHistory"
                 >
-                  新对话
+                  <template #icon>
+                    <NIcon :component="TrashOutline" />
+                  </template>
+                  清空
                 </NButton>
                 <NButton
                   quaternary
@@ -395,6 +399,15 @@
                             <NButton
                               quaternary
                               size="tiny"
+                              type="primary"
+                              title="将分析结论与买方假说沉淀入标的认知档案账本"
+                              @click="saveThesisFromMsg(group.assistantMsg)"
+                            >
+                              📥 存入账本
+                            </NButton>
+                            <NButton
+                              quaternary
+                              size="tiny"
                               class="msg-copy-btn"
                               @click="copyAiContent(group.assistantMsg)"
                             >
@@ -402,6 +415,25 @@
                                 <NIcon :component="CopyOutline" />
                               </template>
                               复制
+                            </NButton>
+                            <NButton
+                              quaternary
+                              size="tiny"
+                              title="重试此条提问"
+                              @click="retryMsg(groupIndex)"
+                            >
+                              <template #icon>
+                                <NIcon :component="RefreshOutline" />
+                              </template>
+                              重试
+                            </NButton>
+                            <NButton
+                              quaternary
+                              size="tiny"
+                              title="引用此回答到输入框"
+                              @click="quoteMsg(group.assistantMsg)"
+                            >
+                              🔗 引用
                             </NButton>
                             <NButton
                               quaternary
@@ -463,19 +495,6 @@
                   placement="top-start"
                   :menu-props="{ style: { zIndex: 10002 } }"
                   class="chat-footer-memory-count"
-                />
-              </div>
-              <div class="chat-footer-agent-mode">
-                <NSelect
-                  v-model:value="agentMode"
-                  :options="agentModeOptions"
-                  size="small"
-                  to="body"
-                  placement="top-start"
-                  placeholder="Agent模式"
-                  :consistent-menu-width="false"
-                  :menu-props="{ style: { zIndex: 10002 } }"
-                  class="chat-footer-agent-mode-select"
                 />
               </div>
             </div>
@@ -627,7 +646,10 @@ import {
   ImageOutline,
   ChevronDownOutline,
   ChevronForwardOutline,
-  ChevronUpOutline
+  ChevronUpOutline,
+  AddOutline,
+  TrashOutline,
+  RefreshOutline
 } from '@vicons/ionicons5'
 import {
   ChatWithAgent,
@@ -637,12 +659,14 @@ import {
   GetAiAssistantSession,
   AbortChatWithAgent,
   SaveAIResponseResult,
-  SaveImage
+  SaveImage,
+  SaveStockThesis
 } from '../../wailsjs/go/main/App'
 import { EventsOff, EventsOn, EventsEmit } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 import html2canvas from 'html2canvas'
+import { copyToClipboard } from '../utils/clipboard'
 
 const emit = defineEmits(['open-market-intelligence'])
 const router = useRouter()
@@ -679,7 +703,7 @@ const STORAGE_KEY_MODEL_ID = 'blades-stock-agent-last-model-id'
 const route = useRoute()
 const message = useMessage()
 
-const showButton = computed(() => route.name !== 'agent')
+const showButton = computed(() => true)
 
 const panelVisible = ref(false)
 const inputValue = ref('')
@@ -931,23 +955,146 @@ async function copyAiContent(msg) {
     message.warning('暂无可复制的 AI 正文内容')
     return
   }
-  try {
-    if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text)
-      message.success('已复制 AI 回答内容')
-    } else {
-      const textarea = document.createElement('textarea')
-      textarea.value = text
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      message.success('已复制 AI 回答内容')
+  const ok = await copyToClipboard(text)
+  if (ok) {
+    message.success('已复制 AI 回答内容到剪贴板')
+  } else {
+    message.error('复制失败，请手动选取文本')
+  }
+}
+
+function clearHistory() {
+  if (isStreamLoad.value) {
+    message.warning('当前有回答正在生成，请先中断或等待完成')
+    return
+  }
+  messages.value = []
+  sessionId.value = Date.now().toString()
+  message.success('已清空当前会话')
+}
+
+function retryMsg(groupIndex) {
+  if (isStreamLoad.value) {
+    message.warning('当前有回答正在生成，请先中断或等待完成')
+    return
+  }
+  const group = messageGroups.value[groupIndex]
+  if (!group || !group.userMsg) return
+  const userContent = group.userMsg.content
+  const userIdx = group.userIndex
+  messages.value = messages.value.slice(0, userIdx)
+  inputValue.value = userContent
+  sendMessage()
+}
+
+function quoteMsg(assistantMsg) {
+  const raw = (assistantMsg?.content || assistantMsg?.rawContent || '').trim()
+  if (!raw) {
+    message.warning('暂无可引用的内容')
+    return
+  }
+  const quote = raw.slice(0, 180).replace(/\n+/g, ' ')
+  const prefix = inputValue.value ? inputValue.value.trim() + '\n\n' : ''
+  inputValue.value = `${prefix}> 引用【AI助手】：${quote}...\n\n`
+  message.success('已引用到输入框')
+  nextTick(() => {
+    const textarea = document.querySelector('.chat-footer-input textarea')
+    if (textarea) {
+      textarea.focus()
+      textarea.scrollTop = textarea.scrollHeight
     }
-  } catch (e) {
-    message.error('复制失败，请手动选择文本')
+  })
+}
+
+async function saveThesisFromMsg(assistantMsg) {
+  const text = assistantMsg?.content || assistantMsg?.rawContent || ''
+  if (!text) {
+    message.warning('暂无可提取的认知内容')
+    return
+  }
+  // 1. 识别股票代码
+  let code = ''
+  const codeMatch = text.match(/(?:sh|sz|bj)?\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b(?:\.(?:SH|SZ|BJ))?/i)
+  if (codeMatch) {
+    code = codeMatch[1]
+  } else {
+    for (let i = messages.value.length - 1; i >= 0; i--) {
+      const hText = messages.value[i].content || messages.value[i].rawContent || ''
+      const hMatch = hText.match(/(?:sh|sz|bj)?\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b(?:\.(?:SH|SZ|BJ))?/i)
+      if (hMatch) {
+        code = hMatch[1]
+        break
+      }
+    }
+  }
+  if (!code && currentStock?.value?.code) {
+    code = currentStock.value.code
+  }
+  if (!code) {
+    message.warning('未在分析结果或对话历史中识别到股票代码')
+    return
+  }
+
+  // 2. 识别股票名称
+  let name = ''
+  const namePatterns = [
+    /[【(（]([A-Za-z\u4e00-\u9fa5\d]+)[)）】]\s*(?:[(（]?(?:sh|sz|bj)?\b\d{6}\b(?:\.(?:SH|SZ|BJ))?[)）]?)/,
+    /【([A-Za-z\u4e00-\u9fa5\d]+)\s*[0-9]{6}】/,
+    /(?:标的(?:名称|代码)?|股票(?:名称)?|分析标的)[：:\s*]+(?:\*\*)?([A-Za-z\u4e00-\u9fa5\d]+)(?:\*\*)?/,
+    /([A-Za-z\u4e00-\u9fa5\d]+)\s*[(（]\s*(?:sh|sz|bj)?\d{6}(?:\.(?:SH|SZ|BJ))?\s*[)）]/
+  ]
+  for (const pat of namePatterns) {
+    const m = text.match(pat)
+    if (m && m[1] && m[1].length >= 2 && m[1].length <= 12) {
+      name = m[1].trim()
+      break
+    }
+  }
+  if (!name && currentStock?.value?.name) name = currentStock.value.name
+  if (!name) name = code
+
+  // 3. 判定买方五维结论
+  let verdict = 'NO_CHANGE'
+  let verdictText = '维持现状'
+  if (/(逻辑强化|THESIS_STRENGTHENED|强烈买入|积极做多|超预期|突破确认|多头共振)/.test(text)) {
+    verdict = 'THESIS_STRENGTHENED'
+    verdictText = '逻辑强化'
+  } else if (/(逻辑证伪|THESIS_BROKEN|清仓止损|破位止损|强风控空仓|假说破灭)/.test(text)) {
+    verdict = 'THESIS_BROKEN'
+    verdictText = '逻辑证伪'
+  } else if (/(逻辑削弱|THESIS_WEAKENED|谨慎防守|逢高减仓|不及预期|动能衰减|冲高回落)/.test(text)) {
+    verdict = 'THESIS_WEAKENED'
+    verdictText = '逻辑削弱'
+  } else if (/(首次建档|新论点|首次立论|NEW_THESIS|首次覆盖|新建仓)/.test(text)) {
+    verdict = 'NEW_THESIS'
+    verdictText = '首次立论'
+  }
+
+  // 4. 提取核心投资假说
+  let coreThesis = ''
+  const tMatch = text.match(/(?:核心投资逻辑|核心假说|核心立论|投资逻辑|核心论点|买方论据)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  if (tMatch) {
+    coreThesis = tMatch[1].replace(/[#*`]/g, '').trim()
+  } else {
+    const lines = text.split('\n').map(l => l.replace(/[#*`]/g, '').trim()).filter(l => l.length > 15 && !l.startsWith('好的') && !l.startsWith('收到'))
+    coreThesis = lines.length > 0 ? lines[0].slice(0, 160) : text.slice(0, 160).replace(/[#*`]/g, '').trim()
+  }
+
+  // 5. 提取催化与风险
+  let keyCatalysts = ''
+  const cMatch = text.match(/(?:催化剂|跟踪催化剂|核心催化|催化事件|关键催化)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  if (cMatch) keyCatalysts = cMatch[1].replace(/[#*`]/g, '').trim()
+
+  let riskFactors = ''
+  const rMatch = text.match(/(?:证伪条件|风险因素|反转条件|止损条件|防守位|黑天鹅风险)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  if (rMatch) riskFactors = rMatch[1].replace(/[#*`]/g, '').trim()
+
+  try {
+    await SaveStockThesis(code, name, verdict, verdictText, coreThesis, keyCatalysts, riskFactors, 'Blades-Agent')
+    message.success(`🎉 已将【${name}】买方认知 (${verdictText}) 归档入库！`)
+    EventsEmit('stockThesisUpdated', { stockCode: code })
+  } catch (err) {
+    message.error(`存入买方认知账本失败: ${err?.message || err}`)
   }
 }
 
@@ -1725,9 +1872,19 @@ function handleOpenFloatingAgentWithQuestion(payload) {
   }
 }
 
+function onWindowOpenAssistant(e) {
+  handleOpenFloatingAgentWithQuestion(e?.detail || '')
+}
+
 onMounted(() => {
   ensureAgentEventListener()
   EventsOn('openFloatingAgentWithQuestion', handleOpenFloatingAgentWithQuestion)
+  EventsOn('agent:consult', handleOpenFloatingAgentWithQuestion)
+  EventsOn('agent:open-assistant', handleOpenFloatingAgentWithQuestion)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('agent:consult', onWindowOpenAssistant)
+    window.addEventListener('agent:open-assistant', onWindowOpenAssistant)
+  }
   EventsOn('updateSettings', onSettingsUpdated)
   EventsOn('aiConfigsUpdated', onAiConfigsUpdated)
   loadHistory()
@@ -1744,6 +1901,12 @@ onBeforeUnmount(() => {
   EventsOff(AGENT_EVENT, onAgentMessage)
   agentListenerBound = false
   EventsOff('openFloatingAgentWithQuestion', handleOpenFloatingAgentWithQuestion)
+  EventsOff('agent:consult', handleOpenFloatingAgentWithQuestion)
+  EventsOff('agent:open-assistant', handleOpenFloatingAgentWithQuestion)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('agent:consult', onWindowOpenAssistant)
+    window.removeEventListener('agent:open-assistant', onWindowOpenAssistant)
+  }
   EventsOff('updateSettings', onSettingsUpdated)
   EventsOff('aiConfigsUpdated', onAiConfigsUpdated)
 })
@@ -1827,8 +1990,8 @@ onBeforeUnmount(() => {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 60vw;
-  min-width: 320px;
+  width: min(780px, 68vw);
+  min-width: 360px;
   max-width: calc(100vw - 48px);
   background: var(--n-color-modal);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);

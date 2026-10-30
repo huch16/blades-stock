@@ -114,6 +114,7 @@ import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
 import CollapsibleSection from './CollapsibleSection.vue'
 import StreamingSkeleton from './StreamingSkeleton.vue'
 import ToolTimeline from './ToolTimeline.vue'
+import { copyToClipboard } from '@/utils/clipboard'
 import {
   formatDuration,
   getToolCallStatusText,
@@ -142,10 +143,10 @@ const unregisterElement = inject<Function>('unregisterMessageElement')
 // 检测内容是否具有买方立论潜在特征
 const hasStockThesisPotential = computed(() => {
   const c = content.value || ''
-  if (!c || c.length < 30) return false
+  if (!c || c.length < 20) return false
   const hasCode = /\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b/.test(c)
-  const hasKeywords = /(逻辑|催化|证伪|买方|立论|研报|估值|评级|止损|仓位)/.test(c)
-  return hasCode || hasKeywords
+  const hasKeywords = /(逻辑|催化|证伪|买方|立论|研报|估值|评级|止损|仓位|趋势|支撑|阻力|买点|卖点|风险)/.test(c)
+  return hasCode || hasKeywords || c.length > 50
 })
 
 // 响应式提取消息字段
@@ -210,28 +211,28 @@ function onSkeletonComplete() {
   // 骨架屏完成，实际内容会由父组件替换
 }
 
-function handleCopyToolArgs(args: string) {
-  navigator.clipboard.writeText(args).then(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('参数已复制'))
-  }).catch(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
+async function handleCopyToolArgs(args: string) {
+  const ok = await copyToClipboard(args)
+  import('tdesign-vue-next').then(({ MessagePlugin }) => {
+    if (ok) MessagePlugin.success('参数已复制')
+    else MessagePlugin.error('复制失败，请手动选取文本')
   })
 }
 
-function handleCopyToolResult(result: string) {
-  navigator.clipboard.writeText(result).then(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('结果已复制'))
-  }).catch(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
+async function handleCopyToolResult(result: string) {
+  const ok = await copyToClipboard(result)
+  import('tdesign-vue-next').then(({ MessagePlugin }) => {
+    if (ok) MessagePlugin.success('结果已复制')
+    else MessagePlugin.error('复制失败，请手动选取文本')
   })
 }
 
-function copyAnchorLink() {
+async function copyAnchorLink() {
   const url = `${window.location.origin}${window.location.pathname}#/agent?msg=${props.message.id}`
-  navigator.clipboard.writeText(url).then(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('深度链接已复制'))
-  }).catch(() => {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.error('复制失败'))
+  const ok = await copyToClipboard(url)
+  import('tdesign-vue-next').then(({ MessagePlugin }) => {
+    if (ok) MessagePlugin.success('消息链接已复制到剪贴板')
+    else MessagePlugin.error('复制失败，请手动复制浏览器地址')
   })
 }
 </script>

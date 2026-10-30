@@ -145,18 +145,13 @@ registerAgentActionHandler((action) => {
       })
       break
     case 'CONSULT_AGENT':
-      // 跨组件一键呼叫全屏 AI 智能体推演中枢
+      // 跨组件一键呼叫统一 Blades Stock AI Agent 助手 (与 AI智能体彻底合并)
       showAgentDiagnosisDrawer.value = false
       showMarketIntelligenceDrawer.value = false
-      setPendingConsult(action.payload)
-      router.push({ name: 'agent' })
-      activeKey.value = 'agent'
-      setTimeout(() => {
-        EventsEmit('agent:consult', action.payload)
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('agent:consult', { detail: action.payload }))
-        }
-      }, 100)
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agent:open-assistant', { detail: action.payload }))
+      }
+      EventsEmit('agent:open-assistant', action.payload)
       break
   }
 })
@@ -667,21 +662,17 @@ const menuOptions = ref([
   {
     label: () =>
         h(
-            RouterLink,
+            'a',
             {
-              to: {
-                name: 'agent',
-                query: {
-                  name:"Ai智能体",
-                },
-                onClick: () => {
-                  activeKey.value = 'agent'
-                },
-              }
+              href: 'javascript:void(0)',
+              onClick: (e) => {
+                e.preventDefault()
+                triggerUnifiedAgentAssistant()
+              },
             },
-            {default: () => 'Ai智能体'}
+            {default: () => 'AI Agent 助手'}
         ),
-    key: 'agent',
+    key: 'agentAssistant',
     show: true,
     icon: renderIcon(Robot),
   },
@@ -1209,6 +1200,13 @@ const currentMobileTab = computed(() => {
   return 'stock'
 })
 
+function triggerUnifiedAgentAssistant(detail = '') {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('agent:open-assistant', { detail }))
+  }
+  EventsEmit('agent:open-assistant', detail)
+}
+
 function switchMobileTab(key) {
   activeKey.value = key
   if (key === 'stock') {
@@ -1439,13 +1437,12 @@ onMounted(() => {
 
                         <div
                           class="mobile-tab-item mobile-tab-agent"
-                          :class="{ active: currentMobileTab === 'agent' }"
-                          @click="switchMobileTab('agent')"
+                          @click="triggerUnifiedAgentAssistant()"
                         >
                           <div class="mobile-tab-icon agent-icon-glow">
                             <n-icon size="22" :component="Robot" />
                           </div>
-                          <span class="mobile-tab-label">AI智能体</span>
+                          <span class="mobile-tab-label">AI助手</span>
                         </div>
 
                         <div
