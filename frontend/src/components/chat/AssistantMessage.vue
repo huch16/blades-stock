@@ -227,7 +227,7 @@ function handleCopyToolResult(result: string) {
 }
 
 function copyAnchorLink() {
-  const url = `${window.location.origin}${window.location.pathname}#${anchorId.value}`
+  const url = `${window.location.origin}${window.location.pathname}#/agent?msg=${props.message.id}`
   navigator.clipboard.writeText(url).then(() => {
     import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('深度链接已复制'))
   }).catch(() => {

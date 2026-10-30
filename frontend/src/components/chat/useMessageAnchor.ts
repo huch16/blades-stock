@@ -43,10 +43,8 @@ export function useMessageAnchor(messages: ChatMessage[]) {
     isScrolling = true
     activeAnchor.value = id
 
-    // 更新 URL hash（不触发页面跳转）
-    history.replaceState(null, '', `#${id}`)
-
-    el.scrollIntoView({ behavior, block: 'center', inline: 'nearest' })
+    // 注意：SPA 使用 createWebHashHistory，绝对禁止修改 window.location.hash，否则会彻底冲垮路由并触发原生锚点跳跃！
+    el.scrollIntoView({ behavior, block: 'start', inline: 'nearest' })
 
     // 滚动结束后重置标志
     if (scrollTimeout) clearTimeout(scrollTimeout)
@@ -77,17 +75,17 @@ export function useMessageAnchor(messages: ChatMessage[]) {
     }
   }
 
-  // 滚动到最新消息
+  // 滚动到最新消息 (自然时间序中最后一个是最新)
   function scrollToLatest() {
     if (messages.length > 0) {
-      scrollToMessage(messages[0].id) // messages[0] 是最新的（倒序）
+      scrollToMessage(messages[messages.length - 1].id)
     }
   }
 
-  // 滚动到最旧消息
+  // 滚动到最旧消息 (自然时间序中第一个是最旧)
   function scrollToOldest() {
     if (messages.length > 0) {
-      scrollToMessage(messages[messages.length - 1].id)
+      scrollToMessage(messages[0].id)
     }
   }
 
@@ -154,19 +152,7 @@ export function useMessageAnchor(messages: ChatMessage[]) {
 
     if (closestId && closestId !== activeAnchor.value) {
       activeAnchor.value = closestId
-      // 静默更新 URL hash（不触发滚动）
-      history.replaceState(null, '', `#${closestId}`)
-    }
-  }
-
-  // 处理 URL hash 变化（深度链接进入）
-  function handleHashChange() {
-    const hash = window.location.hash.slice(1) // 移除 #
-    if (hash && messageElements.has(hash)) {
-      // 延迟滚动，等待 DOM 就绪
-      setTimeout(() => {
-        scrollToMessage(hash, 'auto') // 即时滚动，不动画
-      }, 100)
+      // 仅更新内存态指示器，绝对不覆写 URL hash，避免冲垮路由与触发浏览器原生跳跃
     }
   }
 
@@ -229,11 +215,7 @@ export function useMessageAnchor(messages: ChatMessage[]) {
   // 生命周期
   onMounted(() => {
     initObserver()
-    window.addEventListener('hashchange', handleHashChange)
     window.addEventListener('keydown', handleKeydown)
-
-    // 初始 hash
-    handleHashChange()
   })
 
   onUnmounted(() => {
@@ -241,7 +223,6 @@ export function useMessageAnchor(messages: ChatMessage[]) {
       observer.disconnect()
       observer = null
     }
-    window.removeEventListener('hashchange', handleHashChange)
     window.removeEventListener('keydown', handleKeydown)
     if (scrollTimeout) clearTimeout(scrollTimeout)
   })

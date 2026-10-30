@@ -1183,6 +1183,22 @@ function updateResponsiveLayout() {
   }
 }
 
+const isAgentRoute = computed(() => {
+  const routeName = router.currentRoute.value?.name
+  const path = router.currentRoute.value?.path
+  return routeName === 'agent' || path === '/agent'
+})
+
+const agentHostStyle = computed(() => {
+  if (isWails()) {
+    return "height: calc(100vh - 40px); max-height: calc(100vh - 40px); overflow: hidden; padding: 0; margin: 0;"
+  }
+  if (isMobile.value) {
+    return "height: calc(100dvh - 58px - 56px - var(--sab, 0px)); max-height: calc(100dvh - 58px - 56px - var(--sab, 0px)); overflow: hidden; padding: 0; margin: 0;"
+  }
+  return "height: calc(100dvh - 64px); max-height: calc(100dvh - 64px); overflow: hidden; padding: 0; margin: 0;"
+})
+
 const currentMobileTab = computed(() => {
   const routeName = router.currentRoute.value.name
   if (!routeName || routeName === 'stock') return 'stock'
@@ -1375,7 +1391,18 @@ onMounted(() => {
                           {{ item }}
                         </n-tag>
                       </n-marquee>
-                      <n-scrollbar :style="contentStyle">
+                      <!-- Agent 对话中枢具有完全独立的自包含视口与输入底栏，必须彻底脱离外层 n-scrollbar 与 72px 底部内边距，杜绝双滚动条互搏引起的剧烈上下跳动 -->
+                      <div
+                        v-if="isAgentRoute"
+                        class="agent-standalone-host"
+                        :style="agentHostStyle"
+                      >
+                        <RouterView />
+                      </div>
+                      <n-scrollbar
+                        v-else
+                        :style="contentStyle"
+                      >
                         <n-skeleton
                           v-if="loading"
                           height="calc(100vh)"

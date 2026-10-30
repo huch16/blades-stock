@@ -120,29 +120,16 @@ watch(() => props.expanded, (val) => {
   overflow-y: auto;
   font-size: 13px;
   line-height: 1.6;
-  animation: collapse-in 0.2s ease-out;
 }
 
-@keyframes collapse-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* CSS transition for v-show (not v-if) */
+/* CSS transition for v-show (纯透明度过渡，绝对不使用 translateY 抖动位移) */
 .collapse-enter-active,
 .collapse-leave-active {
-  transition: all 0.2s ease;
+  transition: opacity 0.15s ease;
 }
 
 .collapse-enter-from,
 .collapse-leave-to {
   opacity: 0;
-  transform: translateY(-8px);
 }
 </style>

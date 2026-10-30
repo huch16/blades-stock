@@ -858,7 +858,8 @@ function handleSend() {
   userIsScrolledUp = false
 
   inputValue.value = ''
-  scrollToBottom(true)
+  // 发送消息后瞬时定位到底部，禁止平滑动画（平滑动画尚未结束首包 Token 就已到达，会导致持续打断震荡）
+  scrollToBottom(false)
 
   ChatWithAgent(
     text,
