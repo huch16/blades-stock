@@ -326,7 +326,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, provide } from 'vue'
+import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, nextTick, provide } from 'vue'
 import {
   NSelect,
   NButton,

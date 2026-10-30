@@ -30,6 +30,13 @@ function handleWindowResize() {
   isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
 }
 
+interface StockRow {
+  SECURITY_CODE: string
+  SECURITY_SHORT_NAME: string
+  MARKET_SHORT_NAME: string
+  [key: string]: unknown
+}
+
 const showDiagnosisDrawer = ref(false)
 const diagnosisStockCode = ref('')
 const diagnosisStockName = ref('')
@@ -108,12 +115,6 @@ interface FollowGroup {
 const groupList = ref<FollowGroup[]>([])
 const showFollowGroupModal = ref(false)
 const newGroupName = ref('')
-interface StockRow {
-  SECURITY_CODE: string
-  SECURITY_SHORT_NAME: string
-  MARKET_SHORT_NAME: string
-  [key: string]: unknown
-}
 
 const pendingFollowRow = ref<StockRow | null>(null)
 

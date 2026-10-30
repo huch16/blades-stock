@@ -7,7 +7,7 @@ import {
   WindowUnfullscreen,
   WindowSetTitle
 } from '../wailsjs/runtime'
-import {h, onBeforeMount, onBeforeUnmount, onMounted, ref} from "vue";
+import {h, computed, onBeforeMount, onBeforeUnmount, onMounted, ref} from "vue";
 import {RouterLink, useRouter} from 'vue-router'
 import {createDiscreteApi,darkTheme,lightTheme , NIcon, NText,NButton,dateZhCN,zhCN} from 'naive-ui'
 import {
@@ -1353,7 +1353,8 @@ onMounted(() => {
                         style="position: relative;top:0;z-index: 19;width: 100%"
                       >
                         <n-tag
-                          v-for="item in telegraph"
+                          v-for="(item, idx) in telegraph"
+                          :key="idx"
                           type="warning"
                           style="margin-right: 10px"
                         >

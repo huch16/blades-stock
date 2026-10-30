@@ -96,8 +96,7 @@ onUnmounted(()=>{
     dailyLimitChartRef?.value,
     changeStatsChartRef?.value,
     changeTypeChartRef?.value,
-    dimensionDetailChartRef?.value,
-    chartRefVal?.value
+    dimensionDetailChartRef?.value
   ]
   domRefs.forEach(dom => {
     if (dom) {
