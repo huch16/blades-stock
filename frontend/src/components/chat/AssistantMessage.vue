@@ -103,6 +103,7 @@
         <t-button size="small" variant="text" theme="default" @click="$emit('copy', content)">📋 复制</t-button>
         <t-button size="small" variant="text" theme="default" @click="$emit('retry')">🔄 重试</t-button>
         <t-button size="small" variant="text" theme="default" @click="$emit('reference')">🔗 引用</t-button>
+        <t-button size="small" variant="text" theme="default" title="导出为高清研报图片" @click="$emit('exportImage', message)">🖼️ 导出图片</t-button>
         <t-button size="small" variant="text" theme="default" @click="copyAnchorLink">📍 链接</t-button>
       </div>
     </div>
@@ -134,6 +135,7 @@ const emit = defineEmits<{
   retry: []
   reference: []
   saveThesis: [msg: ChatMessage]
+  exportImage: [msg: ChatMessage]
 }>()
 
 // 注入锚点注册函数

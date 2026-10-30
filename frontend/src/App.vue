@@ -27,8 +27,6 @@ import {
   Wallet, WarningOutline, TimeOutline, SearchOutline,
 } from '@vicons/ionicons5'
 import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime, IsHKTradingTime, IsUSTradingTime} from "../wailsjs/go/main/App";
-import FloatingAiAssistant from "./components/FloatingAiAssistant.vue";
-import FloatingAgentAssistant from "./components/FloatingAgentAssistant.vue";
 import WebAuthModal from "./components/WebAuthModal.vue";
 import { isWails, getAuthToken, webEventBus } from "./api/bridge";
 import MarketIntelligenceDrawer from "./components/MarketIntelligenceDrawer.vue";
@@ -145,13 +143,18 @@ registerAgentActionHandler((action) => {
       })
       break
     case 'CONSULT_AGENT':
-      // 跨组件一键呼叫统一 Blades Stock AI Agent 助手 (与 AI智能体彻底合并)
+      // 跨组件一键呼叫统一全屏 AI 智能体推演工作台
       showAgentDiagnosisDrawer.value = false
       showMarketIntelligenceDrawer.value = false
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('agent:open-assistant', { detail: action.payload }))
-      }
-      EventsEmit('agent:open-assistant', action.payload)
+      setPendingConsult(action.payload)
+      router.push({ name: 'agent' })
+      activeKey.value = 'agent'
+      setTimeout(() => {
+        EventsEmit('agent:consult', action.payload)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agent:consult', { detail: action.payload }))
+        }
+      }, 100)
       break
   }
 })
@@ -662,17 +665,21 @@ const menuOptions = ref([
   {
     label: () =>
         h(
-            'a',
+            RouterLink,
             {
-              href: 'javascript:void(0)',
-              onClick: (e) => {
-                e.preventDefault()
-                triggerUnifiedAgentAssistant()
-              },
+              to: {
+                name: 'agent',
+                query: {
+                  name:"AI Agent 助手",
+                },
+                onClick: () => {
+                  activeKey.value = 'agent'
+                },
+              }
             },
             {default: () => 'AI Agent 助手'}
         ),
-    key: 'agentAssistant',
+    key: 'agent',
     show: true,
     icon: renderIcon(Robot),
   },
@@ -1200,13 +1207,6 @@ const currentMobileTab = computed(() => {
   return 'stock'
 })
 
-function triggerUnifiedAgentAssistant(detail = '') {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('agent:open-assistant', { detail }))
-  }
-  EventsEmit('agent:open-assistant', detail)
-}
-
 function switchMobileTab(key) {
   activeKey.value = key
   if (key === 'stock') {
@@ -1353,7 +1353,6 @@ onMounted(() => {
           <n-dialog-provider>
             <WebAuthModal />
             <template v-if="isAuthenticated">
-              <FloatingAgentAssistant @open-market-intelligence="onOpenMarketIntelligence" />
               <MarketIntelligenceDrawer
                 v-model:show="showMarketIntelligenceDrawer"
                 :report-type="marketIntelligenceType"
@@ -1437,12 +1436,13 @@ onMounted(() => {
 
                         <div
                           class="mobile-tab-item mobile-tab-agent"
-                          @click="triggerUnifiedAgentAssistant()"
+                          :class="{ active: currentMobileTab === 'agent' }"
+                          @click="switchMobileTab('agent')"
                         >
                           <div class="mobile-tab-icon agent-icon-glow">
                             <n-icon size="22" :component="Robot" />
                           </div>
-                          <span class="mobile-tab-label">AI助手</span>
+                          <span class="mobile-tab-label">AI Agent</span>
                         </div>
 
                         <div

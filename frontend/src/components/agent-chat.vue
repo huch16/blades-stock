@@ -3,6 +3,11 @@
     <!-- 顶部 HUD 控制中枢 -->
     <header class="chat-header">
       <div class="header-left">
+        <div class="brand-title-wrap">
+          <span class="brand-icon">🤖</span>
+          <span class="brand-title">Blades Stock AI Agent 助手</span>
+          <span class="brand-badge">L5自主量化</span>
+        </div>
         <n-button
           type="primary"
           size="small"
@@ -44,6 +49,24 @@
       </div>
 
       <div class="header-right">
+        <!-- 思考模式与记忆模式 -->
+        <div class="header-switch-item" title="是否开启大模型深度思考与慢思考链 (Thinking Mode)">
+          <span class="header-switch-label">深度思考</span>
+          <n-switch v-model:value="thinkingMode" size="small" />
+        </div>
+        <div class="header-switch-item" title="是否携带上下文历史多轮记忆">
+          <span class="header-switch-label">记忆</span>
+          <n-switch v-model:value="memoryMode" size="small" />
+          <n-select
+            v-if="memoryMode"
+            v-model:value="memoryCount"
+            :options="memoryCountOptions"
+            size="small"
+            class="header-memory-select"
+            :consistent-menu-width="false"
+          />
+        </div>
+
         <!-- 模型选择 -->
         <n-select
           v-model:value="activeConfigId"
@@ -200,6 +223,7 @@
           @edit="handleEdit"
           @resend="handleResend"
           @save-thesis="handleSaveThesisFromMsg"
+          @export-image="handleExportImage"
         />
       </div>
 
@@ -371,7 +395,8 @@ import {
   NDrawer,
   NDrawerContent,
   NModal,
-  NTag
+  NTag,
+  NSwitch
 } from 'naive-ui'
 import {
   ArrowDownIcon,
@@ -382,7 +407,8 @@ import {
   AddIcon,
   ViewListIcon
 } from 'tdesign-icons-vue-next'
-import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveStockThesis } from '../../wailsjs/go/main/App'
+import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveStockThesis, AbortChatWithAgent, SaveImage } from '../../wailsjs/go/main/App'
+import html2canvas from 'html2canvas'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
 import { cleanFinalContent } from '@/utils/cleanText'
@@ -422,6 +448,18 @@ const showSessionDrawer = ref(false)
 const showScenarioModal = ref(false)
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
 const drawerWidth = computed(() => (isMobile.value ? '85vw' : 320))
+
+// 思考模式与记忆模式
+const thinkingMode = ref(true)
+const memoryMode = ref(false)
+const memoryCount = ref(3)
+const memoryCountOptions = [
+  { label: '1 轮', value: 1 },
+  { label: '2 轮', value: 2 },
+  { label: '3 轮', value: 3 },
+  { label: '5 轮', value: 5 },
+  { label: '10 轮', value: 10 }
+]
 
 function onWindowResize() {
   isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
@@ -857,9 +895,9 @@ function handleSend() {
     text,
     configId,
     null as any,
-    false,
-    0,
-    false,
+    !!memoryMode.value,
+    Number(memoryCount.value) || 0,
+    !!thinkingMode.value,
     agentMode.value === 'auto' ? '' : agentMode.value,
     currentSessionId.value || ''
   ).catch((err: any) => {
@@ -870,6 +908,11 @@ function handleSend() {
 }
 
 function handleStop() {
+  try {
+    AbortChatWithAgent()
+  } catch (e) {
+    console.warn('AbortChatWithAgent failed:', e)
+  }
   isStreaming.value = false
   streamingMsgId.value = null
   currentStreamStatus.value = ''
@@ -1233,6 +1276,87 @@ async function handleSaveThesisFromMsg(msg: ChatMessage) {
   }
 }
 
+// 导出单条 AI 投研回答为高清长图
+async function handleExportImage(msg: ChatMessage) {
+  const anchorId = 'msg-anchor-' + msg.id
+  const el = document.getElementById(anchorId) || document.getElementById('msg-item-' + msg.id)
+  if (!el) {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => {
+      MessagePlugin.warning('未找到对应消息 DOM 节点，请重试')
+    })
+    return
+  }
+
+  // 查找最近的 .t-chat__message-item 或 .assistant-msg 容器
+  const target = (el.closest('.t-chat__message-item') || el.closest('.assistant-msg') || el) as HTMLElement
+
+  const savedStyles: Array<{ el: HTMLElement; overflow: string; overflowY: string; height: string; maxHeight: string }> = []
+  let p = target.parentElement
+  while (p && p !== document.body) {
+    const style = getComputedStyle(p)
+    if (style.overflow === 'hidden' || style.overflowY === 'hidden' || style.overflowY === 'auto' || style.overflowY === 'scroll') {
+      savedStyles.push({
+        el: p,
+        overflow: p.style.overflow,
+        overflowY: p.style.overflowY,
+        height: p.style.height,
+        maxHeight: p.style.maxHeight
+      })
+      p.style.overflow = 'visible'
+      p.style.overflowY = 'visible'
+      p.style.height = 'auto'
+      p.style.maxHeight = 'none'
+    }
+    p = p.parentElement
+  }
+
+  const isDark = document.documentElement.getAttribute('theme-mode') === 'dark'
+  try {
+    const canvas = await html2canvas(target, {
+      useCORS: true,
+      scale: 2,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: isDark ? '#18181c' : '#ffffff'
+    })
+    const dataUrl = canvas.toDataURL('image/png')
+    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+    const safeTime = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')
+
+    try {
+      const result = await SaveImage(`blades-stock-agent-${safeTime}`, base64)
+      if (result && !result.includes('异常') && !result.includes('无法')) {
+        import('tdesign-vue-next').then(({ MessagePlugin }) => {
+          MessagePlugin.success(`已导出为 PNG 图片：${result}`)
+        })
+        return
+      }
+    } catch (e) {
+      // fallback to browser file download
+    }
+
+    const link = document.createElement('a')
+    link.href = dataUrl
+    link.download = `blades-stock-agent-${safeTime}.png`
+    link.click()
+    import('tdesign-vue-next').then(({ MessagePlugin }) => {
+      MessagePlugin.success('已导出下载 PNG 投研长图')
+    })
+  } catch (err: any) {
+    console.error('handleExportImage failed:', err)
+    import('tdesign-vue-next').then(({ MessagePlugin }) => {
+      MessagePlugin.error(`导出图片失败: ${err?.message || err}`)
+    })
+  } finally {
+    savedStyles.forEach(({ el, overflow, overflowY, height, maxHeight }) => {
+      el.style.overflow = overflow
+      el.style.overflowY = overflowY
+      el.style.height = height
+      el.style.maxHeight = maxHeight
+    })
+  }
+}
+
 // ========== 生命周期 ==========
 onBeforeMount(() => {
   EventsOff('agent-message', handleAgentMessage)
@@ -1336,6 +1460,38 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 8px;
 
+    .brand-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-right: 4px;
+      user-select: none;
+
+      .brand-icon {
+        font-size: 18px;
+        line-height: 1;
+      }
+
+      .brand-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--td-text-color-primary, #1d2129);
+        letter-spacing: 0.2px;
+        white-space: nowrap;
+      }
+
+      .brand-badge {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 4px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+        color: #667eea;
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        white-space: nowrap;
+      }
+    }
+
     .session-drawer-btn {
       font-weight: 600;
       font-size: 14px;
@@ -1401,6 +1557,28 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     gap: 8px;
+
+    .header-switch-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--td-bg-color-secondarycontainer, #f2f3f5);
+      border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+      white-space: nowrap;
+
+      .header-switch-label {
+        font-size: 12px;
+        color: var(--td-text-color-secondary, #4e5969);
+        user-select: none;
+      }
+
+      .header-memory-select {
+        width: 76px;
+        margin-left: 2px;
+      }
+    }
 
     .model-selector {
       width: 240px;
@@ -1977,8 +2155,21 @@ onBeforeUnmount(() => {
 
     .header-left {
       order: 1;
+      flex-wrap: wrap;
+      gap: 6px;
+
+      .brand-title-wrap {
+        margin-right: 2px;
+        .brand-title {
+          font-size: 13px !important;
+        }
+        .brand-badge {
+          display: none;
+        }
+      }
+
       .session-drawer-btn {
-        max-width: 130px !important;
+        max-width: 120px !important;
         font-size: 12px !important;
       }
     }
@@ -1986,34 +2177,23 @@ onBeforeUnmount(() => {
     .header-right {
       order: 2;
       margin-left: auto;
+      flex-wrap: wrap;
       gap: 4px !important;
-      .model-selector {
-        width: 140px !important;
-        max-width: 160px !important;
-      }
-    }
 
-    .header-center {
-      order: 3;
-      width: 100% !important;
-      overflow-x: auto !important;
-      justify-content: flex-start !important;
-      padding-top: 2px;
-      -webkit-overflow-scrolling: touch;
-
-      &::-webkit-scrollbar {
-        height: 0;
-      }
-
-      .mode-capsule-group {
-        width: 100%;
-        justify-content: space-between;
-        .mode-capsule-btn {
-          flex: 1;
-          text-align: center;
-          padding: 3px 6px !important;
-          font-size: 11px !important;
+      .header-switch-item {
+        padding: 2px 6px;
+        gap: 4px;
+        .header-switch-label {
+          font-size: 11px;
         }
+        .header-memory-select {
+          width: 60px;
+        }
+      }
+
+      .model-selector {
+        width: 130px !important;
+        max-width: 150px !important;
       }
     }
   }

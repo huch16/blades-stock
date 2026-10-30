@@ -11,6 +11,7 @@
     @edit="onEdit"
     @resend="onResend"
     @save-thesis="onSaveThesis"
+    @export-image="onExportImage"
   />
 </template>
 
@@ -35,6 +36,7 @@ const emit = defineEmits<{
   edit: [msg: ChatMessage]
   resend: [msg: ChatMessage]
   saveThesis: [msg: ChatMessage]
+  exportImage: [msg: ChatMessage]
 }>()
 
 const aiConfigStore = useAiConfigStore()
@@ -76,6 +78,10 @@ function onResend(msg: ChatMessage) {
 
 function onSaveThesis(msg: ChatMessage) {
   emit('saveThesis', msg)
+}
+
+function onExportImage(msg: ChatMessage) {
+  emit('exportImage', msg)
 }
 </script>
 
