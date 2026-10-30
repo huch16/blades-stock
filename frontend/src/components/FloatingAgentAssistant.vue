@@ -1,7 +1,7 @@
 <template>
   <Transition name="fade">
     <div
-      v-if="showButton"
+      v-if="showButton && !isAgentRoute"
       :class="['edge-trigger', { 'edge-trigger-busy': hasBackgroundTask }]"
       :title="hasBackgroundTask ? 'Blades Stock AI Agent 助手正在后台分析...' : 'Blades Stock AI Agent 助手'"
       @click="togglePanel"
@@ -43,6 +43,17 @@
             <div class="panel-header">
               <span class="panel-title">Blades Stock AI Agent 助手</span>
               <div class="panel-actions">
+                <NButton
+                  size="small"
+                  quaternary
+                  title="切换至独立全屏投研工作台"
+                  @click="expandToFullScreen"
+                >
+                  <template #icon>
+                    <NIcon :component="ExpandOutline" />
+                  </template>
+                  独立全屏
+                </NButton>
                 <NButton
                   size="small"
                   quaternary
@@ -605,11 +616,12 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, onBeforeMount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { NButton, NCard, NIcon, NInput, NScrollbar, NSelect, NSpin, NSwitch, NTag, useMessage } from 'naive-ui'
 import {
   CloseOutline,
   SparklesOutline,
+  ExpandOutline,
   PersonCircleOutline,
   CopyOutline,
   ImageOutline,
@@ -633,6 +645,13 @@ import 'md-editor-v3/lib/preview.css'
 import html2canvas from 'html2canvas'
 
 const emit = defineEmits(['open-market-intelligence'])
+const router = useRouter()
+const isAgentRoute = computed(() => route?.name === 'agent' || route?.path === '/agent')
+
+function expandToFullScreen() {
+  closePanel()
+  router.push({ name: 'agent' })
+}
 
 function triggerMarketIntelligence(type) {
   emit('open-market-intelligence', type)

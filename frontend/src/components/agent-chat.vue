@@ -91,6 +91,51 @@
       </div>
     </header>
 
+    <!-- 全局宏观态势感知 HUD 仪表条 (桌面端与移动端统一呈现) -->
+    <section
+      v-if="perceptionSnapshot"
+      class="macro-perception-hud"
+      title="点击呼叫 Agent 深度解读当前宏观节律与持仓策略"
+      @click="askMacroPerception"
+    >
+      <div class="hud-left">
+        <span class="phase-pill">{{ perceptionSnapshot.Phase || '宏观节律感知' }}</span>
+        <span
+          class="traffic-beacon"
+          :style="{ backgroundColor: getTrafficColor(perceptionSnapshot.TrafficLight) }"
+        />
+        <span
+          class="traffic-label"
+          :style="{ color: getTrafficColor(perceptionSnapshot.TrafficLight) }"
+        >
+          {{ getTrafficText(perceptionSnapshot.TrafficLight) }}
+        </span>
+        <span
+          v-if="perceptionSnapshot.MarketBreadth"
+          class="breadth-ratio"
+        >
+          <span class="up-count">涨 {{ perceptionSnapshot.MarketBreadth.UpCount }}</span>
+          <span class="separator">/</span>
+          <span class="down-count">跌 {{ perceptionSnapshot.MarketBreadth.DownCount }}</span>
+        </span>
+      </div>
+      <div class="hud-right">
+        <n-tag
+          v-if="perceptionSnapshot.PortfolioRisk && perceptionSnapshot.PortfolioRisk.RiskLevel !== 'SAFE'"
+          size="small"
+          type="error"
+          round
+          class="risk-tag"
+        >
+          ⚠️ {{ perceptionSnapshot.PortfolioRisk.RiskLevel === 'DANGER' ? '高危持仓预警' : '持仓警示' }}
+        </n-tag>
+        <span class="action-hint">
+          <span>宏观态势推演</span>
+          <span class="arrow">➔</span>
+        </span>
+      </div>
+    </section>
+
     <!-- 主体聊天消息滚动区域 (自然时间线：旧消息在上，新消息在下) -->
     <main
       class="chat-messages-viewport"
@@ -333,7 +378,8 @@ import {
   NTooltip,
   NDrawer,
   NDrawerContent,
-  NModal
+  NModal,
+  NTag
 } from 'naive-ui'
 import {
   ArrowDownIcon,
@@ -344,7 +390,7 @@ import {
   AddIcon,
   ViewListIcon
 } from 'tdesign-icons-vue-next'
-import { ChatWithAgent, GetConfig, GetVersionInfo } from '../../wailsjs/go/main/App'
+import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot } from '../../wailsjs/go/main/App'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { cleanFinalContent } from '@/utils/cleanText'
@@ -423,10 +469,51 @@ const configOptions = computed(() => aiConfigStore.configs.map(c => ({
   value: c.ID,
 })))
 
+// ========== 全局宏观态势感知 ==========
+const perceptionSnapshot = ref<any>(null)
+let perceptionTimer: any = null
+
+async function refreshPerceptionSnapshot() {
+  try {
+    const snap = await GetSystemStateSnapshot()
+    if (snap) {
+      perceptionSnapshot.value = snap
+    }
+  } catch (e) {
+    console.warn('[agent-chat] refreshPerceptionSnapshot failed:', e)
+  }
+}
+
+function getTrafficColor(light?: string) {
+  if (light === 'SAFE') return '#18a058'
+  if (light === 'CAUTION') return '#f0a020'
+  if (light === 'DANGER') return '#d03050'
+  return '#888'
+}
+
+function getTrafficText(light?: string) {
+  if (light === 'SAFE') return '积极做多'
+  if (light === 'CAUTION') return '谨慎防守'
+  if (light === 'DANGER') return '强风控空仓'
+  return '中性观望'
+}
+
+function askMacroPerception() {
+  if (!perceptionSnapshot.value) return
+  const phase = perceptionSnapshot.value.Phase || ''
+  const traffic = perceptionSnapshot.value.TrafficLight || ''
+  inputValue.value = `请结合当前市场【${phase}】节律与情绪【${traffic}】状态，对全天大局观、主线机会和实盘持仓风控进行综合推演。`
+  agentMode.value = 'plan_execute'
+  nextTick(() => {
+    handleSend()
+  })
+}
+
 const agentModeOptions = [
-  { label: '🤖 自动模式', value: 'auto' as const, description: '根据问题复杂度自动选择单步或多步执行策略' },
-  { label: '⚡ 极速诊断', value: 'react' as const, description: 'ReAct 单步即时调用，响应更快，适合快速行情问答' },
+  { label: '🤖 智能自适应', value: 'auto' as const, description: '根据问题复杂度自动选择单步或多步执行策略' },
+  { label: '⚡ 极速诊断', value: 'react' as const, description: 'ReAct 即时单步调用，秒级响应，适合快速行情问答' },
   { label: '🧠 深度规划', value: 'plan_execute' as const, description: 'Plan-and-Execute 深度多步拆解，适合全维度复杂分析' },
+  { label: '📑 买方直出', value: 'direct' as const, description: '原生直连生成机构深度研报，零外部工具开销' },
 ]
 
 // ========== 投研场景库数据 ==========
@@ -761,7 +848,7 @@ function handleSend() {
   ChatWithAgent(
     text,
     configId,
-    0,
+    null as any,
     false,
     0,
     false,
@@ -884,6 +971,9 @@ onMounted(async () => {
   EventsOn('updateSettings', onChatSettingsUpdated)
   EventsOn('aiConfigsUpdated', onChatSettingsUpdated)
 
+  refreshPerceptionSnapshot()
+  perceptionTimer = setInterval(refreshPerceptionSnapshot, 60000)
+
   GetConfig().then((res) => {
     if (res.darkTheme) {
       document.documentElement.setAttribute('theme-mode', 'dark')
@@ -906,6 +996,10 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (perceptionTimer) {
+    clearInterval(perceptionTimer)
+    perceptionTimer = null
+  }
   window.removeEventListener('resize', onWindowResize)
   EventsOff('agent-message', handleAgentMessage)
   EventsOff('updateSettings', onChatSettingsUpdated)
@@ -1010,6 +1104,97 @@ onBeforeUnmount(() => {
 
     .model-selector {
       width: 240px;
+    }
+  }
+}
+
+/* 宏观态势感知 HUD 仪表条 (双端统一呈现) */
+.macro-perception-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--td-bg-color-secondarycontainer, rgba(24, 160, 88, 0.06));
+  border-bottom: 1px solid var(--td-border-level-1-color, rgba(255, 255, 255, 0.08));
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  font-size: 12px;
+  flex-shrink: 0;
+
+  &:hover {
+    background: var(--td-bg-color-component-hover, rgba(24, 160, 88, 0.12));
+
+    .action-hint .arrow {
+      transform: translateX(3px);
+    }
+  }
+
+  .hud-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+
+    .phase-pill {
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--td-text-color-primary, #e5e5e5);
+    }
+
+    .traffic-beacon {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 6px currentColor;
+    }
+
+    .traffic-label {
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .breadth-ratio {
+      font-size: 12px;
+      margin-left: 4px;
+
+      .up-count {
+        color: #f67979;
+        font-weight: 600;
+      }
+      .separator {
+        margin: 0 4px;
+        opacity: 0.4;
+      }
+      .down-count {
+        color: #18a058;
+        font-weight: 600;
+      }
+    }
+  }
+
+  .hud-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    .risk-tag {
+      font-size: 11px;
+    }
+
+    .action-hint {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #18a058;
+      font-weight: 500;
+
+      .arrow {
+        transition: transform 0.2s ease;
+      }
     }
   }
 }

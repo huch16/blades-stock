@@ -668,7 +668,7 @@ const menuOptions = ref([
             {default: () => 'Ai智能体'}
         ),
     key: 'agent',
-    show:enableAgent.value,
+    show: true,
     icon: renderIcon(Robot),
   },
     {
@@ -1114,14 +1114,14 @@ onBeforeMount(() => {
 
   GetConfig().then((res) => {
     enableFund.value = res.enableFund
-    enableAgent.value = res.enableAgent
+    enableAgent.value = true
 
     menuOptions.value.filter((item) => {
       if (item.key === 'fund') {
         item.show = res.enableFund
       }
       if (item.key === 'agent') {
-        item.show = res.enableAgent
+        item.show = true
       }
     })
 
