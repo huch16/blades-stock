@@ -163,47 +163,262 @@
         @scroll="scrollToMessage"
       />
 
-      <!-- 空白欢迎态：专业投研引导工作台 -->
+      <!-- 空白欢迎态：买方五阶投研决策流水线控制台 -->
       <section v-if="messages.length === 0" class="welcome-workspace">
         <div class="welcome-hero">
-          <div class="hero-icon-glow">💬</div>
-          <h2 class="hero-title">Blades AI 智能投研中枢</h2>
+          <div class="hero-icon-glow">⚡</div>
+          <h2 class="hero-title">Blades AI 智能投研中枢 · 买方量化决策系统</h2>
           <p class="hero-desc">
-            融合多源实时行情、本地量化指标引擎、ETF动量轮动与网络搜索的多智能体协作系统
+            从宏观择时到标的落子，全流程标准化作业；消除断层与信息孤岛，实现高胜率闭环
           </p>
+
+          <!-- 模式切换：标准五阶流水线 vs 专项极速控制台 -->
+          <div class="welcome-mode-toggle">
+            <button
+              class="toggle-tab-btn"
+              :class="{ active: welcomeViewMode === 'pipeline' }"
+              @click="welcomeViewMode = 'pipeline'"
+            >
+              🚀 标准五阶流水线 (Sequential Pipeline)
+            </button>
+            <button
+              class="toggle-tab-btn"
+              :class="{ active: welcomeViewMode === 'direct' }"
+              @click="welcomeViewMode = 'direct'"
+            >
+              ⚡ 专项极速控制台 (Direct Focus Tools)
+            </button>
+          </div>
         </div>
 
-        <div class="scenario-grid">
-          <div
-            v-for="(card, idx) in scenarioCards"
-            :key="idx"
-            class="scenario-card"
-            @click="applyScenario(card.prompt)"
-          >
-            <div class="card-header">
-              <span class="card-icon">{{ card.icon }}</span>
-              <span class="card-badge">{{ card.badge }}</span>
+        <!-- 视图 1：标准五阶流水线 (时序导向) -->
+        <div v-if="welcomeViewMode === 'pipeline'" class="pipeline-container">
+          <div class="pipeline-flow-guide">
+            <div class="flow-step-node">① 看大势 (L1)</div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-step-node">② 选赛道 (L2)</div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-step-node">③ 筛标的 (L3)</div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-step-node">④ 验体质与排雷 (L4)</div>
+            <div class="flow-arrow">➔</div>
+            <div class="flow-step-node">⑤ 定落子入账 (L5)</div>
+          </div>
+
+          <div class="pipeline-steps-grid">
+            <!-- Step 1: 🏛️ 看大势 (L1 Macro) -->
+            <div class="pipeline-card step-card-1">
+              <div class="step-header">
+                <span class="step-badge">Step 1 · L1</span>
+                <span class="step-title">🏛️ 宏观大势与仓位择时</span>
+              </div>
+              <p class="step-desc">解决【大盘能不能做？给几成仓？】评估沪深300/A500估值分位、全市场赚钱效应与多空红绿灯。</p>
+              <div class="step-actions">
+                <button class="step-btn primary" @click="executeStep1">
+                  🚀 一键测算大盘择时与仓位
+                </button>
+              </div>
             </div>
-            <h4 class="card-title">{{ card.title }}</h4>
-            <p class="card-desc">{{ card.desc }}</p>
-            <div class="card-prompt-hint">
-              <span>试一试：{{ card.example }}</span>
-              <span class="arrow-hint">→</span>
+
+            <!-- Step 2: 🧭 选赛道 (L2 Sector & ETF) -->
+            <div class="pipeline-card step-card-2">
+              <div class="step-header">
+                <span class="step-badge">Step 2 · L2</span>
+                <span class="step-title">🧭 赛道主线与主力风向</span>
+              </div>
+              <p class="step-desc">解决【资金流向哪里？】运行21日加权动量模型锁定领涨行业ETF，追踪龙虎榜机构专用席位建仓。</p>
+              <div class="step-actions">
+                <button class="step-btn primary" @click="executeStep2('etf')">
+                  🚀 运行核心 ETF 动量排名
+                </button>
+                <button class="step-btn sub" @click="executeStep2('seats')">
+                  🏛️ 龙虎榜机构席位追踪
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 3: 🎯 筛标的 (L3 Alpha Screening) -->
+            <div class="pipeline-card step-card-3">
+              <div class="step-header">
+                <span class="step-badge">Step 3 · L3</span>
+                <span class="step-title">🎯 量化多因子初筛池</span>
+              </div>
+              <p class="step-desc">解决【优势赛道里买哪只？】全市场5000+标的通过数学模型初筛，收敛出3~5只高胜率候选股票。</p>
+              <div class="step-actions">
+                <button class="step-btn primary" @click="executeStep3('breakout')">
+                  🚀 整理平台放量突破选股
+                </button>
+                <button class="step-btn sub" @click="executeStep3('dividend')">
+                  🛡️ 低估高股息价值防守
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 4: 🔬 验体质与极限排雷 (L4 Deep-Dive & Red Flags) -->
+            <div class="pipeline-card step-card-4 highlight-step">
+              <div class="step-header">
+                <span class="step-badge highlight">Step 4 · L4</span>
+                <span class="step-title">🔬 个股四维体检与极限排雷</span>
+              </div>
+              <p class="step-desc">解决【标的有没有暗雷？盈亏比划算吗？】初筛股票绝不可直接买，必须穿透质押解禁、真实现金流ROE与买卖点。</p>
+              
+              <!-- 内置标的快速填装器，彻底消灭占位符 -->
+              <div class="inline-stock-picker">
+                <div class="picker-input-row">
+                  <n-input
+                    v-model:value="step4StockInput"
+                    placeholder="输入股票代码或名称 (如 600519)"
+                    size="small"
+                    class="picker-input"
+                  />
+                </div>
+                <div class="picker-hot-chips">
+                  <span class="hot-label">快速点选：</span>
+                  <span
+                    v-for="stk in hotStocks"
+                    :key="stk.code"
+                    class="hot-chip"
+                    :class="{ active: step4StockInput === stk.code }"
+                    @click="step4StockInput = stk.code"
+                  >
+                    {{ stk.name }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="step-actions">
+                <button class="step-btn primary" @click="executeStep4('diag')">
+                  🔬 全景四维深度体检
+                </button>
+                <button class="step-btn warning" @click="executeStep4('risk')">
+                  🛡️ 股权质押解禁极限排雷
+                </button>
+                <button class="step-btn sub" @click="executeStep4('finance')">
+                  📑 经营现金流与真实ROE
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 5: 📑 定落子与立论 (L5 Verdict & Thesis Ledger) -->
+            <div class="pipeline-card step-card-5">
+              <div class="step-header">
+                <span class="step-badge">Step 5 · L5</span>
+                <span class="step-title">📑 买方立论与 5-Verdict 裁决</span>
+              </div>
+              <p class="step-desc">解决【知行合一与止损防守】输出五级确定性买方裁决、下行证伪底线，并一键归档至认知账本。</p>
+              <div class="ledger-guide-box">
+                <span class="guide-icon">📥</span>
+                <span class="guide-text">推演完成后，点击报告底部的【存入买方认知账本】按钮，立论与证伪线将自动沉淀并驱动自选股与3D诊断！</span>
+              </div>
+              <div class="step-actions">
+                <button class="step-btn sub" @click="executeStep5">
+                  📖 查看买方 5-Verdict 裁决标准
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="quick-keywords-bar">
-          <span class="keywords-label">快速联想：</span>
-          <div class="keywords-list">
-            <span
-              v-for="kw in quickKeywords"
-              :key="kw"
-              class="keyword-chip"
-              @click="applyScenario(kw)"
-            >
-              {{ kw }}
-            </span>
+        <!-- 视图 2：专项极速控制台 (单点任务导向) -->
+        <div v-else class="direct-tools-container">
+          <div class="direct-tools-grid">
+            <!-- 工具 1：个股全景深度体检与排雷 -->
+            <div class="direct-tool-card">
+              <div class="tool-head">
+                <span class="tool-icon">🔬</span>
+                <span class="tool-name">单股四维全景穿透体检</span>
+              </div>
+              <p class="tool-desc">一键穿透基本面财务、量价技术形态、大资金动向、股权质押解禁雷区，输出确定性买方裁决。</p>
+              <div class="tool-form">
+                <n-input
+                  v-model:value="directDiagCode"
+                  placeholder="输入 6 位代码或名称 (如 300750)"
+                  size="medium"
+                  class="tool-input"
+                />
+                <div class="quick-hot-row">
+                  <span
+                    v-for="stk in hotStocks.slice(0, 5)"
+                    :key="stk.code"
+                    class="hot-chip"
+                    @click="directDiagCode = stk.code"
+                  >
+                    {{ stk.name }}
+                  </span>
+                </div>
+                <button class="tool-submit-btn" @click="executeDirectDiag">
+                  🚀 立即启动全景深度体检
+                </button>
+              </div>
+            </div>
+
+            <!-- 工具 2：同行业双龙头深度 PK -->
+            <div class="direct-tool-card">
+              <div class="tool-head">
+                <span class="tool-icon">⚖️</span>
+                <span class="tool-name">赛道同业双龙头深度 PK</span>
+              </div>
+              <p class="tool-desc">横向对比两只行业龙头的商业壁垒、估值弹性、成长确定性与近期K线强弱，择优而入。</p>
+              <div class="tool-form">
+                <div class="pk-inputs-row">
+                  <n-input
+                    v-model:value="pkCodeA"
+                    placeholder="标的 A (如 300750 宁德时代)"
+                    size="medium"
+                  />
+                  <span class="pk-vs">VS</span>
+                  <n-input
+                    v-model:value="pkCodeB"
+                    placeholder="标的 B (如 002594 比亚迪)"
+                    size="medium"
+                  />
+                </div>
+                <div class="quick-hot-row">
+                  <span class="hot-chip" @click="applyPresetPK('300750', '002594')">
+                    宁德时代 vs 比亚迪
+                  </span>
+                  <span class="hot-chip" @click="applyPresetPK('600519', '000858')">
+                    贵州茅台 vs 五粮液
+                  </span>
+                  <span class="hot-chip" @click="applyPresetPK('688981', '002371')">
+                    中芯国际 vs 北方华创
+                  </span>
+                </div>
+                <button class="tool-submit-btn" @click="executeDirectPK">
+                  ⚖️ 立即启动双股横向深度对比
+                </button>
+              </div>
+            </div>
+
+            <!-- 工具 3：筹码与风险极限排雷 -->
+            <div class="direct-tool-card">
+              <div class="tool-head">
+                <span class="tool-icon">🛡️</span>
+                <span class="tool-name">风险极限排雷与筹码穿透</span>
+              </div>
+              <p class="tool-desc">专项穿透大股东股权质押比例、未来一年解禁日程、近3季度股东户数集中度与两融净买入。</p>
+              <div class="tool-form">
+                <n-input
+                  v-model:value="directRiskCode"
+                  placeholder="输入代码或名称 (如 600519)"
+                  size="medium"
+                  class="tool-input"
+                />
+                <div class="quick-hot-row">
+                  <span
+                    v-for="stk in hotStocks.slice(0, 5)"
+                    :key="stk.code"
+                    class="hot-chip"
+                    @click="directRiskCode = stk.code"
+                  >
+                    {{ stk.name }}
+                  </span>
+                </div>
+                <button class="tool-submit-btn warning" @click="executeDirectRisk">
+                  🛡️ 立即启动专项深度排雷
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -225,6 +440,15 @@
           @save-thesis="handleSaveThesisFromMsg"
           @export-image="handleExportImage"
         />
+
+        <!-- 下游时序推荐条 (消除断层与信息孤岛) -->
+        <div v-if="!isStreaming && pipelineNextStep" class="pipeline-next-step-bar">
+          <span class="next-step-icon">💡</span>
+          <span class="next-step-text">流水线下一步推荐：</span>
+          <button class="next-step-btn" @click="pipelineNextStep.action">
+            {{ pipelineNextStep.label }} ➔
+          </button>
+        </div>
       </div>
 
       <!-- 滚动回底部悬浮球 -->
@@ -250,7 +474,7 @@
             v-for="chip in quickChips"
             :key="chip.label"
             class="quick-chip-btn"
-            @click="fillInput(chip.text)"
+            @click="handleQuickChipClick(chip)"
             :title="chip.tip"
           >
             <span class="chip-icon">{{ chip.icon }}</span>
@@ -383,6 +607,70 @@
         </div>
       </div>
     </n-modal>
+
+    <!-- 标的快速填装与推演弹窗 (彻底消灭占位符) -->
+    <n-modal
+      v-model:show="showStockActionModal"
+      preset="card"
+      :title="stockActionModalTitle"
+      style="width: 520px; max-width: 90vw;"
+    >
+      <div class="stock-action-modal-body">
+        <div v-if="targetStockAction === 'pk'" class="pk-modal-inputs">
+          <div class="modal-input-field">
+            <label class="modal-field-label">标的 A 代码或名称：</label>
+            <n-input
+              v-model:value="modalStockInput"
+              placeholder="如 300750 宁德时代"
+              size="medium"
+            />
+          </div>
+          <div class="modal-input-field">
+            <label class="modal-field-label">标的 B 代码或名称：</label>
+            <n-input
+              v-model:value="modalStockInputB"
+              placeholder="如 002594 比亚迪"
+              size="medium"
+            />
+          </div>
+          <div class="modal-preset-chips">
+            <span class="preset-label">热门对比组合：</span>
+            <span class="preset-chip" @click="setModalPK('300750', '002594')">宁德 vs 比亚迪</span>
+            <span class="preset-chip" @click="setModalPK('600519', '000858')">茅台 vs 五粮液</span>
+            <span class="preset-chip" @click="setModalPK('688981', '002371')">中芯 vs 北方华创</span>
+          </div>
+        </div>
+
+        <div v-else class="single-modal-inputs">
+          <label class="modal-field-label">目标标的代码或名称：</label>
+          <n-input
+            v-model:value="modalStockInput"
+            placeholder="输入 6 位代码或名称 (如 600519 贵州茅台)"
+            size="medium"
+            clearable
+          />
+          <div class="modal-preset-chips">
+            <span class="preset-label">核心龙头快捷选择：</span>
+            <span
+              v-for="stk in hotStocks"
+              :key="stk.code"
+              class="preset-chip"
+              :class="{ active: modalStockInput === stk.code }"
+              @click="modalStockInput = stk.code"
+            >
+              {{ stk.name }}
+            </span>
+          </div>
+        </div>
+
+        <div class="modal-footer-actions">
+          <n-button @click="showStockActionModal = false">取消</n-button>
+          <n-button type="primary" :disabled="!isModalStockActionValid" @click="submitModalStockAction">
+            🚀 立即启动推演
+          </n-button>
+        </div>
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -396,7 +684,8 @@ import {
   NDrawerContent,
   NModal,
   NTag,
-  NSwitch
+  NSwitch,
+  NInput
 } from 'naive-ui'
 import {
   ArrowDownIcon,
@@ -468,6 +757,178 @@ const agentMode = ref<'auto' | 'react' | 'plan_execute'>('auto')
 const userAvatar = ref('https://tdesign.gtimg.com/site/avatar.jpg')
 const userName = ref('用户')
 const messagesContainer = ref<HTMLElement | null>(null)
+
+// ========== BUIS 五阶流水线与交互控制中枢状态 ==========
+const welcomeViewMode = ref<'pipeline' | 'direct'>('pipeline')
+const step4StockInput = ref('600519')
+const directDiagCode = ref('600519')
+const directRiskCode = ref('600519')
+const pkCodeA = ref('300750')
+const pkCodeB = ref('002594')
+
+const hotStocks = [
+  { code: '600519', name: '贵州茅台' },
+  { code: '300750', name: '宁德时代' },
+  { code: '002594', name: '比亚迪' },
+  { code: '688981', name: '中芯国际' },
+  { code: '300059', name: '东方财富' },
+  { code: '601318', name: '中国平安' },
+  { code: '600900', name: '长江电力' },
+]
+
+// 交互式标的填装弹窗状态（彻底消灭占位符）
+const showStockActionModal = ref(false)
+const targetStockAction = ref<'diag' | 'risk' | 'finance' | 'pk'>('diag')
+const modalStockInput = ref('')
+const modalStockInputB = ref('')
+
+const stockActionModalTitle = computed(() => {
+  if (targetStockAction.value === 'diag') return '🔬 标的全维深度体检'
+  if (targetStockAction.value === 'risk') return '🛡️ 股权质押与风险极限排雷'
+  if (targetStockAction.value === 'finance') return '📑 经营现金流与真实ROE体检'
+  if (targetStockAction.value === 'pk') return '⚖️ 赛道双龙头深度对比 PK'
+  return '🎯 标的快速填装'
+})
+
+const isModalStockActionValid = computed(() => {
+  if (targetStockAction.value === 'pk') {
+    return Boolean(modalStockInput.value.trim() && modalStockInputB.value.trim())
+  }
+  return Boolean(modalStockInput.value.trim())
+})
+
+function setModalPK(a: string, b: string) {
+  modalStockInput.value = a
+  modalStockInputB.value = b
+}
+
+function openStockActionModal(action: 'diag' | 'risk' | 'finance' | 'pk') {
+  targetStockAction.value = action
+  // 若输入框已包含 6 位股票代码，直接复用
+  const matched = inputValue.value.match(/\b\d{6}\b/)
+  if (matched && action !== 'pk') {
+    modalStockInput.value = matched[0]
+  } else if (!modalStockInput.value) {
+    modalStockInput.value = '600519'
+  }
+  if (action === 'pk' && !modalStockInputB.value) {
+    modalStockInput.value = '300750'
+    modalStockInputB.value = '002594'
+  }
+  showStockActionModal.value = true
+}
+
+function submitModalStockAction() {
+  if (!isModalStockActionValid.value) return
+  const codeA = modalStockInput.value.trim()
+  const codeB = modalStockInputB.value.trim()
+  showStockActionModal.value = false
+
+  if (targetStockAction.value === 'diag') {
+    applyScenario(`请对 ${codeA} 进行全维度深度诊断，涵盖：1. 估值与基本面财务；2. 近期日K线量价与关键支撑阻力位；3. 主力资金进出动向；4. 核心催化与潜在风险，并给出买方 5-Verdict 确定性评级与止损下行底线。`)
+  } else if (targetStockAction.value === 'risk') {
+    applyScenario(`请对 ${codeA} 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。`)
+  } else if (targetStockAction.value === 'finance') {
+    applyScenario(`请深入体检 ${codeA} 的财务报表：对比近3年营业收入与扣非净利润、真实ROE与销售净利率、分析经营现金流净额与净利润比值，验证其盈利真实性。`)
+  } else if (targetStockAction.value === 'pk') {
+    applyScenario(`请对比分析 ${codeA} 与 ${codeB}：横向比较两者的商业壁垒、估值水平、财务成长质量、近期机构资金偏好以及走势强弱差异。`)
+  }
+}
+
+// ========== 五阶时序流水线快速执行方法 ==========
+function executeStep1() {
+  applyScenario('请分析当前沪深300与中证A500的市盈率PE、历史分位数及前五大板块权重，结合全市场涨跌家数比与多空红绿灯节律，给出宏观择时评级与建议总仓位上限。')
+}
+
+function executeStep2(type: 'etf' | 'seats') {
+  if (type === 'etf') {
+    applyScenario('请调用 GetETFMomentumRanking 工具获取当前场内核心 ETF 21日加权动量排名，并根据动量数值分析当前最强进攻板块与防御配置建议。')
+  } else {
+    applyScenario('请查询最近一个交易日的龙虎榜机构席位明细与上榜汇总，重点筛选机构专用席位大额净买入的股票，分析机构资金的真实建仓意图。')
+  }
+}
+
+function executeStep3(type: 'breakout' | 'dividend') {
+  if (type === 'breakout') {
+    applyScenario('请帮我利用量化策略筛选当前市场上呈现均线多头排列且成交量放量突破整理平台的强势个股，并给出具体技术面评分和选股理由。')
+  } else {
+    applyScenario('请筛选市盈率PE<15、近三年股息率>3.5%、ROE>12%的高股息稳健型股票，评估其安全边际与抗跌属性。')
+  }
+}
+
+function executeStep4(action: 'diag' | 'risk' | 'finance') {
+  const code = (step4StockInput.value || '600519').trim()
+  if (action === 'diag') {
+    applyScenario(`请对 ${code} 进行全维度深度诊断，涵盖：1. 估值与基本面财务；2. 近期日K线量价与支撑阻力；3. 主力资金进出动向；4. 核心催化与潜在风险，并给出买方 5-Verdict 裁决与明确的下行证伪止损线。`)
+  } else if (action === 'risk') {
+    applyScenario(`请对 ${code} 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。`)
+  } else {
+    applyScenario(`请深入体检 ${code} 的财务报表：对比近3年营业收入与扣非净利润、真实ROE与销售净利率、分析经营现金流净额与净利润比值，验证其盈利真实性。`)
+  }
+}
+
+function executeStep5() {
+  applyScenario('请说明 Blades 买方认知账本与 5-Verdict 评级规范：包括【强力买入、逢低布局、观望等待、逢高减持、规避离场】的评定准则、核心买入立论提取以及下行证伪止损底线的设定方法。')
+}
+
+function executeDirectDiag() {
+  const code = (directDiagCode.value || '600519').trim()
+  applyScenario(`请对 ${code} 进行全维度深度诊断，涵盖基本面财务、K线形态与量价趋势、主力资金动向，并给出买方 5-Verdict 确定性评级。`)
+}
+
+function executeDirectRisk() {
+  const code = (directRiskCode.value || '600519').trim()
+  applyScenario(`请对 ${code} 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。`)
+}
+
+function executeDirectPK() {
+  const a = (pkCodeA.value || '300750').trim()
+  const b = (pkCodeB.value || '002594').trim()
+  applyScenario(`请对比分析 ${a} 与 ${b}：比较两者的商业壁垒、估值水平、财务成长质量、近期机构资金偏好以及走势强弱差异。`)
+}
+
+function applyPresetPK(a: string, b: string) {
+  pkCodeA.value = a
+  pkCodeB.value = b
+}
+
+function handleQuickChipClick(chip: any) {
+  if (typeof chip.action === 'function') {
+    chip.action()
+  } else if (chip.text) {
+    fillInput(chip.text)
+  }
+}
+
+// 下游时序推荐计算：根据最近一条助手的输出推演内容，智能推荐下一步动作
+const pipelineNextStep = computed(() => {
+  if (messages.value.length === 0) return null
+  const lastMsg = messages.value[messages.value.length - 1]
+  if (lastMsg.role !== 'assistant' || !lastMsg.content) return null
+  const text = lastMsg.content
+
+  if (text.includes('动量') || text.includes('ETF') || text.includes('大势') || text.includes('择时') || text.includes('宏观')) {
+    return {
+      label: '进入 Step 3 · 运行多因子量化突破选股',
+      action: () => executeStep3('breakout'),
+    }
+  }
+  if (text.includes('选股') || text.includes('突破') || text.includes('高股息') || text.includes('多头排列')) {
+    return {
+      label: '进入 Step 4 · 选择标的进行四维体检与极限排雷',
+      action: () => openStockActionModal('diag'),
+    }
+  }
+  if (text.includes('诊断') || text.includes('体检') || text.includes('排雷') || text.includes('评级')) {
+    return {
+      label: '进入 Step 5 · 存入买方认知账本 (5-Verdict)',
+      action: () => {
+        handleSaveThesisFromMsg(lastMsg)
+      },
+    }
+  }
+  return null
+})
 
 // 响应式消息列表：直接绑定当前激活会话的 messages
 const messages = computed<ChatMessage[]>({
@@ -596,13 +1057,14 @@ const quickKeywords = [
 ]
 
 const quickChips = [
-  { icon: '🧭', label: 'ETF动量', text: '请计算当前场内主流ETF的21日加权动量排名并给出板块轮动建议', tip: 'L2 赛道主线轮动' },
-  { icon: '🎯', label: '突破选股', text: '请利用量化策略筛选近期整理平台放量突破、均线多头排列的强势股', tip: 'L3 量化多因子选股' },
-  { icon: '📊', label: '全维诊断', text: '请对股票 [输入代码/名称] 进行全方位深度诊断，给出五级买方裁决建议', tip: 'L4 个股全景解构' },
-  { icon: '🛡️', label: '深度排雷', text: '请对 [输入代码] 进行深度排雷：核查控股股东质押比例、未来一年解禁日程、近3季度股东户数及两融资金。', tip: 'L4 筹码与风险穿透' },
-  { icon: '📑', label: '财报体检', text: '请深度体检 [输入代码] 的财务质量：分析近3年营业收入与扣非净利润、真实ROE与销售毛利率、以及经营活动现金流净额比值。', tip: 'L4 盈利真实性验证' },
-  { icon: '⚖️', label: '双股PK', text: '请对比分析股票 [代码A] 与 [代码B]：比较两者的商业模式、估值水平、成长质量与走势强弱差异', tip: 'L4 赛道龙头对比' },
-  { icon: '🏛️', label: '机构龙虎榜', text: '请查询最近一个交易日的龙虎榜机构席位明细，重点筛选机构专用席位大额净买入的股票并分析建仓意图', tip: 'L2 机构主力资金' },
+  { icon: '🏛️', label: 'L1 大势择时', action: () => executeStep1(), tip: '评估大盘择时、估值水位与仓位上限' },
+  { icon: '🧭', label: 'L2 ETF动量', action: () => executeStep2('etf'), tip: '计算场内主流 ETF 21日动量排名' },
+  { icon: '🎯', label: 'L3 突破选股', action: () => executeStep3('breakout'), tip: '量化筛选均线多头放量突破股' },
+  { icon: '🔬', label: 'L4 个股体检', action: () => openStockActionModal('diag'), tip: '四维穿透基本面、量价与资金' },
+  { icon: '🛡️', label: 'L4 深度排雷', action: () => openStockActionModal('risk'), tip: '穿透大股东质押、解禁与股东户数' },
+  { icon: '📑', label: 'L4 财报体检', action: () => openStockActionModal('finance'), tip: '验证扣非净利润与经营现金流真实性' },
+  { icon: '⚖️', label: 'L4 双龙头PK', action: () => openStockActionModal('pk'), tip: '对比同行业两只核心龙头' },
+  { icon: '🏛️', label: 'L2 机构席位', action: () => executeStep2('seats'), tip: '查询龙虎榜机构专用席位大额建仓' },
 ]
 
 const allScenarios = [
@@ -1706,18 +2168,18 @@ onBeforeUnmount(() => {
 
   .welcome-hero {
     text-align: center;
-    margin-bottom: 28px;
+    margin-bottom: 24px;
 
     .hero-icon-glow {
-      font-size: 40px;
-      margin-bottom: 8px;
+      font-size: 36px;
+      margin-bottom: 6px;
       animation: float-glow 3s ease-in-out infinite;
     }
 
     .hero-title {
       font-size: 22px;
       font-weight: 700;
-      margin: 0 0 8px;
+      margin: 0 0 6px;
       background: linear-gradient(135deg, var(--td-brand-color, #0052d9), #2ba471);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
@@ -1726,121 +2188,381 @@ onBeforeUnmount(() => {
     .hero-desc {
       font-size: 13px;
       color: var(--td-text-color-secondary, #86909c);
-      max-width: 600px;
+      max-width: 640px;
       line-height: 1.6;
-      margin: 0 auto;
+      margin: 0 auto 16px;
+    }
+
+    /* 模式切换：标准五阶流水线 vs 专项极速控制台 */
+    .welcome-mode-toggle {
+      display: inline-flex;
+      background: var(--td-bg-color-component, #f2f3f5);
+      padding: 4px;
+      border-radius: 20px;
+      gap: 6px;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+
+      .toggle-tab-btn {
+        border: none;
+        background: transparent;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 6px 16px;
+        border-radius: 16px;
+        cursor: pointer;
+        color: var(--td-text-color-secondary, #4e5969);
+        transition: all 0.2s ease;
+
+        &:hover {
+          color: var(--td-text-color-primary, #1d2129);
+        }
+
+        &.active {
+          background: var(--td-bg-color-container, #ffffff);
+          color: var(--td-brand-color, #0052d9);
+          font-weight: 600;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+        }
+      }
     }
   }
 
-  .scenario-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
+  /* 视图 1：标准五阶流水线 */
+  .pipeline-container {
     width: 100%;
-    margin-bottom: 24px;
-
-    @media (max-width: 768px) {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .scenario-card {
-    background: var(--td-bg-color-container, #ffffff);
-    border: 1px solid var(--td-border-level-1-color, #e5e6eb);
-    border-radius: 12px;
-    padding: 16px 20px;
-    cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
-
-    &:hover {
-      border-color: var(--td-brand-color, #0052d9);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 16px rgba(0, 82, 217, 0.08);
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-
-      .card-icon {
-        font-size: 20px;
-      }
-
-      .card-badge {
-        font-size: 11px;
-        padding: 2px 8px;
-        border-radius: 12px;
-        background: var(--td-brand-color-light, #ecf2fe);
-        color: var(--td-brand-color, #0052d9);
-        font-weight: 600;
-      }
-    }
-
-    .card-title {
-      font-size: 15px;
-      font-weight: 600;
-      margin: 0 0 6px;
-      color: var(--td-text-color-primary, #1d2129);
-    }
-
-    .card-desc {
-      font-size: 12px;
-      color: var(--td-text-color-secondary, #4e5969);
-      margin: 0 0 12px;
-      line-height: 1.5;
-    }
-
-    .card-prompt-hint {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 12px;
-      color: var(--td-text-color-placeholder, #86909c);
-      padding-top: 8px;
-      border-top: 1px dashed var(--td-border-level-1-color, #f2f3f5);
-
-      .arrow-hint {
-        color: var(--td-brand-color, #0052d9);
-        font-weight: bold;
-      }
-    }
-  }
-
-  .quick-keywords-bar {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    font-size: 12px;
-    width: 100%;
-    padding: 0 8px;
+    flex-direction: column;
+    gap: 20px;
 
-    .keywords-label {
-      color: var(--td-text-color-secondary, #86909c);
-    }
-
-    .keywords-list {
+    .pipeline-flow-guide {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--td-bg-color-container, #ffffff);
+      border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+      border-radius: 10px;
+      overflow-x: auto;
+      white-space: nowrap;
+
+      .flow-step-node {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--td-brand-color, #0052d9);
+        padding: 4px 10px;
+        background: var(--td-brand-color-light, #ecf2fe);
+        border-radius: 6px;
+      }
+
+      .flow-arrow {
+        color: var(--td-text-color-placeholder, #c9cdd4);
+        font-size: 14px;
+      }
     }
 
-    .keyword-chip {
+    .pipeline-steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+
+      @media (max-width: 768px) {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .pipeline-card {
       background: var(--td-bg-color-container, #ffffff);
-      border: 1px solid var(--td-border-level-2-color, #e5e6eb);
-      padding: 3px 10px;
-      border-radius: 14px;
-      cursor: pointer;
-      color: var(--td-text-color-secondary, #4e5969);
-      transition: all 0.2s;
+      border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+      border-radius: 12px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.25s ease;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
 
       &:hover {
-        background: var(--td-brand-color-light, #ecf2fe);
-        color: var(--td-brand-color, #0052d9);
         border-color: var(--td-brand-color, #0052d9);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 82, 217, 0.06);
+      }
+
+      &.highlight-step {
+        border-color: rgba(0, 82, 217, 0.4);
+        background: linear-gradient(180deg, var(--td-bg-color-container, #ffffff) 0%, rgba(0, 82, 217, 0.02) 100%);
+      }
+
+      .step-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+
+        .step-badge {
+          font-size: 11px;
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: var(--td-bg-color-component, #f2f3f5);
+          color: var(--td-text-color-secondary, #4e5969);
+          font-weight: 600;
+
+          &.highlight {
+            background: var(--td-brand-color, #0052d9);
+            color: #ffffff;
+          }
+        }
+
+        .step-title {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--td-text-color-primary, #1d2129);
+        }
+      }
+
+      .step-desc {
+        font-size: 12px;
+        color: var(--td-text-color-secondary, #4e5969);
+        line-height: 1.5;
+        margin: 0 0 14px;
+        flex: 1;
+      }
+
+      .inline-stock-picker {
+        background: var(--td-bg-color-component, #f7f8fa);
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 12px;
+
+        .picker-input-row {
+          margin-bottom: 8px;
+        }
+
+        .picker-hot-chips {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+
+          .hot-label {
+            font-size: 11px;
+            color: var(--td-text-color-placeholder, #86909c);
+          }
+
+          .hot-chip {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--td-bg-color-container, #ffffff);
+            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+            cursor: pointer;
+            transition: all 0.2s ease;
+
+            &:hover,
+            &.active {
+              color: var(--td-brand-color, #0052d9);
+              border-color: var(--td-brand-color, #0052d9);
+              background: var(--td-brand-color-light, #ecf2fe);
+            }
+          }
+        }
+      }
+
+      .ledger-guide-box {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        background: rgba(43, 164, 113, 0.08);
+        border: 1px dashed rgba(43, 164, 113, 0.3);
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 12px;
+        font-size: 11px;
+        color: #198754;
+        line-height: 1.4;
+
+        .guide-icon {
+          font-size: 13px;
+        }
+      }
+
+      .step-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+
+        .step-btn {
+          border: none;
+          padding: 7px 12px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          transition: all 0.2s ease;
+
+          &.primary {
+            background: var(--td-brand-color, #0052d9);
+            color: #ffffff;
+
+            &:hover {
+              background: #0044b8;
+              box-shadow: 0 2px 8px rgba(0, 82, 217, 0.25);
+            }
+          }
+
+          &.warning {
+            background: #fa8c16;
+            color: #ffffff;
+
+            &:hover {
+              background: #d46b08;
+              box-shadow: 0 2px 8px rgba(250, 140, 22, 0.25);
+            }
+          }
+
+          &.sub {
+            background: var(--td-bg-color-component, #f2f3f5);
+            color: var(--td-text-color-primary, #1d2129);
+
+            &:hover {
+              background: var(--td-brand-color-light, #ecf2fe);
+              color: var(--td-brand-color, #0052d9);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /* 视图 2：专项极速控制台 */
+  .direct-tools-container {
+    width: 100%;
+
+    .direct-tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+
+      @media (max-width: 768px) {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .direct-tool-card {
+      background: var(--td-bg-color-container, #ffffff);
+      border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+      border-radius: 12px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+      transition: all 0.25s ease;
+
+      &:hover {
+        border-color: var(--td-brand-color, #0052d9);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0, 82, 217, 0.06);
+      }
+
+      .tool-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+
+        .tool-icon {
+          font-size: 20px;
+        }
+
+        .tool-name {
+          font-size: 15px;
+          font-weight: 600;
+          color: var(--td-text-color-primary, #1d2129);
+        }
+      }
+
+      .tool-desc {
+        font-size: 12px;
+        color: var(--td-text-color-secondary, #4e5969);
+        line-height: 1.5;
+        margin: 0 0 16px;
+      }
+
+      .tool-form {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+
+        .pk-inputs-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+
+          .pk-vs {
+            font-size: 12px;
+            font-weight: 700;
+            color: #d03050;
+            padding: 0 4px;
+          }
+        }
+
+        .quick-hot-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+
+          .hot-chip {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: var(--td-bg-color-component, #f2f3f5);
+            color: var(--td-text-color-secondary, #4e5969);
+            cursor: pointer;
+            transition: all 0.2s ease;
+
+            &:hover {
+              background: var(--td-brand-color-light, #ecf2fe);
+              color: var(--td-brand-color, #0052d9);
+            }
+          }
+        }
+
+        .tool-submit-btn {
+          border: none;
+          padding: 8px 14px;
+          border-radius: 6px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          background: var(--td-brand-color, #0052d9);
+          color: #ffffff;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          margin-top: 4px;
+
+          &:hover {
+            background: #0044b8;
+            box-shadow: 0 2px 8px rgba(0, 82, 217, 0.25);
+          }
+
+          &.warning {
+            background: #fa8c16;
+
+            &:hover {
+              background: #d46b08;
+              box-shadow: 0 2px 8px rgba(250, 140, 22, 0.25);
+            }
+          }
+        }
       }
     }
   }
@@ -1854,6 +2576,106 @@ onBeforeUnmount(() => {
   max-width: 1240px;
   width: 100%;
   margin: 0 auto;
+}
+
+/* 投研流水线下一步推荐条 */
+.pipeline-next-step-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(90deg, rgba(0, 82, 217, 0.06) 0%, rgba(43, 164, 113, 0.06) 100%);
+  border: 1px dashed rgba(0, 82, 217, 0.3);
+  padding: 10px 16px;
+  border-radius: 10px;
+  margin-top: -6px;
+  animation: fadeIn 0.3s ease;
+
+  .next-step-icon {
+    font-size: 16px;
+  }
+
+  .next-step-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--td-text-color-primary, #1d2129);
+  }
+
+  .next-step-btn {
+    border: none;
+    background: var(--td-brand-color, #0052d9);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: auto;
+
+    &:hover {
+      background: #0044b8;
+      box-shadow: 0 2px 8px rgba(0, 82, 217, 0.25);
+      transform: translateY(-1px);
+    }
+  }
+}
+
+/* 标的快速填装弹窗样式 */
+.stock-action-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0;
+
+  .modal-field-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--td-text-color-primary, #1d2129);
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .single-modal-inputs,
+  .pk-modal-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .modal-preset-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+
+    .preset-label {
+      font-size: 12px;
+      color: var(--td-text-color-secondary, #86909c);
+    }
+
+    .preset-chip {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--td-bg-color-component, #f2f3f5);
+      color: var(--td-text-color-secondary, #4e5969);
+      cursor: pointer;
+      transition: all 0.2s ease;
+
+      &:hover,
+      &.active {
+        background: var(--td-brand-color-light, #ecf2fe);
+        color: var(--td-brand-color, #0052d9);
+      }
+    }
+  }
+
+  .modal-footer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+  }
 }
 
 /* 回到底部悬浮球 */
@@ -2299,6 +3121,147 @@ onBeforeUnmount(() => {
   .chat-input-cockpit {
     background: #18181c !important;
     border-top-color: #2e2e33 !important;
+  }
+
+  /* 欢迎页与五阶流水线控制台深色适配 */
+  .welcome-workspace {
+    .welcome-mode-toggle {
+      background: #242429 !important;
+
+      .toggle-tab-btn {
+        color: #86909c !important;
+
+        &:hover {
+          color: #f2f3f5 !important;
+        }
+
+        &.active {
+          background: #323239 !important;
+          color: #a5b4fc !important;
+        }
+      }
+    }
+
+    .pipeline-container {
+      .pipeline-flow-guide {
+        background: #1e1e24 !important;
+        border-color: #2e2e33 !important;
+
+        .flow-step-node {
+          background: rgba(102, 126, 234, 0.2) !important;
+          color: #a5b4fc !important;
+        }
+
+        .flow-arrow {
+          color: #4e5969 !important;
+        }
+      }
+
+      .pipeline-card {
+        background: #1e1e24 !important;
+        border-color: #2e2e33 !important;
+
+        &:hover {
+          border-color: #667eea !important;
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+        }
+
+        &.highlight-step {
+          background: linear-gradient(180deg, #1e1e24 0%, rgba(102, 126, 234, 0.08) 100%) !important;
+          border-color: rgba(102, 126, 234, 0.4) !important;
+        }
+
+        .step-header {
+          .step-badge {
+            background: #2b2b32 !important;
+            color: #c9cdd4 !important;
+
+            &.highlight {
+              background: #667eea !important;
+              color: #ffffff !important;
+            }
+          }
+
+          .step-title {
+            color: #f2f3f5 !important;
+          }
+        }
+
+        .step-desc {
+          color: #a4abb5 !important;
+        }
+
+        .inline-stock-picker {
+          background: #26262c !important;
+
+          .picker-hot-chips {
+            .hot-chip {
+              background: #1e1e24 !important;
+              border-color: #383842 !important;
+              color: #c9cdd4 !important;
+
+              &:hover,
+              &.active {
+                background: rgba(102, 126, 234, 0.25) !important;
+                color: #a5b4fc !important;
+                border-color: #667eea !important;
+              }
+            }
+          }
+        }
+
+        .step-actions {
+          .step-btn.sub {
+            background: #2b2b32 !important;
+            color: #f2f3f5 !important;
+
+            &:hover {
+              background: rgba(102, 126, 234, 0.25) !important;
+              color: #a5b4fc !important;
+            }
+          }
+        }
+      }
+    }
+
+    .direct-tools-container {
+      .direct-tool-card {
+        background: #1e1e24 !important;
+        border-color: #2e2e33 !important;
+
+        &:hover {
+          border-color: #667eea !important;
+          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+        }
+
+        .tool-head .tool-name {
+          color: #f2f3f5 !important;
+        }
+
+        .tool-desc {
+          color: #a4abb5 !important;
+        }
+
+        .quick-hot-row .hot-chip {
+          background: #2b2b32 !important;
+          color: #c9cdd4 !important;
+
+          &:hover {
+            background: rgba(102, 126, 234, 0.25) !important;
+            color: #a5b4fc !important;
+          }
+        }
+      }
+    }
+  }
+
+  .pipeline-next-step-bar {
+    background: linear-gradient(90deg, rgba(102, 126, 234, 0.12) 0%, rgba(43, 164, 113, 0.12) 100%) !important;
+    border-color: rgba(102, 126, 234, 0.4) !important;
+
+    .next-step-text {
+      color: #f2f3f5 !important;
+    }
   }
 }
 </style>
