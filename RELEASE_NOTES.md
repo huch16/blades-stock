@@ -29,6 +29,28 @@ Highlights / 核心亮点
 4. **系统全量版本号统一步进至 1.8.0**
    - 涵盖桌面端 Wails 配置、后端 Go 运行时、无头 Web API 服务、前端 package.json、设置中枢与所有编译打包自动化脚本。
 
+5. **Blades 统一智能投研与决策系统 (BUIS) 科学重塑与闭环落地**
+   - **界面与交互统一 (Unified UI/UX)**：
+     - 桌面端主菜单与移动端底栏完全统一对齐，将【🤖 Ai智能体】固化为顶级第一公民；
+     - 侧边抽屉助手 (`FloatingAgentAssistant`) 与全屏工作台 (`agent-chat`) 双向联动，新增「⤢ 独立全屏」一键展开并在全屏时自动隐身；
+     - 全屏工作台深度集成 `.macro-perception-hud` 宏观全景态势感知仪表条（多空情绪红绿灯、涨跌家数比、持仓风控预警、一键宏观态势推演）。
+   - **路径与路由调度统一 (Unified Routing & Invocation)**：
+     - 扩展 `agentControlBus.ts` 全局总线，定义 `CONSULT_AGENT` 与 `consultAgent()` 统一调度网关；
+     - 根组件 `App.vue` 统一拦截跨组件咨询动作，无缝切换至 `/agent` 页面并自动触发带量化参数的流式推演；
+     - 个股诊断抽屉 (`StockDiagnosisDrawer`) 新增「🤖 呼叫 Agent 深度推演」，大盘情报抽屉 (`MarketIntelligenceDrawer`) 新增「🤖 持仓防守推演」，彻底消除功能孤岛。
+   - **数据与零 Token 确定性边界统一 (Unified Data & Zero-Token Boundary)**：
+     - 坚持原生高精量化指标（均线、筹码分布获利盘、阻力支撑位、F10 财务指标）由 Go 原生引擎计算并结构化前置注入；
+     - 严禁 LLM 在无一手数据前提下凭空幻觉捏造行情或财务数据，保持严密的买方量化纪律。
+   - **技能与四大投研模式统一 (Unified Skills & Modes)**：
+     - 严格梳理 4 大科学执行模式（`auto` 智能自适应、`react` 极速即时诊断、`plan_execute` 深度全景规划、`direct` 买方研报直出）；
+     - 技能库与语义结晶统一召回，匹配最佳策略工具群。
+   - **结论输出与买方立论标准统一 (Unified 5-Verdict Buy-Side Deposition)**：
+     - 全面推行买方 5-Verdict 认知结构化输出（核心投资逻辑、关键证伪条件、跟踪催化剂、估值锚与赔率、仓位控制）；
+     - 智能体回答气泡底部提供「📥 存入买方认知账本」动作按钮，支持一键将定性结论归档至数据库 `stock_thesis_ledger`，并全局广播 `stockThesisUpdated`。
+   - **记忆自演化与飞轮闭环统一 (Unified Memory Closed-Loop Flywheel)**：
+     - 自选股卡片实时监听买方认知变动，毫秒级更新立论标签（逻辑强化、维持现状、逻辑削弱、逻辑证伪、首次建档）；
+     - Agent 执行前置自动检索目标标的的历史买方假说账本与平台经验结晶（`KnowledgeCrystal`），实现“感知 -> 检索经验结晶 -> 结合一手数据 -> 产出买方立论 -> 沉淀认知账本 -> 回溯复盘 -> 凝练新结晶”的完整自我进化飞轮！
+
 ---
 
 # Release v1.6.0
