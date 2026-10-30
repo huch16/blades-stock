@@ -1072,6 +1072,7 @@ onBeforeUnmount(() => {
     clearInterval(marketStatusTimer)
     marketStatusTimer = null
   }
+  window.removeEventListener('resize', updateResponsiveLayout)
   EventsOff("realtime_profit")
   EventsOff("loadingMsg")
   EventsOff("telegraph")
@@ -1152,6 +1153,47 @@ function applyThemeMode(isDark) {
 
 let appInitialized = false
 
+// 移动端响应式感知与布局控制
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
+
+function updateResponsiveLayout() {
+  isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  if (!isWails()) {
+    if (isMobile.value) {
+      contentStyle.value = "height: calc(100dvh - 58px - var(--sab, 0px)); max-height: calc(100dvh - 58px - var(--sab, 0px)); overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(64px + var(--sab, 0px));"
+    } else {
+      contentStyle.value = "height: calc(100dvh - 64px); max-height: calc(100dvh - 64px); overflow-y: auto; padding-bottom: 72px;"
+    }
+  } else {
+    contentStyle.value = "max-height: calc(92vh); overflow: hidden; padding-bottom: 72px;"
+  }
+}
+
+const currentMobileTab = computed(() => {
+  const routeName = router.currentRoute.value.name
+  if (!routeName || routeName === 'stock') return 'stock'
+  if (routeName === 'market') return 'market'
+  if (routeName === 'agent') return 'agent'
+  if (routeName === 'research') return 'research'
+  if (routeName === 'settings') return 'settings'
+  return 'stock'
+})
+
+function switchMobileTab(key) {
+  activeKey.value = key
+  if (key === 'stock') {
+    router.push({ name: 'stock' })
+  } else if (key === 'market') {
+    router.push({ name: 'market' })
+  } else if (key === 'agent') {
+    router.push({ name: 'agent' })
+  } else if (key === 'research') {
+    router.push({ name: 'research' })
+  } else if (key === 'settings') {
+    router.push({ name: 'settings' })
+  }
+}
+
 function initApp() {
   if (appInitialized) return
   appInitialized = true
@@ -1163,11 +1205,7 @@ function initApp() {
       updateMarketStatus()
     }, 60000)
   }
-  if (!isWails()) {
-    contentStyle.value = "height: calc(100dvh - 64px); max-height: calc(100dvh - 64px); overflow-y: auto; padding-bottom: 72px;"
-  } else {
-    contentStyle.value = "max-height: calc(92vh); overflow: hidden; padding-bottom: 72px;"
-  }
+  updateResponsiveLayout()
 
   // 确保 SSE 连接就绪
   webEventBus.reconnectSSE()
@@ -1256,6 +1294,9 @@ function initApp() {
 }
 
 onMounted(() => {
+  window.addEventListener('resize', updateResponsiveLayout)
+  updateResponsiveLayout()
+
   window.addEventListener('blades:authenticated', () => {
     isAuthenticated.value = true
     initApp()
@@ -1328,8 +1369,70 @@ onMounted(() => {
                       </n-scrollbar>
                     </n-spin>
                   </n-gi>
-                  <n-gi style="position: fixed;bottom:0;z-index: 9;width: 100%;">
+                  <n-gi style="position: fixed;bottom:0;z-index: 99;width: 100%;">
+                    <!-- 移动端原生 App 风格 TabBar (Screen <= 768px) -->
+                    <div v-if="isMobile" class="mobile-tabbar-container">
+                      <div class="mobile-tabbar">
+                        <div
+                          class="mobile-tab-item"
+                          :class="{ active: currentMobileTab === 'stock' }"
+                          @click="switchMobileTab('stock')"
+                        >
+                          <div class="mobile-tab-icon">
+                            <n-icon size="20" :component="StarOutline" />
+                          </div>
+                          <span class="mobile-tab-label">自选</span>
+                        </div>
+
+                        <div
+                          class="mobile-tab-item"
+                          :class="{ active: currentMobileTab === 'market' }"
+                          @click="switchMobileTab('market')"
+                        >
+                          <div class="mobile-tab-icon">
+                            <n-icon size="20" :component="Pulse" />
+                          </div>
+                          <span class="mobile-tab-label">行情</span>
+                        </div>
+
+                        <div
+                          class="mobile-tab-item mobile-tab-agent"
+                          :class="{ active: currentMobileTab === 'agent' }"
+                          @click="switchMobileTab('agent')"
+                        >
+                          <div class="mobile-tab-icon agent-icon-glow">
+                            <n-icon size="22" :component="Robot" />
+                          </div>
+                          <span class="mobile-tab-label">AI智能体</span>
+                        </div>
+
+                        <div
+                          class="mobile-tab-item"
+                          :class="{ active: currentMobileTab === 'research' }"
+                          @click="switchMobileTab('research')"
+                        >
+                          <div class="mobile-tab-icon">
+                            <n-icon size="20" :component="FlaskOutline" />
+                          </div>
+                          <span class="mobile-tab-label">研究</span>
+                        </div>
+
+                        <div
+                          class="mobile-tab-item"
+                          :class="{ active: currentMobileTab === 'settings' }"
+                          @click="switchMobileTab('settings')"
+                        >
+                          <div class="mobile-tab-icon">
+                            <n-icon size="20" :component="SettingsOutline" />
+                          </div>
+                          <span class="mobile-tab-label">设置</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 桌面端横向菜单 (Screen > 768px) -->
                     <n-card
+                      v-else
                       size="small"
                       style="--wails-draggable:no-drag"
                     >
@@ -1383,5 +1486,94 @@ body.is-web-mode [style*="--wails-draggable:drag"] {
     width: 100vw !important;
     max-width: 100vw !important;
   }
+}
+
+/* -------------------------------------------------------------------------
+   移动端原生级底部导航栏 (Mobile TabBar)
+   ------------------------------------------------------------------------- */
+.mobile-tabbar-container {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+  padding-bottom: max(6px, var(--sab, 0px));
+}
+
+html.dark .mobile-tabbar-container,
+html[theme-mode='dark'] .mobile-tabbar-container,
+body.is-dark .mobile-tabbar-container {
+  background: rgba(20, 20, 24, 0.94);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.25);
+}
+
+.mobile-tabbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  height: 52px;
+  max-width: 600px;
+  margin: 0 auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mobile-tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 100%;
+  cursor: pointer;
+  color: #8c8c94;
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tab-item:active {
+  transform: scale(0.92);
+}
+
+.mobile-tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.mobile-tab-label {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: 0.2px;
+}
+
+.mobile-tab-item.active {
+  color: #18a058;
+}
+
+html.dark .mobile-tab-item.active,
+html[theme-mode='dark'] .mobile-tab-item.active,
+body.is-dark .mobile-tab-item.active {
+  color: #63e2b7;
+}
+
+.mobile-tab-item.active .mobile-tab-icon {
+  transform: translateY(-2px);
+}
+
+/* AI智能体特色微光动效 */
+.mobile-tab-agent.active .agent-icon-glow {
+  filter: drop-shadow(0 0 6px rgba(24, 160, 88, 0.45));
+}
+
+html.dark .mobile-tab-agent.active .agent-icon-glow,
+html[theme-mode='dark'] .mobile-tab-agent.active .agent-icon-glow,
+body.is-dark .mobile-tab-agent.active .agent-icon-glow {
+  filter: drop-shadow(0 0 8px rgba(99, 226, 183, 0.6));
 }
 </style>

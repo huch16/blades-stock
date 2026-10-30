@@ -642,8 +642,10 @@ function openMarketIntelligence(type) {
             tab="全球指数"
           >
             <n-grid
-              :cols="5"
-              :y-gap="0"
+              cols="1 s:2 m:3 l:4 xl:5"
+              responsive="screen"
+              :y-gap="8"
+              :x-gap="8"
             >
               <n-gi
                 v-for="(val, key) in globalStockIndexes"

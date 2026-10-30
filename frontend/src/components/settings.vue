@@ -2941,4 +2941,71 @@ onBeforeUnmount(() => {
 .fade-enter-from, .fade-leave-to {
   opacity: 0;
 }
+
+/* -------------------------------------------------------------------------
+   移动端 (Screen <= 768px) 设置中心自适应与吸底操作栏防遮挡
+   ------------------------------------------------------------------------- */
+@media screen and (max-width: 768px) {
+  .settings-container {
+    padding: 10px 8px 140px !important;
+  }
+
+  .settings-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .header-actions {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+
+  .settings-tabs :deep(.n-tabs-nav) {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settings-tabs :deep(.n-tabs-wrapper) {
+    width: auto !important;
+  }
+
+  .settings-tabs :deep(.n-tabs-tab) {
+    padding: 6px 10px !important;
+    font-size: 13px !important;
+    white-space: nowrap !important;
+  }
+
+  /* 移动端下所有表单项自适应整行 */
+  .settings-card :deep(.n-form-item-gi),
+  .settings-card :deep(.n-gi) {
+    grid-column: span 24 !important;
+  }
+
+  .wizard-template-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 吸底操作栏避开移动端底部 TabBar (52px + 安全区) */
+  .sticky-action-bar {
+    bottom: calc(52px + var(--sab, 0px)) !important;
+    padding: 0 10px !important;
+    height: 50px !important;
+  }
+
+  .dirty-text {
+    font-size: 11px !important;
+    max-width: 130px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .save-btn {
+    padding: 0 12px !important;
+    font-size: 13px !important;
+  }
+}
 </style>

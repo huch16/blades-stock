@@ -2494,15 +2494,15 @@ watch(modalShow6, (newVal) => {
 
     <template #suffix>
       <n-button size="small" type="warning" secondary @click="triggerAiWatchlistScreening" style="margin-left:4px;">
-        ⚡ 盘前自选股一键综合诊断 / 排雷
+        ⚡ <span class="hidden-xs">盘前自选股一键综合诊断 / 排雷</span><span class="visible-xs">排雷诊断</span>
       </n-button>
       <n-button v-if="currentGroupId>0" size="small" tertiary type="primary" @click="openRenameGroup" style="margin-left:4px;">
-        <n-icon :component="CreateOutline"/>&nbsp;重命名
+        <n-icon :component="CreateOutline"/>&nbsp;<span class="hidden-xs">重命名</span>
       </n-button>
     </template>
 
     <n-tab-pane closable name="0" :tab="'全部'">
-      <n-grid :x-gap="8" :cols="3" :y-gap="8">
+      <n-grid :x-gap="8" cols="1 s:1 m:2 l:3 xl:3" responsive="screen" :y-gap="8">
         <n-gi :id="result['股票代码']+'_gi'" v-for="result in sortedResults" :key="result.key" style="margin-left: 2px;">
           <StockCard :result="result" :open-ai-enable="data.openAiEnable" :group-list="groupList"
             :thesis="thesesMap[result['股票代码']] || thesesMap[result.key] || thesesMap[result.StockCode]"
@@ -2523,7 +2523,7 @@ watch(modalShow6, (newVal) => {
       </n-grid>
     </n-tab-pane>
     <n-tab-pane closable v-for="group in groupList" :group-id="group.ID" :name="String(group.ID)" :tab="group.name">
-      <n-grid :x-gap="8" :cols="3" :y-gap="8">
+      <n-grid :x-gap="8" cols="1 s:1 m:2 l:3 xl:3" responsive="screen" :y-gap="8">
         <n-gi :id="result['股票代码']+'_gi'" v-for="result in groupResults" :key="result.key" style="margin-left: 2px;">
           <StockCard :result="result" :show-spark-line="true" :group-id="group.ID" :open-ai-enable="data.openAiEnable" :group-list="groupList"
             :thesis="thesesMap[result['股票代码']] || thesesMap[result.key] || thesesMap[result.StockCode]"
@@ -2545,7 +2545,7 @@ watch(modalShow6, (newVal) => {
     </n-tab-pane>
   </n-tabs>
 
-  <div style="position: fixed;bottom: 64px;right:20px;z-index: 100;width: 420px;max-width: calc(100vw - 40px);">
+  <div class="watchlist-search-dock">
     <n-input-group style="box-shadow: 0 4px 18px rgba(0,0,0,0.22); border-radius: 8px; overflow: hidden; background: var(--n-color, #fff);">
       <n-auto-complete v-model:value="data.name" v-if="addBTN"
                        :input-props="{
@@ -2962,5 +2962,36 @@ watch(modalShow6, (newVal) => {
 
 .tab-dragging {
   opacity: 0.5;
+}
+
+/* 底部自选搜索输入框响应式停靠 */
+.watchlist-search-dock {
+  position: fixed;
+  bottom: 64px;
+  right: 20px;
+  z-index: 100;
+  width: 420px;
+  max-width: calc(100vw - 40px);
+  transition: all 0.25s ease;
+}
+
+.visible-xs {
+  display: none !important;
+}
+
+@media screen and (max-width: 768px) {
+  .watchlist-search-dock {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    bottom: calc(64px + var(--sab, 0px));
+  }
+  .hidden-xs {
+    display: none !important;
+  }
+  .visible-xs {
+    display: inline !important;
+  }
 }
 </style>

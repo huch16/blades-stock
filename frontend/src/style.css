@@ -1,5 +1,16 @@
+:root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+}
+
 html {
     text-align: center;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+    width: 100%;
 }
 
 html.dark,
@@ -18,10 +29,17 @@ body.is-dark * {
 
 body {
     margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    overflow-x: hidden;
     background-color: #ffffff;
     font-family: "Nunito", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
     "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -webkit-overflow-scrolling: touch;
+    touch-action: manipulation;
 }
 
 @font-face {
@@ -33,10 +51,55 @@ body {
 }
 
 #app {
-    height: 100vh;
+    min-height: 100vh;
+    min-height: 100dvh;
+    width: 100%;
     text-align: center;
+    position: relative;
+    overflow-x: hidden;
 }
 
 .md-editor-preview {
     padding: 0 8px !important;
 }
+
+/* ==========================================================================
+   移动端响应式与丝滑触摸体验适配规范 (Screen <= 768px)
+   ========================================================================== */
+@media screen and (max-width: 768px) {
+    /* 防止移动端软键盘弹出或聚焦时视口错位 */
+    input, textarea, select {
+        font-size: 16px !important; /* 阻止 iOS Safari 聚焦自动放大 */
+    }
+
+    /* 抽屉与浮层在移动端全屏化，提供 Native App 质感 */
+    .n-drawer {
+        max-width: 100vw !important;
+        width: 100vw !important;
+    }
+
+    .n-drawer-content {
+        padding-bottom: max(16px, var(--sab)) !important;
+    }
+
+    /* 弹窗在窄屏下的宽度约束与居中 */
+    .n-modal:not(.n-modal--preset-dialog) {
+        max-width: calc(100vw - 20px) !important;
+        margin: 10px auto !important;
+        border-radius: 12px !important;
+    }
+
+    /* 统一移动端细滚动条 */
+    ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: rgba(150, 150, 150, 0.3);
+        border-radius: 4px;
+    }
+}
+

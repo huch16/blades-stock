@@ -2579,4 +2579,41 @@ body > div:has(.n-select-menu) {
 .reasoning-expanded {
   background: var(--n-color-info);
 }
+
+/* 移动端专属全屏抽屉与触控优化 (Screen <= 768px) */
+@media screen and (max-width: 768px) {
+  .drawer-panel {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+  }
+  .edge-trigger {
+    width: 26px;
+    height: 80px;
+    border-radius: 8px 0 0 8px;
+    font-size: 11px;
+  }
+  .edge-trigger-text {
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .edge-trigger:hover {
+    width: 28px;
+  }
+  .panel-header {
+    padding-right: 4px;
+  }
+  .panel-title {
+    font-size: 14px;
+  }
+  .panel-actions :deep(.n-button) {
+    padding: 0 4px;
+    font-size: 12px;
+  }
+  .chat-input-row {
+    padding: 8px 10px max(10px, var(--sab, 0px)) !important;
+  }
+}
 </style>

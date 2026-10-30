@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import {
   NDrawer,
   NDrawerContent,
@@ -176,12 +176,34 @@ function askAgentAssistant() {
   const q = `请针对 ${targetName} (${targetCode}) 结合当前三维量化诊断（综合评分 ${score}分，建议 ${suggestion}），详细分析近期走势、买卖关键点位以及操作建议。`
   EventsEmit('openFloatingAgentWithQuestion', q)
 }
+
+// 移动端响应式感知与抽屉尺寸适配
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
+function handleDrawerResize() {
+  isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+}
+const drawerWidth = computed(() => {
+  return isMobile.value ? '100%' : 540
+})
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', handleDrawerResize)
+    handleDrawerResize()
+  }
+})
+
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', handleDrawerResize)
+  }
+})
 </script>
 
 <template>
   <NDrawer
     :show="show"
-    :width="540"
+    :width="drawerWidth"
     placement="right"
     :trap-focus="false"
     @update:show="handleClose"

@@ -254,7 +254,7 @@
     <!-- 左侧会话历史抽屉 -->
     <n-drawer
       v-model:show="showSessionDrawer"
-      :width="320"
+      :width="drawerWidth"
       placement="left"
     >
       <n-drawer-content title="💬 投研会话记录" closable>
@@ -380,6 +380,12 @@ const showScrollBottom = ref(false)
 const isCompact = ref(false)
 const showSessionDrawer = ref(false)
 const showScenarioModal = ref(false)
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
+const drawerWidth = computed(() => (isMobile.value ? '85vw' : 320))
+
+function onWindowResize() {
+  isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+}
 const agentMode = ref<'auto' | 'react' | 'plan_execute'>('auto')
 const userAvatar = ref('https://tdesign.gtimg.com/site/avatar.jpg')
 const userName = ref('用户')
@@ -872,6 +878,7 @@ async function onChatSettingsUpdated() {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', onWindowResize)
   loadSessionsFromStorage()
   await aiConfigStore.loadConfigs()
   EventsOn('updateSettings', onChatSettingsUpdated)
@@ -899,6 +906,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', onWindowResize)
   EventsOff('agent-message', handleAgentMessage)
   EventsOff('updateSettings', onChatSettingsUpdated)
   EventsOff('aiConfigsUpdated', onChatSettingsUpdated)
@@ -1458,5 +1466,94 @@ onBeforeUnmount(() => {
 @keyframes pulse-warning {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.75; }
+}
+
+/* -------------------------------------------------------------------------
+   移动端 (Screen <= 768px) 深度触控与全景响应式适配
+   ------------------------------------------------------------------------- */
+@media screen and (max-width: 768px) {
+  .chat-header {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    padding: 6px 10px !important;
+
+    .header-left {
+      order: 1;
+      .session-drawer-btn {
+        max-width: 130px !important;
+        font-size: 12px !important;
+      }
+    }
+
+    .header-right {
+      order: 2;
+      margin-left: auto;
+      gap: 4px !important;
+      .model-selector {
+        width: 140px !important;
+        max-width: 160px !important;
+      }
+    }
+
+    .header-center {
+      order: 3;
+      width: 100% !important;
+      overflow-x: auto !important;
+      justify-content: flex-start !important;
+      padding-top: 2px;
+      -webkit-overflow-scrolling: touch;
+
+      &::-webkit-scrollbar {
+        height: 0;
+      }
+
+      .mode-capsule-group {
+        width: 100%;
+        justify-content: space-between;
+        .mode-capsule-btn {
+          flex: 1;
+          text-align: center;
+          padding: 3px 6px !important;
+          font-size: 11px !important;
+        }
+      }
+    }
+  }
+
+  .chat-messages-viewport {
+    padding: 10px 8px 20px !important;
+  }
+
+  .welcome-workspace {
+    margin: 10px auto 20px !important;
+    .welcome-hero {
+      margin-bottom: 16px !important;
+      .hero-title {
+        font-size: 18px !important;
+      }
+    }
+  }
+
+  .fab-scroll-bottom {
+    right: 14px !important;
+    bottom: 90px !important;
+    padding: 4px 10px !important;
+    font-size: 11px !important;
+  }
+
+  .chat-input-cockpit {
+    padding: 6px 10px max(10px, var(--sab, 0px)) !important;
+
+    .input-quick-bar {
+      margin-bottom: 6px !important;
+      .quick-chips {
+        gap: 4px !important;
+      }
+      .quick-chip-btn {
+        padding: 2px 8px !important;
+        font-size: 11px !important;
+      }
+    }
+  }
 }
 </style>

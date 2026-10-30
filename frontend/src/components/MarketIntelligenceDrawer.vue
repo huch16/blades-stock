@@ -507,7 +507,20 @@ function onDrawerAiConfigsUpdated(payload) {
   loadAiConfigs(prefId)
 }
 
+// 响应式移动端视口检测
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
+function handleDrawerResize() {
+  isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+}
+const drawerWidth = computed(() => {
+  return isMobile.value ? '100%' : 860
+})
+
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', handleDrawerResize)
+    handleDrawerResize()
+  }
   loadTheme()
   loadAiConfigs()
   loadLifecycle()
@@ -516,6 +529,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', handleDrawerResize)
+  }
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
@@ -535,7 +551,7 @@ onBeforeUnmount(() => {
 <template>
   <NDrawer
     :show="show"
-    :width="860"
+    :width="drawerWidth"
     placement="right"
     @update:show="handleClose"
   >
@@ -1458,5 +1474,48 @@ onBeforeUnmount(() => {
 
 .is-dark :deep(details summary) {
   color: #e2e8f0 !important;
+}
+
+/* 移动端 (Screen <= 768px) 布局重排与触控优化 */
+@media screen and (max-width: 768px) {
+  .nav-tabs-container {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 6px !important;
+  }
+  .nav-tab-item {
+    padding: 6px 8px !important;
+  }
+  .tab-title {
+    font-size: 13px !important;
+  }
+  .tab-subtitle {
+    font-size: 10px !important;
+  }
+  .market-status-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .status-left, .status-right {
+    width: 100% !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .model-picker-wrap {
+    width: 100% !important;
+  }
+  .model-picker-wrap :deep(.n-select) {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  .serenity-input-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+  }
+  .serenity-input-row :deep(.n-input) {
+    width: 100% !important;
+  }
 }
 </style>
