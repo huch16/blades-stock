@@ -104,7 +104,17 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   scroll: [id: string]
   toggle: [collapsed: boolean]
+  scrollToLatest: []
 }>()
+
+// 滚动到最新消息
+function scrollToLatest() {
+  if (props.items.length > 0) {
+    const last = props.items[props.items.length - 1]
+    emit('scroll', last.id)
+  }
+  emit('scrollToLatest')
+}
 
 // 折叠状态（默认折叠，保持主界面清爽清空）
 const collapsed = ref(true)

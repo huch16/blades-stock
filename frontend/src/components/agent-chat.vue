@@ -166,27 +166,29 @@
       <!-- 空白欢迎态：买方五阶投研决策流水线控制台 -->
       <section v-if="messages.length === 0" class="welcome-workspace">
         <div class="welcome-hero">
-          <div class="hero-icon-glow">⚡</div>
-          <h2 class="hero-title">Blades AI 智能投研中枢 · 买方量化决策系统</h2>
+          <div class="hero-badge">BUIS QUANTITATIVE INTELLIGENCE LADDER</div>
+          <h2 class="hero-title">Blades AI 智能投研决策中枢</h2>
           <p class="hero-desc">
-            从宏观择时到标的落子，全流程标准化作业；消除断层与信息孤岛，实现高胜率闭环
+            从宏观大势择时到买方个股落子，全流程标准化作业，实现高确定性投研闭环
           </p>
 
-          <!-- 模式切换：标准五阶流水线 vs 专项极速控制台 -->
+          <!-- 模式切换：标准五阶决策梯 vs 专项极速控制台 -->
           <div class="welcome-mode-toggle">
             <button
               class="toggle-tab-btn"
               :class="{ active: welcomeViewMode === 'pipeline' }"
               @click="welcomeViewMode = 'pipeline'"
             >
-              🚀 标准五阶流水线 (Sequential Pipeline)
+              <span class="tab-icon">🚀</span>
+              <span class="tab-title">五阶量化时序决策梯 (L1~L5)</span>
             </button>
             <button
               class="toggle-tab-btn"
               :class="{ active: welcomeViewMode === 'direct' }"
               @click="welcomeViewMode = 'direct'"
             >
-              ⚡ 专项极速控制台 (Direct Focus Tools)
+              <span class="tab-icon">⚡</span>
+              <span class="tab-title">专项极速穿透台 (Direct Tools)</span>
             </button>
           </div>
         </div>
@@ -194,35 +196,63 @@
         <!-- 视图 1：标准五阶流水线 (时序导向) -->
         <div v-if="welcomeViewMode === 'pipeline'" class="pipeline-container">
           <div class="pipeline-flow-guide">
-            <div class="flow-step-node">① 看大势 (L1)</div>
+            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 1 }" @click="executeStep1">
+              <span class="step-num">1</span>
+              <span class="step-name">看大势 (L1)</span>
+            </div>
             <div class="flow-arrow">➔</div>
-            <div class="flow-step-node">② 选赛道 (L2)</div>
+            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 2 }" @click="executeStep2('etf')">
+              <span class="step-num">2</span>
+              <span class="step-name">选赛道 (L2)</span>
+            </div>
             <div class="flow-arrow">➔</div>
-            <div class="flow-step-node">③ 筛标的 (L3)</div>
+            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 3 }" @click="executeStep3('breakout')">
+              <span class="step-num">3</span>
+              <span class="step-name">筛标的 (L3)</span>
+            </div>
             <div class="flow-arrow">➔</div>
-            <div class="flow-step-node">④ 验体质与排雷 (L4)</div>
+            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 4 }" @click="executeStep4('diag')">
+              <span class="step-num">4</span>
+              <span class="step-name">验体质 (L4)</span>
+            </div>
             <div class="flow-arrow">➔</div>
-            <div class="flow-step-node">⑤ 定落子入账 (L5)</div>
+            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 5 }" @click="executeStep5()">
+              <span class="step-num">5</span>
+              <span class="step-name">定落子 (L5)</span>
+            </div>
           </div>
 
           <!-- 全局流水线贯通标的与状态指示栏 (消除前后步骤脱节与信息孤岛) -->
           <div class="pipeline-context-banner">
             <div class="banner-left">
               <span class="banner-icon">🎯</span>
-              <span class="banner-label">流水线贯通标的：</span>
-              <span class="banner-stock-pill">
-                {{ pipelineContext.stockName ? pipelineContext.stockName + ' · ' : '' }}{{ pipelineContext.stockCode }}
+              <span class="banner-label">当前贯通标的：</span>
+              <span class="banner-stock-pill" @click="openStockActionModal('diag')" title="点击更换标的">
+                <span class="pill-name">{{ pipelineContext.stockName || '默认标的' }}</span>
+                <span class="pill-code">{{ pipelineContext.stockCode }}</span>
               </span>
               <span v-if="pipelineContext.mainTrack" class="banner-tag track-tag">
-                🏷️ 赛道: {{ pipelineContext.mainTrack }}
+                🏷️ {{ pipelineContext.mainTrack }}
               </span>
               <span v-if="pipelineContext.macroStance" class="banner-tag stance-tag">
-                🚦 宏观: {{ pipelineContext.macroStance }}
+                🚦 {{ pipelineContext.macroStance }}
               </span>
             </div>
             <div class="banner-right">
+              <div class="banner-hot-chips">
+                <span class="hot-label">快速点选:</span>
+                <button
+                  v-for="stk in hotStocks"
+                  :key="stk.code"
+                  class="hot-chip-btn"
+                  :class="{ active: pipelineContext.stockCode === stk.code }"
+                  @click="setPipelineStock(stk.code, stk.name)"
+                >
+                  {{ stk.name }}
+                </button>
+              </div>
               <button class="banner-switch-btn" @click="openStockActionModal('diag')">
-                🔄 更换/指定标的
+                🔄 自选代码
               </button>
             </div>
           </div>
@@ -231,13 +261,15 @@
             <!-- Step 1: 🏛️ 看大势 (L1 Macro) -->
             <div class="pipeline-card step-card-1">
               <div class="step-header">
-                <span class="step-badge">Step 1 · L1</span>
-                <span class="step-title">🏛️ 宏观大势与仓位择时</span>
+                <div class="step-badge-wrap">
+                  <span class="step-badge l1">L1 择时</span>
+                  <span class="step-title">宏观大势与仓位上限</span>
+                </div>
               </div>
-              <p class="step-desc">解决【大盘能不能做？给几成仓？】评估沪深300/A500估值分位、全市场赚钱效应与多空红绿灯。</p>
+              <p class="step-desc">解决【大盘能不能做？给几成仓？】严禁外部搜索，调用 GetMarketData 评估大盘估值与多空红绿灯。</p>
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep1">
-                  🚀 一键测算大盘择时与仓位
+                  🚀 测算大盘择时与仓位
                 </button>
               </div>
             </div>
@@ -245,16 +277,18 @@
             <!-- Step 2: 🧭 选赛道 (L2 Sector & ETF) -->
             <div class="pipeline-card step-card-2">
               <div class="step-header">
-                <span class="step-badge">Step 2 · L2</span>
-                <span class="step-title">🧭 赛道主线与主力风向</span>
+                <div class="step-badge-wrap">
+                  <span class="step-badge l2">L2 主线</span>
+                  <span class="step-title">赛道动量与主力席位</span>
+                </div>
               </div>
-              <p class="step-desc">解决【资金流向哪里？】运行21日加权动量模型锁定领涨行业ETF，追踪龙虎榜机构专用席位建仓。</p>
+              <p class="step-desc">解决【资金流向哪里？】纯 Go 本地 VectorBT 运行21日加权动量，锁定场内领涨行业 ETF 与龙虎榜席位。</p>
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep2('etf')">
-                  🚀 运行核心 ETF 动量排名
+                  🚀 ETF 动量排名
                 </button>
                 <button class="step-btn sub" @click="executeStep2('seats')">
-                  🏛️ 龙虎榜机构席位追踪
+                  🏛️ 龙虎榜机构席位
                 </button>
               </div>
             </div>
@@ -262,22 +296,24 @@
             <!-- Step 3: 🎯 筛标的 (L3 Alpha Screening) -->
             <div class="pipeline-card step-card-3">
               <div class="step-header">
-                <span class="step-badge">Step 3 · L3</span>
-                <span class="step-title">🎯 量化多因子初筛池</span>
+                <div class="step-badge-wrap">
+                  <span class="step-badge l3">L3 选股</span>
+                  <span class="step-title">量化多因子初筛池</span>
+                </div>
               </div>
-              <p class="step-desc">解决【优势赛道里买哪只？】全市场5000+标的通过数学模型初筛，收敛出高胜率候选股票并自动继承进入下阶。</p>
+              <p class="step-desc">解决【优势赛道里买哪只？】调用 ScreenByStrategy 多因子选拔高胜率候选股票，首选标的自动贯通至 Step 4。</p>
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep3('breakout')">
-                  🚀 放量突破整理平台
+                  🚀 放量突破
                 </button>
                 <button class="step-btn sub" @click="executeStep3('trend')">
-                  📈 均线多头排列跟随
+                  📈 均线多头
                 </button>
                 <button class="step-btn sub" @click="executeStep3('macd')">
-                  ⚡ MACD 零轴二次金叉
+                  ⚡ MACD金叉
                 </button>
                 <button class="step-btn sub" @click="executeStep3('dividend')">
-                  🛡️ 低估高股息价值防守
+                  🛡️ 高股息
                 </button>
               </div>
             </div>
@@ -285,45 +321,33 @@
             <!-- Step 4: 🔬 验体质与极限排雷 (L4 Deep-Dive & Red Flags) -->
             <div class="pipeline-card step-card-4 highlight-step">
               <div class="step-header">
-                <span class="step-badge highlight">Step 4 · L4</span>
-                <span class="step-title">🔬 个股四维体检与极限排雷</span>
+                <div class="step-badge-wrap">
+                  <span class="step-badge l4">L4 验质</span>
+                  <span class="step-title">四维体检与极限排雷</span>
+                </div>
               </div>
-              <p class="step-desc">解决【标的有没有暗雷？盈亏比划算吗？】初筛股票绝不可直接买，必须穿透质押解禁、真实现金流ROE与买卖点。</p>
+              <p class="step-desc">解决【标的有无暗雷？盈亏比划算吗？】对贯通标的进行 VectorBT 胜率测算、60日均线、质押解禁与现金流排雷。</p>
               
               <!-- 内置标的快速填装器，彻底消灭占位符 -->
               <div class="inline-stock-picker">
-                <div class="picker-input-row">
-                  <n-input
-                    v-model:value="step4StockInput"
-                    placeholder="输入股票代码或名称 (如 600519)"
-                    size="small"
-                    class="picker-input"
-                    @update:value="onStep4StockInputChange"
-                  />
-                </div>
-                <div class="picker-hot-chips">
-                  <span class="hot-label">快速点选：</span>
-                  <span
-                    v-for="stk in hotStocks"
-                    :key="stk.code"
-                    class="hot-chip"
-                    :class="{ active: step4StockInput === stk.code }"
-                    @click="setPipelineStock(stk.code, stk.name)"
-                  >
-                    {{ stk.name }}
-                  </span>
-                </div>
+                <n-input
+                  v-model:value="step4StockInput"
+                  placeholder="标的代码 (如 600519)"
+                  size="small"
+                  class="picker-input"
+                  @update:value="onStep4StockInputChange"
+                />
               </div>
 
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep4('diag')">
-                  🔬 全景四维深度体检
+                  🔬 四维深度体检
                 </button>
                 <button class="step-btn warning" @click="executeStep4('risk')">
-                  🛡️ 股权质押解禁极限排雷
+                  🛡️ 股权质押排雷
                 </button>
                 <button class="step-btn sub" @click="executeStep4('finance')">
-                  📑 经营现金流与真实ROE
+                  📑 经营现金流
                 </button>
               </div>
             </div>
@@ -331,22 +355,18 @@
             <!-- Step 5: 📑 定落子与立论 (L5 Verdict & Thesis Ledger) -->
             <div class="pipeline-card step-card-5 highlight-step">
               <div class="step-header">
-                <span class="step-badge highlight">Step 5 · L5</span>
-                <span class="step-title">📑 买方立论与 5-Verdict 裁决</span>
+                <div class="step-badge-wrap">
+                  <span class="step-badge l5">L5 终局</span>
+                  <span class="step-title">买方立论与 5-Verdict</span>
+                </div>
               </div>
-              <p class="step-desc">解决【知行合一与止损防守】对贯通标的作出五级确定性买方裁决、下行证伪底线，并一键存入认知账本。</p>
-              <div class="ledger-guide-box">
-                <span class="guide-icon">📥</span>
-                <span class="guide-text">
-                  执行后 AI 将提炼核心假说与证伪线，并<strong>直接调用 SaveStockThesis 工具</strong>写入 SQLite 认知账本！
-                </span>
-              </div>
+              <p class="step-desc">解决【知行合一与止损防守】对贯通标的作出买方确定性评级与下行证伪线，并强制写入 SQLite 认知账本数据库。</p>
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep5()">
-                  🚀 立即对「{{ pipelineContext.stockName || pipelineContext.stockCode }}」定落子并入库
+                  🚀 5-Verdict 裁决入库
                 </button>
                 <button class="step-btn sub" @click="viewVerdictStandards">
-                  📖 查看买方 5-Verdict 规范
+                  📖 5-Verdict 规范
                 </button>
               </div>
             </div>
@@ -360,28 +380,30 @@
             <div class="direct-tool-card">
               <div class="tool-head">
                 <span class="tool-icon">🔬</span>
-                <span class="tool-name">单股四维全景穿透体检</span>
+                <div class="tool-head-text">
+                  <span class="tool-name">单股四维全景穿透体检</span>
+                  <span class="tool-sub">VectorBT胜率 + 60日均线 + 财务真实性</span>
+                </div>
               </div>
-              <p class="tool-desc">一键穿透基本面财务、量价技术形态、大资金动向、股权质押解禁雷区，输出确定性买方裁决。</p>
               <div class="tool-form">
                 <n-input
                   v-model:value="directDiagCode"
                   placeholder="输入 6 位代码或名称 (如 300750)"
-                  size="medium"
+                  size="small"
                   class="tool-input"
                 />
                 <div class="quick-hot-row">
-                  <span
+                  <button
                     v-for="stk in hotStocks.slice(0, 5)"
                     :key="stk.code"
                     class="hot-chip"
                     @click="directDiagCode = stk.code"
                   >
                     {{ stk.name }}
-                  </span>
+                  </button>
                 </div>
                 <button class="tool-submit-btn" @click="executeDirectDiag">
-                  🚀 立即启动全景深度体检
+                  🚀 立即启动全景体检
                 </button>
               </div>
             </div>
@@ -390,36 +412,38 @@
             <div class="direct-tool-card">
               <div class="tool-head">
                 <span class="tool-icon">⚖️</span>
-                <span class="tool-name">赛道同业双龙头深度 PK</span>
+                <div class="tool-head-text">
+                  <span class="tool-name">赛道同业双龙头深度 PK</span>
+                  <span class="tool-sub">横向对比两只行业龙头的量价形态、估值与ROE</span>
+                </div>
               </div>
-              <p class="tool-desc">横向对比两只行业龙头的商业壁垒、估值弹性、成长确定性与近期K线强弱，择优而入。</p>
               <div class="tool-form">
                 <div class="pk-inputs-row">
                   <n-input
                     v-model:value="pkCodeA"
-                    placeholder="标的 A (如 300750 宁德时代)"
-                    size="medium"
+                    placeholder="标的 A (如 300750)"
+                    size="small"
                   />
                   <span class="pk-vs">VS</span>
                   <n-input
                     v-model:value="pkCodeB"
-                    placeholder="标的 B (如 002594 比亚迪)"
-                    size="medium"
+                    placeholder="标的 B (如 002594)"
+                    size="small"
                   />
                 </div>
                 <div class="quick-hot-row">
-                  <span class="hot-chip" @click="applyPresetPK('300750', '002594')">
+                  <button class="hot-chip" @click="applyPresetPK('300750', '002594')">
                     宁德时代 vs 比亚迪
-                  </span>
-                  <span class="hot-chip" @click="applyPresetPK('600519', '000858')">
+                  </button>
+                  <button class="hot-chip" @click="applyPresetPK('600519', '000858')">
                     贵州茅台 vs 五粮液
-                  </span>
-                  <span class="hot-chip" @click="applyPresetPK('688981', '002371')">
+                  </button>
+                  <button class="hot-chip" @click="applyPresetPK('688981', '002371')">
                     中芯国际 vs 北方华创
-                  </span>
+                  </button>
                 </div>
                 <button class="tool-submit-btn" @click="executeDirectPK">
-                  ⚖️ 立即启动双股横向深度对比
+                  ⚖️ 立即启动双股对比
                 </button>
               </div>
             </div>
@@ -428,28 +452,30 @@
             <div class="direct-tool-card">
               <div class="tool-head">
                 <span class="tool-icon">🛡️</span>
-                <span class="tool-name">风险极限排雷与筹码穿透</span>
+                <div class="tool-head-text">
+                  <span class="tool-name">风险极限排雷与筹码穿透</span>
+                  <span class="tool-sub">穿透大股东股权质押、解禁日程与股东户数</span>
+                </div>
               </div>
-              <p class="tool-desc">专项穿透大股东股权质押比例、未来一年解禁日程、近3季度股东户数集中度与两融净买入。</p>
               <div class="tool-form">
                 <n-input
                   v-model:value="directRiskCode"
                   placeholder="输入代码或名称 (如 600519)"
-                  size="medium"
+                  size="small"
                   class="tool-input"
                 />
                 <div class="quick-hot-row">
-                  <span
+                  <button
                     v-for="stk in hotStocks.slice(0, 5)"
                     :key="stk.code"
                     class="hot-chip"
                     @click="directRiskCode = stk.code"
                   >
                     {{ stk.name }}
-                  </span>
+                  </button>
                 </div>
                 <button class="tool-submit-btn warning" @click="executeDirectRisk">
-                  🛡️ 立即启动专项深度排雷
+                  🛡️ 立即启动专项排雷
                 </button>
               </div>
             </div>
@@ -539,26 +565,24 @@
         >
           <template #suffix>
             <div class="sender-actions">
-              <t-button
+              <n-button
                 v-if="isStreaming"
-                theme="danger"
-                variant="base"
+                type="error"
                 size="medium"
                 class="stop-btn"
                 @click="handleStop"
               >
                 ⏹️ 停止生成
-              </t-button>
-              <t-button
+              </n-button>
+              <n-button
                 v-else
-                theme="primary"
-                variant="base"
+                type="primary"
                 size="medium"
                 :disabled="!inputValue.trim() || !activeConfigId"
                 @click="handleSend"
               >
                 发送
-              </t-button>
+              </n-button>
             </div>
           </template>
         </t-chat-sender>
@@ -719,7 +743,9 @@ import {
   NModal,
   NTag,
   NSwitch,
-  NInput
+  NInput,
+  useMessage,
+  useDialog
 } from 'naive-ui'
 import {
   ArrowDownIcon,
@@ -758,6 +784,26 @@ const STORAGE_KEY = 'blades_stock_chat_sessions_v2'
 const ACTIVE_SESSION_KEY = 'blades_stock_active_session_id_v2'
 
 // ========== 核心状态 ==========
+const message = useMessage()
+const dialog = useDialog()
+
+function notifyWarning(msg: string) {
+  if (message) message.warning(msg)
+  else console.warn(msg)
+}
+function notifySuccess(msg: string) {
+  if (message) message.success(msg)
+  else console.log(msg)
+}
+function notifyError(msg: string) {
+  if (message) message.error(msg)
+  else console.error(msg)
+}
+function notifyInfo(msg: string) {
+  if (message) message.info(msg)
+  else console.log(msg)
+}
+
 const aiConfigStore = useAiConfigStore()
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string>('')
@@ -1514,9 +1560,7 @@ function handleSend() {
 
   const configId = activeConfigId.value
   if (!configId || configId <= 0) {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => {
-      MessagePlugin.warning('请先选择有效的 AI 模型配置')
-    })
+    notifyWarning('请先选择有效的 AI 模型配置')
     return
   }
 
@@ -1593,9 +1637,7 @@ function handleStop() {
   streamingMsgId.value = null
   currentStreamStatus.value = ''
   saveSessionsToStorage()
-  import('tdesign-vue-next').then(({ MessagePlugin }) => {
-    MessagePlugin.info('已停止响应')
-  })
+  notifyInfo('已停止响应')
 }
 
 // ========== 场景交互辅助 ==========
@@ -1622,14 +1664,12 @@ function selectModalScenario(prompt: string) {
 async function handleCopy(content: string) {
   const text = (content || '').trim()
   if (!text) {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.warning('暂无可复制的内容'))
+    notifyWarning('暂无可复制的内容')
     return
   }
   const ok = await copyToClipboard(text)
-  import('tdesign-vue-next').then(({ MessagePlugin }) => {
-    if (ok) MessagePlugin.success('内容已复制到剪贴板')
-    else MessagePlugin.error('复制失败，请手动选取文本')
-  })
+  if (ok) notifySuccess('内容已复制到剪贴板')
+  else notifyError('复制失败，请手动选取文本')
 }
 
 function handleRetry(msgId: string) {
@@ -1655,7 +1695,7 @@ function handleRetry(msgId: string) {
   }
 
   if (!userText) {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.warning('未找到可重试的提问内容'))
+    notifyWarning('未找到可重试的提问内容')
     return
   }
 
@@ -1672,14 +1712,14 @@ function handleReference(msgId: string) {
   if (!msg) return
   const raw = (msg.content || msg.rawContent || '').trim()
   if (!raw) {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.warning('暂无内容可引用'))
+    notifyWarning('暂无内容可引用')
     return
   }
   const quote = raw.slice(0, 180).replace(/\n+/g, ' ')
   const author = msg.role === 'assistant' ? (msg.name || 'AI 智能体') : '我'
   const prefix = inputValue.value.trim() ? inputValue.value.trim() + '\n\n' : ''
   inputValue.value = `${prefix}> 引用【${author}】：${quote}...\n\n`
-  import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('已引用到输入框'))
+  notifySuccess('已引用到输入框')
   nextTick(() => {
     const textarea = document.querySelector('.chat-input-cockpit textarea') as HTMLTextAreaElement
     if (textarea) {
@@ -1707,19 +1747,23 @@ function onConfigChange(val: number) {
 }
 
 function clearCurrentHistory() {
-  import('tdesign-vue-next').then(({ DialogPlugin }) => {
-    DialogPlugin.confirm({
-      header: '清空当前对话',
-      body: '确定要清空当前会话的全部消息历史吗？此操作不可恢复。',
-      confirmBtn: '确认清空',
-      cancelBtn: '取消',
-      onConfirm: () => {
+  if (dialog) {
+    dialog.warning({
+      title: '清空当前对话',
+      content: '确定要清空当前会话的全部消息历史吗？此操作不可恢复。',
+      positiveText: '确认清空',
+      negativeText: '取消',
+      onPositiveClick: () => {
         messages.value = []
         saveSessionsToStorage()
-        import('tdesign-vue-next').then(({ MessagePlugin }) => MessagePlugin.success('会话已清空'))
+        notifySuccess('会话已清空')
       }
     })
-  })
+  } else {
+    messages.value = []
+    saveSessionsToStorage()
+    notifySuccess('会话已清空')
+  }
 }
 
 // ========== 跨组件咨询接入与买方立论记忆入库 ==========
@@ -1945,9 +1989,7 @@ async function handleSaveThesisFromMsg(msg: ChatMessage) {
   const content = msg.content || msg.rawContent || ''
   const thesis = extractThesisFromText(content)
   if (!thesis || !thesis.code) {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => {
-      MessagePlugin.warning('未在分析结果中识别到明确的股票代码或买方论点')
-    })
+    notifyWarning('未在分析结果中识别到明确的股票代码或买方论点')
     return
   }
 
@@ -1964,16 +2006,12 @@ async function handleSaveThesisFromMsg(msg: ChatMessage) {
       thesis.riskFactors,
       modelName
     )
-    import('tdesign-vue-next').then(({ MessagePlugin }) => {
-      MessagePlugin.success(`🎉 已将【${thesis.name || thesis.code}】买方认知(${thesis.verdictText})归档入库！`)
-    })
+    notifySuccess(`🎉 已将【${thesis.name || thesis.code}】买方认知(${thesis.verdictText})归档入库！`)
     // 广播标的认知更新事件，驱动自选股卡片与诊断抽屉实时刷新
     EventsEmit('stockThesisUpdated', { stockCode: thesis.code })
   } catch (err: any) {
     console.error('SaveStockThesis error:', err)
-    import('tdesign-vue-next').then(({ MessagePlugin }) => {
-      MessagePlugin.error(`存入买方认知账本失败: ${err?.message || err}`)
-    })
+    notifyError(`存入买方认知账本失败: ${err?.message || err}`)
   }
 }
 
@@ -1982,9 +2020,7 @@ async function handleExportImage(msg: ChatMessage) {
   const anchorId = 'msg-anchor-' + msg.id
   const el = document.getElementById(anchorId) || document.getElementById('msg-item-' + msg.id)
   if (!el) {
-    import('tdesign-vue-next').then(({ MessagePlugin }) => {
-      MessagePlugin.warning('未找到对应消息 DOM 节点，请重试')
-    })
+    notifyWarning('未找到对应消息 DOM 节点，请重试')
     return
   }
 
@@ -2027,9 +2063,7 @@ async function handleExportImage(msg: ChatMessage) {
     try {
       const result = await SaveImage(`blades-stock-agent-${safeTime}`, base64)
       if (result && !result.includes('异常') && !result.includes('无法')) {
-        import('tdesign-vue-next').then(({ MessagePlugin }) => {
-          MessagePlugin.success(`已导出为 PNG 图片：${result}`)
-        })
+        notifySuccess(`已导出为 PNG 图片：${result}`)
         return
       }
     } catch (e) {
@@ -2040,14 +2074,10 @@ async function handleExportImage(msg: ChatMessage) {
     link.href = dataUrl
     link.download = `blades-stock-agent-${safeTime}.png`
     link.click()
-    import('tdesign-vue-next').then(({ MessagePlugin }) => {
-      MessagePlugin.success('已导出下载 PNG 投研长图')
-    })
+    notifySuccess('已导出下载 PNG 投研长图')
   } catch (err: any) {
     console.error('handleExportImage failed:', err)
-    import('tdesign-vue-next').then(({ MessagePlugin }) => {
-      MessagePlugin.error(`导出图片失败: ${err?.message || err}`)
-    })
+    notifyError(`导出图片失败: ${err?.message || err}`)
   } finally {
     savedStyles.forEach(({ el, overflow, overflowY, height, maxHeight }) => {
       el.style.overflow = overflow
@@ -2374,17 +2404,26 @@ onBeforeUnmount(() => {
     text-align: center;
     margin-bottom: 24px;
 
-    .hero-icon-glow {
-      font-size: 36px;
-      margin-bottom: 6px;
-      animation: float-glow 3s ease-in-out infinite;
+    .hero-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(0, 82, 217, 0.12) 0%, rgba(43, 164, 113, 0.12) 100%);
+      color: var(--td-brand-color, #0052d9);
+      margin-bottom: 10px;
+      border: 1px solid rgba(0, 82, 217, 0.2);
     }
 
     .hero-title {
       font-size: 22px;
-      font-weight: 700;
-      margin: 0 0 6px;
-      background: linear-gradient(135deg, var(--td-brand-color, #0052d9), #2ba471);
+      font-weight: 800;
+      margin: 0 0 8px;
+      letter-spacing: 0.3px;
+      background: linear-gradient(135deg, var(--td-brand-color, #0052d9) 0%, #2ba471 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -2392,9 +2431,9 @@ onBeforeUnmount(() => {
     .hero-desc {
       font-size: 13px;
       color: var(--td-text-color-secondary, #86909c);
-      max-width: 640px;
+      max-width: 680px;
       line-height: 1.6;
-      margin: 0 auto 16px;
+      margin: 0 auto 18px;
     }
 
     /* 模式切换：标准五阶流水线 vs 专项极速控制台 */
@@ -2411,11 +2450,14 @@ onBeforeUnmount(() => {
         background: transparent;
         font-size: 13px;
         font-weight: 500;
-        padding: 6px 16px;
+        padding: 7px 18px;
         border-radius: 16px;
         cursor: pointer;
         color: var(--td-text-color-secondary, #4e5969);
         transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
 
         &:hover {
           color: var(--td-text-color-primary, #1d2129);
@@ -2436,14 +2478,14 @@ onBeforeUnmount(() => {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
 
     .pipeline-flow-guide {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
-      padding: 12px 16px;
+      padding: 10px 16px;
       background: var(--td-bg-color-container, #ffffff);
       border: 1px solid var(--td-border-level-1-color, #e5e6eb);
       border-radius: 10px;
@@ -2453,15 +2495,45 @@ onBeforeUnmount(() => {
       .flow-step-node {
         font-size: 13px;
         font-weight: 600;
-        color: var(--td-brand-color, #0052d9);
-        padding: 4px 10px;
-        background: var(--td-brand-color-light, #ecf2fe);
-        border-radius: 6px;
+        color: var(--td-text-color-secondary, #4e5969);
+        padding: 5px 12px;
+        background: var(--td-bg-color-component, #f2f3f5);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        .step-num {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: rgba(0, 0, 0, 0.1);
+          font-size: 11px;
+        }
+
+        &:hover {
+          background: var(--td-brand-color-light, #ecf2fe);
+          color: var(--td-brand-color, #0052d9);
+        }
+
+        &.current {
+          background: var(--td-brand-color, #0052d9);
+          color: #ffffff;
+
+          .step-num {
+            background: rgba(255, 255, 255, 0.25);
+          }
+        }
       }
 
       .flow-arrow {
         color: var(--td-text-color-placeholder, #c9cdd4);
-        font-size: 14px;
+        font-size: 13px;
       }
     }
 
@@ -2497,11 +2569,31 @@ onBeforeUnmount(() => {
           font-size: 13px;
           font-weight: 700;
           color: #0052d9;
-          background: #ffffff;
-          padding: 2px 10px;
+          background: var(--td-bg-color-container, #ffffff);
+          padding: 3px 10px;
           border-radius: 14px;
           border: 1px solid rgba(0, 82, 217, 0.3);
           box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          transition: all 0.2s ease;
+
+          &:hover {
+            border-color: #0052d9;
+            box-shadow: 0 2px 6px rgba(0, 82, 217, 0.2);
+          }
+
+          .pill-name {
+            font-weight: 700;
+          }
+
+          .pill-code {
+            font-size: 12px;
+            opacity: 0.85;
+            font-family: monospace;
+          }
         }
 
         .banner-tag {
@@ -2526,6 +2618,44 @@ onBeforeUnmount(() => {
       }
 
       .banner-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+
+        .banner-hot-chips {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+
+          .hot-label {
+            font-size: 11px;
+            color: var(--td-text-color-placeholder, #86909c);
+          }
+
+          .hot-chip-btn {
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 10px;
+            background: var(--td-bg-color-container, #ffffff);
+            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+            color: var(--td-text-color-secondary, #4e5969);
+            cursor: pointer;
+            transition: all 0.15s ease;
+
+            &:hover {
+              color: var(--td-brand-color, #0052d9);
+              border-color: var(--td-brand-color, #0052d9);
+            }
+
+            &.active {
+              background: var(--td-brand-color, #0052d9);
+              color: #ffffff;
+              border-color: var(--td-brand-color, #0052d9);
+            }
+          }
+        }
+
         .banner-switch-btn {
           border: 1px solid var(--td-border-level-2-color, #dcdcdc);
           background: var(--td-bg-color-container, #ffffff);
@@ -2547,7 +2677,7 @@ onBeforeUnmount(() => {
 
     .pipeline-steps-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 16px;
 
       @media (max-width: 768px) {
@@ -2559,7 +2689,7 @@ onBeforeUnmount(() => {
       background: var(--td-bg-color-container, #ffffff);
       border: 1px solid var(--td-border-level-1-color, #e5e6eb);
       border-radius: 12px;
-      padding: 16px 18px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -2569,38 +2699,41 @@ onBeforeUnmount(() => {
       &:hover {
         border-color: var(--td-brand-color, #0052d9);
         transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(0, 82, 217, 0.06);
+        box-shadow: 0 6px 16px rgba(0, 82, 217, 0.08);
       }
 
       &.highlight-step {
-        border-color: rgba(0, 82, 217, 0.4);
+        border-color: rgba(0, 82, 217, 0.35);
         background: linear-gradient(180deg, var(--td-bg-color-container, #ffffff) 0%, rgba(0, 82, 217, 0.02) 100%);
       }
 
       .step-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
         margin-bottom: 8px;
 
-        .step-badge {
-          font-size: 11px;
-          padding: 2px 6px;
-          border-radius: 4px;
-          background: var(--td-bg-color-component, #f2f3f5);
-          color: var(--td-text-color-secondary, #4e5969);
-          font-weight: 600;
+        .step-badge-wrap {
+          display: flex;
+          align-items: center;
+          gap: 8px;
 
-          &.highlight {
-            background: var(--td-brand-color, #0052d9);
-            color: #ffffff;
+          .step-badge {
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+
+            &.l1 { background: rgba(0, 82, 217, 0.12); color: #0052d9; }
+            &.l2 { background: rgba(240, 160, 32, 0.14); color: #d46b08; }
+            &.l3 { background: rgba(102, 126, 234, 0.14); color: #5c6ac4; }
+            &.l4 { background: rgba(220, 53, 69, 0.12); color: #dc3545; }
+            &.l5 { background: rgba(43, 164, 113, 0.14); color: #2ba471; }
           }
-        }
 
-        .step-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--td-text-color-primary, #1d2129);
+          .step-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--td-text-color-primary, #1d2129);
+          }
         }
       }
 
@@ -2756,17 +2889,28 @@ onBeforeUnmount(() => {
       .tool-head {
         display: flex;
         align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
+        gap: 10px;
+        margin-bottom: 10px;
 
         .tool-icon {
-          font-size: 20px;
+          font-size: 24px;
         }
 
-        .tool-name {
-          font-size: 15px;
-          font-weight: 600;
-          color: var(--td-text-color-primary, #1d2129);
+        .tool-head-text {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+
+          .tool-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--td-text-color-primary, #1d2129);
+          }
+
+          .tool-sub {
+            font-size: 11px;
+            color: var(--td-text-color-secondary, #86909c);
+          }
         }
       }
 
@@ -2803,8 +2947,9 @@ onBeforeUnmount(() => {
 
           .hot-chip {
             font-size: 11px;
-            padding: 2px 8px;
+            padding: 3px 8px;
             border-radius: 4px;
+            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
             background: var(--td-bg-color-component, #f2f3f5);
             color: var(--td-text-color-secondary, #4e5969);
             cursor: pointer;
@@ -2812,6 +2957,7 @@ onBeforeUnmount(() => {
 
             &:hover {
               background: var(--td-brand-color-light, #ecf2fe);
+              border-color: var(--td-brand-color, #0052d9);
               color: var(--td-brand-color, #0052d9);
             }
           }
@@ -3432,8 +3578,26 @@ onBeforeUnmount(() => {
         border-color: #2e2e33 !important;
 
         .flow-step-node {
-          background: rgba(102, 126, 234, 0.2) !important;
-          color: #a5b4fc !important;
+          background: #2b2b32 !important;
+          color: #c9cdd4 !important;
+
+          .step-num {
+            background: rgba(255, 255, 255, 0.1) !important;
+          }
+
+          &:hover {
+            background: rgba(102, 126, 234, 0.25) !important;
+            color: #a5b4fc !important;
+          }
+
+          &.current {
+            background: #4f46e5 !important;
+            color: #ffffff !important;
+
+            .step-num {
+              background: rgba(255, 255, 255, 0.3) !important;
+            }
+          }
         }
 
         .flow-arrow {
@@ -3454,6 +3618,14 @@ onBeforeUnmount(() => {
             background: #2b2b32 !important;
             color: #a5b4fc !important;
             border-color: rgba(102, 126, 234, 0.5) !important;
+
+            .pill-name {
+              color: #a5b4fc !important;
+            }
+
+            .pill-code {
+              color: #818cf8 !important;
+            }
           }
 
           .banner-tag {
@@ -3470,6 +3642,29 @@ onBeforeUnmount(() => {
         }
 
         .banner-right {
+          .banner-hot-chips {
+            .hot-label {
+              color: #86909c !important;
+            }
+
+            .hot-chip-btn {
+              background: #2b2b32 !important;
+              border-color: #3e3e48 !important;
+              color: #c9cdd4 !important;
+
+              &:hover {
+                border-color: #818cf8 !important;
+                color: #a5b4fc !important;
+              }
+
+              &.active {
+                background: #4f46e5 !important;
+                border-color: #4f46e5 !important;
+                color: #ffffff !important;
+              }
+            }
+          }
+
           .banner-switch-btn {
             background: #2b2b32 !important;
             border-color: #4e5969 !important;
@@ -3498,18 +3693,18 @@ onBeforeUnmount(() => {
         }
 
         .step-header {
-          .step-badge {
-            background: #2b2b32 !important;
-            color: #c9cdd4 !important;
-
-            &.highlight {
-              background: #667eea !important;
-              color: #ffffff !important;
+          .step-badge-wrap {
+            .step-badge {
+              &.l1 { background: rgba(99, 102, 241, 0.2) !important; color: #a5b4fc !important; }
+              &.l2 { background: rgba(245, 158, 11, 0.2) !important; color: #fbbf24 !important; }
+              &.l3 { background: rgba(139, 92, 246, 0.2) !important; color: #c4b5fd !important; }
+              &.l4 { background: rgba(239, 68, 68, 0.2) !important; color: #f87171 !important; }
+              &.l5 { background: rgba(16, 185, 129, 0.2) !important; color: #34d399 !important; }
             }
-          }
 
-          .step-title {
-            color: #f2f3f5 !important;
+            .step-title {
+              color: #f2f3f5 !important;
+            }
           }
         }
 

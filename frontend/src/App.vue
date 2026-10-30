@@ -672,10 +672,10 @@ const menuOptions = ref([
                 query: {
                   name:"AI Agent 助手",
                 },
-                onClick: () => {
-                  activeKey.value = 'agent'
-                },
-              }
+              },
+              onClick: () => {
+                activeKey.value = 'agent'
+              },
             },
             {default: () => 'AI Agent 助手'}
         ),

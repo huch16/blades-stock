@@ -1,5 +1,11 @@
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, unref, type Ref, type ComputedRef } from 'vue'
 import type { ChatMessage } from './types'
+
+export type MaybeRefOrGetter<T> = T | Ref<T> | ComputedRef<T> | (() => T)
+
+function toValue<T>(source: MaybeRefOrGetter<T>): T {
+  return typeof source === 'function' ? (source as () => T)() : unref(source)
+}
 
 /**
  * 消息锚点导航 Composable
@@ -9,7 +15,12 @@ import type { ChatMessage } from './types'
  * - 键盘导航（j/k 上下跳转）
  * - 生成锚点导航栏数据
  */
-export function useMessageAnchor(messages: ChatMessage[]) {
+export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>) {
+  function getMessages(): ChatMessage[] {
+    const list = toValue(messagesSource)
+    return Array.isArray(list) ? list : []
+  }
+
   // 当前高亮的消息 ID
   const activeAnchor = ref<string | null>(null)
 
@@ -57,35 +68,39 @@ export function useMessageAnchor(messages: ChatMessage[]) {
 
   // 滚动到下一条消息
   function scrollToNext() {
-    const ids = messages.map(m => m.id)
+    const msgs = getMessages()
+    const ids = msgs.map(m => m.id)
     const currentIndex = activeAnchor.value ? ids.indexOf(activeAnchor.value) : -1
     const nextIndex = Math.min(currentIndex + 1, ids.length - 1)
-    if (nextIndex >= 0) {
+    if (nextIndex >= 0 && nextIndex < ids.length) {
       scrollToMessage(ids[nextIndex])
     }
   }
 
   // 滚动到上一条消息
   function scrollToPrev() {
-    const ids = messages.map(m => m.id)
+    const msgs = getMessages()
+    const ids = msgs.map(m => m.id)
     const currentIndex = activeAnchor.value ? ids.indexOf(activeAnchor.value) : ids.length
     const prevIndex = Math.max(currentIndex - 1, 0)
-    if (prevIndex >= 0) {
+    if (prevIndex >= 0 && prevIndex < ids.length) {
       scrollToMessage(ids[prevIndex])
     }
   }
 
   // 滚动到最新消息 (自然时间序中最后一个是最新)
   function scrollToLatest() {
-    if (messages.length > 0) {
-      scrollToMessage(messages[messages.length - 1].id)
+    const msgs = getMessages()
+    if (msgs.length > 0) {
+      scrollToMessage(msgs[msgs.length - 1].id)
     }
   }
 
   // 滚动到最旧消息 (自然时间序中第一个是最旧)
   function scrollToOldest() {
-    if (messages.length > 0) {
-      scrollToMessage(messages[0].id)
+    const msgs = getMessages()
+    if (msgs.length > 0) {
+      scrollToMessage(msgs[0].id)
     }
   }
 
@@ -198,13 +213,14 @@ export function useMessageAnchor(messages: ChatMessage[]) {
 
   // 生成导航栏数据
   const anchorNavItems = computed(() => {
-    return messages
+    const msgs = getMessages()
+    return msgs
       .filter(m => m.role === 'assistant' || m.content.length > 100) // 只显示 AI 回复或长用户消息
       .slice(0, 20) // 最多 20 个
       .map((msg, index) => ({
         id: msg.id,
         label: msg.role === 'assistant'
-          ? `AI 回复 ${messages.length - index}`
+          ? `AI 回复 ${msgs.length - index}`
           : `用户: ${msg.content.slice(0, 30)}...`,
         time: msg.datetime,
         role: msg.role,
@@ -228,7 +244,7 @@ export function useMessageAnchor(messages: ChatMessage[]) {
   })
 
   // 当 messages 变化时，重新观察新元素
-  watch(() => messages.length, () => {
+  watch(() => getMessages().length, () => {
     if (observer) {
       messageElements.forEach((el) => {
         if (el.id) observer.observe(el)
