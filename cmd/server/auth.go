@@ -12,6 +12,9 @@ import (
 	"blades-stock/backend/logger"
 )
 
+// DefaultAdminPassword 工业级系统统一预设/恢复管理员口令
+const DefaultAdminPassword = "2266762"
+
 // AuthConfig 访问鉴权配置
 type AuthConfig struct {
 	mu      sync.RWMutex
@@ -50,7 +53,13 @@ func initAuth(dataDir string) {
 		}
 	}
 
-	logger.SugaredLogger.Warn("[Auth] BLADES_AUTH_TOKEN is not set. System requires first-login password initialization.")
+	// 3. 工业级默认规则：自动启用统一预设管理员密码 (2266762) 并固化到存储
+	globalAuth.Token = DefaultAdminPassword
+	if dataDir != "" {
+		tokenFile := filepath.Join(dataDir, "auth.token")
+		_ = os.WriteFile(tokenFile, []byte(DefaultAdminPassword), 0o600)
+	}
+	logger.SugaredLogger.Info("[Auth] Access token protection is ENABLED with unified admin password (2266762).")
 }
 
 func getAuthToken() string {
@@ -123,7 +132,8 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			clientToken = strings.TrimSpace(r.URL.Query().Get("token"))
 		}
 
-		if subtle.ConstantTimeCompare([]byte(clientToken), []byte(serverToken)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(clientToken), []byte(serverToken)) != 1 &&
+			subtle.ConstantTimeCompare([]byte(clientToken), []byte(DefaultAdminPassword)) != 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]any{
@@ -145,14 +155,15 @@ func HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{
 		"code": 0,
 		"data": map[string]any{
-			"needInit":     serverToken == "",
-			"authRequired": true,
-			"version":      "1.6.0",
+			"needInit":        serverToken == "",
+			"authRequired":    true,
+			"version":         "1.8.0",
+			"defaultPassword": DefaultAdminPassword,
 		},
 	})
 }
 
-// HandleInitPassword 提供首次设置访问密码端点
+// HandleInitPassword 提供设置访问密码端点
 func HandleInitPassword(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -162,7 +173,7 @@ func HandleInitPassword(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	current := getAuthToken()
-	if current != "" {
+	if current != "" && current != DefaultAdminPassword {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{
 			"code":  400,
@@ -225,20 +236,14 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serverToken := getAuthToken()
+	if serverToken == "" {
+		serverToken = DefaultAdminPassword
+		_ = setAuthToken(serverToken)
+	}
 	w.Header().Set("Content-Type", "application/json")
 
-	// 若尚未设置密码，提示需先初始化
-	if serverToken == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{
-			"code":     400,
-			"needInit": true,
-			"error":    "系统尚未初始化访问密码，请先完成首次密码设置",
-		})
-		return
-	}
-
-	if subtle.ConstantTimeCompare([]byte(clientPwd), []byte(serverToken)) == 1 {
+	if subtle.ConstantTimeCompare([]byte(clientPwd), []byte(serverToken)) == 1 ||
+		subtle.ConstantTimeCompare([]byte(clientPwd), []byte(DefaultAdminPassword)) == 1 {
 		json.NewEncoder(w).Encode(map[string]any{
 			"code":    0,
 			"message": "登录验证成功",
@@ -253,7 +258,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(map[string]any{
 		"code":    401,
-		"error":   "访问密码错误，请重新输入",
+		"error":   "访问密码错误，请重新输入（统一默认密码：2266762）",
 		"data": map[string]any{
 			"authenticated": false,
 		},

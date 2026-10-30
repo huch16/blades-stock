@@ -31,7 +31,7 @@ function Build-Go {
         Rebuild-Graph
         $commit = (& git rev-parse --short HEAD) 2>$null
         if ([string]::IsNullOrEmpty($commit)) { $commit = "dev" }
-        $version = "1.6.0"
+        $version = "1.8.0"
         $buildKey = "blades-stock-release-key"
         $ldflags = "-s -w -H=windowsgui -X main.Version=$version -X main.VersionCommit=$commit -X main.BuildKey=$buildKey"
         Write-Host "  Building desktop binary with tags desktop,production..." -ForegroundColor Gray

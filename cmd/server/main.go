@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -21,6 +22,10 @@ import (
 )
 
 var (
+	// Version 编译注入版本号（默认 1.8.0）
+	Version       = "1.8.0"
+	VersionCommit = "release"
+
 	portFlag    = flag.String("port", "8000", "Web server listening port")
 	hostFlag    = flag.String("host", "0.0.0.0", "Web server listening host")
 	dataDirFlag = flag.String("data-dir", "data", "Path to data directory containing stock.db")
@@ -33,7 +38,8 @@ func main() {
 	// 1. 初始化日志
 	logger.InitLogger()
 	logger.SugaredLogger.Info("==================================================================")
-	logger.SugaredLogger.Info("   Blades Stock — Cloud-Native Web/SaaS Server Starting...        ")
+	logger.SugaredLogger.Infof("   Blades Stock — Cloud-Native Web/SaaS Server Starting (v%s)...", Version)
+	logger.SugaredLogger.Infof("   [Runtime Profile] Host Cores: %d | GOMAXPROCS: %d | Commit: %s", runtime.NumCPU(), runtime.GOMAXPROCS(0), VersionCommit)
 	logger.SugaredLogger.Info("==================================================================")
 
 	// 2. 确定数据目录并初始化 SQLite
@@ -45,6 +51,15 @@ func main() {
 	dbPath := filepath.Join(dataDir, "stock.db")
 	logger.SugaredLogger.Infof("[Database] Initializing SQLite at: %s", dbPath)
 	db.Init(dbPath)
+
+	// 开启 SQLite 工业级并发与内存缓存优化 (适应 2C/12G, 4C/8G 等不同 VPS)
+	if db.Dao != nil {
+		db.Dao.Exec("PRAGMA journal_mode = WAL;")
+		db.Dao.Exec("PRAGMA synchronous = NORMAL;")
+		db.Dao.Exec("PRAGMA busy_timeout = 10000;")
+		db.Dao.Exec("PRAGMA cache_size = -64000;") // 64MB 内存缓存加速热点数据查询
+		db.Dao.Exec("PRAGMA temp_store = MEMORY;")
+	}
 
 	// 执行全量数据表自动迁移与默认种子数据初始化 (确保全新安装具备完整表结构)
 	services.AutoMigrateAll()
@@ -181,7 +196,10 @@ func main() {
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":    "healthy",
 			"timestamp": time.Now().Unix(),
-			"version":   "1.6.0",
+			"version":   Version,
+			"commit":    VersionCommit,
+			"cores":     runtime.NumCPU(),
+			"maxprocs":  runtime.GOMAXPROCS(0),
 		})
 	})
 

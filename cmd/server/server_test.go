@@ -188,7 +188,7 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 	})
 	handler := AuthMiddleware(mux)
 
-	// 1. 初始状态：应当返回 needInit = true
+	// 1. 初始状态：工业级统一规则下，服务预设 DefaultAdminPassword (2266762)
 	reqStatus := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	wStatus := httptest.NewRecorder()
 	handler.ServeHTTP(wStatus, reqStatus)
@@ -198,14 +198,28 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 	var resStatus struct {
 		Code int `json:"code"`
 		Data struct {
-			NeedInit bool `json:"needInit"`
+			NeedInit        bool   `json:"needInit"`
+			Version         string `json:"version"`
+			DefaultPassword string `json:"defaultPassword"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(wStatus.Body).Decode(&resStatus); err != nil || !resStatus.Data.NeedInit {
-		t.Fatalf("expected needInit=true before init, got %+v", resStatus)
+	if err := json.NewDecoder(wStatus.Body).Decode(&resStatus); err != nil {
+		t.Fatalf("failed to decode /api/auth/status response: %v", err)
+	}
+	if resStatus.Data.DefaultPassword != "2266762" {
+		t.Fatalf("expected defaultPassword=2266762, got %s", resStatus.Data.DefaultPassword)
 	}
 
-	// 2. 初始化密码：设置初始密码为 test-suite-pass-2026
+	// 1.1 开箱即用验证：直接使用统一密码 2266762 登录成功
+	bodyDefault := bytes.NewBufferString(`{"password":"2266762"}`)
+	reqDefault := httptest.NewRequest(http.MethodPost, "/api/auth/login", bodyDefault)
+	wDefault := httptest.NewRecorder()
+	handler.ServeHTTP(wDefault, reqDefault)
+	if wDefault.Code != http.StatusOK {
+		t.Fatalf("expected 200 for unified default password login, got %d: %s", wDefault.Code, wDefault.Body.String())
+	}
+
+	// 2. 初始化/修改密码：设置新密码为 test-suite-pass-2026
 	bodyInit := bytes.NewBufferString(`{"password":"test-suite-pass-2026"}`)
 	reqInit := httptest.NewRequest(http.MethodPost, "/api/auth/init", bodyInit)
 	wInit := httptest.NewRecorder()

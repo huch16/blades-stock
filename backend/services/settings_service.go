@@ -33,8 +33,8 @@ type SettingsService struct {
 func NewSettingsService() *SettingsService {
 	return &SettingsService{
 		versionInfo: &models.VersionInfo{
-			Version:           "1.6.0",
-			Content:           "Settings Command Center & Industrial Disaster Recovery Overhaul",
+			Version:           "1.8.0",
+			Content:           "Industrial Multi-VPS Hybrid Architecture, Unified Auth & Native Mobile Engine",
 			OfficialStatement: "未经授权,禁止商业目的! 数据来源于网络,仅供参考;投资有风险,入市需谨慎",
 		},
 	}

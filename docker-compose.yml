@@ -1,8 +1,11 @@
 version: '3.8'
 
 # ==============================================================================
-# Blades Stock — Cloud-Native Web/SaaS 生产环境编排
-# 针对硬件配置优化：2核 CPU / 12G 内存 / 200GB SSD 云服务器 (Ubuntu 24.04)
+# Blades Stock — Cloud-Native Web/SaaS 生产环境编排 (v1.8.0)
+# 针对多规格 VPS 异构环境自适应调优：
+#   - 甲骨文云 (Oracle Cloud): 2核 CPU / 12G 内存
+#   - Instabox 云沙箱: 4核 CPU / 8G 内存
+#   - 以及通用 Ubuntu 24.04 VPS (1~8核 / 2~16G 内存)
 # ==============================================================================
 
 services:
@@ -21,12 +24,14 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PORT=${PORT:-8000}
-      # 公网访问安全口令（可在 .env 指定，若为空则在首次访问 Web 页面时引导设置）
-      - BLADES_AUTH_TOKEN=${BLADES_AUTH_TOKEN:-}
+      # 公网访问安全口令（默认统一为 2266762，亦可在 .env 中自定义覆盖）
+      - BLADES_AUTH_TOKEN=${BLADES_AUTH_TOKEN:-2266762}
       # 默认 SearXNG 聚合搜索端点
       - SEARXNG_URL=${SEARXNG_URL:-https://search.woha.men}
       # 可选外部 API Key 注入
       - TICKFLOW_API_KEY=${TICKFLOW_API_KEY:-}
+      # Go 内存软限制 (防止容器内存突增 OOM)
+      - GOMEMLIMIT=${GOMEMLIMIT:-}
     volumes:
       # 持久化挂载本地 SQLite 权威库、自选配置与历史数据
       - ./data:/app/data
@@ -35,12 +40,12 @@ services:
     deploy:
       resources:
         limits:
-          # 2核机器限制最多使用 1.8 核，预留 0.2 核保障宿主机系统与网络 I/O 稳定响应
-          cpus: '1.8'
-          # 12G 机器分配 4G 充裕内存给量化计算与行情内存缓存（剩余 8G 可分配给本地模型）
-          memory: 4G
+          # CPU 配额自适应：4核(如 Instabox)分配 3.8 核；2核(如甲骨文)可在 .env 配置为 1.8 核
+          cpus: '${BLADES_CPU_LIMIT:-3.8}'
+          # 内存限制自适应：8G(Instabox)与 12G(甲骨文)默认分配充裕 6G 内存给量化计算与缓存
+          memory: '${BLADES_MEM_LIMIT:-6G}'
         reservations:
-          cpus: '0.2'
+          cpus: '0.1'
           memory: 256M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]

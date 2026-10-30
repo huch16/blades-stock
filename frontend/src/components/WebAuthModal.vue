@@ -9,7 +9,7 @@
             <span class="brand-icon">⚔️</span>
             <span class="brand-title">Blades Stock</span>
             <n-tag size="small" type="success" :bordered="false" round style="margin-left: 8px">
-              Cloud-Native v1.6.0
+              Cloud-Native v1.8.0
             </n-tag>
           </div>
           <div class="card-subtitle">
@@ -71,9 +71,9 @@
         <template v-else>
           <n-alert type="info" :show-icon="true" class="auth-alert">
             <template #header>
-              🔐 云端安全防护已就绪
+              🔐 云端安全防护已就绪 (统一默认密码：2266762)
             </template>
-            当前服务运行于云端安全授权模式。请输入管理员访问密码以解锁量化模型与投研驾驶舱。
+            当前服务运行于云端安全授权模式。系统统一默认管理员密码为 <strong>2266762</strong>，验证后即可解锁量化投研驾驶舱。
           </n-alert>
 
           <div class="form-body">
@@ -83,7 +83,7 @@
                 type="password"
                 show-password-on="click"
                 size="large"
-                placeholder="请输入访问口令 / 管理员密码"
+                placeholder="请输入访问口令 (统一默认密码：2266762)"
                 :disabled="loading"
                 autofocus
                 @keyup.enter="handleLogin"
@@ -225,7 +225,7 @@ const showModal = ref(false)
 const isForced = ref(false)
 const needInit = ref(false)
 
-const tokenInput = ref('')
+const tokenInput = ref('2266762')
 const initPwd = ref('')
 const confirmPwd = ref('')
 const confirmInputRef = ref<any>(null)
@@ -303,7 +303,7 @@ const onOpenAuthModal = async (e: any) => {
   currentSavedToken.value = getAuthToken()
   isForced.value = mode === 'login'
   errorMsg.value = ''
-  tokenInput.value = ''
+  tokenInput.value = currentSavedToken.value || '2266762'
   initPwd.value = ''
   confirmPwd.value = ''
   showModal.value = true

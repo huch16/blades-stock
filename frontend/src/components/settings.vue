@@ -1313,7 +1313,7 @@ onBeforeUnmount(() => {
             🌐 云端 SaaS 运行时 (Web Service)
           </n-tag>
           <n-tag type="default" size="small" round :bordered="false" class="version-tag">
-            Blades v1.6.0
+            Blades v1.8.0
           </n-tag>
         </div>
         <div class="storage-indicator">
