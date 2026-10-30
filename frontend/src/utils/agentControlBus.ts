@@ -35,6 +35,36 @@ export function dispatchAgentAction(action: AgentAction) {
   }
 }
 
+export interface ConsultPayload {
+  question: string
+  stockCode?: string
+  stockName?: string
+  context?: string
+  mode?: 'auto' | 'react' | 'plan_execute' | 'direct'
+  autoSend?: boolean
+  timestamp?: number
+}
+
+let pendingConsult: ConsultPayload | null = null
+
+export function setPendingConsult(payload: ConsultPayload) {
+  pendingConsult = { ...payload, timestamp: Date.now() }
+}
+
+export function consumePendingConsult(): ConsultPayload | null {
+  const p = pendingConsult
+  pendingConsult = null
+  return p
+}
+
+export function getPendingConsult(): ConsultPayload | null {
+  return pendingConsult
+}
+
+export function clearPendingConsult() {
+  pendingConsult = null
+}
+
 /**
  * 快速呼叫智能体发起深度推演（跨组件统一入口）
  */
@@ -46,16 +76,21 @@ export function consultAgent(opts: {
   mode?: 'auto' | 'react' | 'plan_execute' | 'direct'
   autoSend?: boolean
 }) {
+  const payload: ConsultPayload = {
+    question: opts.question,
+    stockCode: opts.stockCode || '',
+    stockName: opts.stockName || '',
+    context: opts.context || '',
+    mode: opts.mode || 'plan_execute',
+    autoSend: opts.autoSend !== false,
+  }
+  
+  // 先落盘挂起缓存，防止异步路由加载延迟导致丢消息
+  setPendingConsult(payload)
+
   dispatchAgentAction({
     type: 'CONSULT_AGENT',
-    payload: {
-      question: opts.question,
-      stockCode: opts.stockCode || '',
-      stockName: opts.stockName || '',
-      context: opts.context || '',
-      mode: opts.mode || 'plan_execute',
-      autoSend: opts.autoSend !== false,
-    },
+    payload,
   })
 }
 

@@ -34,7 +34,7 @@ import { isWails, getAuthToken, webEventBus } from "./api/bridge";
 import MarketIntelligenceDrawer from "./components/MarketIntelligenceDrawer.vue";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
 import StockLightweightKlineChart from "./components/StockLightweightKlineChart.vue";
-import { initAgentControlBus, registerAgentActionHandler } from "./utils/agentControlBus";
+import { initAgentControlBus, registerAgentActionHandler, setPendingConsult } from "./utils/agentControlBus";
 import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
 import {ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
 import {LocalFireDepartmentRound} from "@vicons/material";
@@ -148,6 +148,7 @@ registerAgentActionHandler((action) => {
       // 跨组件一键呼叫全屏 AI 智能体推演中枢
       showAgentDiagnosisDrawer.value = false
       showMarketIntelligenceDrawer.value = false
+      setPendingConsult(action.payload)
       router.push({ name: 'agent' })
       activeKey.value = 'agent'
       setTimeout(() => {

@@ -476,10 +476,22 @@ function copyAnchorLink() {
 /* 操作栏 */
 .msg-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
   margin-top: 6px;
   padding-left: 4px;
   border-top: 1px solid var(--td-component-border);
   padding-top: 8px;
+}
+
+@media (max-width: 768px) {
+  .msg-actions {
+    gap: 4px 6px;
+  }
+  .msg-actions :deep(.t-button) {
+    padding: 0 4px;
+    font-size: 12px;
+  }
 }
 </style>

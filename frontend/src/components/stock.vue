@@ -42,6 +42,7 @@ import StockCard from './StockCard.vue'
 import StockDiagnosisDrawer from './StockDiagnosisDrawer.vue'
 import { useAiConfigStore } from '../stores/aiConfig'
 import { cleanFinalContent } from '../utils/cleanText'
+import { consultAgent } from '../utils/agentControlBus'
 import {
   NAvatar,
   NButton,
@@ -2014,6 +2015,28 @@ function checkPriceLineAlerts(result) {
   }
 }
 
+// 呼叫全屏 Agent 带着当前个股与买方认知档案进行深度量化推演
+function callAgentForDeepStockAnalysis(stockName: string, stockCode: string) {
+  modalShow4.value = false
+  const activeT = activeThesis.value
+  let contextText = `【标的信息】：${stockName} (${stockCode})\n`
+  if (activeT && activeT.verdictText) {
+    contextText += `前期买方认知档案判定：【${activeT.verdictText}】\n`
+    if (activeT.coreThesis) contextText += `核心假说: ${activeT.coreThesis}\n`
+    if (activeT.keyCatalysts) contextText += `跟踪催化: ${activeT.keyCatalysts}\n`
+    if (activeT.riskFactors) contextText += `证伪条件/防守位: ${activeT.riskFactors}\n`
+  }
+  const question = `请针对【${stockName} (${stockCode})】结合最新量化事实、盘口资金与技术筹码形态，进行买方深度推演。重点评估：1. 当前投资逻辑是维持、强化还是证伪；2. 关键阻力与防守支撑位；3. 预期催化剂与赔率胜率。`
+  consultAgent({
+    question,
+    stockCode,
+    stockName,
+    context: contextText,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
+}
+
 function aiReCheckStock(stock, stockCode) {
   if (data.loading) {
     message.warning("AI分析正在进行中，请稍候")
@@ -2818,6 +2841,9 @@ watch(modalShow6, (newVal) => {
             }"
         />
         <!--        <n-button size="tiny" type="error" @click="enableEditor=!enableEditor">编辑/预览</n-button>-->
+        <n-button size="tiny" type="primary" secondary style="font-weight: 600;" @click="callAgentForDeepStockAnalysis(data.name, data.code)">
+          🤖 呼叫 Agent 深度推演
+        </n-button>
         <n-button size="tiny" type="warning" @click="aiReCheckStock(data.name,data.code)">开始AI分析</n-button>
         <n-button size="tiny" type="info" @click="saveAsImage(data.name,data.code)">保存为图片</n-button>
         <n-button size="tiny" type="success" @click="copyToClipboard">复制到剪切板</n-button>

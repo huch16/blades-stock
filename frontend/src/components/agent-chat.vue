@@ -395,6 +395,7 @@ import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveS
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
 import { cleanFinalContent } from '@/utils/cleanText'
+import { consumePendingConsult } from '../utils/agentControlBus'
 import {
   useMessageAnchor,
   type ChatMessage,
@@ -956,10 +957,20 @@ function clearCurrentHistory() {
 }
 
 // ========== 跨组件咨询接入与买方立论记忆入库 ==========
+const lastConsultStock = ref<{ code: string; name: string } | null>(null)
+
 function handleAgentConsult(payload: any) {
   if (!payload) return
   const { question, stockCode, stockName, context, mode, autoSend } = payload
   if (!question && !context) return
+
+  // 记录最近一次咨询的标的上下文，供后续买方立论归档提取兜底
+  if (stockCode || stockName) {
+    lastConsultStock.value = {
+      code: stockCode || '',
+      name: stockName || ''
+    }
+  }
 
   // 1. 设置执行模式
   if (mode && ['auto', 'react', 'plan_execute', 'direct'].includes(mode)) {
@@ -994,58 +1005,111 @@ function onWindowAgentConsult(e: any) {
 function extractThesisFromText(text: string, defaultCode?: string, defaultName?: string) {
   if (!text) return null
 
-  // 1. 识别股票代码 (标准 6 位 A 股/ETF 代码)
+  // 1. 识别股票代码 (标准 6 位 A 股/ETF 代码，支持兼容 sh/sz 前缀、.SH/.SZ 后缀以及 Markdown 标记)
   let code = defaultCode || ''
   if (!code) {
-    const codeMatch = text.match(/\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b/)
-    if (codeMatch) code = codeMatch[1]
+    // 优先匹配标准 6 位代码
+    const codeMatch = text.match(/(?:sh|sz|bj)?\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b(?:\.(?:SH|SZ|BJ))?/i)
+    if (codeMatch) {
+      code = codeMatch[1]
+    } else if (lastConsultStock.value?.code) {
+      code = lastConsultStock.value.code
+    }
   }
   if (!code) return null
 
-  // 2. 识别股票名称
+  // 2. 识别股票名称 (支持多种常见 Markdown、括号与标的引导词格式)
   let name = defaultName || ''
   if (!name) {
-    const nameMatch = text.match(/[【(（]([A-Za-z\u4e00-\u9fa5\d]+)[)）】]\s*(?:[(（]?\b\d{6}\b[)）]?)/) ||
-                      text.match(/【([A-Za-z\u4e00-\u9fa5\d]+)\s*[0-9]{6}】/)
-    if (nameMatch) name = nameMatch[1]
+    const namePatterns = [
+      /[【(（]([A-Za-z\u4e00-\u9fa5\d]+)[)）】]\s*(?:[(（]?(?:sh|sz|bj)?\b\d{6}\b(?:\.(?:SH|SZ|BJ))?[)）]?)/,
+      /【([A-Za-z\u4e00-\u9fa5\d]+)\s*[0-9]{6}】/,
+      /(?:标的(?:名称|代码)?|股票(?:名称)?|分析标的)[：:\s*]+(?:\*\*)?([A-Za-z\u4e00-\u9fa5\d]+)(?:\*\*)?/,
+      /(?:\*\*|__)([A-Za-z\u4e00-\u9fa5\d]+)(?:\*\*|__)\s*[(（]\s*\d{6}\s*[)）]/,
+      /([A-Za-z\u4e00-\u9fa5\d]+)\s*[(（]\s*(?:sh|sz|bj)?\d{6}(?:\.(?:SH|SZ|BJ))?\s*[)）]/
+    ]
+    for (const pat of namePatterns) {
+      const match = text.match(pat)
+      if (match && match[1] && match[1].length >= 2 && match[1].length <= 12) {
+        name = match[1].trim()
+        break
+      }
+    }
+    if (!name && lastConsultStock.value?.name) {
+      name = lastConsultStock.value.name
+    }
   }
 
-  // 3. 识别买方五维定性判定
+  // 3. 识别买方五维定性判定 (多维金融自然语言模糊匹配)
   let verdict = 'NO_CHANGE'
   let verdictText = '维持现状'
-  if (text.includes('逻辑强化') || text.includes('THESIS_STRENGTHENED') || text.includes('强烈买入') || text.includes('积极做多')) {
+  if (
+    text.includes('逻辑强化') ||
+    text.includes('THESIS_STRENGTHENED') ||
+    text.includes('强烈买入') ||
+    text.includes('积极做多') ||
+    text.includes('超预期') ||
+    text.includes('突破确认') ||
+    text.includes('多头共振')
+  ) {
     verdict = 'THESIS_STRENGTHENED'
     verdictText = '逻辑强化'
-  } else if (text.includes('逻辑证伪') || text.includes('THESIS_BROKEN') || text.includes('清仓止损') || text.includes('强风控空仓')) {
+  } else if (
+    text.includes('逻辑证伪') ||
+    text.includes('THESIS_BROKEN') ||
+    text.includes('清仓止损') ||
+    text.includes('破位止损') ||
+    text.includes('强风控空仓') ||
+    text.includes('假说破灭')
+  ) {
     verdict = 'THESIS_BROKEN'
     verdictText = '逻辑证伪'
-  } else if (text.includes('逻辑削弱') || text.includes('THESIS_WEAKENED') || text.includes('谨慎防守') || text.includes('逢高减仓')) {
+  } else if (
+    text.includes('逻辑削弱') ||
+    text.includes('THESIS_WEAKENED') ||
+    text.includes('谨慎防守') ||
+    text.includes('逢高减仓') ||
+    text.includes('不及预期') ||
+    text.includes('动能衰减') ||
+    text.includes('冲高回落')
+  ) {
     verdict = 'THESIS_WEAKENED'
     verdictText = '逻辑削弱'
-  } else if (text.includes('首次建档') || text.includes('新论点') || text.includes('首次立论') || text.includes('NEW_THESIS')) {
+  } else if (
+    text.includes('首次建档') ||
+    text.includes('新论点') ||
+    text.includes('首次立论') ||
+    text.includes('NEW_THESIS') ||
+    text.includes('首次覆盖') ||
+    text.includes('新建仓')
+  ) {
     verdict = 'NEW_THESIS'
     verdictText = '首次立论'
   }
 
-  // 4. 提取核心投资假说
+  // 4. 提取核心投资假说 (过滤 Markdown 符号)
   let coreThesis = ''
-  const thesisMatch = text.match(/(?:核心投资逻辑|核心假说|核心立论|投资逻辑|核心论点)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  const thesisMatch = text.match(/(?:核心投资逻辑|核心假说|核心立论|投资逻辑|核心论点|买方论据)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
   if (thesisMatch) {
     coreThesis = thesisMatch[1].replace(/[#*`]/g, '').trim()
   } else {
-    coreThesis = text.slice(0, 160).replace(/[#*`]/g, '').trim()
+    // 提取正文第一段有实质意义的内容
+    const cleanLines = text.split('\n')
+      .map(l => l.replace(/[#*`]/g, '').trim())
+      .filter(l => l.length > 15 && !l.startsWith('好的') && !l.startsWith('收到') && !l.includes('免责声明'))
+    coreThesis = cleanLines.length > 0 ? cleanLines[0].slice(0, 160) : text.slice(0, 160).replace(/[#*`]/g, '').trim()
   }
 
   // 5. 提取重点跟踪催化剂
   let keyCatalysts = ''
-  const catMatch = text.match(/(?:催化剂|跟踪催化剂|核心催化|催化事件|关键催化)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  const catMatch = text.match(/(?:催化剂|跟踪催化剂|核心催化|催化事件|关键催化|关键事件)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
   if (catMatch) {
     keyCatalysts = catMatch[1].replace(/[#*`]/g, '').trim()
   }
 
   // 6. 提取证伪条件与防守止损
   let riskFactors = ''
-  const riskMatch = text.match(/(?:证伪条件|风险因素|反转条件|止损条件|防守位|黑天鹅风险)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  const riskMatch = text.match(/(?:证伪条件|风险因素|反转条件|止损条件|防守位|黑天鹅风险|下行风险)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
   if (riskMatch) {
     riskFactors = riskMatch[1].replace(/[#*`]/g, '').trim()
   }
@@ -1121,6 +1185,14 @@ onMounted(async () => {
   EventsOn('agent:consult', handleAgentConsult)
   if (typeof window !== 'undefined') {
     window.addEventListener('agent:consult', onWindowAgentConsult)
+  }
+
+  // 消费挂起的跨组件咨询任务 (消除异步路由加载延迟导致丢消息的问题)
+  const pending = consumePendingConsult()
+  if (pending) {
+    nextTick(() => {
+      handleAgentConsult(pending)
+    })
   }
 
   GetConfig().then((res) => {
@@ -1854,6 +1926,34 @@ onBeforeUnmount(() => {
           padding: 3px 6px !important;
           font-size: 11px !important;
         }
+      }
+    }
+  }
+
+  .macro-perception-hud {
+    padding: 6px 10px !important;
+    gap: 6px !important;
+
+    .hud-left {
+      gap: 6px !important;
+      font-size: 11px !important;
+
+      .phase-pill {
+        padding: 1px 6px !important;
+        font-size: 11px !important;
+      }
+      .breadth-ratio {
+        font-size: 11px !important;
+      }
+    }
+
+    .hud-right {
+      gap: 6px !important;
+      .risk-tag {
+        display: none !important;
+      }
+      .action-hint {
+        font-size: 11px !important;
       }
     }
   }

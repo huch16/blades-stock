@@ -649,8 +649,16 @@ const router = useRouter()
 const isAgentRoute = computed(() => route?.name === 'agent' || route?.path === '/agent')
 
 function expandToFullScreen() {
+  const draft = (inputValue.value || '').trim()
   closePanel()
-  router.push({ name: 'agent' })
+  if (draft) {
+    consultAgent({
+      question: draft,
+      autoSend: false,
+    })
+  } else {
+    router.push({ name: 'agent' })
+  }
 }
 
 function triggerMarketIntelligence(type) {
@@ -663,7 +671,7 @@ function triggerMarketIntelligence(type) {
   }
 }
 import { cleanFinalContent } from '../utils/cleanText'
-import { dispatchAgentAction } from '../utils/agentControlBus'
+import { dispatchAgentAction, consultAgent } from '../utils/agentControlBus'
 import { currentStock } from '../utils/stockContextBus'
 
 const STORAGE_KEY_MODEL_ID = 'blades-stock-agent-last-model-id'

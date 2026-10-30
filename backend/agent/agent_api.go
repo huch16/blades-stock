@@ -236,9 +236,22 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		// 标的历史买方认知档案 (Stock Thesis Ledger) 前置注入 (实现认知连续演化，严禁割裂历史立论)
 		reCode := regexp.MustCompile(`\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b`)
-		if codeMatch := reCode.FindString(question); codeMatch != "" {
+		targetStockCode := reCode.FindString(question)
+		// 若当前提问未显式包含股票代码 (例如连续多轮追问 "它如果跌破止损位怎么办"), 逆序回溯历史消息查找最近提及的股票代码
+		if targetStockCode == "" && len(historyMessages) > 0 {
+			for i := len(historyMessages) - 1; i >= 0; i-- {
+				if hmContent := historyMessages[i]["content"]; hmContent != "" {
+					if hmCode := reCode.FindString(hmContent); hmCode != "" {
+						targetStockCode = hmCode
+						break
+					}
+				}
+			}
+		}
+
+		if targetStockCode != "" {
 			thesisApi := data.NewStockThesisApi()
-			if thesis, err := thesisApi.GetStockThesis(codeMatch); err == nil && thesis != nil && thesis.ID > 0 {
+			if thesis, err := thesisApi.GetStockThesis(targetStockCode); err == nil && thesis != nil && thesis.ID > 0 {
 				sysPrompt += fmt.Sprintf("\n\n【标的历史买方认知档案（供连续性演化参考）】：\n标的代码: %s (%s)\n前期认知判定: 【%s】\n核心假说: %s\n重点跟踪催化: %s\n证伪条件/防守位: %s\n请结合最新量化事实与盘口资金，重点论证该买方逻辑是维持、强化还是证伪，严禁割裂前期认知。",
 					thesis.StockCode, thesis.StockName, thesis.VerdictText, thesis.CoreThesis, thesis.KeyCatalysts, thesis.RiskFactors)
 			}
