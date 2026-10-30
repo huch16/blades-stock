@@ -67,14 +67,13 @@
       <div class="msg-main-content" :id="anchorId">
         <t-chat-content v-if="content" :content="content" />
         <div v-else-if="isStreaming" class="streaming-placeholder">
-          <StreamingSkeleton
-            :lines="estimatedLines"
-            :content="rawContent"
-            :char-mode="true"
-            :cursor="true"
-            :show-end="false"
-            @complete="onSkeletonComplete"
-          />
+          <!-- 采用与首行文本等高的紧凑打字占位符，彻底消除原 5 行骨架屏 (150px) 瞬间坍缩为首字 1 行 (24px) 的剧烈上下震荡 -->
+          <div class="compact-typing-indicator">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-text">{{ message.statusText || '正在思考并撰写投研报告...' }}</span>
+          </div>
         </div>
         <div v-else class="empty-state">（空回复）</div>
       </div>
@@ -89,10 +88,10 @@
         <span v-if="metrics.cost_usd" class="metric-tag" title="预估成本">💰 $${metrics.cost_usd.toFixed(4)}</span>
       </div>
 
-      <!-- 7. 消息操作栏 -->
-      <div class="msg-actions">
+      <!-- 7. 消息操作栏 (生成中隐藏，完成后渐入，杜绝操作条随流式文本逐行下移震荡) -->
+      <div v-if="!isStreaming" class="msg-actions">
         <t-button
-          v-if="!isStreaming && hasStockThesisPotential"
+          v-if="hasStockThesisPotential"
           size="small"
           variant="text"
           theme="primary"
@@ -434,8 +433,44 @@ function copyAnchorLink() {
 .streaming-placeholder {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 80px;
+  min-height: 28px;
+  padding: 4px 0;
+}
+
+.compact-typing-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--td-text-color-secondary, #4e5969);
+
+  .typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--td-brand-color, #0052d9);
+    animation: typing-bounce 1.4s infinite ease-in-out both;
+
+    &:nth-child(1) { animation-delay: -0.32s; }
+    &:nth-child(2) { animation-delay: -0.16s; }
+  }
+
+  .typing-text {
+    font-size: 12px;
+    opacity: 0.85;
+    letter-spacing: 0.3px;
+  }
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .empty-state {

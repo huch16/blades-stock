@@ -756,6 +756,7 @@ function finalizeStream(targetMsg?: ChatMessage) {
 
 // ========== 滚动控制 ==========
 let userIsScrolledUp = false
+let scrollRafId: number | null = null
 
 function handleScroll() {
   const el = messagesContainer.value
@@ -766,19 +767,31 @@ function handleScroll() {
 }
 
 function autoScrollIfNearBottom() {
-  if (!userIsScrolledUp) {
-    scrollToBottom(false)
-  }
+  if (userIsScrolledUp) return
+  if (scrollRafId !== null) return
+  // 使用 requestAnimationFrame 节流，与浏览器刷新率 (60fps/120fps) 严格同步，彻底消除流式高频触发的掉帧与抖动
+  scrollRafId = requestAnimationFrame(() => {
+    scrollRafId = null
+    const el = messagesContainer.value
+    if (el && !userIsScrolledUp) {
+      // 流式生成中必须使用瞬时赋值，严禁 smooth 滚动（smooth 与高频新 Token 会产生持续打断震荡）
+      el.scrollTop = el.scrollHeight
+    }
+  })
 }
 
-function scrollToBottom(smooth = true) {
+function scrollToBottom(smooth = false) {
   nextTick(() => {
     const el = messagesContainer.value
     if (el) {
-      el.scrollTo({
-        top: el.scrollHeight,
-        behavior: smooth ? 'smooth' : 'auto',
-      })
+      if (smooth) {
+        el.scrollTo({
+          top: el.scrollHeight,
+          behavior: 'smooth',
+        })
+      } else {
+        el.scrollTop = el.scrollHeight
+      }
     }
   })
 }
@@ -1222,6 +1235,10 @@ onBeforeUnmount(() => {
     perceptionTimer = null
   }
   EventsOff('agent:consult', handleAgentConsult)
+  if (scrollRafId !== null) {
+    cancelAnimationFrame(scrollRafId)
+    scrollRafId = null
+  }
   if (typeof window !== 'undefined') {
     window.removeEventListener('agent:consult', onWindowAgentConsult)
   }
@@ -1430,7 +1447,9 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   padding: 20px 24px 30px;
   position: relative;
-  scroll-behavior: smooth;
+  /* 禁用默认平滑滚动（平滑滚动会与高频流式 SSE 渲染产生冲突导致上下抽搐），改由特定动作显式触发 */
+  /* 禁用浏览器默认锚定，防止动态 Markdown 渲染时与 JS scrollTop 吸底竞争导致剧烈上下抖动 */
+  overflow-anchor: none;
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -1644,11 +1663,16 @@ onBeforeUnmount(() => {
     align-items: center;
     margin-bottom: 8px;
     font-size: 12px;
+    min-height: 28px;
+    line-height: 28px;
 
     .quick-chips {
       display: flex;
       gap: 6px;
       overflow-x: auto;
+      flex: 1;
+      min-width: 0;
+      flex-wrap: nowrap;
       padding-bottom: 2px;
 
       &::-webkit-scrollbar {
@@ -1668,6 +1692,7 @@ onBeforeUnmount(() => {
       font-size: 12px;
       color: var(--td-text-color-secondary, #4e5969);
       white-space: nowrap;
+      flex-shrink: 0;
       transition: all 0.2s;
 
       &:hover {
@@ -1683,6 +1708,8 @@ onBeforeUnmount(() => {
       color: var(--td-brand-color, #0052d9);
       font-size: 12px;
       white-space: nowrap;
+      flex-shrink: 0;
+      margin-left: 10px;
 
       .live-dot {
         width: 8px;
