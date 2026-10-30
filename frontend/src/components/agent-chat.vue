@@ -825,66 +825,140 @@ function submitModalStockAction() {
   showStockActionModal.value = false
 
   if (targetStockAction.value === 'diag') {
-    applyScenario(`请对 ${codeA} 进行全维度深度诊断，涵盖：1. 估值与基本面财务；2. 近期日K线量价与关键支撑阻力位；3. 主力资金进出动向；4. 核心催化与潜在风险，并给出买方 5-Verdict 确定性评级与止损下行底线。`)
+    applyScenario(`【L4 个股全景四维体检】请对股票 ${codeA} 进行全维度量化深度诊断：
+1. 优先调用系统内置 DiagnoseStock(${codeA}) 获取 VectorBT 向量化回测置信胜率、量化综合评分与关键支撑阻力位；
+2. 调用 GetEastMoneyKLineWithMA(${codeA}, "day", 60) 查看日K线均线系统与量价趋势；
+3. 调用 GetStockFinancialInfo(${codeA}) 与 GetStockLatestFinance(${codeA}) 穿透营收利润与真实ROE；
+4. 调用 GetStockHolderTrend(${codeA}) 穿透近几个季度股东户数增减与筹码集中度。
+【执行纪律】：严禁调用 WebSearch 从外网抓取陈旧碎片。直接输出结构化量化研报，严禁在正文输出"下一步需要调用..."等机械规划文字。`)
   } else if (targetStockAction.value === 'risk') {
-    applyScenario(`请对 ${codeA} 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。`)
+    applyScenario(`【L4 筹码与风险极限排雷】请对股票 ${codeA} 进行深度排雷诊断：
+1. 调用 GetStockHolderTrend(${codeA}) 穿透股东户数变动趋势，判断主力吸筹或散户接盘；
+2. 调用 GetStockMarginTrading(${codeA}) 分析两融杠杆资金多空动向；
+3. 核查控股股东股权质押比例、未来一年限售解禁日程、商誉减值与资产负债率风险。
+【执行纪律】：严禁调用 WebSearch。直接输出专业排雷研报与风控评级。`)
   } else if (targetStockAction.value === 'finance') {
-    applyScenario(`请深入体检 ${codeA} 的财务报表：对比近3年营业收入与扣非净利润、真实ROE与销售净利率、分析经营现金流净额与净利润比值，验证其盈利真实性。`)
+    applyScenario(`【L4 财报体检与真实ROE验证】请调用系统内置 GetStockFinancialInfo(${codeA}) 与 GetStockLatestFinance(${codeA}) 深度体检财务质量：
+1. 对比近3年营业收入与扣非净利润增长趋势；
+2. 穿透销售毛利率、真实ROE与净利率水平；
+3. 核验经营活动现金流净额与净利润比值，验证其盈利真实性，排查应收账款与坏账风险。
+【执行纪律】：严禁调用 WebSearch。直接输出财务健康度体检结论。`)
   } else if (targetStockAction.value === 'pk') {
-    applyScenario(`请对比分析 ${codeA} 与 ${codeB}：横向比较两者的商业壁垒、估值水平、财务成长质量、近期机构资金偏好以及走势强弱差异。`)
+    applyScenario(`【L4 赛道双龙头深度PK】请调用系统内置量化与行情工具，对比分析股票 ${codeA} 与 ${codeB}：
+1. 分别调用 GetEastMoneyKLineWithMA(${codeA}, "day", 60) 与 GetEastMoneyKLineWithMA(${codeB}, "day", 60) 对比量价强弱与均线排列；
+2. 分别调用 GetStockLatestFinance 对比两者的市盈率估值、真实ROE与营收成长质量；
+3. 分别调用 GetStockHolderTrend 对比两者的筹码集中度变动。
+【执行纪律】：严禁调用 WebSearch。直接输出双龙头横向对比报告与配置优选建议。`)
   }
 }
 
-// ========== 五阶时序流水线快速执行方法 ==========
+// ========== 五阶时序流水线快速执行方法（全链路绑定 Blades 内置工具与权威数据） ==========
 function executeStep1() {
-  applyScenario('请分析当前沪深300与中证A500的市盈率PE、历史分位数及前五大板块权重，结合全市场涨跌家数比与多空红绿灯节律，给出宏观择时评级与建议总仓位上限。')
+  const snap = perceptionSnapshot.value
+  let realTimeFacts = ''
+  if (snap) {
+    const lightText = getTrafficText(snap.TrafficLight || snap.trafficLight)
+    const phase = snap.Phase || snap.phaseDesc || snap.clockPhase || '正常交易时钟'
+    const up = snap.UpCount || snap.upCount || 0
+    const down = snap.DownCount || snap.downCount || 0
+    const limitUp = snap.LimitUpCount || snap.limitUpCount || 0
+    const limitDown = snap.LimitDownCount || snap.limitDownCount || 0
+    realTimeFacts = `
+【系统实时态势感知一手事实（由 blades 引擎刚刚捕获）】：
+- 盘面交易节律：${phase}
+- 多空红绿灯状态：${lightText} (${snap.TrafficLight || snap.trafficLight})
+- 全市场涨跌家数比：上涨 ${up} 家 vs 下跌 ${down} 家
+- 涨跌停极端对比：涨停 ${limitUp} 家 vs 跌停 ${limitDown} 家`
+  }
+
+  applyScenario(`【L1 宏观大势与仓位择时】${realTimeFacts}
+【执行纪律与工具调用要求】：
+1. 优先调用系统内置 GetMarketData 获取核心宽基指数（上证指数 000001、沪深300 000300、创业板指 399006）的最新行情截面，严禁调用 WebSearch 从外网抓取过时新闻碎片！
+2. 严禁在回答中输出任何"下一步需要调用..."、"我将查询..."等机械思考或规划句子。
+3. 直接输出结构化宏观研报：
+   - 一、大盘核心指数行情与量价均线态势（调用 GetMarketData）
+   - 二、全市场微观多空博弈与红绿灯节律诊断（结合上述系统实盘数据）
+   - 三、宏观择时评级与总仓位上限指导（必须给出明确的最高持仓上限百分比，例如 ≤30% 或 ≤70%）。`)
 }
 
 function executeStep2(type: 'etf' | 'seats') {
   if (type === 'etf') {
-    applyScenario('请调用 GetETFMomentumRanking 工具获取当前场内核心 ETF 21日加权动量排名，并根据动量数值分析当前最强进攻板块与防御配置建议。')
+    applyScenario(`【L2 赛道主线轮动】请调用系统内置 GetETFMomentumRanking 工具获取场内核心 ETF 21日加权动量排名：
+1. 严禁调用 WebSearch 从外网搜索。
+2. 完整列出动量评分 >0 的正动量进攻候选池，并根据动量衰减度指出当前资金流入最强的主线板块；
+3. 对动量 <=0 的防守/规避板块给出调仓规避建议。
+4. 直接输出研报正文，严禁输出任何机械调用步骤或规划文字。`)
   } else {
-    applyScenario('请查询最近一个交易日的龙虎榜机构席位明细与上榜汇总，重点筛选机构专用席位大额净买入的股票，分析机构资金的真实建仓意图。')
+    applyScenario(`【L2 主力风向追踪】请调用系统内置 GetLongTigerList / GetStockBillboard 工具获取最新龙虎榜明细：
+1. 严禁使用 WebSearch。
+2. 重点筛选机构专用席位大额净买入的股票及所属板块，分析机构资金的真实建仓方向；
+3. 排查游资席位是否存在"一日游"打板出逃迹象。
+4. 直接输出研报正文，严禁输出机械调用步骤。`)
   }
 }
 
 function executeStep3(type: 'breakout' | 'dividend') {
   if (type === 'breakout') {
-    applyScenario('请帮我利用量化策略筛选当前市场上呈现均线多头排列且成交量放量突破整理平台的强势个股，并给出具体技术面评分和选股理由。')
+    applyScenario(`【L3 量化多因子选股池】请利用系统内置量化筛选工具（如 SearchStockByIndicators / FilterStocks / HotStrategyTable）：
+1. 筛选当前市场上呈现均线多头排列（MA5>MA10>MA20）、成交量放量突破近期整理平台的强势标的；
+2. 严禁调用 WebSearch 搜外网概念股；
+3. 输出入选股票的具体代码、名称、技术面评分与突破确认点位。
+4. 直接输出选股清单与逻辑，严禁输出机械规划步骤。`)
   } else {
-    applyScenario('请筛选市盈率PE<15、近三年股息率>3.5%、ROE>12%的高股息稳健型股票，评估其安全边际与抗跌属性。')
+    applyScenario(`【L3 价值防守选股池】请利用系统内置量化工具：
+1. 筛选市盈率PE<15、近三年平均股息率>3.5%、ROE>12%的高股息稳健型股票；
+2. 严禁调用 WebSearch；
+3. 评估入选标的的安全边际与抗跌属性，给出防御性底仓配置建议。
+4. 直接输出选股结论，严禁输出机械规划步骤。`)
   }
 }
 
 function executeStep4(action: 'diag' | 'risk' | 'finance') {
   const code = (step4StockInput.value || '600519').trim()
   if (action === 'diag') {
-    applyScenario(`请对 ${code} 进行全维度深度诊断，涵盖：1. 估值与基本面财务；2. 近期日K线量价与支撑阻力；3. 主力资金进出动向；4. 核心催化与潜在风险，并给出买方 5-Verdict 裁决与明确的下行证伪止损线。`)
+    applyScenario(`【L4 个股全景深度体检】请对股票 ${code} 进行全维度深度量化诊断：
+1. 优先调用系统内置 DiagnoseStock(${code}) 获取 VectorBT 向量化回测置信胜率、量化综合评分与第一目标价/止损位；
+2. 调用 GetEastMoneyKLineWithMA(${code}, "day", 60) 查看日K线均线系统与关键支撑阻力位；
+3. 调用 GetStockFinancialInfo(${code}) 与 GetStockLatestFinance(${code}) 穿透营收利润与真实ROE；
+4. 调用 GetStockHolderTrend(${code}) 穿透股东户数集中度与主力资金动向。
+【执行纪律】：严禁调用 WebSearch。直接输出专业研报，给出买方 5-Verdict 确定性评级与明确的下行证伪止损线，严禁输出机械思考文字。`)
   } else if (action === 'risk') {
-    applyScenario(`请对 ${code} 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。`)
+    applyScenario(`【L4 筹码与风险极限排雷】请对股票 ${code} 进行深度排雷：
+1. 调用 GetStockHolderTrend(${code}) 穿透股东户数集中度趋势；
+2. 调用 GetStockMarginTrading(${code}) 分析两融杠杆资金多空动向；
+3. 核查控股股东股权质押比例、未来一年限售解禁日程、商誉减值与资产负债率风险。
+【执行纪律】：严禁调用 WebSearch。直接输出风控评级与排雷研报。`)
   } else {
-    applyScenario(`请深入体检 ${code} 的财务报表：对比近3年营业收入与扣非净利润、真实ROE与销售净利率、分析经营现金流净额与净利润比值，验证其盈利真实性。`)
+    applyScenario(`【L4 财报体检与真实ROE验证】请调用系统内置 GetStockFinancialInfo(${code}) 与 GetStockLatestFinance(${code}) 深度体检财务质量：
+1. 对比近3年营业收入与扣非净利润增长趋势；
+2. 穿透销售毛利率、真实ROE与销售净利率；
+3. 核验经营活动现金流净额与净利润比值，验证其盈利真实性，排查应收账款异常。
+【执行纪律】：严禁调用 WebSearch。直接输出财务健康度结论。`)
   }
 }
 
 function executeStep5() {
-  applyScenario('请说明 Blades 买方认知账本与 5-Verdict 评级规范：包括【强力买入、逢低布局、观望等待、逢高减持、规避离场】的评定准则、核心买入立论提取以及下行证伪止损底线的设定方法。')
+  applyScenario(`【L5 买方立论与 5-Verdict 裁决】请根据 Blades 买方量化投研体系，阐明决策终局与认知账本规范：
+1. 详细说明【强力买入、逢低布局、观望等待、逢高减持、规避离场】五级裁决的评定边界；
+2. 说明如何提取核心买入立论假说、核心催化剂日程、以及明确的下行证伪止损底线；
+3. 说明如何调用系统内置 SaveStockThesis 工具将分析结论持久化存入买方认知账本。
+【执行纪律】：直接输出专业买方规范，严禁输出机械调用步骤。`)
 }
 
 function executeDirectDiag() {
   const code = (directDiagCode.value || '600519').trim()
-  applyScenario(`请对 ${code} 进行全维度深度诊断，涵盖基本面财务、K线形态与量价趋势、主力资金动向，并给出买方 5-Verdict 确定性评级。`)
+  applyScenario(`【L4 极速全维体检】请对股票 ${code} 进行全维度深度诊断：优先调用系统内置 DiagnoseStock(${code}) 获取 VectorBT 量化评分与置信胜率，调用 GetEastMoneyKLineWithMA(${code}, "day", 60) 查看均线量价，调用 GetStockLatestFinance 查看财务质量。严禁调用 WebSearch。直接给出买方 5-Verdict 裁决与止损位。`)
 }
 
 function executeDirectRisk() {
   const code = (directRiskCode.value || '600519').trim()
-  applyScenario(`请对 ${code} 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。`)
+  applyScenario(`【L4 专项极限排雷】请对股票 ${code} 进行深度排雷：调用 GetStockHolderTrend(${code}) 查看股东户数集中度，调用 GetStockMarginTrading(${code}) 查看两融杠杆，核查股权质押与限售解禁日程。严禁调用 WebSearch。直接输出综合排雷评级。`)
 }
 
 function executeDirectPK() {
   const a = (pkCodeA.value || '300750').trim()
   const b = (pkCodeB.value || '002594').trim()
-  applyScenario(`请对比分析 ${a} 与 ${b}：比较两者的商业壁垒、估值水平、财务成长质量、近期机构资金偏好以及走势强弱差异。`)
+  applyScenario(`【L4 双龙头横向对比】请调用系统内置量化工具对比 ${a} 与 ${b}：分别对比两者的日K量价走势（GetEastMoneyKLineWithMA）、最新财务ROE与估值（GetStockLatestFinance）、以及筹码集中度（GetStockHolderTrend）。严禁调用 WebSearch。直接输出双龙对比结论。`)
 }
 
 function applyPresetPK(a: string, b: string) {
@@ -1017,7 +1091,7 @@ const scenarioCards = [
     title: 'ETF 加权动量轮动',
     desc: '计算全市场核心宽基与行业 ETF 21日加权动量评分，捕捉进攻主线。',
     example: '计算当前 ETF 动量排名',
-    prompt: '请调用 GetETFMomentumRanking 工具获取当前场内核心 ETF 21日加权动量排名，并根据动量数值分析当前最强进攻板块与防御配置建议。',
+    prompt: '请调用系统内置 GetETFMomentumRanking 工具获取当前场内核心 ETF 21日加权动量排名，严禁使用 WebSearch。根据动量绝对值（>0进攻，<=0防守）全面分析最强进攻赛道与防御调仓建议。直接输出研报正文，严禁输出机械调用步骤。',
   },
   {
     icon: '🎯',
@@ -1025,7 +1099,7 @@ const scenarioCards = [
     title: '多因子策略选股',
     desc: '基于均线多头排列、放量突破或高股息防守因子，全市场量化初筛。',
     example: '筛选均线多头放量突破个股',
-    prompt: '请帮我筛选当前市场上呈现均线多头排列且成交量放量突破的个股，并给出具体技术面评分和选股理由。',
+    prompt: '请利用系统内置量化筛选工具（SearchStockByIndicators / FilterStocks / HotStrategyTable），筛选市场上呈现均线多头排列且成交量放量突破近期整理平台的强势标的，严禁使用 WebSearch。给出具体技术面评分与入选逻辑。直接输出研报正文。',
   },
   {
     icon: '🔬',
@@ -1033,7 +1107,7 @@ const scenarioCards = [
     title: '个股全景深度体检',
     desc: '四维穿透财务基本面、量价均线形态、大资金动向与估值弹性。',
     example: '深度分析 600519 贵州茅台',
-    prompt: '请对 600519 贵州茅台 进行全维度深度诊断，涵盖：1. 估值与基本面财务；2. 近期日K线量价与支撑阻力；3. 主力资金进出动向；4. 核心催化与潜在风险。',
+    prompt: '请对 600519 贵州茅台 进行全维度深度诊断：优先调用系统内置 DiagnoseStock(600519) 获取 VectorBT 向量化回测置信胜率与量化评分，调用 GetEastMoneyKLineWithMA(600519, "day", 60) 查看量价均线，调用 GetStockFinancialInfo 穿透真实财务。严禁使用 WebSearch。直接输出专业量化研报并给出买方 5-Verdict 裁决与证伪底线。',
   },
   {
     icon: '🛡️',
@@ -1041,7 +1115,7 @@ const scenarioCards = [
     title: '筹码与风控极限穿透',
     desc: '深度穿透大股东质押率、解禁日程、股东户数集中度与财务真实性。',
     example: '深度排雷 600519 贵州茅台',
-    prompt: '请对 600519 贵州茅台 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。',
+    prompt: '请对 600519 贵州茅台 进行深度排雷：调用 GetStockHolderTrend(600519) 穿透股东户数集中度，调用 GetStockMarginTrading 分析两融杠杆，核查控股股东质押比例、未来一年解禁日程及主力资金动向，严禁使用 WebSearch。给出综合风控评级。',
   },
 ]
 
@@ -1069,27 +1143,27 @@ const quickChips = [
 
 const allScenarios = [
   // L1 宏观大势与环境感知
-  { category: 'L1 大势与宽基', title: '宽基指数估值与权重穿透', prompt: '请分析当前沪深300与中证A500的市盈率PE、历史分位数及前五大成分股与板块权重分布，评估市场估值水位与整体赚钱效应。' },
+  { category: 'L1 大势与宽基', title: '核心宽基行情与量价均线穿透', prompt: '请调用系统内置 GetMarketData 获取上证指数(000001)、沪深300(000300)与创业板指(399006)的最新点位、涨跌幅与量价均线态势，结合全市场涨跌比，评估市场多空赚钱效应与总仓位上限。严禁调用 WebSearch。' },
   
   // L2 赛道主线与资金风向
-  { category: 'L2 赛道与主线', title: 'ETF 加权动量轮动模型', prompt: '请获取主流场内ETF的21日加权动量排名表，按动量评分排序并给出当前最具超额弹性的进攻主线与防御调仓建议。' },
-  { category: 'L2 赛道与主线', title: '重点产业链景气度研判', prompt: '请深入分析当前半导体及算力产业链的行业景气度、产业政策催化、供需格局与核心受益龙头。' },
-  { category: 'L2 赛道与主线', title: '龙虎榜机构专用席位追踪', prompt: '请查询最近一个交易日的龙虎榜机构席位明细与上榜汇总，重点筛选机构专用席位大额净买入的股票，分析机构资金的真实建仓意图。' },
+  { category: 'L2 赛道与主线', title: 'ETF 加权动量轮动模型', prompt: '请调用系统内置 GetETFMomentumRanking 获取主流场内ETF的21日加权动量排名表，按动量评分排序并给出当前最具超额弹性的进攻主线与防御调仓建议。严禁调用 WebSearch。直接输出研报正文。' },
+  { category: 'L2 赛道与主线', title: '重点产业链知识图谱研判', prompt: '请调用系统内置 GetIndustrySupplyGraph / QuerySupplyChainCascade 工具深入分析半导体及算力产业链的上下游供需格局、核心受益梯队与暴露度。严禁使用 WebSearch。' },
+  { category: 'L2 赛道与主线', title: '龙虎榜机构专用席位追踪', prompt: '请调用系统内置 GetLongTigerList / GetStockBillboard 工具获取最近一个交易日的龙虎榜明细，重点筛选机构专用席位大额净买入的股票，分析机构资金的真实建仓意图。严禁使用 WebSearch。' },
 
   // L3 量化多因子选股池
-  { category: 'L3 量化选股池', title: '强势平台放量突破选股', prompt: '请利用量化策略筛选突破近期整理平台且放量上涨、均线多头排列的强势标的，并给出具体技术面评分与入选逻辑。' },
-  { category: 'L3 量化选股池', title: '低估值高股息价值防守', prompt: '请筛选市盈率PE<15、近三年股息率>3.5%、ROE>12%的高股息稳健型股票，评估其安全边际与抗跌属性。' },
-  { category: 'L3 量化选股池', title: '业绩预告超预期挖掘', prompt: '请检索近期披露业绩预告中净利润同比大幅预增的公司，结合当前估值百分位与成长确定性，给出高性价比标的分析。' },
+  { category: 'L3 量化选股池', title: '强势平台放量突破选股', prompt: '请利用系统内置量化筛选工具（SearchStockByIndicators / FilterStocks / HotStrategyTable），筛选突破近期整理平台且放量上涨、均线多头排列的强势标的，给出具体技术面评分与入选逻辑。严禁使用 WebSearch。' },
+  { category: 'L3 量化选股池', title: '低估值高股息价值防守', prompt: '请利用系统内置指标工具筛选市盈率PE<15、近三年股息率>3.5%、ROE>12%的高股息稳健型股票，评估其安全边际与抗跌属性。严禁使用 WebSearch。' },
+  { category: 'L3 量化选股池', title: '业绩预告超预期挖掘', prompt: '请检索近期披露业绩预告中净利润同比大幅预增的公司，结合当前估值与成长确定性给出高性价比标的分析。严禁使用 WebSearch。' },
 
   // L4 微观解构与极限制约
-  { category: 'L4 个股深度解构', title: '全景四维深度体检', prompt: '请对 [股票代码/名称] 进行全方位深度诊断，涵盖：基本面财务质量、K线形态与量价趋势、主力资金动向，并给出确定性投资评级与建议。' },
-  { category: 'L4 个股深度解构', title: '深度排雷与筹码穿透', prompt: '请对 [股票代码] 进行深度排雷：查询控股股东质押比例、未来一年解禁日程、近3季度股东户数趋势及主力资金净流入，给出综合风控评级。' },
-  { category: 'L4 个股深度解构', title: '财报体检与真实ROE验证', prompt: '请深入体检 [股票代码] 的财务报表：对比近3年营业收入与扣非净利润、ROE与销售净利率、分析经营现金流净额与净利润比值，验证其盈利真实性。' },
-  { category: 'L4 个股深度解构', title: '关键支撑阻力位测算', prompt: '请分析 [股票代码] 的近期日K线走势与成交密集区，精确测算关键支撑位、压力位、止损参考点位以及当前买卖盈亏比。' },
-  { category: 'L4 个股深度解构', title: '同业龙头双股深度PK', prompt: '请对比分析 [股票A] 与 [股票B]：比较两者的商业壁垒、估值水平、财务成长质量、近期机构资金偏好以及走势强弱差异。' },
+  { category: 'L4 个股深度解构', title: '全景四维深度体检', prompt: '请对 [输入代码] 进行全方位深度诊断：优先调用 DiagnoseStock 获取 VectorBT 回测胜率与量化评分，调用 GetEastMoneyKLineWithMA 查看量价均线，调用 GetStockFinancialInfo 穿透财务真实性，给出买方 5-Verdict 确定性评级与止损线。严禁使用 WebSearch。' },
+  { category: 'L4 个股深度解构', title: '深度排雷与筹码穿透', prompt: '请对 [输入代码] 进行深度排雷：调用 GetStockHolderTrend 穿透股东户数集中度，调用 GetStockMarginTrading 分析两融多空动向，核查控股股东质押比例与限售解禁日程。严禁使用 WebSearch。' },
+  { category: 'L4 个股深度解构', title: '财报体检与真实ROE验证', prompt: '请调用系统内置 GetStockFinancialInfo 与 GetStockLatestFinance 深入体检 [输入代码] 的财务报表：对比近3年营业收入与扣非净利润、ROE与销售净利率、分析经营现金流净额比值，验证其盈利真实性。严禁使用 WebSearch。' },
+  { category: 'L4 个股深度解构', title: '关键支撑阻力位测算', prompt: '请调用 GetEastMoneyKLineWithMA 分析 [输入代码] 的近期日K线走势与成交密集区，精确测算关键支撑位、压力位、止损参考点位以及当前买卖盈亏比。严禁使用 WebSearch。' },
+  { category: 'L4 个股深度解构', title: '同业龙头双股深度PK', prompt: '请调用内置量化与行情工具对比分析 [代码A] 与 [代码B]：横向比较两者的日K走势强弱（GetEastMoneyKLineWithMA）、最新财务ROE与成长质量（GetStockLatestFinance）以及筹码集中度（GetStockHolderTrend）。严禁使用 WebSearch。' },
 
   // L5 买方立论与风控
-  { category: 'L5 买方决策风控', title: '标的 5-Verdict 裁决与证伪线', prompt: '请对 [股票代码] 给出买方确定性评级（强力买入/逢低布局/观望等待/逢高减持/规避离场），提炼核心买入立论、催化剂假设、以及明确的下行证伪止损底线。' },
+  { category: 'L5 买方决策风控', title: '标的 5-Verdict 裁决与证伪线', prompt: '请对 [输入代码] 给出买方确定性评级（强力买入/逢低布局/观望等待/逢高减持/规避离场），提炼核心买入立论、催化剂假设、以及明确的下行证伪止损底线，并说明如何调用 SaveStockThesis 存入认知账本。' },
 ]
 
 // ========== 锚点导航 ==========

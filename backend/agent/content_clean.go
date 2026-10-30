@@ -184,6 +184,64 @@ func salvageRawContent(raw string) string {
 	return s
 }
 
+// stripLeadingPlanningNoise 剥离正文开头意外泄露的 Plan-Execute 思考/规划杂音句子。
+// 例如："下一步需要调用 XX 工具... 下一步需要查询... ### 正文" -> "### 正文"
+func stripLeadingPlanningNoise(text string) string {
+	if text == "" {
+		return ""
+	}
+
+	noisePrefixes := []string{
+		"下一步需要查询", "下一步需要调用", "下一步我将调用", "下一步调用", "我将调用工具",
+	}
+
+	s := text
+	for {
+		trimmed := strings.TrimLeft(s, " \t\r\n")
+		matched := false
+		for _, prefix := range noisePrefixes {
+			if strings.HasPrefix(trimmed, prefix) {
+				// 寻找句末标点或换行符
+				endIdx := -1
+				for i, r := range trimmed {
+					if r == '\n' || r == '。' || r == '！' || r == '!' {
+						endIdx = i + utf8.RuneLen(r)
+						break
+					}
+				}
+				if endIdx > 0 {
+					s = strings.TrimLeft(trimmed[endIdx:], " \t\r\n")
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			break
+		}
+	}
+
+	return s
+}
+
+// stripUnclosedAgentAction 移除末尾因 token 耗尽而未闭合的残缺 ```agent-action 代码块。
+func stripUnclosedAgentAction(text string) string {
+	s := text
+	const marker = "```agent-action"
+	lastIdx := strings.LastIndex(s, marker)
+	if lastIdx < 0 {
+		return s
+	}
+
+	// 检查 marker 之后是否有闭合的 ```
+	suffix := s[lastIdx+len(marker):]
+	if !strings.Contains(suffix, "```") {
+		// 未闭合，直接截断 marker 之前的内容，并去除末尾空白
+		return strings.TrimRight(s[:lastIdx], " \t\r\n")
+	}
+	return s
+}
+
 // cleanFinalContent is applied once after streaming completes: strip reasoning
 // blocks first, then collapse a repeated answer if the model emitted one.
 func cleanFinalContent(raw string) string {
@@ -192,8 +250,11 @@ func cleanFinalContent(raw string) string {
 	if strings.TrimSpace(cleaned) == "" && len(strings.TrimSpace(raw)) > 100 {
 		salvaged := salvageRawContent(raw)
 		if salvaged != "" {
-			return collapseConsecutiveDuplicates(salvaged, 400)
+			cleaned = collapseConsecutiveDuplicates(salvaged, 400)
 		}
 	}
+	// 剥离开头规划杂音与末尾未闭合的残缺 agent-action 代码块
+	cleaned = stripLeadingPlanningNoise(cleaned)
+	cleaned = stripUnclosedAgentAction(cleaned)
 	return cleaned
 }

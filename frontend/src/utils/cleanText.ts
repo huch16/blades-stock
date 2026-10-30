@@ -132,16 +132,68 @@ export function salvageRawContent(raw: string): string {
   return s
 }
 
+// stripLeadingPlanningNoise 剥离正文开头意外泄露的 Plan-Execute 思考/规划杂音句子。
+// 例如："下一步需要调用 XX 工具... 下一步需要查询... ### 正文" -> "### 正文"
+export function stripLeadingPlanningNoise(text: string): string {
+  if (!text) return ''
+  let s = text
+  const noisePrefixes = [
+    '下一步需要查询', '下一步需要调用', '下一步我将调用', '下一步调用', '我将调用工具',
+  ]
+
+  for (let round = 0; round < 10; round++) {
+    let matched = false
+    const trimmed = s.replace(/^[ \t\r\n]+/, '')
+    for (const prefix of noisePrefixes) {
+      if (trimmed.startsWith(prefix)) {
+        let endIdx = -1
+        for (let i = 0; i < trimmed.length; i++) {
+          const ch = trimmed[i]
+          if (ch === '\n' || ch === '。' || ch === '！' || ch === '!') {
+            endIdx = i + 1
+            break
+          }
+        }
+        if (endIdx > 0) {
+          s = trimmed.slice(endIdx).replace(/^[ \t\r\n]+/, '')
+          matched = true
+          break
+        }
+      }
+    }
+    if (!matched) break
+  }
+  return s
+}
+
+// stripUnclosedAgentAction 移除末尾因 token 耗尽而未闭合的残缺 ```agent-action 代码块。
+export function stripUnclosedAgentAction(text: string): string {
+  if (!text) return ''
+  const marker = '```agent-action'
+  const lastIdx = text.lastIndexOf(marker)
+  if (lastIdx < 0) return text
+
+  const suffix = text.slice(lastIdx + marker.length)
+  if (!suffix.includes('```')) {
+    // 未闭合，直接截断 marker 之前的内容
+    return text.slice(0, lastIdx).replace(/[ \t\r\n]+$/, '')
+  }
+  return text
+}
+
 // cleanFinalContent is applied once when streaming finishes: strip reasoning
 // blocks first, then collapse a repeated answer if the model emitted one.
 export function cleanFinalContent(raw: string): string {
-  const cleaned = collapseConsecutiveDuplicates(cleanThinkBlocks(raw), 400)
+  let cleaned = collapseConsecutiveDuplicates(cleanThinkBlocks(raw), 400)
   // 防空兜底：若过滤后为空，但原始文本包含大量字符，智能挽救正文内容
   if (!cleaned.trim() && raw && raw.trim().length > 100) {
     const salvaged = salvageRawContent(raw)
     if (salvaged) {
-      return collapseConsecutiveDuplicates(salvaged, 400)
+      cleaned = collapseConsecutiveDuplicates(salvaged, 400)
     }
   }
+  // 剥离开头规划杂音与末尾未闭合的残缺 agent-action 代码块
+  cleaned = stripLeadingPlanningNoise(cleaned)
+  cleaned = stripUnclosedAgentAction(cleaned)
   return cleaned
 }

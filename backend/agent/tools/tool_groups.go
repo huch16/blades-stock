@@ -87,7 +87,7 @@ var toolGroupMap = map[string]ToolGroup{
 	"GetStockHistoryMoneyData":    GroupMoneyFlow,
 	"GetIndustryMoneyRank":        GroupMoneyFlow,
 	"QueryStockNewsTool":          GroupNewsResearch,
-	// WebSearch intentionally omitted from toolGroupMap — always available to all questions
+	"WebSearch":                   GroupNewsResearch,
 	"FetchWebPage":                GroupNewsResearch,
 	"GetNewsListData":             GroupNewsResearch,
 	"GetStockResearchReport":      GroupNewsResearch,
@@ -324,7 +324,6 @@ func ClassifyQuestion(question string) map[ToolGroup]bool {
 }
 
 // FilterToolsByGroups curates tools per group; groups not in map are excluded.
-// Tools not mapped to any group (e.g. WebSearch) are always included.
 func FilterToolsByGroups(allTools []tools.Tool, groups map[ToolGroup]bool) []tools.Tool {
 	var filtered []tools.Tool
 	for _, t := range allTools {
@@ -375,6 +374,7 @@ var coreToolByGroup = map[ToolGroup][]string{
 		"GetNewsListData", "GetStockResearchReport",
 		"GetStockNotice", "GetHotStockList", "GetHotEventList",
 		"GetUplimitHotStocks", "GetUplimitHotPlates", "GetWallstreetcnLives",
+		"WebSearch", "FetchWebPage",
 	},
 	GroupAIAnalysis: {
 		"FinancialQA", "AiRecommendStocks", "GetAIAnalysisHistory", "GetStockThesis", "SaveStockThesis", "GetPaperPortfolioSummary", "ExecutePaperTrade", "TriggerPostMortemAudit", "GetPostMortemAuditHistory", "RunAutoAlphaExploration", "GetAutoAlphaProposals", "RunBacktest", "RunVectorizedBacktest", "DiagnoseStock", "VectorBacktest", "VectorGridSearch",
@@ -404,7 +404,7 @@ func FilterToolsByGroupsCapped(allTools []tools.Tool, groups map[ToolGroup]bool)
 	for _, t := range allTools {
 		group, exists := toolGroupMap[t.Name()]
 		if !exists {
-			// 未映射到任何组的工具（如 WebSearch）始终注入
+			// 未映射到任何特定组的通用基础工具
 			filtered = append(filtered, t)
 			continue
 		}

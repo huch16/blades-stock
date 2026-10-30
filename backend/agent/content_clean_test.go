@@ -153,3 +153,13 @@ func TestCleanFinalContent_NonJunkGapNotCollapsed(t *testing.T) {
 		t.Fatalf("non-junk gap was collapsed: got len=%d want len=%d", len(got), len(raw))
 	}
 }
+
+func TestCleanFinalContent_StripLeadingPlanningNoiseAndUnclosedAction(t *testing.T) {
+	// 场景：模型泄露了开头 Planning 杂音，并在末尾截断了 agent-action
+	raw := "下一步需要查询沪深300与中证A500指数的代码及最新行情数据。下一步需要调用 GetMarketData 获取当前盘面最新涨跌家数比，并调用 WebSearch 查询。### 一、 沪深300 vs 中证A500\n\n正文内容详述。\n\n```agent-action\n{\"type\": \"DISCIPLINE_ALERT\", \"payload\": {\"title\": \"退潮期风控预警\""
+	want := "### 一、 沪深300 vs 中证A500\n\n正文内容详述。"
+	got := cleanFinalContent(raw)
+	if got != want {
+		t.Fatalf("planning noise or unclosed agent-action not stripped:\ngot  %q\nwant %q", got, want)
+	}
+}
