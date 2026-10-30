@@ -14,7 +14,7 @@ func buildAllFakeTools() []bladesTools.Tool {
 		names[name] = true
 	}
 	// 未映射工具（如 WebSearch）也应存在
-	names["WebSearch"] = true
+	names["CustomUnmappedTool"] = true
 	var out []bladesTools.Tool
 	for n := range names {
 		out = append(out, types.NewTool(n, "desc", map[string]*types.ParamDef{}, func(string) (string, error) { return "", nil }))
@@ -64,8 +64,8 @@ func TestFilterToolsByGroupsCapped_UncappedAndUnmapped(t *testing.T) {
 	out := FilterToolsByGroupsCapped(all, groups)
 	got := groupNamesOf(out)
 	// 未映射工具始终注入
-	if got["WebSearch"] != 1 {
-		t.Errorf("unmapped WebSearch should always be injected, got=%v", got)
+	if got["CustomUnmappedTool"] != 1 {
+		t.Errorf("unmapped CustomUnmappedTool should always be injected, got=%v", got)
 	}
 	// base 无上限，全部注入
 	for n, g := range toolGroupMap {

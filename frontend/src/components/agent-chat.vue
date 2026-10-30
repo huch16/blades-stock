@@ -205,6 +205,28 @@
             <div class="flow-step-node">⑤ 定落子入账 (L5)</div>
           </div>
 
+          <!-- 全局流水线贯通标的与状态指示栏 (消除前后步骤脱节与信息孤岛) -->
+          <div class="pipeline-context-banner">
+            <div class="banner-left">
+              <span class="banner-icon">🎯</span>
+              <span class="banner-label">流水线贯通标的：</span>
+              <span class="banner-stock-pill">
+                {{ pipelineContext.stockName ? pipelineContext.stockName + ' · ' : '' }}{{ pipelineContext.stockCode }}
+              </span>
+              <span v-if="pipelineContext.mainTrack" class="banner-tag track-tag">
+                🏷️ 赛道: {{ pipelineContext.mainTrack }}
+              </span>
+              <span v-if="pipelineContext.macroStance" class="banner-tag stance-tag">
+                🚦 宏观: {{ pipelineContext.macroStance }}
+              </span>
+            </div>
+            <div class="banner-right">
+              <button class="banner-switch-btn" @click="openStockActionModal('diag')">
+                🔄 更换/指定标的
+              </button>
+            </div>
+          </div>
+
           <div class="pipeline-steps-grid">
             <!-- Step 1: 🏛️ 看大势 (L1 Macro) -->
             <div class="pipeline-card step-card-1">
@@ -243,10 +265,16 @@
                 <span class="step-badge">Step 3 · L3</span>
                 <span class="step-title">🎯 量化多因子初筛池</span>
               </div>
-              <p class="step-desc">解决【优势赛道里买哪只？】全市场5000+标的通过数学模型初筛，收敛出3~5只高胜率候选股票。</p>
+              <p class="step-desc">解决【优势赛道里买哪只？】全市场5000+标的通过数学模型初筛，收敛出高胜率候选股票并自动继承进入下阶。</p>
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep3('breakout')">
-                  🚀 整理平台放量突破选股
+                  🚀 放量突破整理平台
+                </button>
+                <button class="step-btn sub" @click="executeStep3('trend')">
+                  📈 均线多头排列跟随
+                </button>
+                <button class="step-btn sub" @click="executeStep3('macd')">
+                  ⚡ MACD 零轴二次金叉
                 </button>
                 <button class="step-btn sub" @click="executeStep3('dividend')">
                   🛡️ 低估高股息价值防守
@@ -270,6 +298,7 @@
                     placeholder="输入股票代码或名称 (如 600519)"
                     size="small"
                     class="picker-input"
+                    @update:value="onStep4StockInputChange"
                   />
                 </div>
                 <div class="picker-hot-chips">
@@ -279,7 +308,7 @@
                     :key="stk.code"
                     class="hot-chip"
                     :class="{ active: step4StockInput === stk.code }"
-                    @click="step4StockInput = stk.code"
+                    @click="setPipelineStock(stk.code, stk.name)"
                   >
                     {{ stk.name }}
                   </span>
@@ -300,19 +329,24 @@
             </div>
 
             <!-- Step 5: 📑 定落子与立论 (L5 Verdict & Thesis Ledger) -->
-            <div class="pipeline-card step-card-5">
+            <div class="pipeline-card step-card-5 highlight-step">
               <div class="step-header">
-                <span class="step-badge">Step 5 · L5</span>
+                <span class="step-badge highlight">Step 5 · L5</span>
                 <span class="step-title">📑 买方立论与 5-Verdict 裁决</span>
               </div>
-              <p class="step-desc">解决【知行合一与止损防守】输出五级确定性买方裁决、下行证伪底线，并一键归档至认知账本。</p>
+              <p class="step-desc">解决【知行合一与止损防守】对贯通标的作出五级确定性买方裁决、下行证伪底线，并一键存入认知账本。</p>
               <div class="ledger-guide-box">
                 <span class="guide-icon">📥</span>
-                <span class="guide-text">推演完成后，点击报告底部的【存入买方认知账本】按钮，立论与证伪线将自动沉淀并驱动自选股与3D诊断！</span>
+                <span class="guide-text">
+                  执行后 AI 将提炼核心假说与证伪线，并<strong>直接调用 SaveStockThesis 工具</strong>写入 SQLite 认知账本！
+                </span>
               </div>
               <div class="step-actions">
-                <button class="step-btn sub" @click="executeStep5">
-                  📖 查看买方 5-Verdict 裁决标准
+                <button class="step-btn primary" @click="executeStep5()">
+                  🚀 立即对「{{ pipelineContext.stockName || pipelineContext.stockCode }}」定落子并入库
+                </button>
+                <button class="step-btn sub" @click="viewVerdictStandards">
+                  📖 查看买方 5-Verdict 规范
                 </button>
               </div>
             </div>
@@ -852,8 +886,67 @@ function submitModalStockAction() {
   }
 }
 
+// ========== 五阶时序流水线贯通上下文（确保 L1 -> L2 -> L3 -> L4 -> L5 实体数据无缝流转） ==========
+const pipelineContext = reactive({
+  currentStep: 1,
+  stockCode: '600519',
+  stockName: '贵州茅台',
+  macroStance: '',
+  positionCap: '',
+  mainTrack: '',
+  lastVerdict: '',
+})
+
+function setPipelineStock(code: string, name?: string) {
+  const trimmed = (code || '').trim()
+  if (!trimmed) return
+  pipelineContext.stockCode = trimmed
+  step4StockInput.value = trimmed
+  if (name) {
+    pipelineContext.stockName = name.trim()
+  } else {
+    const found = hotStocks.find(s => s.code === trimmed)
+    if (found) pipelineContext.stockName = found.name
+  }
+}
+
+function onStep4StockInputChange(val: string) {
+  const trimmed = (val || '').trim()
+  pipelineContext.stockCode = trimmed
+  const found = hotStocks.find(s => s.code === trimmed)
+  if (found) {
+    pipelineContext.stockName = found.name
+  }
+}
+
+// 从助手回答中智能抽取选股/推荐标的代码与名称，自动贯通到下游体检与立论
+function extractStockFromAssistantText(text: string) {
+  if (!text) return
+  // 1. 优先匹配 Markdown 表格数据行：| 1 | 002371 | 北方华创 |
+  const tableMatch = text.match(/\|\s*\d+\s*\|\s*(\d{6})\s*\|\s*([^\|\r\n]+)\s*\|/)
+  if (tableMatch && tableMatch[1]) {
+    const code = tableMatch[1].trim()
+    const name = tableMatch[2].trim().replace(/\s+/g, '')
+    setPipelineStock(code, name)
+    return
+  }
+  // 2. 匹配 "北方华创 (002371)"
+  const parenMatch = text.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,8})\s*[(（](\d{6})[)）]/)
+  if (parenMatch && parenMatch[2]) {
+    setPipelineStock(parenMatch[2].trim(), parenMatch[1].trim())
+    return
+  }
+  // 3. 匹配 "002371 北方华创"
+  const codeNameMatch = text.match(/(?:\b|\D)(\d{6})(?:\b|\D)\s*([\u4e00-\u9fa5]{2,6})/)
+  if (codeNameMatch && codeNameMatch[1]) {
+    setPipelineStock(codeNameMatch[1].trim(), codeNameMatch[2].trim())
+    return
+  }
+}
+
 // ========== 五阶时序流水线快速执行方法（全链路绑定 Blades 内置工具与权威数据） ==========
 function executeStep1() {
+  pipelineContext.currentStep = 1
   const snap = perceptionSnapshot.value
   let realTimeFacts = ''
   if (snap) {
@@ -863,6 +956,7 @@ function executeStep1() {
     const down = snap.DownCount || snap.downCount || 0
     const limitUp = snap.LimitUpCount || snap.limitUpCount || 0
     const limitDown = snap.LimitDownCount || snap.limitDownCount || 0
+    pipelineContext.macroStance = lightText
     realTimeFacts = `
 【系统实时态势感知一手事实（由 blades 引擎刚刚捕获）】：
 - 盘面交易节律：${phase}
@@ -882,6 +976,7 @@ function executeStep1() {
 }
 
 function executeStep2(type: 'etf' | 'seats') {
+  pipelineContext.currentStep = 2
   if (type === 'etf') {
     applyScenario(`【L2 赛道主线轮动】请调用系统内置 GetETFMomentumRanking 工具获取场内核心 ETF 21日加权动量排名：
 1. 严禁调用 WebSearch 从外网搜索。
@@ -897,39 +992,53 @@ function executeStep2(type: 'etf' | 'seats') {
   }
 }
 
-function executeStep3(type: 'breakout' | 'dividend') {
+function executeStep3(type: 'breakout' | 'trend' | 'macd' | 'dividend') {
+  pipelineContext.currentStep = 3
   if (type === 'breakout') {
-    applyScenario(`【L3 量化多因子选股池】请利用系统内置量化筛选工具（如 SearchStockByIndicators / FilterStocks / HotStrategyTable）：
-1. 筛选当前市场上呈现均线多头排列（MA5>MA10>MA20）、成交量放量突破近期整理平台的强势标的；
+    applyScenario(`【L3 量化多因子初筛池 · 放量突破】请调用系统内置 ScreenByStrategy(strategyName="放量突破", limit=10) 工具：
+1. 筛选全市场呈现成交量放量突破近期整理平台的强势标的；
 2. 严禁调用 WebSearch 搜外网概念股；
-3. 输出入选股票的具体代码、名称、技术面评分与突破确认点位。
-4. 直接输出选股清单与逻辑，严禁输出机械规划步骤。`)
+3. 输出入选股票的具体代码、名称、技术面评分、现价、涨跌幅、量比与突破确认点位；
+4. 综合评选出最优的前3只标的，系统将自动继承首选标的供后续 Step 4 四维深度体检。直接输出选股清单。`)
+  } else if (type === 'trend') {
+    applyScenario(`【L3 量化多因子初筛池 · 均线多头】请调用系统内置 ScreenByStrategy(strategyName="趋势跟随", limit=10) 工具：
+1. 筛选均线多头排列（MA5>MA10>MA20）且趋势持续向上的强势标的；
+2. 严禁调用 WebSearch；
+3. 输出入选股票的具体代码、名称、技术面评分与均线支撑位，直接输出选股清单。`)
+  } else if (type === 'macd') {
+    applyScenario(`【L3 量化多因子初筛池 · MACD金叉】请调用系统内置 ScreenByStrategy(strategyName="macd_golden_cross", limit=10) 工具：
+1. 筛选近期在零轴上方形成二次金叉放量共振的个股；
+2. 严禁调用 WebSearch；
+3. 输出入选股票的具体代码、名称与金叉确认理由，直接输出选股清单。`)
   } else {
-    applyScenario(`【L3 价值防守选股池】请利用系统内置量化工具：
+    applyScenario(`【L3 价值防守选股池】请利用系统内置量化筛选工具（SearchStockByIndicators / FilterStocks）：
 1. 筛选市盈率PE<15、近三年平均股息率>3.5%、ROE>12%的高股息稳健型股票；
 2. 严禁调用 WebSearch；
-3. 评估入选标的的安全边际与抗跌属性，给出防御性底仓配置建议。
-4. 直接输出选股结论，严禁输出机械规划步骤。`)
+3. 评估入选标的的安全边际与抗跌属性，给出防御性底仓配置建议，直接输出选股清单。`)
   }
 }
 
 function executeStep4(action: 'diag' | 'risk' | 'finance') {
-  const code = (step4StockInput.value || '600519').trim()
+  pipelineContext.currentStep = 4
+  const code = (step4StockInput.value || pipelineContext.stockCode || '600519').trim()
+  const name = pipelineContext.stockName || ''
+  const targetDesc = name ? `${name} (${code})` : `股票 ${code}`
+
   if (action === 'diag') {
-    applyScenario(`【L4 个股全景深度体检】请对股票 ${code} 进行全维度深度量化诊断：
+    applyScenario(`【L4 个股全景深度体检】请对 ${targetDesc} 进行全维度深度量化诊断：
 1. 优先调用系统内置 DiagnoseStock(${code}) 获取 VectorBT 向量化回测置信胜率、量化综合评分与第一目标价/止损位；
 2. 调用 GetEastMoneyKLineWithMA(${code}, "day", 60) 查看日K线均线系统与关键支撑阻力位；
 3. 调用 GetStockFinancialInfo(${code}) 与 GetStockLatestFinance(${code}) 穿透营收利润与真实ROE；
 4. 调用 GetStockHolderTrend(${code}) 穿透股东户数集中度与主力资金动向。
 【执行纪律】：严禁调用 WebSearch。直接输出专业研报，给出买方 5-Verdict 确定性评级与明确的下行证伪止损线，严禁输出机械思考文字。`)
   } else if (action === 'risk') {
-    applyScenario(`【L4 筹码与风险极限排雷】请对股票 ${code} 进行深度排雷：
+    applyScenario(`【L4 筹码与风险极限排雷】请对 ${targetDesc} 进行深度排雷：
 1. 调用 GetStockHolderTrend(${code}) 穿透股东户数集中度趋势；
 2. 调用 GetStockMarginTrading(${code}) 分析两融杠杆资金多空动向；
 3. 核查控股股东股权质押比例、未来一年限售解禁日程、商誉减值与资产负债率风险。
 【执行纪律】：严禁调用 WebSearch。直接输出风控评级与排雷研报。`)
   } else {
-    applyScenario(`【L4 财报体检与真实ROE验证】请调用系统内置 GetStockFinancialInfo(${code}) 与 GetStockLatestFinance(${code}) 深度体检财务质量：
+    applyScenario(`【L4 财报体检与真实ROE验证】请调用系统内置 GetStockFinancialInfo(${code}) 与 GetStockLatestFinance(${code}) 深度体检 ${targetDesc} 的财务质量：
 1. 对比近3年营业收入与扣非净利润增长趋势；
 2. 穿透销售毛利率、真实ROE与销售净利率；
 3. 核验经营活动现金流净额与净利润比值，验证其盈利真实性，排查应收账款异常。
@@ -937,21 +1046,33 @@ function executeStep4(action: 'diag' | 'risk' | 'finance') {
   }
 }
 
-function executeStep5() {
-  applyScenario(`【L5 买方立论与 5-Verdict 裁决】请根据 Blades 买方量化投研体系，阐明决策终局与认知账本规范：
-1. 详细说明【强力买入、逢低布局、观望等待、逢高减持、规避离场】五级裁决的评定边界；
-2. 说明如何提取核心买入立论假说、核心催化剂日程、以及明确的下行证伪止损底线；
-3. 说明如何调用系统内置 SaveStockThesis 工具将分析结论持久化存入买方认知账本。
-【执行纪律】：直接输出专业买方规范，严禁输出机械调用步骤。`)
+function executeStep5(customCode?: string) {
+  pipelineContext.currentStep = 5
+  const code = (customCode || step4StockInput.value || pipelineContext.stockCode || '600519').trim()
+  const name = pipelineContext.stockName || ''
+  const targetDesc = name ? `${name} (${code})` : `股票 ${code}`
+
+  applyScenario(`【L5 买方立论与 5-Verdict 裁决】请根据前期宏观大势、赛道动量、量化体检与风控排雷结论，对 ${targetDesc} 作出最终买方投资决断：
+1. 明确给出严肃的 5-Verdict 买方评级（【强力买入】、【逢低布局】、【观望等待】、【逢高减持】、【规避离场】）；
+2. 提炼核心买入立论假说（Core Thesis，1-2句话高度概括其商业壁垒与成长逻辑）；
+3. 明确列出下一阶段重点跟踪的验证催化事件（Key Catalysts）；
+4. 设定严格的下行证伪止损底线价位（Risk Factors / Invalidation Price）；
+5. 【核心纪律与工具调用】：必须直接调用系统内置 SaveStockThesis 工具，将上述结构化投资假说正式持久化存入系统认知账本数据库！并在回答末尾输出认知账本保存凭据。`)
+}
+
+function viewVerdictStandards() {
+  applyScenario(`请说明 Blades 买方认知账本与 5-Verdict 评级规范：包括【强力买入、逢低布局、观望等待、逢高减持、规避离场】的评定边界、核心买入立论提取、催化剂假设提取以及下行证伪止损底线的设定方法。`)
 }
 
 function executeDirectDiag() {
   const code = (directDiagCode.value || '600519').trim()
+  setPipelineStock(code)
   applyScenario(`【L4 极速全维体检】请对股票 ${code} 进行全维度深度诊断：优先调用系统内置 DiagnoseStock(${code}) 获取 VectorBT 量化评分与置信胜率，调用 GetEastMoneyKLineWithMA(${code}, "day", 60) 查看均线量价，调用 GetStockLatestFinance 查看财务质量。严禁调用 WebSearch。直接给出买方 5-Verdict 裁决与止损位。`)
 }
 
 function executeDirectRisk() {
   const code = (directRiskCode.value || '600519').trim()
+  setPipelineStock(code)
   applyScenario(`【L4 专项极限排雷】请对股票 ${code} 进行深度排雷：调用 GetStockHolderTrend(${code}) 查看股东户数集中度，调用 GetStockMarginTrading(${code}) 查看两融杠杆，核查股权质押与限售解禁日程。严禁调用 WebSearch。直接输出综合排雷评级。`)
 }
 
@@ -974,31 +1095,36 @@ function handleQuickChipClick(chip: any) {
   }
 }
 
-// 下游时序推荐计算：根据最近一条助手的输出推演内容，智能推荐下一步动作
+// 下游时序推荐计算：根据最近一条助手的输出推演内容，智能推荐下一步动作（自动继承贯通标的）
 const pipelineNextStep = computed(() => {
   if (messages.value.length === 0) return null
   const lastMsg = messages.value[messages.value.length - 1]
   if (lastMsg.role !== 'assistant' || !lastMsg.content) return null
   const text = lastMsg.content
 
+  const currentCode = pipelineContext.stockCode || '600519'
+  const currentName = pipelineContext.stockName || ''
+  const displayTarget = currentName ? `${currentName} (${currentCode})` : currentCode
+
+  // 1. 如果是宏观大势或 ETF 动量分析 -> 推荐进入 Step 3 进行多因子选股
   if (text.includes('动量') || text.includes('ETF') || text.includes('大势') || text.includes('择时') || text.includes('宏观')) {
     return {
-      label: '进入 Step 3 · 运行多因子量化突破选股',
+      label: '👉 进入 Step 3 · 运行多因子放量突破量化选股',
       action: () => executeStep3('breakout'),
     }
   }
-  if (text.includes('选股') || text.includes('突破') || text.includes('高股息') || text.includes('多头排列')) {
+  // 2. 如果是选股初筛池 -> 推荐进入 Step 4 对筛选出的标的进行全维体检
+  if (text.includes('选股') || text.includes('突破') || text.includes('初筛') || text.includes('高股息') || text.includes('多头排列')) {
     return {
-      label: '进入 Step 4 · 选择标的进行四维体检与极限排雷',
-      action: () => openStockActionModal('diag'),
+      label: `👉 进入 Step 4 · 对标的「${displayTarget}」启动四维体检与极限排雷`,
+      action: () => executeStep4('diag'),
     }
   }
-  if (text.includes('诊断') || text.includes('体检') || text.includes('排雷') || text.includes('评级')) {
+  // 3. 如果是个股体检、排雷或财报分析 -> 推荐进入 Step 5 做出终局买方立论并写入账本
+  if (text.includes('诊断') || text.includes('体检') || text.includes('排雷') || text.includes('5-Verdict') || text.includes('VectorBT')) {
     return {
-      label: '进入 Step 5 · 存入买方认知账本 (5-Verdict)',
-      action: () => {
-        handleSaveThesisFromMsg(lastMsg)
-      },
+      label: `👉 进入 Step 5 · 对「${displayTarget}」做出买方 5-Verdict 裁决并存入认知账本`,
+      action: () => executeStep5(),
     }
   }
   return null
@@ -1326,6 +1452,10 @@ function finalizeStream(targetMsg?: ChatMessage) {
   if (targetMsg) {
     if (targetMsg.rawContent) {
       targetMsg.content = cleanFinalContent(targetMsg.rawContent)
+    }
+    // 智能抽取分析中产出的个股实体（代码与名称），自动贯通流水线上下文供后续阶段使用
+    if (targetMsg.content) {
+      extractStockFromAssistantText(targetMsg.content)
     }
   }
   saveSessionsToStorage()
@@ -2335,6 +2465,86 @@ onBeforeUnmount(() => {
       }
     }
 
+    /* 全局流水线贯通指示栏 */
+    .pipeline-context-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 16px;
+      background: linear-gradient(135deg, rgba(0, 82, 217, 0.05) 0%, rgba(102, 126, 234, 0.08) 100%);
+      border: 1px solid rgba(0, 82, 217, 0.18);
+      border-radius: 10px;
+      flex-wrap: wrap;
+
+      .banner-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+
+        .banner-icon {
+          font-size: 16px;
+        }
+
+        .banner-label {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--td-text-color-primary, #1d2129);
+        }
+
+        .banner-stock-pill {
+          font-size: 13px;
+          font-weight: 700;
+          color: #0052d9;
+          background: #ffffff;
+          padding: 2px 10px;
+          border-radius: 14px;
+          border: 1px solid rgba(0, 82, 217, 0.3);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .banner-tag {
+          font-size: 12px;
+          padding: 2px 8px;
+          border-radius: 12px;
+          background: rgba(0, 0, 0, 0.04);
+          color: var(--td-text-color-secondary, #4e5969);
+
+          &.track-tag {
+            background: rgba(240, 160, 32, 0.12);
+            color: #d46b08;
+            font-weight: 500;
+          }
+
+          &.stance-tag {
+            background: rgba(24, 160, 88, 0.12);
+            color: #18a058;
+            font-weight: 500;
+          }
+        }
+      }
+
+      .banner-right {
+        .banner-switch-btn {
+          border: 1px solid var(--td-border-level-2-color, #dcdcdc);
+          background: var(--td-bg-color-container, #ffffff);
+          color: var(--td-text-color-primary, #1d2129);
+          padding: 4px 10px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+
+          &:hover {
+            border-color: var(--td-brand-color, #0052d9);
+            color: var(--td-brand-color, #0052d9);
+          }
+        }
+      }
+    }
+
     .pipeline-steps-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -3228,6 +3438,48 @@ onBeforeUnmount(() => {
 
         .flow-arrow {
           color: #4e5969 !important;
+        }
+      }
+
+      .pipeline-context-banner {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.12) 0%, rgba(30, 30, 36, 0.9) 100%) !important;
+        border-color: rgba(102, 126, 234, 0.3) !important;
+
+        .banner-left {
+          .banner-label {
+            color: #f2f3f5 !important;
+          }
+
+          .banner-stock-pill {
+            background: #2b2b32 !important;
+            color: #a5b4fc !important;
+            border-color: rgba(102, 126, 234, 0.5) !important;
+          }
+
+          .banner-tag {
+            &.track-tag {
+              background: rgba(240, 160, 32, 0.2) !important;
+              color: #f59e0b !important;
+            }
+
+            &.stance-tag {
+              background: rgba(24, 160, 88, 0.2) !important;
+              color: #10b981 !important;
+            }
+          }
+        }
+
+        .banner-right {
+          .banner-switch-btn {
+            background: #2b2b32 !important;
+            border-color: #4e5969 !important;
+            color: #e5e6eb !important;
+
+            &:hover {
+              border-color: #a5b4fc !important;
+              color: #a5b4fc !important;
+            }
+          }
         }
       }
 
