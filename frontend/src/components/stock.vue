@@ -548,12 +548,14 @@ const unwatch = watch(groupList, () => {
 // 在组件卸载时清理监听器
 onBeforeUnmount(() => {
   unwatch();
+  EventsOff('stockThesisUpdated', loadAllTheses);
 });
 onMounted(() => {
   nextTick(() => {
     initDraggableTabs();
   });
   loadAllTheses();
+  EventsOn('stockThesisUpdated', loadAllTheses);
 
   message.loading("Loading...")
   GetFollowList(currentGroupId.value).then(result => {

@@ -208,6 +208,7 @@
           @reference="handleReference"
           @edit="handleEdit"
           @resend="handleResend"
+          @save-thesis="handleSaveThesisFromMsg"
         />
       </div>
 
@@ -390,9 +391,9 @@ import {
   AddIcon,
   ViewListIcon
 } from 'tdesign-icons-vue-next'
-import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot } from '../../wailsjs/go/main/App'
+import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveStockThesis } from '../../wailsjs/go/main/App'
 import { useAiConfigStore } from '@/stores/aiConfig'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime'
+import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
 import { cleanFinalContent } from '@/utils/cleanText'
 import {
   useMessageAnchor,
@@ -954,6 +955,149 @@ function clearCurrentHistory() {
   })
 }
 
+// ========== 跨组件咨询接入与买方立论记忆入库 ==========
+function handleAgentConsult(payload: any) {
+  if (!payload) return
+  const { question, stockCode, stockName, context, mode, autoSend } = payload
+  if (!question && !context) return
+
+  // 1. 设置执行模式
+  if (mode && ['auto', 'react', 'plan_execute', 'direct'].includes(mode)) {
+    agentMode.value = mode as any
+  }
+
+  // 2. 组装输入框文本 (一手量化指标前置注入 + 深度分析推演任务)
+  let finalInput = ''
+  if (context) {
+    finalInput = `【一手量化与买方参考数据】：\n${context}\n\n【分析推演任务】：\n${question || '请结合上述一手量化参考数据，给出全维度买方深度研报与买方立论。'}`
+  } else {
+    finalInput = question || ''
+  }
+
+  inputValue.value = finalInput
+
+  // 3. 自动触发分析
+  if (autoSend !== false) {
+    nextTick(() => {
+      handleSend()
+    })
+  }
+}
+
+function onWindowAgentConsult(e: any) {
+  if (e?.detail) {
+    handleAgentConsult(e.detail)
+  }
+}
+
+// 智能提炼买方 5-Verdict 认知结构 (立论、假说、催化、证伪风险)
+function extractThesisFromText(text: string, defaultCode?: string, defaultName?: string) {
+  if (!text) return null
+
+  // 1. 识别股票代码 (标准 6 位 A 股/ETF 代码)
+  let code = defaultCode || ''
+  if (!code) {
+    const codeMatch = text.match(/\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b/)
+    if (codeMatch) code = codeMatch[1]
+  }
+  if (!code) return null
+
+  // 2. 识别股票名称
+  let name = defaultName || ''
+  if (!name) {
+    const nameMatch = text.match(/[【(（]([A-Za-z\u4e00-\u9fa5\d]+)[)）】]\s*(?:[(（]?\b\d{6}\b[)）]?)/) ||
+                      text.match(/【([A-Za-z\u4e00-\u9fa5\d]+)\s*[0-9]{6}】/)
+    if (nameMatch) name = nameMatch[1]
+  }
+
+  // 3. 识别买方五维定性判定
+  let verdict = 'NO_CHANGE'
+  let verdictText = '维持现状'
+  if (text.includes('逻辑强化') || text.includes('THESIS_STRENGTHENED') || text.includes('强烈买入') || text.includes('积极做多')) {
+    verdict = 'THESIS_STRENGTHENED'
+    verdictText = '逻辑强化'
+  } else if (text.includes('逻辑证伪') || text.includes('THESIS_BROKEN') || text.includes('清仓止损') || text.includes('强风控空仓')) {
+    verdict = 'THESIS_BROKEN'
+    verdictText = '逻辑证伪'
+  } else if (text.includes('逻辑削弱') || text.includes('THESIS_WEAKENED') || text.includes('谨慎防守') || text.includes('逢高减仓')) {
+    verdict = 'THESIS_WEAKENED'
+    verdictText = '逻辑削弱'
+  } else if (text.includes('首次建档') || text.includes('新论点') || text.includes('首次立论') || text.includes('NEW_THESIS')) {
+    verdict = 'NEW_THESIS'
+    verdictText = '首次立论'
+  }
+
+  // 4. 提取核心投资假说
+  let coreThesis = ''
+  const thesisMatch = text.match(/(?:核心投资逻辑|核心假说|核心立论|投资逻辑|核心论点)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  if (thesisMatch) {
+    coreThesis = thesisMatch[1].replace(/[#*`]/g, '').trim()
+  } else {
+    coreThesis = text.slice(0, 160).replace(/[#*`]/g, '').trim()
+  }
+
+  // 5. 提取重点跟踪催化剂
+  let keyCatalysts = ''
+  const catMatch = text.match(/(?:催化剂|跟踪催化剂|核心催化|催化事件|关键催化)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  if (catMatch) {
+    keyCatalysts = catMatch[1].replace(/[#*`]/g, '').trim()
+  }
+
+  // 6. 提取证伪条件与防守止损
+  let riskFactors = ''
+  const riskMatch = text.match(/(?:证伪条件|风险因素|反转条件|止损条件|防守位|黑天鹅风险)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
+  if (riskMatch) {
+    riskFactors = riskMatch[1].replace(/[#*`]/g, '').trim()
+  }
+
+  return {
+    code,
+    name: name || code,
+    verdict,
+    verdictText,
+    coreThesis,
+    keyCatalysts,
+    riskFactors,
+  }
+}
+
+// 消息卡片点击「存入买方认知账本」
+async function handleSaveThesisFromMsg(msg: ChatMessage) {
+  const content = msg.content || msg.rawContent || ''
+  const thesis = extractThesisFromText(content)
+  if (!thesis || !thesis.code) {
+    import('tdesign-vue-next').then(({ MessagePlugin }) => {
+      MessagePlugin.warning('未在分析结果中识别到明确的股票代码或买方论点')
+    })
+    return
+  }
+
+  try {
+    const activeCfg = aiConfigStore.activeConfig
+    const modelName = activeCfg?.modelName || 'Blades-Agent'
+    await SaveStockThesis(
+      thesis.code,
+      thesis.name || thesis.code,
+      thesis.verdict,
+      thesis.verdictText,
+      thesis.coreThesis,
+      thesis.keyCatalysts,
+      thesis.riskFactors,
+      modelName
+    )
+    import('tdesign-vue-next').then(({ MessagePlugin }) => {
+      MessagePlugin.success(`🎉 已将【${thesis.name || thesis.code}】买方认知(${thesis.verdictText})归档入库！`)
+    })
+    // 广播标的认知更新事件，驱动自选股卡片与诊断抽屉实时刷新
+    EventsEmit('stockThesisUpdated', { stockCode: thesis.code })
+  } catch (err: any) {
+    console.error('SaveStockThesis error:', err)
+    import('tdesign-vue-next').then(({ MessagePlugin }) => {
+      MessagePlugin.error(`存入买方认知账本失败: ${err?.message || err}`)
+    })
+  }
+}
+
 // ========== 生命周期 ==========
 onBeforeMount(() => {
   EventsOff('agent-message', handleAgentMessage)
@@ -973,6 +1117,11 @@ onMounted(async () => {
 
   refreshPerceptionSnapshot()
   perceptionTimer = setInterval(refreshPerceptionSnapshot, 60000)
+
+  EventsOn('agent:consult', handleAgentConsult)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('agent:consult', onWindowAgentConsult)
+  }
 
   GetConfig().then((res) => {
     if (res.darkTheme) {
@@ -999,6 +1148,10 @@ onBeforeUnmount(() => {
   if (perceptionTimer) {
     clearInterval(perceptionTimer)
     perceptionTimer = null
+  }
+  EventsOff('agent:consult', handleAgentConsult)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('agent:consult', onWindowAgentConsult)
   }
   window.removeEventListener('resize', onWindowResize)
   EventsOff('agent-message', handleAgentMessage)

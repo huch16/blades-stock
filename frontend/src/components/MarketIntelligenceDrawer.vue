@@ -32,7 +32,7 @@ import {
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
-import { dispatchAgentAction } from '../utils/agentControlBus'
+import { dispatchAgentAction, consultAgent } from '../utils/agentControlBus'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -495,6 +495,34 @@ if (typeof window !== 'undefined') {
   window.addEventListener('show-market-intelligence-serenity', onWinShowSerenity)
 }
 
+// 呼叫全屏 Agent 结合当前宏观情报进行持仓防守推演（跨组件上下文穿透）
+function callAgentForPortfolioDeduction() {
+  const title = currentTitle.value || '市场情报'
+  const phase = lifecycle.value?.phaseName || '休市整固'
+  const desc = lifecycle.value?.marketStateDesc || ''
+  
+  let summarySnippet = ''
+  if (currentReport.value?.content) {
+    // 截取前 400 字核心逻辑
+    summarySnippet = currentReport.value.content.replace(/[#*`]/g, '').trim().slice(0, 400) + '...'
+  }
+
+  let contextText = `【大盘宏观情报态势】：\n报告主题: ${title}\n市场节律相位: ${phase}\n状态描述: ${desc}\n`
+  if (summarySnippet) {
+    contextText += `情报摘要: ${summarySnippet}\n`
+  }
+
+  const question = `请结合当前【${title}】大盘宏观情报与【${phase}】市场节律状态，对全市场风险敞口与实盘自选股持仓防守位进行深度推演。重点评估：1. 当前仓位控制上限与主线板块博弈胜率；2. 针对自选股持仓有哪些黑天鹅风险需提前设防；3. 是否存在买方强反转或防御切换机会？`
+
+  handleClose()
+  consultAgent({
+    question,
+    context: contextText,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
+}
+
 function onDrawerSettingsUpdated(cfg) {
   if (cfg) {
     const prefId = cfg.aiConfigId ?? cfg.defaultAiConfigId
@@ -634,6 +662,16 @@ onBeforeUnmount(() => {
                 @click="goToSettings"
               >
                 ⚙️ 前往配置 AI
+              </NButton>
+              <NButton
+                size="tiny"
+                type="primary"
+                secondary
+                style="font-weight: 600; margin-left: 6px;"
+                title="将当前宏观情报带入全屏智能体中枢进行持仓风控推演"
+                @click="callAgentForPortfolioDeduction"
+              >
+                🤖 持仓防守推演
               </NButton>
             </div>
           </div>

@@ -144,6 +144,19 @@ registerAgentActionHandler((action) => {
         positiveText: '严格遵守风控纪律',
       })
       break
+    case 'CONSULT_AGENT':
+      // 跨组件一键呼叫全屏 AI 智能体推演中枢
+      showAgentDiagnosisDrawer.value = false
+      showMarketIntelligenceDrawer.value = false
+      router.push({ name: 'agent' })
+      activeKey.value = 'agent'
+      setTimeout(() => {
+        EventsEmit('agent:consult', action.payload)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agent:consult', { detail: action.payload }))
+        }
+      }, 100)
+      break
   }
 })
 

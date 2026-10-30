@@ -10,6 +10,7 @@
     @reference="onReference"
     @edit="onEdit"
     @resend="onResend"
+    @save-thesis="onSaveThesis"
   />
 </template>
 
@@ -33,6 +34,7 @@ const emit = defineEmits<{
   reference: [msgId: string]
   edit: [msg: ChatMessage]
   resend: [msg: ChatMessage]
+  saveThesis: [msg: ChatMessage]
 }>()
 
 const aiConfigStore = useAiConfigStore()
@@ -70,6 +72,10 @@ function onEdit(msg: ChatMessage) {
 
 function onResend(msg: ChatMessage) {
   emit('resend', msg)
+}
+
+function onSaveThesis(msg: ChatMessage) {
+  emit('saveThesis', msg)
 }
 </script>
 

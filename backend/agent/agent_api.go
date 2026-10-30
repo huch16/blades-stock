@@ -234,6 +234,24 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			sysPrompt += "\n\n" + brief
 		}
 
+		// 标的历史买方认知档案 (Stock Thesis Ledger) 前置注入 (实现认知连续演化，严禁割裂历史立论)
+		reCode := regexp.MustCompile(`\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b`)
+		if codeMatch := reCode.FindString(question); codeMatch != "" {
+			thesisApi := data.NewStockThesisApi()
+			if thesis, err := thesisApi.GetStockThesis(codeMatch); err == nil && thesis != nil && thesis.ID > 0 {
+				sysPrompt += fmt.Sprintf("\n\n【标的历史买方认知档案（供连续性演化参考）】：\n标的代码: %s (%s)\n前期认知判定: 【%s】\n核心假说: %s\n重点跟踪催化: %s\n证伪条件/防守位: %s\n请结合最新量化事实与盘口资金，重点论证该买方逻辑是维持、强化还是证伪，严禁割裂前期认知。",
+					thesis.StockCode, thesis.StockName, thesis.VerdictText, thesis.CoreThesis, thesis.KeyCatalysts, thesis.RiskFactors)
+			}
+		}
+
+		// Direct 模式下前置召回语义向量经验结晶 (让买方研报直出同样具备平台历史智慧积累)
+		if agentMode == string(AgentModeDirect) {
+			crystals, _ := DefaultSemanticDistiller().SearchKnowledgeCrystals(ctx, question, "", 2)
+			if len(crystals) > 0 {
+				sysPrompt += "\n\n" + DefaultSemanticDistiller().FormatCrystalsForPrompt(crystals)
+			}
+		}
+
 		aiConfig, _ := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
 			return uint(aiConfigId) == item.ID
 		})

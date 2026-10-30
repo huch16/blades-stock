@@ -21,8 +21,9 @@ import {
   useMessage
 } from 'naive-ui'
 import { DiagnoseStock, GetStockThesis, GetStockThesisHistory } from '../../wailsjs/go/main/App'
-import { EventsEmit } from '../../wailsjs/runtime/runtime'
+import { EventsEmit, EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { setCurrentStock } from '../utils/stockContextBus'
+import { consultAgent } from '../utils/agentControlBus'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -69,6 +70,42 @@ async function openThesisHistory(code) {
   } catch (err) {
     message.error('获取认知历史失败: ' + (err?.message || err))
   }
+}
+
+// 呼叫全屏 Agent 深度推演（跨组件上下文穿透）
+function callAgentForDeepAnalysis() {
+  const code = activeCode.value || props.stockCode
+  const name = diagnosisData.value?.stockName || activeName.value || props.stockName || code
+  if (!code) return
+
+  let contextText = `标的代码: ${code}, 标的名称: ${name}\n`
+  if (diagnosisData.value) {
+    const d = diagnosisData.value
+    contextText += `量化综合评分: ${d.totalScore || '未知'}分\n`
+    if (d.advice) contextText += `量化操作建议: ${d.advice}\n`
+    if (d.supportPrice || d.resistancePrice) {
+      contextText += `技术关键位: 支撑位 ${d.supportPrice || '--'} / 阻力位 ${d.resistancePrice || '--'}\n`
+    }
+  }
+  if (thesisData.value) {
+    const t = thesisData.value
+    contextText += `当前买方认知判定: 【${t.verdictText || t.verdict || '无'}】\n`
+    if (t.coreThesis) contextText += `原核心假说: ${t.coreThesis}\n`
+    if (t.keyCatalysts) contextText += `原核心催化: ${t.keyCatalysts}\n`
+    if (t.riskFactors) contextText += `原核心证伪风险: ${t.riskFactors}\n`
+  }
+
+  const question = `请基于最新的盘口资金、均线量价形态与基本面驱动因素，对【${name} (${code})】进行全维度买方深度推演。重点评估：1. 当前买方逻辑是维持、强化还是证伪；2. 关键催化剂兑现窗口与潜在黑天鹅风险；3. 给出严格的止损防守位与胜率赔率测算。`
+
+  handleClose()
+  consultAgent({
+    question,
+    stockCode: code,
+    stockName: name,
+    context: contextText,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
 }
 
 // 幂等防抖：同一股票 30 秒内不重复请求
@@ -186,17 +223,29 @@ const drawerWidth = computed(() => {
   return isMobile.value ? '100%' : 540
 })
 
+function onThesisUpdated(payload) {
+  const code = activeCode.value || props.stockCode
+  if (!code) return
+  if (!payload || !payload.stockCode || payload.stockCode === code) {
+    GetStockThesis(code).then(res => {
+      thesisData.value = res || null
+    }).catch(() => {})
+  }
+}
+
 onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', handleDrawerResize)
     handleDrawerResize()
   }
+  EventsOn('stockThesisUpdated', onThesisUpdated)
 })
 
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', handleDrawerResize)
   }
+  EventsOff('stockThesisUpdated', onThesisUpdated)
 })
 </script>
 
@@ -212,22 +261,37 @@ onBeforeUnmount(() => {
       :title="`✨ ${diagnosisData?.stockName || activeName || stockName} (${diagnosisData?.stockCode || activeCode || stockCode}) 量化三维诊断`"
       closable
     >
-      <!-- 快速历史对比切换条 -->
+      <!-- 快速历史对比切换条与深度推演操作 -->
       <div
-        v-if="recentStocks.length > 1"
-        style="margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;"
+        style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;"
       >
-        <span style="font-size: 11px; color: #888;">快速切换标的:</span>
-        <NButton
-          v-for="s in recentStocks"
-          :key="s.code"
-          size="tiny"
-          quaternary
-          :type="s.code === activeCode ? 'primary' : 'default'"
-          @click="switchStock(s.code, s.name)"
+        <div
+          v-if="recentStocks.length > 1"
+          style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;"
         >
-          {{ s.name || s.code }}
-        </NButton>
+          <span style="font-size: 11px; color: #888;">快速切换标的:</span>
+          <NButton
+            v-for="s in recentStocks"
+            :key="s.code"
+            size="tiny"
+            quaternary
+            :type="s.code === activeCode ? 'primary' : 'default'"
+            @click="switchStock(s.code, s.name)"
+          >
+            {{ s.name || s.code }}
+          </NButton>
+        </div>
+        <div style="margin-left: auto;">
+          <NButton
+            type="primary"
+            size="small"
+            secondary
+            style="font-weight: 600;"
+            @click="callAgentForDeepAnalysis"
+          >
+            🤖 呼叫 Agent 深度推演
+          </NButton>
+        </div>
       </div>
 
       <div

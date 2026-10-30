@@ -91,6 +91,16 @@
 
       <!-- 7. 消息操作栏 -->
       <div class="msg-actions">
+        <t-button
+          v-if="!isStreaming && hasStockThesisPotential"
+          size="small"
+          variant="text"
+          theme="primary"
+          title="将分析结论与买方假说沉淀入标的认知档案账本"
+          @click="$emit('saveThesis', message)"
+        >
+          📥 存入买方认知账本
+        </t-button>
         <t-button size="small" variant="text" theme="default" @click="$emit('copy', content)">📋 复制</t-button>
         <t-button size="small" variant="text" theme="default" @click="$emit('retry')">🔄 重试</t-button>
         <t-button size="small" variant="text" theme="default" @click="$emit('reference')">🔗 引用</t-button>
@@ -123,11 +133,21 @@ const emit = defineEmits<{
   copy: [content: string]
   retry: []
   reference: []
+  saveThesis: [msg: ChatMessage]
 }>()
 
 // 注入锚点注册函数
 const registerElement = inject<Function>('registerMessageElement')
 const unregisterElement = inject<Function>('unregisterMessageElement')
+
+// 检测内容是否具有买方立论潜在特征
+const hasStockThesisPotential = computed(() => {
+  const c = content.value || ''
+  if (!c || c.length < 30) return false
+  const hasCode = /\b(00\d{4}|30\d{4}|60\d{4}|68\d{4}|51\d{4}|58\d{4}|15\d{4})\b/.test(c)
+  const hasKeywords = /(逻辑|催化|证伪|买方|立论|研报|估值|评级|止损|仓位)/.test(c)
+  return hasCode || hasKeywords
+})
 
 // 响应式提取消息字段
 const content = computed(() => props.message.content || '')

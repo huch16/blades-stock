@@ -1,7 +1,15 @@
 import { EventsOn, EventsEmit } from '../../wailsjs/runtime'
 
 export interface AgentAction {
-  type: 'NAVIGATE_VIEW' | 'OPEN_DIAGNOSIS' | 'OPEN_MARKET_INTELLIGENCE' | 'SHOW_KLINE' | 'DISCIPLINE_ALERT' | 'FILTER_WATCHLIST'
+  type:
+    | 'NAVIGATE_VIEW'
+    | 'OPEN_DIAGNOSIS'
+    | 'OPEN_MARKET_INTELLIGENCE'
+    | 'SHOW_KLINE'
+    | 'DISCIPLINE_ALERT'
+    | 'FILTER_WATCHLIST'
+    | 'CONSULT_AGENT'
+    | 'SAVE_THESIS'
   payload: Record<string, any>
 }
 
@@ -25,6 +33,30 @@ export function dispatchAgentAction(action: AgentAction) {
       console.error('[AgentControlBus] handler error:', e)
     }
   }
+}
+
+/**
+ * 快速呼叫智能体发起深度推演（跨组件统一入口）
+ */
+export function consultAgent(opts: {
+  question: string
+  stockCode?: string
+  stockName?: string
+  context?: string
+  mode?: 'auto' | 'react' | 'plan_execute' | 'direct'
+  autoSend?: boolean
+}) {
+  dispatchAgentAction({
+    type: 'CONSULT_AGENT',
+    payload: {
+      question: opts.question,
+      stockCode: opts.stockCode || '',
+      stockName: opts.stockName || '',
+      context: opts.context || '',
+      mode: opts.mode || 'plan_execute',
+      autoSend: opts.autoSend !== false,
+    },
+  })
 }
 
 let isInitialized = false
