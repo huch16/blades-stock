@@ -36,6 +36,7 @@ export function dispatchAgentAction(action: AgentAction) {
 }
 
 export interface ConsultPayload {
+  id?: string
   question: string
   stockCode?: string
   stockName?: string
@@ -48,7 +49,8 @@ export interface ConsultPayload {
 let pendingConsult: ConsultPayload | null = null
 
 export function setPendingConsult(payload: ConsultPayload) {
-  pendingConsult = { ...payload, timestamp: Date.now() }
+  const consultId = payload.id || `consult_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  pendingConsult = { ...payload, id: consultId, timestamp: Date.now() }
 }
 
 export function consumePendingConsult(): ConsultPayload | null {
@@ -76,13 +78,16 @@ export function consultAgent(opts: {
   mode?: 'auto' | 'react' | 'plan_execute' | 'direct'
   autoSend?: boolean
 }) {
+  const consultId = `consult_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const payload: ConsultPayload = {
+    id: consultId,
     question: opts.question,
     stockCode: opts.stockCode || '',
     stockName: opts.stockName || '',
     context: opts.context || '',
     mode: opts.mode || 'plan_execute',
     autoSend: opts.autoSend !== false,
+    timestamp: Date.now(),
   }
   
   // 先落盘挂起缓存，防止异步路由加载延迟导致丢消息

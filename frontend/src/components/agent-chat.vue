@@ -829,7 +829,6 @@ function scrollToBottom(smooth = false) {
 // ========== 发送与停止 ==========
 function handleSend() {
   if (isStreaming.value) {
-    handleStop()
     return
   }
 
@@ -1048,13 +1047,31 @@ function clearCurrentHistory() {
 
 // ========== 跨组件咨询接入与买方立论记忆入库 ==========
 const lastConsultStock = ref<{ code: string; name: string } | null>(null)
+const processedConsultIds = new Set<string>()
+let lastConsultSignature = ''
+let lastConsultTimestamp = 0
 
-function handleAgentConsult(payload: any) {
+async function handleAgentConsult(payload: any) {
   if (!payload) return
-  const { question, stockCode, stockName, context, mode, autoSend } = payload
+  const { id: consultId, question, stockCode, stockName, context, mode, autoSend } = payload
   if (!question && !context) return
 
-  // 记录最近一次咨询的标的上下文，供后续买方立论归档提取兜底
+  // 1. 去重守卫：防止路由跳转与自定义事件并发导致的重复消费与竞态
+  if (consultId && processedConsultIds.has(consultId)) {
+    return
+  }
+  const currentSig = `${stockCode || ''}_${stockName || ''}_${(question || '').slice(0, 50)}`
+  const now = Date.now()
+  if (currentSig === lastConsultSignature && now - lastConsultTimestamp < 1500) {
+    return
+  }
+  if (consultId) {
+    processedConsultIds.add(consultId)
+  }
+  lastConsultSignature = currentSig
+  lastConsultTimestamp = now
+
+  // 2. 记录最近一次咨询的标的上下文，供后续买方立论归档提取兜底
   if (stockCode || stockName) {
     lastConsultStock.value = {
       code: stockCode || '',
@@ -1062,12 +1079,12 @@ function handleAgentConsult(payload: any) {
     }
   }
 
-  // 1. 设置执行模式
+  // 3. 设置执行模式
   if (mode && ['auto', 'react', 'plan_execute', 'direct'].includes(mode)) {
     agentMode.value = mode as any
   }
 
-  // 2. 组装输入框文本 (一手量化指标前置注入 + 深度分析推演任务)
+  // 4. 组装输入框文本 (一手量化指标前置注入 + 深度分析推演任务)
   let finalInput = ''
   if (context) {
     finalInput = `【一手量化与买方参考数据】：\n${context}\n\n【分析推演任务】：\n${question || '请结合上述一手量化参考数据，给出全维度买方深度研报与买方立论。'}`
@@ -1077,8 +1094,15 @@ function handleAgentConsult(payload: any) {
 
   inputValue.value = finalInput
 
-  // 3. 自动触发分析
+  // 5. 自动触发分析
   if (autoSend !== false) {
+    // 若 AI 配置正在异步拉取中，等待最多 500ms 确保配置就绪
+    if (!activeConfigId.value || activeConfigId.value <= 0) {
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+        if (activeConfigId.value && activeConfigId.value > 0) break
+      }
+    }
     nextTick(() => {
       handleSend()
     })
@@ -1516,43 +1540,6 @@ onBeforeUnmount(() => {
     }
   }
 
-  .header-center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    .mode-capsule-group {
-      display: inline-flex;
-      background: var(--td-bg-color-secondarycontainer, #f2f3f5);
-      padding: 3px;
-      border-radius: 20px;
-      gap: 2px;
-
-      .mode-capsule-btn {
-        border: none;
-        background: transparent;
-        padding: 4px 12px;
-        font-size: 12px;
-        border-radius: 16px;
-        cursor: pointer;
-        color: var(--td-text-color-secondary, #4e5969);
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        font-weight: 500;
-
-        &:hover {
-          color: var(--td-text-color-primary, #1d2129);
-        }
-
-        &.active {
-          background: var(--td-bg-color-container, #ffffff);
-          color: var(--td-brand-color, #0052d9);
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
-          font-weight: 600;
-        }
-      }
-    }
-  }
-
   .header-right {
     display: flex;
     align-items: center;
@@ -1567,6 +1554,7 @@ onBeforeUnmount(() => {
       background: var(--td-bg-color-secondarycontainer, #f2f3f5);
       border: 1px solid var(--td-border-level-1-color, #e5e6eb);
       white-space: nowrap;
+      transition: all 0.2s ease;
 
       .header-switch-label {
         font-size: 12px;
@@ -2260,6 +2248,46 @@ onBeforeUnmount(() => {
         font-size: 11px !important;
       }
     }
+  }
+}
+
+/* -------------------------------------------------------------------------
+   深色模式 (Theme Mode: Dark) 高对比度与层次质感增强
+   ------------------------------------------------------------------------- */
+:global([theme-mode="dark"]) {
+  .chat-header {
+    background: #18181c !important;
+    border-bottom-color: #2e2e33 !important;
+
+    .brand-title-wrap {
+      .brand-title {
+        color: #f2f3f5 !important;
+      }
+      .brand-badge {
+        background: rgba(102, 126, 234, 0.25) !important;
+        color: #a5b4fc !important;
+        border-color: rgba(102, 126, 234, 0.45) !important;
+      }
+    }
+
+    .header-switch-item {
+      background: rgba(255, 255, 255, 0.06) !important;
+      border-color: rgba(255, 255, 255, 0.12) !important;
+
+      .header-switch-label {
+        color: #c9cdd4 !important;
+      }
+    }
+  }
+
+  .macro-perception-hud {
+    background: #1e1e24 !important;
+    border-bottom-color: #2e2e33 !important;
+  }
+
+  .chat-input-cockpit {
+    background: #18181c !important;
+    border-top-color: #2e2e33 !important;
   }
 }
 </style>
