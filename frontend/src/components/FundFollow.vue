@@ -354,9 +354,8 @@ function blinkBorder(findId) {
   <n-grid
     :x-gap="10"
     :y-gap="10"
-    :cols="2"
+    cols="1 s:1 m:2"
     responsive="screen"
-    item-responsive
   >
     <n-gi
       v-for="info in followList"
@@ -399,8 +398,9 @@ function blinkBorder(findId) {
         <n-grid
           :cols="24"
           :x-gap="16"
+          :y-gap="10"
         >
-          <n-gi :span="10">
+          <n-gi span="24 m:10">
             <n-flex
               align="center"
               :size="12"
@@ -551,7 +551,7 @@ function blinkBorder(findId) {
             </n-flex>
           </n-gi>
 
-          <n-gi :span="14">
+          <n-gi span="24 m:14">
             <div
               v-if="holdingsMap[info.code] && holdingsMap[info.code].length"
               class="holdings-panel"
@@ -636,6 +636,8 @@ function blinkBorder(findId) {
           <n-flex
             justify="space-between"
             align="center"
+            :wrap="true"
+            :size="[6, 6]"
           >
             <n-text
               depth="3"
@@ -643,7 +645,7 @@ function blinkBorder(findId) {
             >
               {{ countdown }}s 后刷新
             </n-text>
-            <n-flex :size="8">
+            <n-flex :size="6" :wrap="true">
               <n-button
                 size="tiny"
                 :loading="refreshing"

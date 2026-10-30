@@ -374,9 +374,10 @@ function showStockKline(stockCode, stockName, market) {
 
 <template>
   <n-flex
-    :wrap="false"
+    :wrap="true"
     align="center"
-    :size="12"
+    :size="[8, 8]"
+    class="fund-ranking-toolbar"
     style="flex-shrink: 0; margin-bottom: 8px;"
   >
     <n-select
@@ -447,7 +448,7 @@ function showStockKline(stockCode, stockName, market) {
     v-model:show="holdingsModalShow"
     :title="holdingsFundName + ' - ' + holdingsFundCode + ' 十大持仓'"
     preset="card"
-    style="max-width: 1400px;"
+    style="width: min(1400px, 96vw); max-width: 96vw;"
     :mask-closable="true"
   >
     <n-text

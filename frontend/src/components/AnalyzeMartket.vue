@@ -113,6 +113,16 @@ function handleResize() {
   if (treemapRef.value) echarts.getInstanceByDom(treemapRef.value)?.resize()
   if (dailyUpDownChartRef.value) echarts.getInstanceByDom(dailyUpDownChartRef.value)?.resize()
   if (dailyLimitChartRef.value) echarts.getInstanceByDom(dailyLimitChartRef.value)?.resize()
+  if (changeStatsChartRef?.value) echarts.getInstanceByDom(changeStatsChartRef.value)?.resize()
+  if (changeTypeChartRef?.value) echarts.getInstanceByDom(changeTypeChartRef.value)?.resize()
+  if (changeRankStockRef?.value) echarts.getInstanceByDom(changeRankStockRef.value)?.resize()
+  if (changeRankIndustryRef?.value) echarts.getInstanceByDom(changeRankIndustryRef.value)?.resize()
+  if (bullBearStockUpRef?.value) echarts.getInstanceByDom(bullBearStockUpRef.value)?.resize()
+  if (bullBearStockDownRef?.value) echarts.getInstanceByDom(bullBearStockDownRef.value)?.resize()
+  if (bullBearIndustryUpRef?.value) echarts.getInstanceByDom(bullBearIndustryUpRef.value)?.resize()
+  if (bullBearIndustryDownRef?.value) echarts.getInstanceByDom(bullBearIndustryDownRef.value)?.resize()
+  if (bullBearConceptUpRef?.value) echarts.getInstanceByDom(bullBearConceptUpRef.value)?.resize()
+  if (bullBearConceptDownRef?.value) echarts.getInstanceByDom(bullBearConceptDownRef.value)?.resize()
 }
 
 watch(showTreemap, (newVal) => {
@@ -2079,25 +2089,29 @@ function handleTreemap() {
       </n-flex>
       <n-grid
         :cols="24"
-        :y-gap="0"
+        :y-gap="12"
+        :x-gap="12"
       >
-        <n-gi span="8">
+        <n-gi span="24 m:8">
           <div
             ref="chartRef"
+            class="market-chart-box"
             style="width: 100%;height: auto;--wails-draggable:no-drag"
             :style="{height:chartHeight+'px'}"
           />
         </n-gi>
-        <n-gi span="8">
+        <n-gi span="24 m:8">
           <div
             ref="limitChartRef"
+            class="market-chart-box"
             style="width: 100%;height: auto;--wails-draggable:no-drag"
             :style="{height:chartHeight+'px'}"
           />
         </n-gi>
-        <n-gi span="8">
+        <n-gi span="24 m:8">
           <div
             ref="changeRankConceptRef"
+            class="market-chart-box"
             style="width: 100%;height: auto;--wails-draggable:no-drag"
             :style="{height:chartHeight+'px'}"
           />
@@ -2106,7 +2120,8 @@ function handleTreemap() {
       <n-flex
         justify="center"
         style="margin: 8px 0"
-        :wrap="false"
+        :wrap="true"
+        :size="[6, 6]"
       >
         <n-button
           text
@@ -2151,6 +2166,7 @@ function handleTreemap() {
       <n-collapse-transition :show="showTreemap">
         <div
           ref="treemapRef"
+          class="market-chart-box"
           style="width: 100%;height: auto;--wails-draggable:no-drag"
           :style="{height:chartHeight+'px'}"
         />
@@ -2158,18 +2174,21 @@ function handleTreemap() {
       <n-collapse-transition :show="showDailyChart">
         <n-grid
           :cols="24"
-          :y-gap="0"
+          :y-gap="12"
+          :x-gap="12"
         >
-          <n-gi span="12">
+          <n-gi span="24 m:12">
             <div
               ref="dailyUpDownChartRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
           </n-gi>
-          <n-gi span="12">
+          <n-gi span="24 m:12">
             <div
               ref="dailyLimitChartRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
@@ -2179,18 +2198,21 @@ function handleTreemap() {
       <n-collapse-transition :show="showChangeStats">
         <n-grid
           :cols="24"
-          :y-gap="0"
+          :y-gap="12"
+          :x-gap="12"
         >
-          <n-gi span="12">
+          <n-gi span="24 m:12">
             <div
               ref="changeStatsChartRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
           </n-gi>
-          <n-gi span="12">
+          <n-gi span="24 m:12">
             <div
               ref="changeTypeChartRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
@@ -2200,18 +2222,21 @@ function handleTreemap() {
       <n-collapse-transition :show="showChangeRank">
         <n-grid
           :cols="24"
-          :y-gap="0"
+          :y-gap="12"
+          :x-gap="12"
         >
-          <n-gi span="12">
+          <n-gi span="24 m:12">
             <div
               ref="changeRankStockRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
           </n-gi>
-          <n-gi span="12">
+          <n-gi span="24 m:12">
             <div
               ref="changeRankIndustryRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
@@ -2258,25 +2283,29 @@ function handleTreemap() {
         </n-flex>
         <n-grid
           :cols="24"
-          :y-gap="0"
+          :y-gap="12"
+          :x-gap="12"
         >
-          <n-gi span="8">
+          <n-gi span="24 m:8">
             <div
               ref="bullBearStockUpRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
           </n-gi>
-          <n-gi span="8">
+          <n-gi span="24 m:8">
             <div
               ref="bullBearIndustryUpRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
           </n-gi>
-          <n-gi span="8">
+          <n-gi span="24 m:8">
             <div
               ref="bullBearConceptUpRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
@@ -2284,25 +2313,29 @@ function handleTreemap() {
         </n-grid>
         <n-grid
           :cols="24"
-          :y-gap="0"
+          :y-gap="12"
+          :x-gap="12"
         >
-          <n-gi span="8">
+          <n-gi span="24 m:8">
             <div
               ref="bullBearStockDownRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
           </n-gi>
-          <n-gi span="8">
+          <n-gi span="24 m:8">
             <div
               ref="bullBearIndustryDownRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
           </n-gi>
-          <n-gi span="8">
+          <n-gi span="24 m:8">
             <div
               ref="bullBearConceptDownRef"
+              class="market-chart-box"
               style="width: 100%;height: auto;--wails-draggable:no-drag"
               :style="{height:chartHeight+'px'}"
             />
@@ -2326,5 +2359,9 @@ function handleTreemap() {
 </template>
 
 <style scoped>
-
+@media screen and (max-width: 768px) {
+  .market-chart-box {
+    height: 320px !important;
+  }
+}
 </style>

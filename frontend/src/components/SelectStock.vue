@@ -24,6 +24,12 @@ const klineStockCode = ref('')
 const klineStockName = ref('')
 let klineAutoCloseTimer = null
 
+// 移动端视口检测
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
+function handleWindowResize() {
+  isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+}
+
 const showDiagnosisDrawer = ref(false)
 const diagnosisStockCode = ref('')
 const diagnosisStockName = ref('')
@@ -388,6 +394,18 @@ onBeforeMount(() => {
   loadGroupList()
 })
 
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', handleWindowResize)
+  }
+})
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', handleWindowResize)
+  }
+})
+
 function loadCustomStrategies() {
   GetAllCustomStrategies().then(res => {
     customStrategies.value = res || []
@@ -471,31 +489,33 @@ function openCenteredWindow(url, width, height) {
 </script>
 
 <template>
-  <n-grid :cols="24" style="max-height: calc(100vh - 165px)">
-    <n-gi :span="4">
+  <n-grid :cols="24" :y-gap="isMobile ? 8 : 0" style="max-height: calc(100vh - 165px)">
+    <n-gi :span="isMobile ? 24 : 4">
       <n-tabs v-model:value="leftTab" type="segment" size="small" style="margin-bottom: 4px;">
         <n-tab name="hot">热门策略</n-tab>
         <n-tab name="custom">我的策略</n-tab>
       </n-tabs>
 
-      <n-list bordered style="text-align: left;" hoverable clickable v-show="leftTab==='hot'">
-        <n-scrollbar style="max-height: calc(100vh - 210px);">
-          <n-list-item v-for="item in hotStrategy" :key="item.rank" @click="DoSearch(item.question)">
-            <n-ellipsis line-clamp="1" :tooltip="true">
-              <n-tag size="small" :bordered="false" type="info">#{{ item.rank }}</n-tag>
-              <n-text type="warning">{{ item.question }}</n-text>
-              <template #tooltip>
-                <div style="text-align: center;max-width: 180px">
-                  <n-text type="warning">{{ item.question }}</n-text>
-                </div>
-              </template>
-            </n-ellipsis>
-          </n-list-item>
+      <div v-show="leftTab==='hot'">
+        <n-scrollbar :style="{ maxHeight: isMobile ? '120px' : 'calc(100vh - 210px)' }">
+          <n-list bordered style="text-align: left;" hoverable clickable>
+            <n-list-item v-for="item in hotStrategy" :key="item.rank" @click="DoSearch(item.question)">
+              <n-ellipsis line-clamp="1" :tooltip="true">
+                <n-tag size="small" :bordered="false" type="info">#{{ item.rank }}</n-tag>
+                <n-text type="warning">{{ item.question }}</n-text>
+                <template #tooltip>
+                  <div style="text-align: center;max-width: 180px">
+                    <n-text type="warning">{{ item.question }}</n-text>
+                  </div>
+                </template>
+              </n-ellipsis>
+            </n-list-item>
+          </n-list>
         </n-scrollbar>
-      </n-list>
+      </div>
 
       <div v-show="leftTab==='custom'">
-        <n-scrollbar style="max-height: calc(100vh - 250px);">
+        <n-scrollbar :style="{ maxHeight: isMobile ? '120px' : 'calc(100vh - 250px)' }">
           <n-list bordered hoverable clickable v-if="customStrategies.length > 0">
             <n-list-item v-for="item in customStrategies" :key="item.id">
               <template #suffix>
@@ -533,7 +553,7 @@ function openCenteredWindow(url, width, height) {
               </div>
             </n-list-item>
           </n-list>
-          <n-empty v-else description="暂无自定义策略" style="margin-top: 40px;"/>
+          <n-empty v-else description="暂无自定义策略" :style="{ marginTop: isMobile ? '10px' : '40px' }"/>
         </n-scrollbar>
         <n-button block dashed type="primary" size="small" @click="openSaveModal(false)" style="margin-top: 4px;">
           <template #icon><n-icon :component="AddOutline"/></template>
@@ -541,19 +561,28 @@ function openCenteredWindow(url, width, height) {
         </n-button>
       </div>
     </n-gi>
-    <n-gi :span="20">
-      <div style="--wails-draggable:no-drag">
-        <n-input-group style="text-align: left">
-          <n-input :rows="1" clearable v-model:value="search" placeholder="请输入选股指标或者要求" @keyup.enter="Search"/>
-          <n-button type="primary" @click="Search">搜索A股</n-button>
-          <n-button type="warning" secondary @click="triggerAiStrategySummary" :disabled="!dataList || !dataList.length">
-            ⚡ AI 策略共振推演
-          </n-button>
-          <n-button type="warning" @click="openSaveModal(false)" :disabled="!search">
-            <template #icon><n-icon :component="BookmarkOutline" size="16"/></template>
-            保存策略
-          </n-button>
-        </n-input-group>
+    <n-gi :span="isMobile ? 24 : 20">
+      <div style="--wails-draggable:no-drag" class="search-bar-container">
+        <div class="search-bar-input-group">
+          <n-input
+            :rows="1"
+            clearable
+            v-model:value="search"
+            placeholder="请输入选股指标或者要求"
+            @keyup.enter="Search"
+            class="strategy-search-input"
+          />
+          <div class="search-actions-wrap">
+            <n-button type="primary" @click="Search">搜索A股</n-button>
+            <n-button type="warning" secondary @click="triggerAiStrategySummary" :disabled="!dataList || !dataList.length">
+              ⚡ AI 策略共振推演
+            </n-button>
+            <n-button type="warning" @click="openSaveModal(false)" :disabled="!search">
+              <template #icon><n-icon :component="BookmarkOutline" size="16"/></template>
+              保存策略
+            </n-button>
+          </div>
+        </div>
       </div>
       <div v-if="traceInfo" style="margin: 5px 0; --wails-draggable:no-drag">
         <n-ellipsis line-clamp="1" :tooltip="true">
@@ -654,4 +683,49 @@ function openCenteredWindow(url, width, height) {
 </template>
 
 <style scoped>
+.search-bar-container {
+  margin-bottom: 8px;
+}
+
+.search-bar-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.strategy-search-input {
+  flex: 1;
+}
+
+.search-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+@media screen and (max-width: 768px) {
+  .search-bar-input-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .strategy-search-input {
+    width: 100%;
+  }
+
+  .search-actions-wrap {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .search-actions-wrap :deep(.n-button) {
+    flex: 1;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+}
 </style>

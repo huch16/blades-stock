@@ -86,4 +86,18 @@ function updateTab(name) {
 </template>
 
 <style scoped>
+@media screen and (max-width: 768px) {
+  :deep(.n-tabs-nav-scroll-content) {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  :deep(.n-tabs-tab) {
+    padding: 6px 10px !important;
+    font-size: 13px !important;
+    white-space: nowrap !important;
+  }
+  :deep(.n-card__content) {
+    padding: 8px !important;
+  }
+}
 </style>

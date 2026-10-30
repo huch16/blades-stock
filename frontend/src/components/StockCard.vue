@@ -275,59 +275,61 @@ const emit = defineEmits([
       </n-collapse-item>
     </n-collapse>
     <template #header-extra>
-      <n-tooltip v-if="thesis && thesis.verdictText" trigger="hover">
-        <template #trigger>
-          <n-tag
-            size="tiny"
-            round
-            :bordered="false"
-            :type="getVerdictType(thesis.verdict)"
-            style="cursor: pointer; font-size: 11px; font-weight: 500; margin-right: 6px;"
-            @click.stop="emit('ai-check-stock', result['股票名称'], result['股票代码'])"
-          >
-            {{ thesis.verdictText }}
-          </n-tag>
-        </template>
-        <div style="max-width: 260px; font-size: 12px; line-height: 1.5; text-align: left;">
-          <div style="font-weight: bold; margin-bottom: 4px; color: #18a058;">🎯 买方认知假说</div>
-          <div>{{ thesis.coreThesis || '暂无详细假说描述' }}</div>
-          <div v-if="thesis.keyCatalysts" style="margin-top: 4px; color: #f0a020;">
-            <strong>催化：</strong>{{ thesis.keyCatalysts }}
+      <div class="card-header-extra">
+        <n-tooltip v-if="thesis && thesis.verdictText" trigger="hover">
+          <template #trigger>
+            <n-tag
+              size="tiny"
+              round
+              :bordered="false"
+              :type="getVerdictType(thesis.verdict)"
+              style="cursor: pointer; font-size: 11px; font-weight: 500;"
+              @click.stop="emit('ai-check-stock', result['股票名称'], result['股票代码'])"
+            >
+              {{ thesis.verdictText }}
+            </n-tag>
+          </template>
+          <div style="max-width: 260px; font-size: 12px; line-height: 1.5; text-align: left;">
+            <div style="font-weight: bold; margin-bottom: 4px; color: #18a058;">🎯 买方认知假说</div>
+            <div>{{ thesis.coreThesis || '暂无详细假说描述' }}</div>
+            <div v-if="thesis.keyCatalysts" style="margin-top: 4px; color: #f0a020;">
+              <strong>催化：</strong>{{ thesis.keyCatalysts }}
+            </div>
           </div>
-        </div>
-      </n-tooltip>
-      <n-tag
-        size="small"
-        :bordered="false"
-      >
-        {{ result['股票代码'] }}
-      </n-tag>&nbsp;
-      <n-button
-        size="tiny"
-        secondary
-        type="primary"
-        @click="emit('remove-monitor', result['股票代码'], result['股票名称'], result.key)"
-      >
-        取消关注
-      </n-button>&nbsp;
-      <n-button
-        v-if="props.openAiEnable"
-        size="tiny"
-        secondary
-        type="warning"
-        @click="emit('ai-check-stock', result['股票名称'], result['股票代码'])"
-      >
-        AI分析
-      </n-button>
-      <n-button
-        v-if="groupId != null"
-        secondary
-        type="error"
-        size="tiny"
-        @click="emit('del-stock-group', result['股票代码'], result['股票名称'], groupId)"
-      >
-        移出分组
-      </n-button>
+        </n-tooltip>
+        <n-tag
+          size="small"
+          :bordered="false"
+        >
+          {{ result['股票代码'] }}
+        </n-tag>
+        <n-button
+          size="tiny"
+          secondary
+          type="primary"
+          @click="emit('remove-monitor', result['股票代码'], result['股票名称'], result.key)"
+        >
+          取消关注
+        </n-button>
+        <n-button
+          v-if="props.openAiEnable"
+          size="tiny"
+          secondary
+          type="warning"
+          @click="emit('ai-check-stock', result['股票名称'], result['股票代码'])"
+        >
+          AI分析
+        </n-button>
+        <n-button
+          v-if="groupId != null"
+          secondary
+          type="error"
+          size="tiny"
+          @click="emit('del-stock-group', result['股票代码'], result['股票名称'], groupId)"
+        >
+          移出分组
+        </n-button>
+      </div>
     </template>
     <template #footer>
       <n-flex
@@ -379,7 +381,7 @@ const emit = defineEmits([
       </n-flex>
     </template>
     <template #action>
-      <n-flex justify="left">
+      <n-flex justify="start" wrap :size="[6, 6]" class="card-action-flex">
         <n-button
           size="tiny"
           type="warning"
@@ -432,23 +434,55 @@ const emit = defineEmits([
         >
           研报
         </n-button>
-        <n-flex justify="right">
-          <n-dropdown
-            trigger="click"
-            :options="props.groupList"
-            key-field="ID"
-            label-field="name"
-            @select="(gid) => emit('add-stock-group', gid, result['股票代码'], result['股票名称'])"
+        <n-dropdown
+          trigger="click"
+          :options="props.groupList"
+          key-field="ID"
+          label-field="name"
+          @select="(gid) => emit('add-stock-group', gid, result['股票代码'], result['股票名称'])"
+        >
+          <n-button
+            type="warning"
+            size="tiny"
           >
-            <n-button
-              type="warning"
-              size="tiny"
-            >
-              设置分组
-            </n-button>
-          </n-dropdown>
-        </n-flex>
+            设置分组
+          </n-button>
+        </n-dropdown>
       </n-flex>
     </template>
   </n-card>
 </template>
+
+<style scoped>
+.card-header-extra {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.card-action-flex {
+  width: 100%;
+}
+
+@media screen and (max-width: 768px) {
+  :deep(.n-card-header) {
+    padding: 10px 12px !important;
+  }
+  :deep(.n-card__content) {
+    padding: 8px 12px !important;
+  }
+  :deep(.n-card__footer) {
+    padding: 8px 12px !important;
+  }
+  :deep(.n-card__action) {
+    padding: 8px 12px !important;
+  }
+  .card-action-flex :deep(.n-button) {
+    padding: 0 6px !important;
+    font-size: 11px !important;
+    min-height: 24px;
+  }
+}
+</style>
