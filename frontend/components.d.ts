@@ -39,6 +39,7 @@ declare module 'vue' {
     LongTigerRankList: typeof import('./src/components/LongTigerRankList.vue')['default']
     Market: typeof import('./src/components/market.vue')['default']
     MarketIntelligenceDrawer: typeof import('./src/components/MarketIntelligenceDrawer.vue')['default']
+    MarketIntelligenceView: typeof import('./src/components/MarketIntelligenceView.vue')['default']
     McpServerManager: typeof import('./src/components/mcp-server-manager.vue')['default']
     MessageAnchorNav: typeof import('./src/components/chat/MessageAnchorNav.vue')['default']
     MoneyTrend: typeof import('./src/components/moneyTrend.vue')['default']

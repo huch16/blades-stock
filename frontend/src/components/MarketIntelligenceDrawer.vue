@@ -42,7 +42,7 @@ const props = defineProps({
   embedded: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['update:show', 'openFloatingAgentWithQuestion'])
+const emit = defineEmits(['update:show', 'openFloatingAgentWithQuestion', 'changeTab'])
 
 const router = useRouter()
 const message = useMessage()
@@ -324,6 +324,7 @@ async function loadLifecycle() {
 
 function handleTabChange(tabKey) {
   currentTab.value = tabKey
+  emit('changeTab', tabKey)
   if (!reports.value[tabKey]) {
     loadLatestForTab(tabKey)
   }
@@ -582,6 +583,9 @@ onMounted(() => {
   loadTheme()
   loadAiConfigs()
   loadLifecycle()
+  if (props.embedded) {
+    loadLatestForTab(currentTab.value)
+  }
   EventsOn('updateSettings', onDrawerSettingsUpdated)
   EventsOn('aiConfigsUpdated', onDrawerAiConfigsUpdated)
 })

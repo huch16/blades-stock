@@ -25,7 +25,7 @@ import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import { CaretDown, CaretUp, PulseOutline,} from "@vicons/ionicons5";
 import {NAvatar, NButton, NFlex, NText, useMessage, useNotification} from "naive-ui";
 import {MdPreview} from "md-editor-v3";
-import {useRoute} from 'vue-router'
+import {useRoute, useRouter} from 'vue-router'
 import RankTable from "./rankTable.vue";
 import IndustryMoneyRank from "./industryMoneyRank.vue";
 import StockResearchReportList from "./StockResearchReportList.vue";
@@ -40,9 +40,9 @@ import ClsCalendarTimeLine from "./ClsCalendarTimeLine.vue";
 import Stockhotmap from "./stockhotmap.vue";
 import BKFundFlowChart from "./bkFundFlowChart.vue";
 import ConceptFundFlowChart from "./conceptFundFlowChart.vue";
-import MarketIntelligenceDrawer from "./MarketIntelligenceDrawer.vue";
 
 const route = useRoute()
+const router = useRouter()
 const icon = ref('');
 
 const message = useMessage()
@@ -125,7 +125,6 @@ const promptTemplates = ref([])
 const industryRanks = ref([])
 const sort = ref("0")
 const nowTab = ref("市场快讯")
-const marketIntelType = ref('pre_market_briefing')
 const indexInterval = ref(null)
 const indexIndustryRank = ref(null)
 const tradingCheckInterval = ref(null)
@@ -529,17 +528,9 @@ function ReFlesh(source) {
     }
   }).catch(() => {})
 }
-function openMarketIntelligence(type) {
-  marketIntelType.value = type || 'pre_market_briefing'
-  nowTab.value = 'AI市场智能'
-  try {
-    EventsEmit('show-market-intelligence', type)
-  } catch (e) {
-    console.error('EventsEmit error:', e)
-  }
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('show-market-intelligence', { detail: type }))
-  }
+function goToIntelligence(type) {
+  const query = type ? { tab: type } : {}
+  router.push({ name: 'intelligence', query })
 }
 </script>
 
@@ -561,54 +552,16 @@ function openMarketIntelligence(type) {
           <n-button
             size="tiny"
             round
-            type="info"
-            tertiary
-            style="font-weight: 500;"
-            @click="openMarketIntelligence('pre_market_briefing')"
+            type="primary"
+            secondary
+            style="font-weight: 600;"
+            title="直通独立 AI 市场智能中枢投研工作台"
+            @click="goToIntelligence()"
           >
-            🌅 盘前前瞻
-          </n-button>
-          <n-button
-            size="tiny"
-            round
-            type="warning"
-            tertiary
-            style="font-weight: 500;"
-            @click="openMarketIntelligence('post_market_review')"
-          >
-            🌆 盘后复盘
-          </n-button>
-          <n-button
-            size="tiny"
-            round
-            type="success"
-            tertiary
-            style="font-weight: 500;"
-            @click="openMarketIntelligence('etf_rotation_decision')"
-          >
-            📈 ETF轮动
-          </n-button>
-          <n-button
-            size="tiny"
-            round
-            type="error"
-            tertiary
-            style="font-weight: 500;"
-            @click="openMarketIntelligence('serenity_industry_analysis')"
-          >
-            🔍 产业拆解
+            🧠 宏观智能中枢 ➔
           </n-button>
         </n-space>
       </template>
-      <n-tab-pane
-        name="AI市场智能"
-        tab="🧠 AI 市场智能"
-      >
-        <MarketIntelligenceDrawer
-          :embedded="true"
-          :report-type="marketIntelType"
-        />
-      </n-tab-pane>
       <n-tab-pane
         name="市场快讯"
         tab="市场快讯"

@@ -29,7 +29,6 @@ import {
 import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime, IsHKTradingTime, IsUSTradingTime} from "../wailsjs/go/main/App";
 import WebAuthModal from "./components/WebAuthModal.vue";
 import { isWails, getAuthToken, webEventBus } from "./api/bridge";
-import MarketIntelligenceDrawer from "./components/MarketIntelligenceDrawer.vue";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
 import StockLightweightKlineChart from "./components/StockLightweightKlineChart.vue";
 import { initAgentControlBus, registerAgentActionHandler, setPendingConsult } from "./utils/agentControlBus";
@@ -60,9 +59,6 @@ const telegraph = ref([])
 const groupList = ref([])
 const officialStatement= ref("")
 const marketStatus = ref('')
-const showMarketIntelligenceDrawer = ref(false)
-const marketIntelligenceType = ref('pre_market_briefing')
-const marketIntelligenceSerenityTarget = ref('')
 let marketStatusTimer = null
 
 // Web 浏览器原生桌面推送通知辅助
@@ -145,7 +141,6 @@ registerAgentActionHandler((action) => {
     case 'CONSULT_AGENT':
       // 跨组件一键呼叫统一全屏 AI 智能体推演工作台
       showAgentDiagnosisDrawer.value = false
-      showMarketIntelligenceDrawer.value = false
       setPendingConsult(action.payload)
       router.push({ name: 'agent' })
       activeKey.value = 'agent'
@@ -160,11 +155,13 @@ registerAgentActionHandler((action) => {
 })
 
 function onOpenMarketIntelligence(type, target) {
-  marketIntelligenceType.value = type || 'pre_market_briefing'
+  const tab = type || 'pre_market_briefing'
+  const query = { tab }
   if (target) {
-    marketIntelligenceSerenityTarget.value = typeof target === 'string' ? target : (target?.name || '')
+    query.target = typeof target === 'string' ? target : (target?.name || '')
   }
-  showMarketIntelligenceDrawer.value = true
+  activeKey.value = 'intelligence'
+  router.push({ name: 'intelligence', query })
 }
 
 EventsOn('show-market-intelligence', (type) => {
@@ -587,6 +584,93 @@ const menuOptions = ref([
             ),
         key: 'market11',
         icon: renderIcon(FirefoxBrowser),
+      },
+    ]
+  },
+  {
+    label: () =>
+        h(
+            RouterLink,
+            {
+              to: {
+                name: 'intelligence',
+              },
+              onClick: () => {
+                activeKey.value = 'intelligence'
+              },
+            },
+            {default: () => '宏观智能'}
+        ),
+    key: 'intelligence',
+    icon: renderIcon(AnalyticsOutline),
+    children: [
+      {
+        label: () =>
+            h(
+                RouterLink,
+                {
+                  to: {
+                    name: 'intelligence',
+                    query: { tab: 'pre_market_briefing' },
+                  },
+                  onClick: () => {
+                    activeKey.value = 'intelligence'
+                  },
+                },
+                {default: () => '🌅 盘前前瞻'}
+            ),
+        key: 'intel_pre',
+      },
+      {
+        label: () =>
+            h(
+                RouterLink,
+                {
+                  to: {
+                    name: 'intelligence',
+                    query: { tab: 'etf_rotation_decision' },
+                  },
+                  onClick: () => {
+                    activeKey.value = 'intelligence'
+                  },
+                },
+                {default: () => '📈 ETF轮动'}
+            ),
+        key: 'intel_etf',
+      },
+      {
+        label: () =>
+            h(
+                RouterLink,
+                {
+                  to: {
+                    name: 'intelligence',
+                    query: { tab: 'post_market_review' },
+                  },
+                  onClick: () => {
+                    activeKey.value = 'intelligence'
+                  },
+                },
+                {default: () => '🌆 盘后复盘'}
+            ),
+        key: 'intel_post',
+      },
+      {
+        label: () =>
+            h(
+                RouterLink,
+                {
+                  to: {
+                    name: 'intelligence',
+                    query: { tab: 'serenity_industry_analysis' },
+                  },
+                  onClick: () => {
+                    activeKey.value = 'intelligence'
+                  },
+                },
+                {default: () => '🔍 产业拆解'}
+            ),
+        key: 'intel_serenity',
       },
     ]
   },
@@ -1201,6 +1285,7 @@ const currentMobileTab = computed(() => {
   const routeName = router.currentRoute.value.name
   if (!routeName || routeName === 'stock') return 'stock'
   if (routeName === 'market') return 'market'
+  if (routeName === 'intelligence') return 'market'
   if (routeName === 'agent') return 'agent'
   if (routeName === 'research') return 'research'
   if (routeName === 'settings') return 'settings'
@@ -1311,10 +1396,15 @@ function initApp() {
             (data.content || '').slice(0, 500) + ((data.content || '').length > 500 ? '...' : '')
           )
         ]),
+        action: () => h(NButton, {
+          size: 'small',
+          type: 'primary',
+          secondary: true,
+          onClick: () => onOpenMarketIntelligence(data.type)
+        }, { default: () => '📖 查看宏观研报 ➔' }),
         meta: () => h(NText, { depth: 3 }, { default: () => `${new Date(data.generatedAt).toLocaleString()} · ${data.source || 'Agent'}` }),
         duration: 1000 * 60 * 5,
       })
-      EventsEmit('show-market-intelligence', data.type)
     })
   }).catch(err => {
     console.error("GetConfig(onMounted) error:", err)
@@ -1353,11 +1443,6 @@ onMounted(() => {
           <n-dialog-provider>
             <WebAuthModal />
             <template v-if="isAuthenticated">
-              <MarketIntelligenceDrawer
-                v-model:show="showMarketIntelligenceDrawer"
-                :report-type="marketIntelligenceType"
-                :initial-serenity-target="marketIntelligenceSerenityTarget"
-              />
               <!-- 全局 Agent 控制抽屉 -->
               <StockDiagnosisDrawer
                 v-model:show="showAgentDiagnosisDrawer"

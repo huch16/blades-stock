@@ -6,6 +6,7 @@ import stockView from '../components/stock.vue'
 const fundView = () => import("../components/fund.vue")
 const settingsView = () => import('../components/settings.vue')
 const marketView = () => import("../components/market.vue")
+const marketIntelligenceView = () => import("../components/MarketIntelligenceView.vue")
 const agentChat = () => import("../components/agent-chat.vue")
 const research = () => import("../components/researchIndex.vue")
 const cronTaskManager = () => import("../components/cron-task-manager.vue")
@@ -19,6 +20,7 @@ const routes = [
     { path: '/fund', component: fundView, name: 'fund' },
     { path: '/settings', component: settingsView, name: 'settings' },
     { path: '/market', component: marketView, name: 'market' },
+    { path: '/intelligence', component: marketIntelligenceView, name: 'intelligence' },
     { path: '/agent', component: agentChat, name: 'agent' },
     { path: '/research', component: research, name: 'research' },
     { path: '/cron-tasks', component: cronTaskManager, name: 'cronTasks' },
