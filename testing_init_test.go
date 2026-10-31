@@ -23,6 +23,7 @@ func TestMain(m *testing.M) {
 
 	dbPath := filepath.Join(tmpDir, "stock.db")
 	db.Init(dbPath)
+	AutoMigrate()
 
 	os.Exit(m.Run())
 }

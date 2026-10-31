@@ -41,6 +41,8 @@ func init() {
 	}
 
 	SharedHTTPClient = resty.NewWithClient(sharedHTTPClient).
+		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36").
+		SetHeader("Accept", "application/json, text/plain, */*").
 		SetRetryCount(0).
 		SetTimeout(300 * time.Second)
 }
@@ -107,6 +109,8 @@ func CreateHTTPClientWithTimeout(timeout time.Duration) *resty.Client {
 	}
 
 	return resty.NewWithClient(httpClient).
+		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36").
+		SetHeader("Accept", "application/json, text/plain, */*").
 		SetTimeout(timeout).
 		SetRetryCount(0)
 }

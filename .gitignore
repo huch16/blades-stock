@@ -161,3 +161,9 @@ vendor-blades/
 /_tmp34.py
 /db34.txt
 /tushare_whitelist.txt
+*.log
+/server.log
+/server_test.log
+/.gotmp/
+/.tmp/
+data/*.token

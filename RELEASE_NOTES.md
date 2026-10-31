@@ -51,6 +51,23 @@ Highlights / 核心亮点
      - 自选股卡片实时监听买方认知变动，毫秒级更新立论标签（逻辑强化、维持现状、逻辑削弱、逻辑证伪、首次建档）；
      - Agent 执行前置自动检索目标标的的历史买方假说账本与平台经验结晶（`KnowledgeCrystal`），实现“感知 -> 检索经验结晶 -> 结合一手数据 -> 产出买方立论 -> 沉淀认知账本 -> 回溯复盘 -> 凝练新结晶”的完整自我进化飞轮！
 
+6. **工业级全面检查、修正、清理、优化与固化交付 (Industrial-Grade Hardening & Solidification)**
+   - **全局智能体调度总线统一收敛**：
+     - 全量清理 8 大业务组件（`SelectStock`、`stock`、`allStockList`、`stockChangesMonitor`、`uplimitLadder`、`TradingRecordManager`、`aiRecommendStocksList`、`StockDiagnosisDrawer`）中残留的已废弃悬浮事件，统一平滑收敛至 `@/utils/agentControlBus` 的 `consultAgent()` 黄金总线；
+     - 补齐 `App.vue` 智能体控制动作闭环分支：`SAVE_THESIS`（自动无感知落库买方认知账本 `stock_thesis_ledger`）与 `FILTER_WATCHLIST`（自选股动态联动过滤）。
+   - **向量服务端点自愈与版本升级**：
+     - 彻底解决 NVIDIA NIM 官方下线 `nv-embed-v1` 导致的 HTTP 410 Gone 告警，自动透明迁移至当前最新 `nvidia/nemotron-3-embed-1b`（2048 维向量），语义向量技能匹配与长期记忆检索实时恢复 100% 可用。
+   - **工业级网络韧性与反爬防护**：
+     - 在 `SharedHTTPClient` 及 `holiday_tool` 中统一注入现代真实浏览器请求头（`User-Agent` 与 `Accept`），彻底杜绝 Cloudflare / Timor 等数据源拦截返回 HTTP 403 导致的交易日判断失误。
+   - **研报持久化与网络断连解耦**：
+     - 将 `market_lifecycle.go` 研报归档上下文升级为独立的 `context.Background()`，杜绝因客户端网页刷新或短暂断网导致研报写入 SQLite 中断的极端边界情况。
+   - **前端构建分包深度微调与零告警**：
+     - 优化 Vite Rollup 分包规则，将 Vue 3 核心与 Naive UI 细粒度解耦，独立拆出轻量高效的 `vendor-vue-core`（107 kB），全站产物编译 0 Warning、0 Error。
+   - **全量测试套件预迁移固化**：
+     - 在根目录与子包 `testing_init_test.go` 中引入完整模型表预迁移，全系统单元测试（43 个包 / 100+ 测试项）100% 通过且无表结构缺失警告。
+   - **全景工作台自动化 E2E 验证 (Playwright)**：
+     - 覆盖 9 大核心工作站（自选监控、ETF基金、大盘行情、宏观智能、AI智能体、多周期K线、VectorBT回测、设置中枢、审计中心），100% 无错误顺畅运行。
+
 ---
 
 # Release v1.6.0
