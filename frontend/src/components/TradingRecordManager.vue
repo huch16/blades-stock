@@ -12,6 +12,7 @@ import {
   GetConfig
 } from '../../wailsjs/go/main/App'
 import { EventsEmit } from '../../wailsjs/runtime/runtime'
+import { consultAgent } from '../utils/agentControlBus'
 import {
   NButton,
   NDataTable,
@@ -270,7 +271,13 @@ function triggerAiTradeAudit(row) {
 2. 【知行合一排查】：止损止盈设定是否合理？实盘中是否出现了扛单、恐慌割肉或过早卖飞等心态变形？
 3. 【进化指导】：下次遇到同类行情，如何优化入场时机与风控执行力？`
 
-  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  consultAgent({
+    question: prompt,
+    stockCode: row.StockCode || '',
+    stockName: name,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
   message.success(`已发起 [${name}] 单笔交易 AI 纪律体检！`)
 }
 
@@ -331,7 +338,11 @@ function triggerAiPortfolioAudit() {
 2. 【知行合一痛点排查】：是否存在“赚小钱就跑、亏大钱死扛”或“频繁交易磨损手续费”的散户通病？
 3. 【下阶段专属红线军规】：列出 3 条个人交易者必须严格执行的防爆仓军规纪律。`
 
-  EventsEmit('openFloatingAgentWithQuestion', prompt)
+  consultAgent({
+    question: prompt,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
   message.success('已发起个人交易账户 AI 全面体检！')
 }
 

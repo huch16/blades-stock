@@ -42,7 +42,7 @@ const props = defineProps({
   embedded: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['update:show', 'openFloatingAgentWithQuestion', 'changeTab'])
+const emit = defineEmits(['update:show', 'changeTab'])
 
 const router = useRouter()
 const message = useMessage()

@@ -2,6 +2,7 @@
 import {computed, h, onBeforeMount, onBeforeUnmount, onMounted, onUnmounted, ref, reactive} from 'vue'
 import {GetStockChanges, GetConfig, GetStockChangeHistory, SaveStockChangesToHistory, GetAllStockChangesWithPaging} from "../../wailsjs/go/main/App";
 import {NButton, NTag, NText, useMessage, useNotification} from "naive-ui";
+import { consultAgent } from "../utils/agentControlBus";
 
 const notify = useNotification()
 const message = useMessage()
@@ -339,7 +340,13 @@ function triggerAiAnomalyAnalysis(row) {
 2. 【排雷风险排查】：近期是否存在解禁减持、业绩预亏、高位筹码松动或重大黑天鹅风险？
 3. 【实战防套锦囊】：个人散户此刻应当追高、观望等待回调，还是果断止损防飞刀？给出明确防套点位与纪律。`
 
-  EventsEmit('openFloatingAgentWithQuestion', { question: prompt, agentMode: 'direct' })
+  consultAgent({
+    question: prompt,
+    stockCode: code,
+    stockName: name,
+    mode: 'direct',
+    autoSend: true,
+  })
   message.success(`已发起 [${name}] 异动 AI 归因排雷推演！`)
 }
 
@@ -424,8 +431,12 @@ async function triggerAiMarketAnomalySummary() {
 2. 【虚实辨析与持续性】：进攻型异动标的是否具备板块共振？哪些容易是脉冲式一日游/飞刀？
 3. 【散户避坑与实操风控】：针对当前异动结构，给出明确的防追高点位策略与防套纪律。`
 
-  EventsEmit('openFloatingAgentWithQuestion', { question: prompt, agentMode: 'direct' })
-  message.success('已提炼盘面异动，正在右侧 AI 助手展开全景透视...', { duration: 3500 })
+  consultAgent({
+    question: prompt,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
+  message.success('已提炼盘面异动，正在 AI Agent 工作台展开全景透视...', { duration: 3500 })
 }
 
 function checkTradingTime() {

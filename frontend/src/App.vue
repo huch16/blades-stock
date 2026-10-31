@@ -26,7 +26,7 @@ import {
   StatsChartOutline,
   Wallet, WarningOutline, TimeOutline, SearchOutline,
 } from '@vicons/ionicons5'
-import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime, IsHKTradingTime, IsUSTradingTime} from "../wailsjs/go/main/App";
+import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime, IsHKTradingTime, IsUSTradingTime, SaveStockThesis} from "../wailsjs/go/main/App";
 import WebAuthModal from "./components/WebAuthModal.vue";
 import { isWails, getAuthToken, webEventBus } from "./api/bridge";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
@@ -150,6 +150,35 @@ registerAgentActionHandler((action) => {
           window.dispatchEvent(new CustomEvent('agent:consult', { detail: action.payload }))
         }
       }, 100)
+      break
+    case 'FILTER_WATCHLIST':
+      router.push({
+        name: 'stock',
+        query: {
+          filter: action.payload?.keyword || action.payload?.tag || '',
+        },
+      })
+      activeKey.value = 'stock'
+      globalMessage.info('🤖 已为您定位至自选股列表')
+      break
+    case 'SAVE_THESIS':
+      if (action.payload?.stockCode) {
+        const p = action.payload
+        SaveStockThesis(
+          p.stockCode,
+          p.stockName || '',
+          p.verdict || 'HOLD',
+          p.verdictText || '观察跟踪',
+          p.coreThesis || '',
+          p.keyCatalysts || '',
+          p.riskFactors || '',
+          p.modelName || 'Agent',
+        ).then(() => {
+          globalMessage.success(`🤖 已将【${p.stockName || p.stockCode}】买方立论成功沉淀至认知账本！`)
+        }).catch((err) => {
+          console.error('[AgentControlBus] SaveStockThesis error:', err)
+        })
+      }
       break
   }
 })

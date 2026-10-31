@@ -211,7 +211,13 @@ function askAgentAssistant() {
   const score = diagnosisData.value?.overallScore || ''
   const suggestion = diagnosisData.value?.suggestion || ''
   const q = `请针对 ${targetName} (${targetCode}) 结合当前三维量化诊断（综合评分 ${score}分，建议 ${suggestion}），详细分析近期走势、买卖关键点位以及操作建议。`
-  EventsEmit('openFloatingAgentWithQuestion', q)
+  consultAgent({
+    question: q,
+    stockCode: targetCode,
+    stockName: targetName,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
 }
 
 // 移动端响应式感知与抽屉尺寸适配

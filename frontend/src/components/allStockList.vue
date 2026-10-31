@@ -12,6 +12,7 @@ import KLineChart from "./KLineChart.vue";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import StockDiagnosisDrawer from "./StockDiagnosisDrawer.vue";
 import {EventsEmit} from "../../wailsjs/runtime";
+import { consultAgent } from "../utils/agentControlBus";
 import {FolderOpenOutline, AddOutline} from "@vicons/ionicons5";
 import {format} from "date-fns";
 
@@ -74,7 +75,13 @@ function triggerAiShapeAnalysis(row) {
 2. 【买卖点与止损】：次日进场博弈的关键低吸/确认买点在哪里？关键防守支撑与失效止损底线在哪里？
 3. 【纪律锦囊】：给出 1 条针对该股的核心实盘防坑建议。`
 
-  EventsEmit('openFloatingAgentWithQuestion', { question: prompt, agentMode: 'direct' })
+  consultAgent({
+    question: prompt,
+    stockCode: code,
+    stockName: name,
+    mode: 'direct',
+    autoSend: true,
+  })
   message.success(`已发起 [${name}] 形态 AI 推演！`)
 }
 
@@ -99,7 +106,11 @@ function triggerAiShapeListSummary() {
 2. 【形态虚实辨析】：在大盘当前市场环境下，该形态（如连续放量、连涨突破等）的实际胜率与炸板风险如何？
 3. 【实战选强与仓位】：如何从这批标的中选出最强的排头兵？给出严格的仓位管理与买入防线。`
 
-  EventsEmit('openFloatingAgentWithQuestion', { question: prompt, agentMode: 'direct' })
+  consultAgent({
+    question: prompt,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
   message.success('已发起形态列表 AI 共振推演！')
 }
 

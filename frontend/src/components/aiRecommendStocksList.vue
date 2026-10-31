@@ -11,7 +11,7 @@ import {NAvatar, NButton, NEllipsis, NSwitch, NTag, NText, useMessage, useNotifi
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import sparkLine from "./stockSparkLine.vue"
 import {format} from "date-fns";
-import { dispatchAgentAction } from "../utils/agentControlBus";
+import { dispatchAgentAction, consultAgent } from "../utils/agentControlBus";
 import { setCurrentStock } from "../utils/stockContextBus";
 
 const notify = useNotification()
@@ -61,11 +61,11 @@ async function handleSyncFromIntelligence() {
 }
 
 function handleTriggerAgentRecommendation() {
-  window.dispatchEvent(
-    new CustomEvent('openFloatingAgentWithQuestion', {
-      detail: '请结合当前市场情绪红绿灯与板块资金流向，为我推荐 3 只具有高盈亏比的优质潜力标的，并给出明确的买入区间与止损点，调用 BatchCreateAiRecommendStocks 保存到推荐库。'
-    })
-  )
+  consultAgent({
+    question: '请结合当前市场情绪红绿灯与板块资金流向，为我推荐 3 只具有高盈亏比的优质潜力标的，并给出明确的买入区间与止损点，调用 BatchCreateAiRecommendStocks 保存到推荐库。',
+    mode: 'plan_execute',
+    autoSend: true,
+  })
 }
 const mdPreviewRef = ref(null)
 const mdEditorRef = ref(null)

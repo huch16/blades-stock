@@ -1793,7 +1793,11 @@ ${summary.join('\n\n')}
    - 🔴【破位预警/果断止损】：跌破关键均线支撑、浮亏扩大或存在解禁业绩雷区的标的；
 2. 【今日盘中盯盘主线与红线】：今日操作重点聚焦哪只标的？绝对禁止冲动追高哪只？`
 
-  EventsEmit('openFloatingAgentWithQuestion', { question: prompt, agentMode: 'direct' })
+  consultAgent({
+    question: prompt,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
   message.success(`已发起 [${groupTitle}] 盘前综合排雷诊断！`)
 }
 

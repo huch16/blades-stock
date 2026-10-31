@@ -133,6 +133,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
+import { useMessage } from 'naive-ui'
 import CollapsibleSection from './CollapsibleSection.vue'
 import StreamingSkeleton from './StreamingSkeleton.vue'
 import ToolTimeline from './ToolTimeline.vue'
@@ -273,33 +274,29 @@ function getStepDotClass(step: string): string {
   return ''
 }
 
+const message = useMessage()
+
 function onSkeletonComplete() {
   // 骨架屏完成，实际内容会由父组件替换
 }
 
 async function handleCopyToolArgs(args: string) {
   const ok = await copyToClipboard(args)
-  import('tdesign-vue-next').then(({ MessagePlugin }) => {
-    if (ok) MessagePlugin.success('参数已复制')
-    else MessagePlugin.error('复制失败，请手动选取文本')
-  })
+  if (ok) message.success('参数已复制')
+  else message.error('复制失败，请手动选取文本')
 }
 
 async function handleCopyToolResult(result: string) {
   const ok = await copyToClipboard(result)
-  import('tdesign-vue-next').then(({ MessagePlugin }) => {
-    if (ok) MessagePlugin.success('结果已复制')
-    else MessagePlugin.error('复制失败，请手动选取文本')
-  })
+  if (ok) message.success('结果已复制')
+  else message.error('复制失败，请手动选取文本')
 }
 
 async function copyAnchorLink() {
   const url = `${window.location.origin}${window.location.pathname}#/agent?msg=${props.message.id}`
   const ok = await copyToClipboard(url)
-  import('tdesign-vue-next').then(({ MessagePlugin }) => {
-    if (ok) MessagePlugin.success('消息链接已复制到剪贴板')
-    else MessagePlugin.error('复制失败，请手动复制浏览器地址')
-  })
+  if (ok) message.success('消息链接已复制到剪贴板')
+  else message.error('复制失败，请手动复制浏览器地址')
 }
 </script>
 

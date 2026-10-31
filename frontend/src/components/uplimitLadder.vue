@@ -2,6 +2,7 @@
 import {onBeforeMount, onBeforeUnmount, ref, computed, h} from 'vue'
 import {GetConfig, GetUplimitHot, IsTradingTime, IsTradingDay, GetLatestTradingDay} from "../../wailsjs/go/main/App";
 import {EventsEmit} from "../../wailsjs/runtime";
+import { consultAgent } from "../utils/agentControlBus";
 import {NButton, NText, NTag, NTooltip, NProgress, useMessage} from "naive-ui";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 
@@ -385,8 +386,12 @@ function triggerAiRelayAnalysis() {
 2. 【梯队结构与龙头健康度】：高标是加速还是分歧？炸板标的有什么共性特征？
 3. 【次日个人实战操作锦囊】：明天个人散户应该进攻还是管住手？如果出手，重点看几板（如 1 进 2 还是首板补涨）？给出严格的止损防套纪律。`
 
-  EventsEmit('openFloatingAgentWithQuestion', prompt)
-  message.success('已将短线连板梯队数据送入 AI 助手推演！')
+  consultAgent({
+    question: prompt,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
+  message.success('已将短线连板梯队数据送入 AI Agent 工作台推演！')
 }
 
 function getTypeColor(type) {

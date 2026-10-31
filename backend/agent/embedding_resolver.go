@@ -64,11 +64,11 @@ func resolveEmbeddingCandidate(settingConfig *data.SettingConfig, selected *data
 			return &embeddingCandidate{
 				baseURL: url,
 				apiKey:  settingConfig.EmbeddingApiKey,
-				model:   settingConfig.EmbeddingModelName,
+				model:   sanitizeEmbeddingModel(url, settingConfig.EmbeddingModelName),
 				source:  "全局向量配置",
 			}
 		}
-		return resolveEmbeddingEndpoint(settingConfig, selected, settingConfig.EmbeddingModelName)
+		return resolveEmbeddingEndpoint(settingConfig, selected, sanitizeEmbeddingModel(settingConfig.EmbeddingBaseUrl, settingConfig.EmbeddingModelName))
 	}
 
 	if selected != nil && selected.EmbeddingEnabled && strings.TrimSpace(selected.EmbeddingModelName) != "" {
@@ -79,7 +79,7 @@ func resolveEmbeddingCandidate(settingConfig *data.SettingConfig, selected *data
 		return &embeddingCandidate{
 			baseURL: url,
 			apiKey:  selected.ApiKey,
-			model:   selected.EmbeddingModelName,
+			model:   sanitizeEmbeddingModel(url, selected.EmbeddingModelName),
 			source:  "所选 AI 配置的 Embedding 设置",
 		}
 	}
@@ -93,13 +93,26 @@ func resolveEmbeddingCandidate(settingConfig *data.SettingConfig, selected *data
 			return &embeddingCandidate{
 				baseURL: url,
 				apiKey:  cfg.ApiKey,
-				model:   cfg.EmbeddingModelName,
+				model:   sanitizeEmbeddingModel(url, cfg.EmbeddingModelName),
 				source:  "扫描到的 Embedding 配置",
 			}
 		}
 	}
 
 	return nil
+}
+
+// sanitizeEmbeddingModel 自动将过期/下线的向量模型平滑升级至平台活跃主力模型
+func sanitizeEmbeddingModel(baseURL, model string) string {
+	model = strings.TrimSpace(model)
+	baseLower := strings.ToLower(baseURL)
+	if strings.Contains(baseLower, "nvidia.com") {
+		// nv-embed-v1 与 nv-embedqa-e5-v5 均已于 2026 年下线 (HTTP 410)
+		if model == "nvidia/nv-embed-v1" || model == "nvidia/nv-embedqa-e5-v5" || model == "baai/bge-m3" || model == "" {
+			return "nvidia/nemotron-3-embed-1b"
+		}
+	}
+	return model
 }
 
 // resolveEmbeddingEndpoint picks an endpoint when the global vector config is

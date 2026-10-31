@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"blades-stock/backend/data"
 	"blades-stock/backend/db"
+	"blades-stock/backend/models"
 )
 
 // TestMain initializes a temp SQLite database for tests in this package
@@ -25,6 +27,18 @@ func TestMain(m *testing.M) {
 
 	dbPath := filepath.Join(tmpDir, "stock.db")
 	db.Init(dbPath)
+
+	// 自动预先迁移核心测试表，消除单元测试中因无表导致的 SQL 错误刷屏
+	_ = db.Dao.AutoMigrate(
+		&data.Settings{},
+		&data.AIConfig{},
+		&data.StockBasic{},
+		&models.AllStockInfo{},
+		&models.StockThesisLedger{},
+		&models.StockVerdictHistory{},
+		&models.AiRecommendStocks{},
+		&models.AIResponseResult{},
+	)
 
 	os.Exit(m.Run())
 }

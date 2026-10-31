@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"blades-stock/backend/data"
 	"blades-stock/backend/db"
+	"blades-stock/backend/models"
 )
 
 // TestMain initializes a temp SQLite database for the duration of the test
@@ -27,6 +29,18 @@ func TestMain(m *testing.M) {
 
 	dbPath := filepath.Join(tmpDir, "stock.db")
 	db.Init(dbPath)
+
+	_ = db.Dao.AutoMigrate(
+		&data.Settings{},
+		&data.AIConfig{},
+		&models.StockThesisLedger{},
+		&models.StockVerdictHistory{},
+		&models.AiRecommendStocks{},
+		&models.AIResponseResult{},
+		&models.KnowledgeCrystal{},
+		&models.PaperPortfolio{},
+		&models.PostMortemAuditRecord{},
+	)
 
 	// 确保 skills 表存在（供 SkillEmbeddingService.MatchSkills 查询）
 	db.Dao.Exec(`CREATE TABLE IF NOT EXISTS skills (

@@ -519,8 +519,8 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 		Source:      "Agent盘前与ETF轮动引擎",
 	}
 
-	// 持久化到 ai_response_result 归档，标明 code 为 ETF 组合
-	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动盘前内参", finalReport, "pre_market_etf_"+todayStr, prompt)
+	// 持久化到 ai_response_result 归档，标明 code 为 ETF 组合（使用独立 Background 上下文，防止客户端临时断连导致落库中断）
+	data.NewDeepSeekOpenAi(context.Background(), aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动盘前内参", finalReport, "pre_market_etf_"+todayStr, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
 
 	cacheReport(report)
@@ -675,7 +675,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 		saveCode = "serenity"
 	}
 	saveName := fmt.Sprintf("Serenity-%s", sectorOrStockName)
-	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult(saveCode, saveName, finalReport, "serenity_"+todayStr+"_"+saveCode, prompt)
+	data.NewDeepSeekOpenAi(context.Background(), aiConfigId).SaveAIResponseResult(saveCode, saveName, finalReport, "serenity_"+todayStr+"_"+saveCode, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
 
 	cacheReport(report)
@@ -800,8 +800,8 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 		Source:      "Agent复盘引擎",
 	}
 
-	// 持久化到 ai_response_result
-	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("收盘复盘", "盘后复盘", finalReport, "post_market_"+todayStr, prompt)
+	// 持久化到 ai_response_result（使用独立 Background 上下文，防止客户端临时断连导致落库中断）
+	data.NewDeepSeekOpenAi(context.Background(), aiConfigId).SaveAIResponseResult("收盘复盘", "盘后复盘", finalReport, "post_market_"+todayStr, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
 
 	cacheReport(report)
