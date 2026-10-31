@@ -40,6 +40,7 @@ type StreamMessage struct {
 	Actions          []types.AgentAction `json:"actions,omitempty"`
 	Metrics          *AgentRunMetrics    `json:"metrics,omitempty"`
 	ModelName        string              `json:"model_name,omitempty"`
+	FinishReason     string              `json:"finish_reason,omitempty"`
 }
 
 type StockAiAgent struct {
@@ -684,14 +685,18 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		// 解析并在结束前下发伴随的全局控制动作指令
 		if fullResponse.Len() > 0 {
-			_, actions := types.ParseAndExtractActions(fullResponse.String())
+			cleanedText, actions := types.ParseAndExtractActions(fullResponse.String())
+			if strings.TrimSpace(cleanedText) != "" && cleanedText != fullResponse.String() {
+				fullResponse.Reset()
+				fullResponse.WriteString(cleanedText)
+			}
 
 			// Audit log for agent actions
 			if len(actions) > 0 {
 				for _, action := range actions {
 					actionAuditEntry := models.AuditLog{
 						ToolName:    "AGENT_ACTION_" + string(action.Type),
-						Success:     true,  // Actions are parsed from successful LLM responses
+						Success:     true, // Actions are parsed from successful LLM responses
 					}
 					// Serialize action details as JSON for the request/response fields
 					actionJSON, _ := json.Marshal(action)
@@ -709,9 +714,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		}
 
 		ch <- &StreamMessage{
-			Role:    "assistant",
-			Content: "agent-DONE",
-			Metrics: &metrics,
+			Role:         "assistant",
+			Content:      "agent-DONE",
+			FinishReason: "stop",
+			Metrics:      &metrics,
 		}
 		close(ch)
 	}()

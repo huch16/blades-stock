@@ -763,9 +763,9 @@ import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveS
 import html2canvas from 'html2canvas'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
-import { cleanFinalContent } from '@/utils/cleanText'
+import { cleanFinalContent, stripAllAgentActionBlocks } from '@/utils/cleanText'
 import { copyToClipboard } from '@/utils/clipboard'
-import { consumePendingConsult } from '../utils/agentControlBus'
+import { consumePendingConsult, dispatchAgentAction } from '../utils/agentControlBus'
 import {
   useMessageAnchor,
   type ChatMessage,
@@ -1463,13 +1463,25 @@ function handleAgentMessage(data: StreamChunk) {
       }
     }
 
-    // 正文流式追加
+    // 动作指令追踪与自动调度执行
+    if (data.actions && data.actions.length > 0) {
+      if (!targetMsg.actions) targetMsg.actions = []
+      targetMsg.actions.push(...data.actions)
+      for (const act of data.actions) {
+        dispatchAgentAction(act)
+      }
+    }
+
+    // 正文流式追加与结束判断
     if (data.content) {
       if (data.content === 'agent-DONE') {
         if (data.metrics) targetMsg.metrics = data.metrics
+        finalizeStream(targetMsg)
+        return
       } else {
         targetMsg.rawContent = (targetMsg.rawContent || '') + data.content
-        targetMsg.content = targetMsg.rawContent
+        // 流式过程中即时过滤未闭合/闭合的 agent-action，杜绝 JSON 代码块直接闪烁污染界面
+        targetMsg.content = stripAllAgentActionBlocks(targetMsg.rawContent)
       }
     }
 
@@ -1486,9 +1498,10 @@ function handleAgentMessage(data: StreamChunk) {
     // 智能滚动吸底
     autoScrollIfNearBottom()
 
-    // 结束处理
-    if (data.response_meta?.finish_reason === 'stop') {
+    // 结束处理 (严格兼容 finish_reason 与 response_meta)
+    if (data.finish_reason === 'stop' || data.response_meta?.finish_reason === 'stop') {
       finalizeStream(targetMsg)
+      return
     }
   }
 }

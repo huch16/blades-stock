@@ -78,6 +78,27 @@
         <div v-else class="empty-state">（空回复）</div>
       </div>
 
+      <!-- 5.1 伴随动作卡片 (Agent Action Chips) —— 将 raw agent-action JSON 转化为高交互性原生芯片 -->
+      <div v-if="actions && actions.length > 0 && !isStreaming" class="action-chips-container">
+        <div class="action-chips-header">
+          <span class="action-chips-icon">⚡</span>
+          <span class="action-chips-label">智能体建议系统联动：</span>
+        </div>
+        <div class="action-chips-list">
+          <button
+            v-for="(act, ai) in actions"
+            :key="ai"
+            class="action-chip-btn"
+            @click="handleTriggerAction(act)"
+            :title="getActionTooltip(act)"
+          >
+            <span class="action-btn-icon">{{ getActionIcon(act) }}</span>
+            <span class="action-btn-text">{{ getActionLabel(act) }}</span>
+            <span class="action-btn-arrow">➔</span>
+          </button>
+        </div>
+      </div>
+
       <!-- 6. 性能指标胶囊（底部，低优先级） -->
       <div v-if="metrics" class="metrics-capsule">
         <span class="metric-tag" title="端到端总耗时">⏱️ {{ formatDuration(metrics.total_duration) }}</span>
@@ -116,6 +137,8 @@ import CollapsibleSection from './CollapsibleSection.vue'
 import StreamingSkeleton from './StreamingSkeleton.vue'
 import ToolTimeline from './ToolTimeline.vue'
 import { copyToClipboard } from '@/utils/clipboard'
+import { dispatchAgentAction, type AgentAction } from '@/utils/agentControlBus'
+import { stripAllAgentActionBlocks } from '@/utils/cleanText'
 import {
   formatDuration,
   getToolCallStatusText,
@@ -152,15 +175,56 @@ const hasStockThesisPotential = computed(() => {
 })
 
 // 响应式提取消息字段
-const content = computed(() => props.message.content || '')
+const content = computed(() => stripAllAgentActionBlocks(props.message.content || ''))
 const reasoning = computed(() => props.message.reasoning || '')
 const rawReasoning = computed(() => props.message.rawReasoning || '')
 const rawContent = computed(() => props.message.rawContent || '')
 const jsonMarkdown = computed(() => props.message.jsonMarkdown || '')
 const steps = computed(() => props.message.steps || [])
 const toolCalls = computed(() => props.message.toolCalls || [])
+const actions = computed(() => props.message.actions || [])
 const metrics = computed(() => props.message.metrics)
 const datetime = computed(() => props.message.datetime)
+
+function getActionIcon(act: any): string {
+  switch (act?.type) {
+    case 'OPEN_DIAGNOSIS': return '🎯'
+    case 'SHOW_KLINE': return '📈'
+    case 'NAVIGATE_VIEW': return '🧭'
+    case 'OPEN_MARKET_INTELLIGENCE': return '🧠'
+    case 'DISCIPLINE_ALERT': return '⚠️'
+    default: return '⚡'
+  }
+}
+
+function getActionLabel(act: any): string {
+  if (!act) return '系统联动'
+  const p = act.payload || {}
+  switch (act.type) {
+    case 'OPEN_DIAGNOSIS':
+      return `调起 3D 量化体检: ${p.name || ''} (${p.code || ''})`
+    case 'SHOW_KLINE':
+      return `查看 K 线走势: ${p.name || ''} (${p.code || ''})`
+    case 'NAVIGATE_VIEW':
+      return `跳转至功能页面: ${p.path || ''}`
+    case 'OPEN_MARKET_INTELLIGENCE':
+      return `打开 AI 市场智能中枢`
+    case 'DISCIPLINE_ALERT':
+      return p.title || '风控操盘纪律提醒'
+    default:
+      return `执行联动: ${act.type}`
+  }
+}
+
+function getActionTooltip(act: any): string {
+  return `点击立即触发系统联动动作: ${act?.type || ''}`
+}
+
+function handleTriggerAction(act: any) {
+  if (act) {
+    dispatchAgentAction(act as AgentAction)
+  }
+}
 
 // 展开状态（默认全折叠）
 const expandedReasoning = ref(false)
@@ -521,6 +585,70 @@ async function copyAnchorLink() {
   padding-left: 4px;
   border-top: 1px solid var(--td-component-border);
   padding-top: 8px;
+}
+
+/* 智能体建议联动动作卡片栏 */
+.action-chips-container {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--td-bg-color-secondarycontainer, rgba(24, 160, 88, 0.06));
+  border: 1px dashed var(--td-brand-color, #18a058);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.action-chips-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+}
+
+.action-chips-icon {
+  font-size: 14px;
+}
+
+.action-chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--td-bg-color-container, #fff);
+  border: 1px solid var(--td-brand-color, #18a058);
+  border-radius: 6px;
+  color: var(--td-brand-color, #18a058);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.action-chip-btn:hover {
+  background: var(--td-brand-color, #18a058);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(24, 160, 88, 0.25);
+}
+
+.action-btn-arrow {
+  font-size: 11px;
+  opacity: 0.8;
+  transition: transform 0.2s;
+}
+
+.action-chip-btn:hover .action-btn-arrow {
+  transform: translateX(2px);
 }
 
 @media (max-width: 768px) {

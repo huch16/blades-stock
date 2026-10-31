@@ -166,6 +166,12 @@ export function stripLeadingPlanningNoise(text: string): string {
   return s
 }
 
+// stripClosedAgentAction 移除成对闭合的 ```agent-action ... ``` 动作代码块，避免暴露 JSON 污染最终文本。
+export function stripClosedAgentAction(text: string): string {
+  if (!text) return ''
+  return text.replace(/```agent-action\s*[\s\S]*?```/g, '')
+}
+
 // stripUnclosedAgentAction 移除末尾因 token 耗尽而未闭合的残缺 ```agent-action 代码块。
 export function stripUnclosedAgentAction(text: string): string {
   if (!text) return ''
@@ -181,6 +187,12 @@ export function stripUnclosedAgentAction(text: string): string {
   return text
 }
 
+// stripAllAgentActionBlocks 移除所有 ```agent-action 代码块（包括闭合与未闭合的残卷）。
+export function stripAllAgentActionBlocks(text: string): string {
+  if (!text) return ''
+  return stripUnclosedAgentAction(stripClosedAgentAction(text))
+}
+
 // cleanFinalContent is applied once when streaming finishes: strip reasoning
 // blocks first, then collapse a repeated answer if the model emitted one.
 export function cleanFinalContent(raw: string): string {
@@ -192,8 +204,8 @@ export function cleanFinalContent(raw: string): string {
       cleaned = collapseConsecutiveDuplicates(salvaged, 400)
     }
   }
-  // 剥离开头规划杂音与末尾未闭合的残缺 agent-action 代码块
+  // 剥离开头规划杂音与所有 agent-action 代码块
   cleaned = stripLeadingPlanningNoise(cleaned)
-  cleaned = stripUnclosedAgentAction(cleaned)
+  cleaned = stripAllAgentActionBlocks(cleaned)
   return cleaned
 }

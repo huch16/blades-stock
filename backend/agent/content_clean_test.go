@@ -163,3 +163,14 @@ func TestCleanFinalContent_StripLeadingPlanningNoiseAndUnclosedAction(t *testing
 		t.Fatalf("planning noise or unclosed agent-action not stripped:\ngot  %q\nwant %q", got, want)
 	}
 }
+
+func TestCleanFinalContent_StripClosedAgentAction(t *testing.T) {
+	// 场景：模型在末尾输出了完整的 agent-action JSON 代码块，必须从正文中剥离避免污染 UI
+	raw := "### 天目药业 (600671) 量化分析\n\n该公司近期量价形态处于多头蓄势区间。\n\n```agent-action\n{\"type\": \"OPEN_DIAGNOSIS\", \"payload\": {\"code\": \"600671\", \"name\": \"天目药业\"}}\n```\n"
+	want := "### 天目药业 (600671) 量化分析\n\n该公司近期量价形态处于多头蓄势区间。\n\n\n"
+	got := cleanFinalContent(raw)
+	if got != want {
+		t.Fatalf("closed agent-action not stripped:\ngot  %q\nwant %q", got, want)
+	}
+}
+

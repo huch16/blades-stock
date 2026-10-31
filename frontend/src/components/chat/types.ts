@@ -37,11 +37,13 @@ export interface ChatMessage {
   statusText?: string
   steps?: string[]
   toolCalls?: ToolCall[]
+  actions?: any[]
   metrics?: ExecutionMetrics
   datetime: string
   avatar?: string
   name?: string
   error?: boolean
+  modelName?: string
 }
 
 export interface StreamChunk {
@@ -50,6 +52,8 @@ export interface StreamChunk {
   reasoning_content?: string
   sessionId?: string
   session_id?: string
+  actions?: any[]
+  finish_reason?: string
   metrics?: ExecutionMetrics
   tool_calls?: ToolCall[]
   response_meta?: {

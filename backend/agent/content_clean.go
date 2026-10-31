@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -224,6 +225,16 @@ func stripLeadingPlanningNoise(text string) string {
 	return s
 }
 
+var actionBlockRegex = regexp.MustCompile("(?s)```agent-action\\s*([\\s\\S]*?)\\s*```")
+
+// stripClosedAgentAction 移除成对闭合的 ```agent-action ... ``` 动作代码块，避免暴露 JSON 污染最终文本。
+func stripClosedAgentAction(text string) string {
+	if text == "" {
+		return ""
+	}
+	return actionBlockRegex.ReplaceAllString(text, "")
+}
+
 // stripUnclosedAgentAction 移除末尾因 token 耗尽而未闭合的残缺 ```agent-action 代码块。
 func stripUnclosedAgentAction(text string) string {
 	s := text
@@ -242,6 +253,11 @@ func stripUnclosedAgentAction(text string) string {
 	return s
 }
 
+// stripAllAgentActionBlocks 移除所有 ```agent-action 代码块（包括闭合与未闭合的残卷）。
+func stripAllAgentActionBlocks(text string) string {
+	return stripUnclosedAgentAction(stripClosedAgentAction(text))
+}
+
 // cleanFinalContent is applied once after streaming completes: strip reasoning
 // blocks first, then collapse a repeated answer if the model emitted one.
 func cleanFinalContent(raw string) string {
@@ -253,8 +269,8 @@ func cleanFinalContent(raw string) string {
 			cleaned = collapseConsecutiveDuplicates(salvaged, 400)
 		}
 	}
-	// 剥离开头规划杂音与末尾未闭合的残缺 agent-action 代码块
+	// 剥离开头规划杂音与所有 agent-action 代码块
 	cleaned = stripLeadingPlanningNoise(cleaned)
-	cleaned = stripUnclosedAgentAction(cleaned)
+	cleaned = stripAllAgentActionBlocks(cleaned)
 	return cleaned
 }
