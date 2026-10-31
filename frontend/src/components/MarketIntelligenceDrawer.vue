@@ -443,12 +443,27 @@ function handleClose() {
 }
 
 function askAgentAssistant() {
-  const title = currentReport.value?.title || currentTitle.value
-  emit(
-    'openFloatingAgentWithQuestion',
-    `请就这份【${title}】做精炼要点复述，并结合当前盘面给出重点关注标的和风控对策。`
-  )
-  handleClose()
+  if (!currentReport.value) return
+  const title = currentReport.value.title || currentTitle.value
+  const summary = currentReport.value.summary || ''
+  const content = currentReport.value.content || ''
+  
+  // 提取研报核心精华前置注入为一手量化与买方参考数据
+  const reportExcerpt = content.length > 1200 ? content.slice(0, 1200) + '...' : content
+  const context = `【宏观研报类型】: ${currentTitle.value}\n【研报标题】: ${title}\n【核心摘要】: ${summary}\n【研报精要】:\n${reportExcerpt}`
+  
+  const question = `请基于这份【${title}】的核心观点与宏观研判，进行买方深度推演：\n1. 提炼核心逻辑与关键盘面推论；\n2. 结合当前市场风险偏好，梳理最具弹性的主线赛道与潜伏标的；\n3. 给出明确的风控止损红线与仓位管理建议。`
+
+  if (props.show) {
+    handleClose()
+  }
+
+  consultAgent({
+    question,
+    context,
+    mode: 'plan_execute',
+    autoSend: true,
+  })
 }
 
 EventsOn('marketIntelligenceReport', (incoming) => {
@@ -832,9 +847,10 @@ onBeforeUnmount(() => {
             v-if="currentReport && !isReportCorrupted"
             secondary
             type="info"
+            title="带上本研报核心要点与上下文，直通 AI 智能体推演工作台进行互动追问与标的挖掘"
             @click="askAgentAssistant"
           >
-            💬 针对本报告提问AI助手
+            💬 针对本报告提问 AI 助手 ➔
           </NButton>
           <NButton
             v-if="currentReport && !isReportCorrupted"
@@ -1093,9 +1109,10 @@ onBeforeUnmount(() => {
             v-if="currentReport && !isReportCorrupted"
             secondary
             type="info"
+            title="带上本研报核心要点与上下文，直通 AI 智能体推演工作台进行互动追问与标的挖掘"
             @click="askAgentAssistant"
           >
-            💬 针对本报告提问AI助手
+            💬 针对本报告提问 AI 助手 ➔
           </NButton>
           <NButton
             v-if="currentReport && !isReportCorrupted"

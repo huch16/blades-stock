@@ -31,7 +31,7 @@ import WebAuthModal from "./components/WebAuthModal.vue";
 import { isWails, getAuthToken, webEventBus } from "./api/bridge";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
 import StockLightweightKlineChart from "./components/StockLightweightKlineChart.vue";
-import { initAgentControlBus, registerAgentActionHandler, setPendingConsult } from "./utils/agentControlBus";
+import { initAgentControlBus, registerAgentActionHandler, setPendingConsult, consultAgent } from "./utils/agentControlBus";
 import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
 import {ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
 import {LocalFireDepartmentRound} from "@vicons/material";
@@ -178,6 +178,33 @@ if (typeof window !== 'undefined') {
   })
   window.addEventListener('show-market-intelligence-serenity', (e) => {
     onOpenMarketIntelligence('serenity_industry_analysis', e.detail)
+  })
+}
+
+// 全局兼容兜底：承接所有组件发起的 openFloatingAgentWithQuestion，统一平滑收敛至 /agent 智能体推演工作台
+function handleLegacyFloatingAgent(payload) {
+  let question = ''
+  let agentMode = 'plan_execute'
+  if (typeof payload === 'string') {
+    question = payload
+  } else if (payload && typeof payload === 'object') {
+    question = payload.question || payload.prompt || ''
+    if (payload.agentMode) agentMode = payload.agentMode
+  }
+  if (question) {
+    consultAgent({
+      question,
+      mode: agentMode,
+      autoSend: true
+    })
+  }
+}
+
+EventsOn('openFloatingAgentWithQuestion', handleLegacyFloatingAgent)
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('openFloatingAgentWithQuestion', (e) => {
+    handleLegacyFloatingAgent(e.detail)
   })
 }
 
