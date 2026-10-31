@@ -2,6 +2,7 @@
 import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  NModal,
   NDrawer,
   NDrawerContent,
   NSpin,
@@ -37,7 +38,8 @@ import { dispatchAgentAction, consultAgent } from '../utils/agentControlBus'
 const props = defineProps({
   show: { type: Boolean, default: false },
   reportType: { type: String, default: 'pre_market_briefing' },
-  initialSerenityTarget: { type: String, default: '' }
+  initialSerenityTarget: { type: String, default: '' },
+  embedded: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['update:show', 'openFloatingAgentWithQuestion'])
@@ -544,6 +546,34 @@ const drawerWidth = computed(() => {
   return isMobile.value ? '100%' : 860
 })
 
+// 沉浸式全屏与工作站窗口尺寸计算（彻底告别狭窄局促的右侧侧边抽屉）
+const isFullscreen = ref(false)
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value
+}
+const modalStyle = computed(() => {
+  if (isFullscreen.value) {
+    return {
+      width: '100vw',
+      height: '100vh',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
+      margin: '0',
+      borderRadius: '0',
+      display: 'flex',
+      flexDirection: 'column'
+    }
+  }
+  return {
+    width: isMobile.value ? '98vw' : 'min(1360px, 94vw)',
+    height: isMobile.value ? '96vh' : '90vh',
+    maxHeight: '92vh',
+    display: 'flex',
+    flexDirection: 'column',
+    borderRadius: '14px'
+  }
+})
+
 onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', handleDrawerResize)
@@ -577,334 +607,510 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <NDrawer
-    :show="show"
-    :width="drawerWidth"
-    placement="right"
-    @update:show="handleClose"
+  <!-- 场景 A：主界面 Tab 内嵌工作站渲染 (Embedded Workstation Mode) -->
+  <div
+    v-if="embedded"
+    class="intel-workstation-embedded"
+    :class="{ 'is-dark': isDark }"
   >
-    <NDrawerContent
-      :title="'🧠 AI 市场智能中枢 · ' + currentTitle"
-      :native-scrollbar="false"
-      closable
-    >
-      <div
-        class="intel-drawer-container"
-        :class="{ 'is-dark': isDark }"
-      >
-        <!-- 1. 顶部 4 大核心维度导航卡片栏（高辨识度，完美适配暗黑） -->
-        <div class="nav-tabs-container">
-          <div
-            v-for="item in navTabs"
-            :key="item.key"
-            class="nav-tab-item"
-            :class="{ active: currentTab === item.key }"
-            @click="handleTabChange(item.key)"
-          >
-            <div class="tab-icon-box">
-              {{ item.icon }}
-            </div>
-            <div class="tab-text-box">
-              <div class="tab-title">
-                {{ item.title }}
-              </div>
-              <div class="tab-subtitle">
-                {{ item.desc }}
-              </div>
-            </div>
-            <div
-              v-if="currentTab === item.key"
-              class="tab-active-indicator"
-            />
-          </div>
-        </div>
-
-        <!-- 2. 市场状态与模型控制栏 -->
-        <div class="market-status-bar">
-          <div class="status-left">
-            <NTag
-              :type="phaseTagType"
-              round
-              size="small"
-              class="phase-tag"
-            >
-              ● {{ lifecycle?.phaseName || '休市整固' }}
-            </NTag>
-            <span class="status-clock">
-              {{ lifecycle?.currentTime || '' }}
-            </span>
-            <span class="status-desc">
-              {{ lifecycle?.marketStateDesc }}
-            </span>
-          </div>
-          <div class="status-right">
-            <span
-              v-if="lifecycle?.nextEvent"
-              class="next-event-chip"
-            >
-              ⏭ 下一节点: <strong>{{ lifecycle.nextEvent }} ({{ lifecycle.nextEventTime }})</strong>
-            </span>
-            <div class="model-picker-wrap">
-              <span class="model-picker-label">🤖 模型:</span>
-              <NSelect
-                v-if="aiConfigOptions.length > 0"
-                v-model:value="selectedAiConfigId"
-                :options="aiConfigOptions"
-                size="tiny"
-                style="min-width: 170px; max-width: 250px;"
-                placeholder="选择决策模型"
-              />
-              <NButton
-                v-else
-                size="tiny"
-                type="warning"
-                ghost
-                @click="goToSettings"
-              >
-                ⚙️ 前往配置 AI
-              </NButton>
-              <NButton
-                size="tiny"
-                type="primary"
-                secondary
-                style="font-weight: 600; margin-left: 6px;"
-                title="将当前宏观情报带入全屏智能体中枢进行持仓风控推演"
-                @click="callAgentForPortfolioDeduction"
-              >
-                🤖 持仓防守推演
-              </NButton>
-            </div>
-          </div>
-        </div>
-
-        <!-- 3. Serenity 专属参数输入栏 -->
-        <div
-          v-if="currentTab === 'serenity_industry_analysis'"
-          class="serenity-ctrl-card"
-        >
-          <div class="serenity-input-row">
-            <NInput
-              v-model:value="serenityTarget"
-              size="small"
-              placeholder="输入目标行业/产业链/龙头公司（如：半导体设备、中际旭创）"
-              style="flex: 1;"
-              @keydown.enter="generate"
-            />
-            <NInput
-              v-model:value="serenityCode"
-              size="small"
-              placeholder="可选代码(如: 300308)"
-              style="width: 130px;"
-            />
-            <NButton
-              type="primary"
-              size="small"
-              :loading="loading"
-              @click="generate"
-            >
-              🔬 发起深度拆解
-            </NButton>
-          </div>
-          <div class="serenity-presets-row">
-            <span class="presets-label">⚡ 热门方向：</span>
-            <NTag
-              v-for="p in serenityPresets"
-              :key="p"
-              size="tiny"
-              round
-              checkable
-              :checked="serenityTarget === p"
-              style="cursor: pointer;"
-              @click="selectSerenityPreset(p)"
-            >
-              {{ p }}
-            </NTag>
-          </div>
-        </div>
-
-        <!-- 4. 报告元数据与快捷操作条 -->
-        <div class="report-meta-bar">
-          <div class="meta-left">
-            <span
-              v-if="currentReport && !isReportCorrupted"
-              class="meta-item"
-            >
-              📅 生成时间：<strong>{{ new Date(currentReport.generatedAt).toLocaleString() }}</strong>
-            </span>
-            <span
-              v-if="currentReport?.source && !isReportCorrupted"
-              class="meta-item meta-source"
-            >
-              来源：{{ currentReport.source }}
-            </span>
-            <span
-              v-if="!currentReport || isReportCorrupted"
-              class="meta-item meta-empty"
-            >
-              当前尚未生成该维度研报，点击右侧按钮立即推演
-            </span>
-          </div>
-          <div class="meta-right">
-            <NButton
-              v-if="displayContent"
-              size="tiny"
-              secondary
-              @click="copyMarkdown"
-            >
-              📋 复制 Markdown
-            </NButton>
-            <NButton
-              size="tiny"
-              type="primary"
-              :loading="loading"
-              @click="generate"
-            >
-              {{ currentReport && !isReportCorrupted ? '🔄 重新推演' : '🚀 立即生成' }}
-            </NButton>
-          </div>
-        </div>
-
-        <!-- 发现残损研报时的引导与清理卡片 -->
-        <div
-          v-if="isReportCorrupted"
-          class="corrupted-alert-card"
-        >
-          <div class="corrupted-alert-left">
-            <span class="corrupted-icon">⚠️</span>
-            <div class="corrupted-text">
-              <div class="corrupted-title">
-                检测到历史研报存在网络中断或网关超时截断 (502 / context canceled)
-              </div>
-              <div class="corrupted-desc">
-                系统已为您主动隔离拦截报错残卷，请点击右侧按钮重新启动大模型推演。
-              </div>
-            </div>
-          </div>
-          <NSpace>
-            <NButton
-              size="small"
-              type="primary"
-              :loading="loading"
-              @click="generate"
-            >
-              🚀 立即重新推演
-            </NButton>
-            <NButton
-              size="small"
-              secondary
-              @click="handlePurgeCorrupted"
-            >
-              🧹 物理清除残损记录
-            </NButton>
-          </NSpace>
-        </div>
-
-        <!-- 5. 核心决策摘要卡片 (清晰醒目，适配暗黑) -->
-        <div
-          v-if="currentReport?.summary && !isReportCorrupted"
-          class="summary-card"
-        >
-          <div class="summary-header">
-            <span class="summary-badge">💡 核心决策摘要</span>
-          </div>
-          <div class="summary-content">
-            {{ currentReport.summary }}
-          </div>
-        </div>
-
-        <!-- 研报伴随系统联动动作项 (Agent-Action) -->
-        <div
-          v-if="reportActions && reportActions.length > 0 && !isReportCorrupted"
-          class="report-actions-container"
-        >
-          <div class="report-actions-title">
-            ⚡ 研报建议系统联动：
-          </div>
-          <div class="report-actions-list">
-            <NButton
-              v-for="(act, idx) in reportActions"
-              :key="idx"
-              size="small"
-              type="primary"
-              secondary
-              @click="handleExecuteAction(act)"
-            >
-              {{ getActionDesc(act) }}
-            </NButton>
-          </div>
-        </div>
-
-        <!-- 6. 研报正文展示容器 (支持主题自适应) -->
-        <NSpin :show="loading">
-          <div
-            v-if="!currentReport || !displayContent"
-            class="empty-report-view"
-          >
-            <NEmpty
-              :description="`尚未生成 ${currentTitle}`"
-              style="padding: 48px 0;"
-            >
-              <template #extra>
-                <NButton
-                  type="primary"
-                  size="medium"
-                  :loading="loading"
-                  @click="generate"
-                >
-                  🚀 立即启动 {{ currentTitle }} 多Agent分析
-                </NButton>
-              </template>
-            </NEmpty>
-          </div>
-
-          <div
+    <div class="embedded-header-bar">
+      <div class="header-title-wrap">
+        <span class="header-icon">🧠</span>
+        <span class="header-title">AI 市场智能中枢 · {{ currentTitle }}</span>
+        <NTag :type="phaseTagType" round size="small" class="phase-tag">
+          ● {{ lifecycle?.phaseName || '休市整固' }}
+        </NTag>
+      </div>
+      <div class="header-actions">
+        <span v-if="lifecycle?.currentTime" class="status-clock">
+          {{ lifecycle?.currentTime }}
+        </span>
+        <div class="model-picker-wrap">
+          <span class="model-picker-label">🤖 模型:</span>
+          <NSelect
+            v-if="aiConfigOptions.length > 0"
+            v-model:value="selectedAiConfigId"
+            :options="aiConfigOptions"
+            size="tiny"
+            style="min-width: 170px; max-width: 250px;"
+            placeholder="选择决策模型"
+          />
+          <NButton
             v-else
-            class="markdown-preview-container"
+            size="tiny"
+            type="warning"
+            ghost
+            @click="goToSettings"
           >
-            <MdPreview
-              :theme="isDark ? 'dark' : 'light'"
-              :model-value="displayContent"
-              preview-theme="github"
-              :show-code-row-number="false"
-              style="background: transparent;"
-            />
+            ⚙️ 前往配置 AI
+          </NButton>
+          <NButton
+            size="tiny"
+            type="primary"
+            secondary
+            style="font-weight: 600; margin-left: 6px;"
+            title="将当前宏观情报带入全屏智能体中枢进行持仓风控推演"
+            @click="callAgentForPortfolioDeduction"
+          >
+            🤖 持仓防守推演
+          </NButton>
+        </div>
+      </div>
+    </div>
+
+    <!-- 核心工作区内容 -->
+    <div class="intel-workstation-body">
+      <!-- 1. 顶部 4 大核心维度导航卡片栏 -->
+      <div class="nav-tabs-container">
+        <div
+          v-for="item in navTabs"
+          :key="item.key"
+          class="nav-tab-item"
+          :class="{ active: currentTab === item.key }"
+          @click="handleTabChange(item.key)"
+        >
+          <div class="tab-icon-box">{{ item.icon }}</div>
+          <div class="tab-text-box">
+            <div class="tab-title">{{ item.title }}</div>
+            <div class="tab-subtitle">{{ item.desc }}</div>
           </div>
-        </NSpin>
+          <div v-if="currentTab === item.key" class="tab-active-indicator" />
+        </div>
       </div>
 
-      <template #footer>
-        <div class="drawer-footer-row">
-          <span class="footer-hint">
-            {{ currentReport && !isReportCorrupted ? '🧠 由 blades-stock 量化矩阵引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
-          </span>
-          <NSpace>
-            <NButton
-              v-if="currentReport && !isReportCorrupted"
-              secondary
-              type="info"
-              @click="askAgentAssistant"
-            >
-              💬 针对本报告提问AI助手
-            </NButton>
-            <NButton
-              v-if="currentReport && !isReportCorrupted"
-              tertiary
-              @click="loadLatestForTab(currentTab)"
-            >
-              刷新缓存
-            </NButton>
-            <NButton
-              type="primary"
-              :loading="loading"
-              @click="generate"
-            >
-              {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
-            </NButton>
-          </NSpace>
+      <!-- 2. 状态信息栏 -->
+      <div class="market-status-bar">
+        <div class="status-left">
+          <span class="status-desc">{{ lifecycle?.marketStateDesc }}</span>
         </div>
-      </template>
-    </NDrawerContent>
-  </NDrawer>
+        <div class="status-right">
+          <span v-if="lifecycle?.nextEvent" class="next-event-chip">
+            ⏭ 下一节点: <strong>{{ lifecycle.nextEvent }} ({{ lifecycle.nextEventTime }})</strong>
+          </span>
+        </div>
+      </div>
+
+      <!-- 3. Serenity 专属参数输入栏 -->
+      <div v-if="currentTab === 'serenity_industry_analysis'" class="serenity-ctrl-card">
+        <div class="serenity-input-row">
+          <NInput
+            v-model:value="serenityTarget"
+            size="small"
+            placeholder="输入目标行业/产业链/龙头公司（如：半导体设备、中际旭创）"
+            style="flex: 1;"
+            @keydown.enter="generate"
+          />
+          <NInput
+            v-model:value="serenityCode"
+            size="small"
+            placeholder="可选代码(如: 300308)"
+            style="width: 130px;"
+          />
+          <NButton type="primary" size="small" :loading="loading" @click="generate">
+            🔬 发起深度拆解
+          </NButton>
+        </div>
+        <div class="serenity-presets-row">
+          <span class="presets-label">⚡ 热门方向：</span>
+          <NTag
+            v-for="p in serenityPresets"
+            :key="p"
+            size="tiny"
+            round
+            checkable
+            :checked="serenityTarget === p"
+            style="cursor: pointer;"
+            @click="selectSerenityPreset(p)"
+          >
+            {{ p }}
+          </NTag>
+        </div>
+      </div>
+
+      <!-- 4. 报告元数据与快捷操作条 -->
+      <div class="report-meta-bar">
+        <div class="meta-left">
+          <span v-if="currentReport && !isReportCorrupted" class="meta-item">
+            📅 生成时间：<strong>{{ new Date(currentReport.generatedAt).toLocaleString() }}</strong>
+          </span>
+          <span v-if="currentReport?.source && !isReportCorrupted" class="meta-item meta-source">
+            来源：{{ currentReport.source }}
+          </span>
+          <span v-if="!currentReport || isReportCorrupted" class="meta-item meta-empty">
+            当前尚未生成该维度研报，点击右侧按钮立即推演
+          </span>
+        </div>
+        <div class="meta-right">
+          <NButton v-if="displayContent" size="tiny" secondary @click="copyMarkdown">
+            📋 复制 Markdown
+          </NButton>
+          <NButton size="tiny" type="primary" :loading="loading" @click="generate">
+            {{ currentReport && !isReportCorrupted ? '🔄 重新推演' : '🚀 立即生成' }}
+          </NButton>
+        </div>
+      </div>
+
+      <!-- 发现残损研报时的引导与清理卡片 -->
+      <div v-if="isReportCorrupted" class="corrupted-alert-card">
+        <div class="corrupted-alert-left">
+          <span class="corrupted-icon">⚠️</span>
+          <div class="corrupted-text">
+            <div class="corrupted-title">检测到历史研报存在网络中断或网关超时截断 (502 / context canceled)</div>
+            <div class="corrupted-desc">系统已为您主动隔离拦截报错残卷，请点击右侧按钮重新启动大模型推演。</div>
+          </div>
+        </div>
+        <NSpace>
+          <NButton size="small" type="primary" :loading="loading" @click="generate">
+            🚀 立即重新推演
+          </NButton>
+          <NButton size="small" secondary @click="handlePurgeCorrupted">
+            🧹 物理清除残损记录
+          </NButton>
+        </NSpace>
+      </div>
+
+      <!-- 5. 核心决策摘要卡片 -->
+      <div v-if="currentReport?.summary && !isReportCorrupted" class="summary-card">
+        <div class="summary-header">
+          <span class="summary-badge">💡 核心决策摘要</span>
+        </div>
+        <div class="summary-content">
+          {{ currentReport.summary }}
+        </div>
+      </div>
+
+      <!-- 研报伴随系统联动动作项 (Agent-Action) -->
+      <div v-if="reportActions && reportActions.length > 0 && !isReportCorrupted" class="report-actions-container">
+        <div class="report-actions-title">⚡ 研报建议系统联动：</div>
+        <div class="report-actions-list">
+          <NButton
+            v-for="(act, idx) in reportActions"
+            :key="idx"
+            size="small"
+            type="primary"
+            secondary
+            @click="handleExecuteAction(act)"
+          >
+            {{ getActionDesc(act) }}
+          </NButton>
+        </div>
+      </div>
+
+      <!-- 6. 研报正文展示容器 -->
+      <NSpin :show="loading">
+        <div v-if="!currentReport || !displayContent" class="empty-report-view">
+          <NEmpty :description="'尚未生成 ' + currentTitle" style="padding: 48px 0;">
+            <template #extra>
+              <NButton type="primary" size="medium" :loading="loading" @click="generate">
+                🚀 立即启动 {{ currentTitle }} 多Agent分析
+              </NButton>
+            </template>
+          </NEmpty>
+        </div>
+        <div v-else class="markdown-preview-container">
+          <MdPreview
+            :theme="isDark ? 'dark' : 'light'"
+            :model-value="displayContent"
+            preview-theme="github"
+            :show-code-row-number="false"
+            style="background: transparent;"
+          />
+        </div>
+      </NSpin>
+
+      <!-- 底部辅助工具条 -->
+      <div class="workstation-bottom-bar">
+        <span class="footer-hint">
+          {{ currentReport && !isReportCorrupted ? '🧠 由 blades-stock 量化矩阵引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
+        </span>
+        <NSpace>
+          <NButton
+            v-if="currentReport && !isReportCorrupted"
+            secondary
+            type="info"
+            @click="askAgentAssistant"
+          >
+            💬 针对本报告提问AI助手
+          </NButton>
+          <NButton
+            v-if="currentReport && !isReportCorrupted"
+            tertiary
+            @click="loadLatestForTab(currentTab)"
+          >
+            刷新缓存
+          </NButton>
+          <NButton
+            type="primary"
+            :loading="loading"
+            @click="generate"
+          >
+            {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
+          </NButton>
+        </NSpace>
+      </div>
+    </div>
+  </div>
+
+  <!-- 场景 B：作为全局模态工作台弹出 (Modal Mode) —— 彻底取代狭窄侧边抽屉 -->
+  <NModal
+    v-else
+    :show="show"
+    preset="card"
+    class="market-intelligence-modal"
+    :class="{ 'is-fullscreen': isFullscreen, 'is-dark': isDark }"
+    :style="modalStyle"
+    :mask-closable="true"
+    @update:show="handleClose"
+  >
+    <template #header>
+      <div class="modal-header-bar">
+        <div class="header-title-wrap">
+          <span class="header-icon">🧠</span>
+          <span class="header-title">AI 市场智能中枢 · {{ currentTitle }}</span>
+          <NTag :type="phaseTagType" round size="small" class="phase-tag">
+            ● {{ lifecycle?.phaseName || '休市整固' }}
+          </NTag>
+        </div>
+        <div class="header-actions">
+          <span v-if="lifecycle?.currentTime" class="status-clock">
+            {{ lifecycle?.currentTime }}
+          </span>
+          <div class="model-picker-wrap">
+            <span class="model-picker-label">🤖 模型:</span>
+            <NSelect
+              v-if="aiConfigOptions.length > 0"
+              v-model:value="selectedAiConfigId"
+              :options="aiConfigOptions"
+              size="tiny"
+              style="min-width: 150px; max-width: 220px;"
+              placeholder="选择决策模型"
+            />
+            <NButton
+              v-else
+              size="tiny"
+              type="warning"
+              ghost
+              @click="goToSettings"
+            >
+              ⚙️ 配置AI
+            </NButton>
+            <NButton
+              size="tiny"
+              type="primary"
+              secondary
+              style="font-weight: 600; margin-left: 6px;"
+              title="将当前宏观情报带入全屏智能体中枢进行持仓风控推演"
+              @click="callAgentForPortfolioDeduction"
+            >
+              🤖 持仓防守推演
+            </NButton>
+          </div>
+          <NButton
+            size="tiny"
+            quaternary
+            circle
+            class="fs-toggle-btn"
+            :title="isFullscreen ? '还原窗口' : '全屏展示'"
+            @click="toggleFullscreen"
+          >
+            {{ isFullscreen ? '🗗' : '⛶' }}
+          </NButton>
+        </div>
+      </div>
+    </template>
+
+    <div class="intel-modal-scrollable">
+      <!-- 1. 顶部 4 大核心维度导航卡片栏 -->
+      <div class="nav-tabs-container">
+        <div
+          v-for="item in navTabs"
+          :key="item.key"
+          class="nav-tab-item"
+          :class="{ active: currentTab === item.key }"
+          @click="handleTabChange(item.key)"
+        >
+          <div class="tab-icon-box">{{ item.icon }}</div>
+          <div class="tab-text-box">
+            <div class="tab-title">{{ item.title }}</div>
+            <div class="tab-subtitle">{{ item.desc }}</div>
+          </div>
+          <div v-if="currentTab === item.key" class="tab-active-indicator" />
+        </div>
+      </div>
+
+      <!-- 2. 状态信息栏 -->
+      <div class="market-status-bar">
+        <div class="status-left">
+          <span class="status-desc">{{ lifecycle?.marketStateDesc }}</span>
+        </div>
+        <div class="status-right">
+          <span v-if="lifecycle?.nextEvent" class="next-event-chip">
+            ⏭ 下一节点: <strong>{{ lifecycle.nextEvent }} ({{ lifecycle.nextEventTime }})</strong>
+          </span>
+        </div>
+      </div>
+
+      <!-- 3. Serenity 专属参数输入栏 -->
+      <div v-if="currentTab === 'serenity_industry_analysis'" class="serenity-ctrl-card">
+        <div class="serenity-input-row">
+          <NInput
+            v-model:value="serenityTarget"
+            size="small"
+            placeholder="输入目标行业/产业链/龙头公司（如：半导体设备、中际旭创）"
+            style="flex: 1;"
+            @keydown.enter="generate"
+          />
+          <NInput
+            v-model:value="serenityCode"
+            size="small"
+            placeholder="可选代码(如: 300308)"
+            style="width: 130px;"
+          />
+          <NButton type="primary" size="small" :loading="loading" @click="generate">
+            🔬 发起深度拆解
+          </NButton>
+        </div>
+        <div class="serenity-presets-row">
+          <span class="presets-label">⚡ 热门方向：</span>
+          <NTag
+            v-for="p in serenityPresets"
+            :key="p"
+            size="tiny"
+            round
+            checkable
+            :checked="serenityTarget === p"
+            style="cursor: pointer;"
+            @click="selectSerenityPreset(p)"
+          >
+            {{ p }}
+          </NTag>
+        </div>
+      </div>
+
+      <!-- 4. 报告元数据与快捷操作条 -->
+      <div class="report-meta-bar">
+        <div class="meta-left">
+          <span v-if="currentReport && !isReportCorrupted" class="meta-item">
+            📅 生成时间：<strong>{{ new Date(currentReport.generatedAt).toLocaleString() }}</strong>
+          </span>
+          <span v-if="currentReport?.source && !isReportCorrupted" class="meta-item meta-source">
+            来源：{{ currentReport.source }}
+          </span>
+          <span v-if="!currentReport || isReportCorrupted" class="meta-item meta-empty">
+            当前尚未生成该维度研报，点击右侧按钮立即推演
+          </span>
+        </div>
+        <div class="meta-right">
+          <NButton v-if="displayContent" size="tiny" secondary @click="copyMarkdown">
+            📋 复制 Markdown
+          </NButton>
+          <NButton size="tiny" type="primary" :loading="loading" @click="generate">
+            {{ currentReport && !isReportCorrupted ? '🔄 重新推演' : '🚀 立即生成' }}
+          </NButton>
+        </div>
+      </div>
+
+      <!-- 发现残损研报时的引导与清理卡片 -->
+      <div v-if="isReportCorrupted" class="corrupted-alert-card">
+        <div class="corrupted-alert-left">
+          <span class="corrupted-icon">⚠️</span>
+          <div class="corrupted-text">
+            <div class="corrupted-title">检测到历史研报存在网络中断或网关超时截断 (502 / context canceled)</div>
+            <div class="corrupted-desc">系统已为您主动隔离拦截报错残卷，请点击右侧按钮重新启动大模型推演。</div>
+          </div>
+        </div>
+        <NSpace>
+          <NButton size="small" type="primary" :loading="loading" @click="generate">
+            🚀 立即重新推演
+          </NButton>
+          <NButton size="small" secondary @click="handlePurgeCorrupted">
+            🧹 物理清除残损记录
+          </NButton>
+        </NSpace>
+      </div>
+
+      <!-- 5. 核心决策摘要卡片 -->
+      <div v-if="currentReport?.summary && !isReportCorrupted" class="summary-card">
+        <div class="summary-header">
+          <span class="summary-badge">💡 核心决策摘要</span>
+        </div>
+        <div class="summary-content">
+          {{ currentReport.summary }}
+        </div>
+      </div>
+
+      <!-- 研报伴随系统联动动作项 (Agent-Action) -->
+      <div v-if="reportActions && reportActions.length > 0 && !isReportCorrupted" class="report-actions-container">
+        <div class="report-actions-title">⚡ 研报建议系统联动：</div>
+        <div class="report-actions-list">
+          <NButton
+            v-for="(act, idx) in reportActions"
+            :key="idx"
+            size="small"
+            type="primary"
+            secondary
+            @click="handleExecuteAction(act)"
+          >
+            {{ getActionDesc(act) }}
+          </NButton>
+        </div>
+      </div>
+
+      <!-- 6. 研报正文展示容器 -->
+      <NSpin :show="loading">
+        <div v-if="!currentReport || !displayContent" class="empty-report-view">
+          <NEmpty :description="'尚未生成 ' + currentTitle" style="padding: 48px 0;">
+            <template #extra>
+              <NButton type="primary" size="medium" :loading="loading" @click="generate">
+                🚀 立即启动 {{ currentTitle }} 多Agent分析
+              </NButton>
+            </template>
+          </NEmpty>
+        </div>
+        <div v-else class="markdown-preview-container">
+          <MdPreview
+            :theme="isDark ? 'dark' : 'light'"
+            :model-value="displayContent"
+            preview-theme="github"
+            :show-code-row-number="false"
+            style="background: transparent;"
+          />
+        </div>
+      </NSpin>
+    </div>
+
+    <template #footer>
+      <div class="modal-footer-row">
+        <span class="footer-hint">
+          {{ currentReport && !isReportCorrupted ? '🧠 由 blades-stock 量化矩阵引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
+        </span>
+        <NSpace>
+          <NButton
+            v-if="currentReport && !isReportCorrupted"
+            secondary
+            type="info"
+            @click="askAgentAssistant"
+          >
+            💬 针对本报告提问AI助手
+          </NButton>
+          <NButton
+            v-if="currentReport && !isReportCorrupted"
+            tertiary
+            @click="loadLatestForTab(currentTab)"
+          >
+            刷新缓存
+          </NButton>
+          <NButton
+            type="primary"
+            :loading="loading"
+            @click="generate"
+          >
+            {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
+          </NButton>
+        </NSpace>
+      </div>
+    </template>
+  </NModal>
 </template>
 
 <style scoped>
@@ -1555,5 +1761,117 @@ onBeforeUnmount(() => {
   .serenity-input-row :deep(.n-input) {
     width: 100% !important;
   }
+}
+
+/* ========== 全屏/模态沉浸式智能中枢工作台 (彻底取代狭窄侧边抽屉) ========== */
+:deep(.market-intelligence-modal) {
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+:deep(.market-intelligence-modal .n-card-header) {
+  padding: 14px 20px !important;
+  border-bottom: 1px solid var(--n-border-color, rgba(128, 128, 128, 0.16));
+  background: var(--n-card-color, rgba(255, 255, 255, 0.85));
+  backdrop-filter: blur(12px);
+}
+
+:deep(.market-intelligence-modal .n-card__content) {
+  padding: 16px 20px !important;
+  flex: 1 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+:deep(.market-intelligence-modal .n-card__footer) {
+  padding: 12px 20px !important;
+  border-top: 1px solid var(--n-border-color, rgba(128, 128, 128, 0.16));
+  background: var(--n-card-color, rgba(255, 255, 255, 0.85));
+}
+
+.modal-header-bar,
+.embedded-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.header-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-icon {
+  font-size: 22px;
+}
+
+.header-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--n-text-color, #1a202c);
+  letter-spacing: 0.3px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fs-toggle-btn {
+  font-size: 15px;
+  color: var(--n-text-color-2);
+}
+
+.fs-toggle-btn:hover {
+  color: #18a058;
+}
+
+.intel-modal-scrollable {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-right: 6px;
+}
+
+.modal-footer-row,
+.workstation-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* 内嵌工作站容器 */
+.intel-workstation-embedded {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 4px 16px;
+}
+
+.embedded-header-bar {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--n-border-color, rgba(128, 128, 128, 0.16));
+}
+
+.workstation-bottom-bar {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--n-border-color, rgba(128, 128, 128, 0.16));
+}
+
+.intel-workstation-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 </style>

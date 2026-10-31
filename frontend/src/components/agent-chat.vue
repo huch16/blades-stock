@@ -91,16 +91,19 @@
           场景库
         </n-button>
 
-        <n-tooltip placement="bottom" :content="isCompact ? '标准视图' : '紧凑视图'">
-          <n-button
-            quaternary
-            circle
-            size="small"
-            @click="isCompact = !isCompact"
-          >
-            <FullscreenExitIcon v-if="!isCompact" />
-            <FullscreenIcon v-else />
-          </n-button>
+        <n-tooltip trigger="hover" placement="bottom">
+          <template #trigger>
+            <n-button
+              quaternary
+              circle
+              size="small"
+              @click="isCompact = !isCompact"
+            >
+              <FullscreenExitIcon v-if="!isCompact" />
+              <FullscreenIcon v-else />
+            </n-button>
+          </template>
+          <span>{{ isCompact ? '标准视图' : '紧凑视图' }}</span>
         </n-tooltip>
       </div>
     </header>
@@ -733,7 +736,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, nextTick, provide } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeMount, onBeforeUnmount, nextTick, provide } from 'vue'
 import {
   NSelect,
   NButton,
