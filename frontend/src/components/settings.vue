@@ -2947,7 +2947,7 @@ onBeforeUnmount(() => {
    ------------------------------------------------------------------------- */
 @media screen and (max-width: 768px) {
   .settings-container {
-    padding: 10px 8px 140px !important;
+    padding: 10px 8px 160px !important; /* 预留底部 TabBar(52px) + 吸底栏(50px) + 安全区 */
   }
 
   .settings-header {
@@ -2966,6 +2966,7 @@ onBeforeUnmount(() => {
   .settings-tabs :deep(.n-tabs-nav) {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px; /* 防止指示器被切割 */
   }
 
   .settings-tabs :deep(.n-tabs-wrapper) {
@@ -2973,9 +2974,16 @@ onBeforeUnmount(() => {
   }
 
   .settings-tabs :deep(.n-tabs-tab) {
-    padding: 6px 10px !important;
+    padding: 10px 14px !important;
     font-size: 13px !important;
     white-space: nowrap !important;
+    min-width: max-content !important;
+  }
+
+  .settings-tabs :deep(.n-tabs-tab__label) {
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
   }
 
   /* 移动端下所有表单项自适应整行 */
@@ -2984,28 +2992,84 @@ onBeforeUnmount(() => {
     grid-column: span 24 !important;
   }
 
+  .settings-card :deep(.n-form-item) {
+    margin-bottom: 12px !important;
+  }
+
+  .settings-card :deep(.n-form-item-label) {
+    font-size: 13px !important;
+    padding-bottom: 4px !important;
+  }
+
+  .settings-card :deep(.n-input),
+  .settings-card :deep(.n-select),
+  .settings-card :deep(.n-input-number) {
+    font-size: 16px !important; /* 防止 iOS Safari 聚焦放大 */
+  }
+
   .wizard-template-grid {
     grid-template-columns: 1fr !important;
   }
 
-  /* 吸底操作栏避开移动端底部 TabBar (52px + 安全区) */
+  /* 卡片间距优化 */
+  .settings-card {
+    margin-bottom: 16px !important;
+  }
+
+  .settings-card :deep(.n-card-content) {
+    padding: 16px !important;
+  }
+
+  /* 吸底操作栏避开移动端底部 TabBar (52px + 安全区) + 自身高度 */
   .sticky-action-bar {
-    bottom: calc(52px + var(--sab, 0px)) !important;
-    padding: 0 10px !important;
-    height: 50px !important;
+    bottom: calc(52px + 54px + var(--sab, 0px)) !important; /* TabBar高度 + 自身高度 + 安全区 */
+    padding: 0 12px !important;
+    height: 54px !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border-top: 1px solid rgba(0, 0, 0, 0.06) !important;
+  }
+
+  html.dark .sticky-action-bar,
+  html[theme-mode='dark'] .sticky-action-bar,
+  body.is-dark .sticky-action-bar {
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
   }
 
   .dirty-text {
-    font-size: 11px !important;
-    max-width: 130px !important;
+    font-size: 12px !important;
+    max-width: 160px !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
   }
 
   .save-btn {
-    padding: 0 12px !important;
-    font-size: 13px !important;
+    padding: 0 16px !important;
+    font-size: 14px !important;
+    height: 36px !important;
+  }
+
+  /* 向导弹窗移动端适配 */
+  .wizard-modal :deep(.n-modal-content) {
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+  }
+
+  .wizard-modal :deep(.n-form-item) {
+    margin-bottom: 10px !important;
+  }
+
+  /* 表格横向滚动 */
+  .modern-backup-table {
+    display: block !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modern-backup-table table {
+    min-width: 600px !important;
   }
 }
 </style>

@@ -71,9 +71,9 @@
         <template v-else>
           <n-alert type="info" :show-icon="true" class="auth-alert">
             <template #header>
-              🔐 云端安全防护已就绪 (统一默认密码：2266762)
+              🔐 云端安全防护已就绪
             </template>
-            当前服务运行于云端安全授权模式。系统统一默认管理员密码为 <strong>2266762</strong>，验证后即可解锁量化投研驾驶舱。
+            当前服务运行于云端安全授权模式。请输入访问口令以解锁量化投研驾驶舱。
           </n-alert>
 
           <div class="form-body">
@@ -83,7 +83,7 @@
                 type="password"
                 show-password-on="click"
                 size="large"
-                placeholder="请输入访问口令 (统一默认密码：2266762)"
+                placeholder="请输入访问口令"
                 :disabled="loading"
                 autofocus
                 @keyup.enter="handleLogin"
@@ -151,12 +151,6 @@
           </n-button>
         </div>
 
-        <!-- 当前口令状态提示 -->
-        <div v-if="currentSavedToken" class="current-token-info">
-          <span class="info-label">当前生效口令：</span>
-          <span class="info-masked">{{ maskedToken }}</span>
-        </div>
-
         <n-form-item
           label="更换新访问口令"
           :feedback="errorMsg"
@@ -166,7 +160,7 @@
             v-model:value="tokenInput"
             type="password"
             show-password-on="click"
-            placeholder="输入新口令以更换授权凭据"
+            placeholder="输入新口令以更换授权凭据 (留空则保持当前口令)"
             @keyup.enter="handleLogin"
             :disabled="loading"
           />
@@ -225,7 +219,7 @@ const showModal = ref(false)
 const isForced = ref(false)
 const needInit = ref(false)
 
-const tokenInput = ref('2266762')
+const tokenInput = ref('')
 const initPwd = ref('')
 const confirmPwd = ref('')
 const confirmInputRef = ref<any>(null)
@@ -237,12 +231,7 @@ const healthStatus = ref<'checking' | 'healthy' | 'error'>('checking')
 const pingLatency = ref(0)
 const currentSavedToken = ref('')
 
-const maskedToken = computed(() => {
-  if (!currentSavedToken.value) return '未设置'
-  const len = currentSavedToken.value.length
-  if (len <= 4) return '••••'
-  return currentSavedToken.value.slice(0, 2) + '••••••••' + currentSavedToken.value.slice(-2)
-})
+// Removed maskedToken display - security best practice: never show token fragments in UI
 
 const checkServerHealth = async () => {
   healthStatus.value = 'checking'
@@ -303,7 +292,7 @@ const onOpenAuthModal = async (e: any) => {
   currentSavedToken.value = getAuthToken()
   isForced.value = mode === 'login'
   errorMsg.value = ''
-  tokenInput.value = currentSavedToken.value || '2266762'
+  tokenInput.value = currentSavedToken.value || ''
   initPwd.value = ''
   confirmPwd.value = ''
   showModal.value = true
@@ -325,6 +314,7 @@ onMounted(async () => {
   if (!currentSavedToken.value) {
     isForced.value = true
     showModal.value = true
+    tokenInput.value = ''
     await fetchAuthStatus()
     return
   }
@@ -345,6 +335,7 @@ onMounted(async () => {
       currentSavedToken.value = ''
       isForced.value = true
       showModal.value = true
+      tokenInput.value = ''
       await fetchAuthStatus()
     }
   } catch {
@@ -600,23 +591,128 @@ const handleLogin = async () => {
   margin-right: 6px;
 }
 
-.current-token-info {
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  background: rgba(128, 128, 128, 0.08);
-  padding: 6px 12px;
-  border-radius: 6px;
+/* ==========================================================================
+   移动端响应式适配 (<= 480px 手机屏幕)
+   ========================================================================== */
+@media screen and (max-width: 480px) {
+  .web-auth-fullscreen-gate {
+    padding: 0;
+    align-items: stretch;
+    justify-content: flex-end;
+  }
+
+  .auth-gate-card {
+    max-width: 100vw;
+    width: 100vw;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 24px 20px;
+    min-height: 100dvh;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-shadow: none;
+    background: linear-gradient(180deg, #0a0e17 0%, #161f30 100%);
+  }
+
+  .card-header {
+    margin-bottom: 20px;
+  }
+
+  .brand-badge {
+    font-size: 22px;
+  }
+
+  .brand-icon {
+    font-size: 24px;
+  }
+
+  .card-subtitle {
+    font-size: 12px;
+  }
+
+  .auth-alert {
+    font-size: 13px;
+    padding: 12px 14px;
+  }
+
+  .form-body {
+    margin-bottom: 12px;
+  }
+
+  .form-body :deep(.n-form-item-label) {
+    font-size: 13px;
+  }
+
+  .form-body :deep(.n-input) {
+    font-size: 16px !important; /* 防止 iOS Safari 聚焦放大 */
+  }
+
+  .auth-action-btn {
+    height: 52px;
+    font-size: 16px;
+    border-radius: 10px;
+    margin-top: 16px;
+  }
+
+  .card-footer {
+    margin-top: auto;
+    padding-top: 20px;
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+    text-align: center;
+  }
+
+  .health-indicator {
+    justify-content: center;
+    font-size: 11px;
+  }
+
+  /* 管理模式弹窗移动端适配 */
+  .web-auth-manage-modal {
+    max-width: calc(100vw - 16px) !important;
+    margin: 8px auto !important;
+    border-radius: 16px 16px 0 0 !important;
+  }
+
+  .server-status-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .status-label {
+    margin-right: 0;
+    text-align: center;
+  }
 }
 
-.info-label {
-  color: var(--n-text-color-3);
-  margin-right: 6px;
+/* 平板横屏及小尺寸桌面 (<= 768px) */
+@media screen and (min-width: 481px) and (max-width: 768px) {
+  .web-auth-fullscreen-gate {
+    padding: 24px;
+  }
+
+  .auth-gate-card {
+    max-width: 420px;
+    padding: 28px 24px;
+  }
+
+  .auth-action-btn {
+    height: 48px;
+  }
 }
 
-.info-masked {
-  font-family: monospace;
-  font-weight: 600;
-  color: #18a058;
+/* 安全区域适配 (iPhone X+ 刘海屏) */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media screen and (max-width: 480px) {
+    .auth-gate-card {
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+  }
 }
 </style>

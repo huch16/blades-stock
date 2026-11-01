@@ -1341,7 +1341,7 @@ const currentMobileTab = computed(() => {
   const routeName = router.currentRoute.value.name
   if (!routeName || routeName === 'stock') return 'stock'
   if (routeName === 'market') return 'market'
-  if (routeName === 'intelligence') return 'market'
+  if (routeName === 'intelligence') return 'intelligence'
   if (routeName === 'agent') return 'agent'
   if (routeName === 'research') return 'research'
   if (routeName === 'settings') return 'settings'
@@ -1354,6 +1354,8 @@ function switchMobileTab(key) {
     router.push({ name: 'stock' })
   } else if (key === 'market') {
     router.push({ name: 'market' })
+  } else if (key === 'intelligence') {
+    router.push({ name: 'intelligence' })
   } else if (key === 'agent') {
     router.push({ name: 'agent' })
   } else if (key === 'research') {
@@ -1573,6 +1575,17 @@ onMounted(() => {
                             <n-icon size="20" :component="Pulse" />
                           </div>
                           <span class="mobile-tab-label">行情</span>
+                        </div>
+
+                        <div
+                          class="mobile-tab-item"
+                          :class="{ active: currentMobileTab === 'intelligence' }"
+                          @click="switchMobileTab('intelligence')"
+                        >
+                          <div class="mobile-tab-icon">
+                            <n-icon size="20" :component="AnalyticsOutline" />
+                          </div>
+                          <span class="mobile-tab-label">宏观智能</span>
                         </div>
 
                         <div

@@ -158,7 +158,6 @@ func HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 			"needInit":        serverToken == "",
 			"authRequired":    true,
 			"version":         "1.8.0",
-			"defaultPassword": DefaultAdminPassword,
 		},
 	})
 }
@@ -212,7 +211,6 @@ func HandleInitPassword(w http.ResponseWriter, r *http.Request) {
 		"message": "访问密码初始化成功！",
 		"data": map[string]any{
 			"authenticated": true,
-			"token":         pwd,
 		},
 	})
 }
@@ -249,7 +247,6 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 			"message": "登录验证成功",
 			"data": map[string]any{
 				"authenticated": true,
-				"token":         serverToken,
 			},
 		})
 		return
@@ -258,7 +255,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(map[string]any{
 		"code":    401,
-		"error":   "访问密码错误，请重新输入（统一默认密码：2266762）",
+		"error":   "访问密码错误，请重新输入",
 		"data": map[string]any{
 			"authenticated": false,
 		},

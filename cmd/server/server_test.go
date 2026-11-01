@@ -198,16 +198,16 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 	var resStatus struct {
 		Code int `json:"code"`
 		Data struct {
-			NeedInit        bool   `json:"needInit"`
-			Version         string `json:"version"`
-			DefaultPassword string `json:"defaultPassword"`
+			NeedInit     bool `json:"needInit"`
+			Version      string `json:"version"`
+			AuthRequired bool `json:"authRequired"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(wStatus.Body).Decode(&resStatus); err != nil {
 		t.Fatalf("failed to decode /api/auth/status response: %v", err)
 	}
-	if resStatus.Data.DefaultPassword != "2266762" {
-		t.Fatalf("expected defaultPassword=2266762, got %s", resStatus.Data.DefaultPassword)
+	if !resStatus.Data.AuthRequired {
+		t.Fatalf("expected authRequired=true")
 	}
 
 	// 1.1 开箱即用验证：直接使用统一密码 2266762 登录成功
