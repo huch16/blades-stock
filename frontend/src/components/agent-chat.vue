@@ -108,50 +108,7 @@
       </div>
     </header>
 
-    <!-- 全局宏观态势感知 HUD 仪表条 (桌面端与移动端统一呈现) -->
-    <section
-      v-if="perceptionSnapshot"
-      class="macro-perception-hud"
-      title="点击呼叫 Agent 深度解读当前宏观节律与持仓策略"
-      @click="askMacroPerception"
-    >
-      <div class="hud-left">
-        <span class="phase-pill">{{ perceptionSnapshot.Phase || '宏观节律感知' }}</span>
-        <span
-          class="traffic-beacon"
-          :style="{ backgroundColor: getTrafficColor(perceptionSnapshot.TrafficLight) }"
-        />
-        <span
-          class="traffic-label"
-          :style="{ color: getTrafficColor(perceptionSnapshot.TrafficLight) }"
-        >
-          {{ getTrafficText(perceptionSnapshot.TrafficLight) }}
-        </span>
-        <span
-          v-if="perceptionSnapshot.MarketBreadth"
-          class="breadth-ratio"
-        >
-          <span class="up-count">涨 {{ perceptionSnapshot.MarketBreadth.UpCount }}</span>
-          <span class="separator">/</span>
-          <span class="down-count">跌 {{ perceptionSnapshot.MarketBreadth.DownCount }}</span>
-        </span>
-      </div>
-      <div class="hud-right">
-        <n-tag
-          v-if="perceptionSnapshot.PortfolioRisk && perceptionSnapshot.PortfolioRisk.RiskLevel !== 'SAFE'"
-          size="small"
-          type="error"
-          round
-          class="risk-tag"
-        >
-          ⚠️ {{ perceptionSnapshot.PortfolioRisk.RiskLevel === 'DANGER' ? '高危持仓预警' : '持仓警示' }}
-        </n-tag>
-        <span class="action-hint">
-          <span>宏观态势推演</span>
-          <span class="arrow">➔</span>
-        </span>
-      </div>
-    </section>
+
 
     <!-- 主体聊天消息滚动区域 (自然时间线：旧消息在上，新消息在下) -->
     <main
@@ -1336,27 +1293,11 @@ async function refreshPerceptionSnapshot() {
   }
 }
 
-function getTrafficColor(light?: string) {
-  if (light === 'SAFE') return '#18a058'
-  if (light === 'CAUTION') return '#f0a020'
-  if (light === 'DANGER') return '#d03050'
-  return '#888'
-}
-
 function getTrafficText(light?: string) {
   if (light === 'SAFE') return '积极做多'
   if (light === 'CAUTION') return '谨慎防守'
   if (light === 'DANGER') return '强风控空仓'
   return '中性观望'
-}
-
-function askMacroPerception() {
-  if (!perceptionSnapshot.value) return
-  const phase = perceptionSnapshot.value.Phase || ''
-  const traffic = perceptionSnapshot.value.TrafficLight || ''
-  const prompt = `请结合当前市场【${phase}】节律与情绪【${traffic}】状态，对全天大局观、主线机会和实盘持仓风控进行综合推演。`
-  agentMode.value = 'plan_execute'
-  applyScenario(prompt, false)
 }
 
 const agentModeOptions = [
@@ -2418,96 +2359,7 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 宏观态势感知 HUD 仪表条 (双端统一呈现) */
-.macro-perception-hud {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
-  background: var(--td-bg-color-secondarycontainer, rgba(24, 160, 88, 0.06));
-  border-bottom: 1px solid var(--td-border-level-1-color, rgba(255, 255, 255, 0.08));
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-  font-size: 12px;
-  flex-shrink: 0;
 
-  &:hover {
-    background: var(--td-bg-color-component-hover, rgba(24, 160, 88, 0.12));
-
-    .action-hint .arrow {
-      transform: translateX(3px);
-    }
-  }
-
-  .hud-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-
-    .phase-pill {
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--td-text-color-primary, #e5e5e5);
-    }
-
-    .traffic-beacon {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      display: inline-block;
-      box-shadow: 0 0 6px currentColor;
-    }
-
-    .traffic-label {
-      font-weight: 600;
-      letter-spacing: 0.5px;
-    }
-
-    .breadth-ratio {
-      font-size: 12px;
-      margin-left: 4px;
-
-      .up-count {
-        color: #f67979;
-        font-weight: 600;
-      }
-      .separator {
-        margin: 0 4px;
-        opacity: 0.4;
-      }
-      .down-count {
-        color: #18a058;
-        font-weight: 600;
-      }
-    }
-  }
-
-  .hud-right {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-
-    .risk-tag {
-      font-size: 11px;
-    }
-
-    .action-hint {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      color: #18a058;
-      font-weight: 500;
-
-      .arrow {
-        transition: transform 0.2s ease;
-      }
-    }
-  }
-}
 
 /* 主体消息滚动视图 (正序) */
 .chat-messages-viewport {
@@ -3638,33 +3490,7 @@ onBeforeUnmount(() => {
     }
   }
 
-  .macro-perception-hud {
-    padding: 6px 10px !important;
-    gap: 6px !important;
 
-    .hud-left {
-      gap: 6px !important;
-      font-size: 11px !important;
-
-      .phase-pill {
-        padding: 1px 6px !important;
-        font-size: 11px !important;
-      }
-      .breadth-ratio {
-        font-size: 11px !important;
-      }
-    }
-
-    .hud-right {
-      gap: 6px !important;
-      .risk-tag {
-        display: none !important;
-      }
-      .action-hint {
-        font-size: 11px !important;
-      }
-    }
-  }
 
   .chat-messages-viewport {
     padding: 10px 8px 20px !important;
@@ -3732,10 +3558,7 @@ onBeforeUnmount(() => {
     }
   }
 
-  .macro-perception-hud {
-    background: #1e1e24 !important;
-    border-bottom-color: #2e2e33 !important;
-  }
+
 
   .chat-input-cockpit {
     background: #18181c !important;
