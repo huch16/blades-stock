@@ -242,8 +242,7 @@ import {
 import { SearchOutline, AddOutline, TrashOutline, CreateOutline, FlashOutline } from '@vicons/ionicons5'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
-import { CreateSkill, UpdateSkill, DeleteSkill, GetSkillList, EnableSkill, GetSkillByID, GetAllSkills } from '../../wailsjs/go/main/App.js'
-import { GetMCPServerList, GetConfig } from '../../wailsjs/go/main/App.js'
+import { CreateSkill, UpdateSkill, DeleteSkill, GetSkillList, EnableSkill, GetSkillByID, GetAllSkills, GetMCPServerList, GetConfig } from '../../wailsjs/go/main/App.js'
 
 const message = useMessage()
 const loading = ref(false)

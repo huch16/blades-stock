@@ -1,6 +1,6 @@
 <script setup>
 import {h, ref, computed, reactive, onMounted, watch} from "vue";
-import {NButton, NText, NFlex, NTag, NDataTable} from "naive-ui";
+import {NButton, NText, NFlex, NTag, NDataTable, useMessage} from "naive-ui";
 import {
   FollowFund,
   GetConfig,
@@ -11,7 +11,6 @@ import {
   SearchFundCodes
 } from "../../wailsjs/go/main/App";
 import {Environment} from "../../wailsjs/runtime";
-import {useMessage} from "naive-ui";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import StockSparkLine from "./stockSparkLine.vue";
 

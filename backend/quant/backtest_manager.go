@@ -155,6 +155,9 @@ func (m *BacktestManager) RunSingleReportBacktest(r models.AIResponseResult) (*m
 	}
 
 	startPrice := close[idx]
+	if startPrice <= 0 {
+		return nil, fmt.Errorf("insufficient or invalid price data (startPrice=%.2f) on %s", startPrice, analysisDate)
+	}
 	endPrice := close[endIdx-1]
 	priceChange := (endPrice - startPrice) / startPrice * 100
 
@@ -487,6 +490,9 @@ func (m *BacktestManager) backtestSingleReport(r models.AIResponseResult, stockD
 	}
 
 	startPrice := pd.close[idx]
+	if startPrice <= 0 {
+		return aiReportResult{reportID: r.ID, skipped: true, skipReason: "invalid start price"}
+	}
 	endPrice := pd.close[endIdx-1]
 	priceChange := (endPrice - startPrice) / startPrice * 100
 

@@ -7,7 +7,6 @@ import {
 } from "../../wailsjs/go/main/App";
 import {NButton, NInput, NTag, NText, useMessage, useNotification, NDataTable, NSpace, NPagination, NDropdown, NIcon} from "naive-ui";
 import sparkLine from "./stockSparkLine.vue"
-import klineChart from "./KLineChart.vue"
 import KLineChart from "./KLineChart.vue";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import StockDiagnosisDrawer from "./StockDiagnosisDrawer.vue";

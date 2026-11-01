@@ -227,10 +227,13 @@ func simulateETFMomentumBacktest(klineDataMap map[string][]float64, lookback int
 		if currentHold != "" {
 			todayPrice := klineDataMap[currentHold][t]
 			nextPrice := klineDataMap[currentHold][t+1]
-			ret := (nextPrice - todayPrice) / todayPrice
+			ret := 0.0
+			if todayPrice > 0 {
+				ret = (nextPrice - todayPrice) / todayPrice
+			}
 
 			// 止损触发检查
-			if (todayPrice-entryPrice)/entryPrice <= -stopLoss {
+			if entryPrice > 0 && (todayPrice-entryPrice)/entryPrice <= -stopLoss {
 				// 止损离场
 				ret = -stopLoss
 				currentHold = ""
@@ -250,7 +253,9 @@ func simulateETFMomentumBacktest(klineDataMap map[string][]float64, lookback int
 			currentHold = bestCode
 			entryPrice = klineDataMap[bestCode][t]
 			nextPrice := klineDataMap[bestCode][t+1]
-			todayRet = (nextPrice - entryPrice) / entryPrice
+			if entryPrice > 0 {
+				todayRet = (nextPrice - entryPrice) / entryPrice
+			}
 		}
 
 		dailyReturns = append(dailyReturns, todayRet)
@@ -258,14 +263,20 @@ func simulateETFMomentumBacktest(klineDataMap map[string][]float64, lookback int
 		if totalReturn > peakReturn {
 			peakReturn = totalReturn
 		}
-		dd := (peakReturn - totalReturn) / peakReturn * 100.0
+		dd := 0.0
+		if peakReturn > 0 {
+			dd = (peakReturn - totalReturn) / peakReturn * 100.0
+		}
 		if dd > maxDrawdown {
 			maxDrawdown = dd
 		}
 	}
 
 	days := float64(len(dailyReturns))
-	annualized := (math.Pow(totalReturn, 250.0/days) - 1.0) * 100.0
+	annualized := 0.0
+	if days > 0 && totalReturn > 0 {
+		annualized = (math.Pow(totalReturn, 250.0/days) - 1.0) * 100.0
+	}
 	if math.IsNaN(annualized) || math.IsInf(annualized, 0) {
 		annualized = 0.0
 	}

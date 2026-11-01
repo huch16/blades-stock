@@ -5,7 +5,6 @@ import {NButton, NEllipsis, NText} from "naive-ui";
 import ResearchReport from "./researchReport.vue";
 import AiRecommendStocksList from "./aiRecommendStocksList.vue";
 import AllStockList from "./allStockList.vue";
-import AllStockInfoList from "./allStockInfoList.vue";
 import CronTaskManager from "./cron-task-manager.vue";
 import TradingRecordManager from "./TradingRecordManager.vue";
 import StockChangesMonitor from "./stockChangesMonitor.vue";
@@ -72,9 +71,6 @@ function updateTab(name) {
       <n-tab-pane name="交易日志">
         <TradingRecordManager />
       </n-tab-pane>
-      <!--      <n-tab-pane name="全部股票信息">-->
-      <!--        <AllStockInfoList/>-->
-      <!--      </n-tab-pane>-->
       <n-tab-pane name="MCP服务">
         <MCPServiceManager />
       </n-tab-pane>

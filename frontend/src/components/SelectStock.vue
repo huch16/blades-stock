@@ -2,9 +2,8 @@
 import {h, onBeforeMount, onMounted, onUnmounted, ref, reactive, computed} from 'vue'
 import {SearchStock, GetHotStrategy, OpenURL, Follow, GetFollowList, GetAllCustomStrategies, SaveCustomStrategy, DeleteCustomStrategy, GetConfig, GetGroupList, AddStockGroup, AddGroup} from "../../wailsjs/go/main/App";
 import {useMessage, NText, NTag, NButton, NPopconfirm, NDropdown, NIcon} from 'naive-ui'
-import {Environment} from "../../wailsjs/runtime"
+import {Environment, EventsEmit} from "../../wailsjs/runtime"
 import {BookmarkOutline, TrashOutline, CreateOutline, AddOutline, FolderOpenOutline} from "@vicons/ionicons5";
-import {EventsEmit} from "../../wailsjs/runtime";
 import { consultAgent } from "../utils/agentControlBus";
 import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import StockDiagnosisDrawer from "./StockDiagnosisDrawer.vue";

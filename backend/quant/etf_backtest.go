@@ -103,6 +103,9 @@ func computeETFScore(closes []float64, momentumDays int) (float64, float64, floa
 
 	y := make([]float64, n)
 	for i := 0; i < n; i++ {
+		if closes[i] <= 0 {
+			return 0, 0, 0
+		}
 		y[i] = math.Log(closes[i])
 	}
 
@@ -144,8 +147,21 @@ func computeETFScore(closes []float64, momentumDays int) (float64, float64, floa
 		sst += wi * d2 * d2
 	}
 
-	r2 := 1.0 - sse/sst
+	r2 := 0.0
+	if sst > 1e-15 {
+		r2 = 1.0 - sse/sst
+	}
 	score := annualized * r2
+
+	if math.IsNaN(annualized) || math.IsInf(annualized, 0) {
+		annualized = 0
+	}
+	if math.IsNaN(r2) || math.IsInf(r2, 0) {
+		r2 = 0
+	}
+	if math.IsNaN(score) || math.IsInf(score, 0) {
+		score = 0
+	}
 
 	return annualized, r2, score
 }
@@ -473,7 +489,11 @@ func RunETFMomentumBacktest(cfg *ETFMomentumConfig) (*ETFMomentumResult, error) 
 			}
 
 			buyPrice := buyFees(entryPrice)
-			positionSize := cash / float64(targetCount-len(holdings))
+			remSlots := targetCount - len(holdings)
+			if remSlots <= 0 || buyPrice <= 0 {
+				continue
+			}
+			positionSize := cash / float64(remSlots)
 
 			for {
 				buyCost := positionSize
@@ -557,11 +577,18 @@ func RunETFMomentumBacktest(cfg *ETFMomentumConfig) (*ETFMomentumResult, error) 
 		delete(holdings, h.Symbol)
 	}
 
-	totalReturn := (cash - cfg.InitCash) / cfg.InitCash * 100
+	initCash := cfg.InitCash
+	if initCash <= 0 {
+		initCash = 100000.0
+	}
+	totalReturn := (cash - initCash) / initCash * 100
 	totalDays := len(tradingDays)
 	annualReturn := totalReturn
-	if totalDays > 0 {
+	if totalDays > 0 && (1+totalReturn/100) > 0 {
 		annualReturn = (math.Pow(1+totalReturn/100, 252/float64(totalDays)) - 1) * 100
+	}
+	if math.IsNaN(annualReturn) || math.IsInf(annualReturn, 0) {
+		annualReturn = totalReturn
 	}
 
 	maxVal := 0.0
@@ -570,9 +597,11 @@ func RunETFMomentumBacktest(cfg *ETFMomentumConfig) (*ETFMomentumResult, error) 
 		if v > maxVal {
 			maxVal = v
 		}
-		dd := (maxVal - v) / maxVal * 100
-		if dd > maxDD {
-			maxDD = dd
+		if maxVal > 0 {
+			dd := (maxVal - v) / maxVal * 100
+			if dd > maxDD {
+				maxDD = dd
+			}
 		}
 	}
 

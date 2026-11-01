@@ -86,9 +86,14 @@ func (h *SSEHub) Broadcast(event string, data any) {
 		default:
 			// 关键事件（如智能体消息、状态变更、结束信号等）进行缓冲投递，绝不允许随意丢弃
 			go func(c chan []byte, m []byte) {
+				defer func() {
+					_ = recover()
+				}()
+				t := time.NewTimer(1 * time.Second)
+				defer t.Stop()
 				select {
 				case c <- m:
-				case <-time.After(1 * time.Second):
+				case <-t.C:
 					// 超时 1s 后放弃，防止 goroutine 泄漏
 				}
 			}(ch, msg)
