@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"blades-stock/backend/circuitbreaker"
 	"blades-stock/backend/logger"
 )
 
@@ -43,6 +44,10 @@ func NewBaostockApi() *BaostockApi {
 // ---- 通用 HTTP 请求 ----
 
 func (b *BaostockApi) get(path string, params map[string]string) ([]byte, error) {
+	cb := circuitbreaker.Get("baostock_api")
+	if !cb.Allow() {
+		return nil, fmt.Errorf("baostock circuit breaker open (fast fail)")
+	}
 	u := b.baseURL + path
 	if len(params) > 0 {
 		v := url.Values{}
@@ -53,16 +58,20 @@ func (b *BaostockApi) get(path string, params map[string]string) ([]byte, error)
 	}
 	resp, err := b.client.Get(u)
 	if err != nil {
+		cb.Failure()
 		return nil, fmt.Errorf("baostock request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		cb.Failure()
 		return nil, fmt.Errorf("baostock read body failed: %w", err)
 	}
 	if resp.StatusCode >= 400 {
+		cb.Failure()
 		return body, fmt.Errorf("baostock HTTP %d: %s", resp.StatusCode, string(body))
 	}
+	cb.Success()
 	return body, nil
 }
 

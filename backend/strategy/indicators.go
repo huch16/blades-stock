@@ -175,6 +175,9 @@ func emaSeries(values []float64, period int) []float64 {
 	if len(values) == 0 {
 		return out
 	}
+	if period <= 0 {
+		period = 1
+	}
 	k := 2.0 / (float64(period) + 1)
 	out[0] = values[0]
 	for i := 1; i < len(values); i++ {
@@ -185,7 +188,7 @@ func emaSeries(values []float64, period int) []float64 {
 
 func rsiWilder(closes []float64, period int) float64 {
 	n := len(closes)
-	if n < period+1 {
+	if period <= 0 || n < period+1 {
 		return 0
 	}
 	var gains, losses float64

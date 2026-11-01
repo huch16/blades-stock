@@ -14,6 +14,7 @@ import (
 type SSEHub struct {
 	clientsMu sync.RWMutex
 	clients   map[chan []byte]bool
+	stopCh    chan struct{}
 }
 
 var globalSSEHub = NewSSEHub()
@@ -22,10 +23,22 @@ var globalSSEHub = NewSSEHub()
 func NewSSEHub() *SSEHub {
 	hub := &SSEHub{
 		clients: make(map[chan []byte]bool),
+		stopCh:  make(chan struct{}),
 	}
 	// 启动定期心跳协程，防止代理（如 Nginx / Cloudflare）因空闲切断长连接
 	go hub.startHeartbeat()
 	return hub
+}
+
+// Shutdown 优雅关停心跳协程并断开所有客户端
+func (h *SSEHub) Shutdown() {
+	close(h.stopCh)
+	h.clientsMu.Lock()
+	defer h.clientsMu.Unlock()
+	for ch := range h.clients {
+		delete(h.clients, ch)
+		close(ch)
+	}
 }
 
 func (h *SSEHub) addClient(ch chan []byte) {
@@ -88,18 +101,23 @@ func (h *SSEHub) startHeartbeat() {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		h.clientsMu.RLock()
-		if len(h.clients) > 0 {
-			ping := []byte(": ping\n\n")
-			for ch := range h.clients {
-				select {
-				case ch <- ping:
-				default:
+	for {
+		select {
+		case <-h.stopCh:
+			return
+		case <-ticker.C:
+			h.clientsMu.RLock()
+			if len(h.clients) > 0 {
+				ping := []byte(": ping\n\n")
+				for ch := range h.clients {
+					select {
+					case ch <- ping:
+					default:
+					}
 				}
 			}
+			h.clientsMu.RUnlock()
 		}
-		h.clientsMu.RUnlock()
 	}
 }
 

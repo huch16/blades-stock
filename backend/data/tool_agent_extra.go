@@ -675,5 +675,10 @@ func handleGetNextTradingDay(o *OpenAi, funcArguments string, ctx *ToolContext) 
 }
 
 func restyForHoliday() *resty.Client {
-	return resty.New()
+	return resty.New().
+		SetTimeout(10 * time.Second).
+		SetRetryCount(1).
+		SetRetryWaitTime(500 * time.Millisecond).
+		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36").
+		SetHeader("Accept", "application/json, text/plain, */*")
 }

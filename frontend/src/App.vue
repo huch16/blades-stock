@@ -1232,6 +1232,10 @@ onBeforeUnmount(() => {
   EventsOff("groupListChanged")
   EventsOff("stockPriceAlertTriggered")
   EventsOff("marketIntelligenceReport")
+  EventsOff("show-market-intelligence")
+  EventsOff("show-market-intelligence-serenity")
+  EventsOff("openFloatingAgentWithQuestion")
+  EventsOff("updateSettings")
 })
 
 window.onerror = function (msg, source, lineno, colno, error) {

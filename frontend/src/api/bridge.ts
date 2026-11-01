@@ -85,6 +85,24 @@ class WebEventBus {
   private sseConnected: boolean = false
   private retryTimer: any = null
   private attachedEvents: Set<string> = new Set()
+  private retryCount: number = 0
+  private readonly maxRetryDelay: number = 30000
+  private readonly baseRetryDelay: number = 2000
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => {
+        if (!isWails()) {
+          this.reconnectSSE()
+        }
+      })
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && !this.sseConnected && !isWails()) {
+          this.reconnectSSE()
+        }
+      })
+    }
+  }
 
   public onMultiple(event: string, callback: Function, maxCallbacks: number = -1): void {
     if (!this.listeners.has(event)) {
@@ -192,7 +210,15 @@ class WebEventBus {
       this.sseConnected = true
       this.attachedEvents.clear()
 
-      this.sseSource.onmessage = (e) => this.handleSSEMessage(e)
+      this.sseSource.onopen = () => {
+        this.sseConnected = true
+        this.retryCount = 0
+      }
+
+      this.sseSource.onmessage = (e) => {
+        this.retryCount = 0
+        this.handleSSEMessage(e)
+      }
 
       // 为当前已注册的所有前端监听事件挂载 addEventListener，提供双重保障
       for (const evt of this.listeners.keys()) {
@@ -211,10 +237,15 @@ class WebEventBus {
           this.sseSource = null
         }
         if (!this.retryTimer) {
+          const delay = Math.min(
+            this.maxRetryDelay,
+            Math.round(this.baseRetryDelay * Math.pow(1.5, Math.min(this.retryCount, 8)) * (0.8 + Math.random() * 0.4))
+          )
+          this.retryCount++
           this.retryTimer = setTimeout(() => {
             this.retryTimer = null
             this.ensureSSEConnection()
-          }, 5000)
+          }, delay)
         }
       }
     } catch (e) {
@@ -229,6 +260,7 @@ class WebEventBus {
       this.sseSource = null
     }
     this.sseConnected = false
+    this.retryCount = 0
     if (this.retryTimer) {
       clearTimeout(this.retryTimer)
       this.retryTimer = null

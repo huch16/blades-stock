@@ -290,6 +290,9 @@ func main() {
 	sig := <-stopChan
 	logger.SugaredLogger.Infof("[Shutdown] Received signal %v, shutting down gracefully...", sig)
 
+	// 优雅关闭 SSE 心跳与客户端连接
+	globalSSEHub.Shutdown()
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

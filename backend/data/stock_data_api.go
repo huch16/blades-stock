@@ -851,7 +851,8 @@ func GB18030ToUTF8(bs []byte) string {
 	reader := transform.NewReader(bytes.NewReader(bs), simplifiedchinese.GB18030.NewDecoder())
 	d, err := io.ReadAll(reader)
 	if err != nil {
-		panic(err)
+		logger.SugaredLogger.Warnf("GB18030ToUTF8 decode error: %v, returning raw string", err)
+		return string(bs)
 	}
 	return string(d)
 }
@@ -1265,9 +1266,14 @@ func SearchStockPriceInfo(stockName, stockCode string, crawlTimeOut int64) *[]st
 }
 
 func SearchStockInfo(stock, msgType string, crawlTimeOut int64) *[]string {
+	if crawlTimeOut <= 0 {
+		crawlTimeOut = 10
+	}
 	apiURL := fmt.Sprintf("https://www.cls.cn/api/cache?app=CailianpressWeb&name=telegraphSearch&os=web&sv=8.7.9&keyword=%s&type=%s", url2.QueryEscape(RemoveAllBlankChar(stock)), url2.QueryEscape(msgType))
 	client := resty.New()
-	resp, err := client.SetTimeout(time.Duration(crawlTimeOut)*time.Second).R().
+	resp, err := client.SetTimeout(time.Duration(crawlTimeOut)*time.Second).
+		SetRetryCount(1).
+		SetRetryWaitTime(300 * time.Millisecond).R().
 		SetHeader("Host", "www.cls.cn").
 		SetHeader("Origin", "https://www.cls.cn").
 		SetHeader("Referer", "https://www.cls.cn/searchPage").
