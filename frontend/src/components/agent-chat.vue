@@ -170,9 +170,9 @@
       <section v-if="messages.length === 0" class="welcome-workspace">
         <div class="welcome-hero">
           <div class="hero-badge">BUIS QUANTITATIVE INTELLIGENCE LADDER</div>
-          <h2 class="hero-title">Blades AI 智能投研决策中枢</h2>
+          <h2 class="hero-title">Blades 买方量化投研决策中枢</h2>
           <p class="hero-desc">
-            从宏观大势择时到买方个股落子，全流程标准化作业，实现高确定性投研闭环
+            从宏观大势择时到买方个股落子 · 五阶全时序量化闭环作业
           </p>
 
           <!-- 模式切换：标准五阶决策梯 vs 专项极速控制台 -->
@@ -198,47 +198,87 @@
 
         <!-- 视图 1：标准五阶流水线 (时序导向) -->
         <div v-if="welcomeViewMode === 'pipeline'" class="pipeline-container">
+          <!-- 阶段引导流程轴 -->
           <div class="pipeline-flow-guide">
-            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 1 }" @click="executeStep1">
-              <span class="step-num">1</span>
+            <div
+              class="flow-step-node"
+              :class="{ current: pipelineContext.currentStep === 1 }"
+              @click="executeStep1"
+              title="点击测算大盘择时与仓位上限"
+            >
+              <span class="step-num l1">1</span>
               <span class="step-name">看大势 (L1)</span>
             </div>
             <div class="flow-arrow">➔</div>
-            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 2 }" @click="executeStep2('etf')">
-              <span class="step-num">2</span>
+            <div
+              class="flow-step-node"
+              :class="{ current: pipelineContext.currentStep === 2 }"
+              @click="executeStep2('etf')"
+              title="点击计算核心行业ETF动量排名"
+            >
+              <span class="step-num l2">2</span>
               <span class="step-name">选赛道 (L2)</span>
             </div>
             <div class="flow-arrow">➔</div>
-            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 3 }" @click="executeStep3('breakout')">
-              <span class="step-num">3</span>
+            <div
+              class="flow-step-node"
+              :class="{ current: pipelineContext.currentStep === 3 }"
+              @click="executeStep3('breakout')"
+              title="点击运行多因子策略量化选股"
+            >
+              <span class="step-num l3">3</span>
               <span class="step-name">筛标的 (L3)</span>
             </div>
             <div class="flow-arrow">➔</div>
-            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 4 }" @click="executeStep4('diag')">
-              <span class="step-num">4</span>
+            <div
+              class="flow-step-node"
+              :class="{ current: pipelineContext.currentStep === 4 }"
+              @click="executeStep4('diag')"
+              title="点击启动个股四维全景体检与排雷"
+            >
+              <span class="step-num l4">4</span>
               <span class="step-name">验体质 (L4)</span>
             </div>
             <div class="flow-arrow">➔</div>
-            <div class="flow-step-node" :class="{ current: pipelineContext.currentStep === 5 }" @click="executeStep5()">
-              <span class="step-num">5</span>
+            <div
+              class="flow-step-node"
+              :class="{ current: pipelineContext.currentStep === 5 }"
+              @click="executeStep5()"
+              title="点击形成买方5-Verdict裁决并存入认知账本"
+            >
+              <span class="step-num l5">5</span>
               <span class="step-name">定落子 (L5)</span>
             </div>
           </div>
 
-          <!-- 全局流水线贯通标的与状态指示栏 (消除前后步骤脱节与信息孤岛) -->
+          <!-- 全局流水线贯通标的与状态指示栏 (统一单入口，消除信息孤岛) -->
           <div class="pipeline-context-banner">
             <div class="banner-left">
               <span class="banner-icon">🎯</span>
-              <span class="banner-label">当前贯通标的：</span>
-              <span class="banner-stock-pill" @click="openStockActionModal('diag')" title="点击更换标的">
+              <span class="banner-label">全局贯通标的：</span>
+              <div
+                class="banner-stock-pill"
+                @click="openStockActionModal('diag')"
+                title="点击弹出标的库搜索或更换标的"
+              >
                 <span class="pill-name">{{ pipelineContext.stockName || '默认标的' }}</span>
                 <span class="pill-code">{{ pipelineContext.stockCode }}</span>
+              </div>
+              <div class="banner-quick-input-wrap" title="直接输入6位股票代码按回车快速切换贯通标的">
+                <n-input
+                  v-model:value="pipelineContext.stockCode"
+                  placeholder="代码/回车"
+                  size="tiny"
+                  class="banner-quick-input"
+                  @update:value="onPipelineStockCodeChange"
+                  @keydown.enter="onPipelineStockCodeEnter"
+                />
+              </div>
+              <span v-if="pipelineContext.macroStance" class="banner-tag stance-tag">
+                🚦 {{ pipelineContext.macroStance }}
               </span>
               <span v-if="pipelineContext.mainTrack" class="banner-tag track-tag">
                 🏷️ {{ pipelineContext.mainTrack }}
-              </span>
-              <span v-if="pipelineContext.macroStance" class="banner-tag stance-tag">
-                🚦 {{ pipelineContext.macroStance }}
               </span>
             </div>
             <div class="banner-right">
@@ -255,21 +295,28 @@
                 </button>
               </div>
               <button class="banner-switch-btn" @click="openStockActionModal('diag')">
-                🔄 自选代码
+                🔍 标的库
               </button>
             </div>
           </div>
 
+          <!-- 五阶量化时序决策卡片矩阵 (严格等高、网格对称对齐) -->
           <div class="pipeline-steps-grid">
             <!-- Step 1: 🏛️ 看大势 (L1 Macro) -->
-            <div class="pipeline-card step-card-1">
-              <div class="step-header">
+            <div class="pipeline-card step-card-1" :class="{ current: pipelineContext.currentStep === 1 }">
+              <div class="step-card-header">
                 <div class="step-badge-wrap">
                   <span class="step-badge l1">L1 择时</span>
                   <span class="step-title">宏观大势与仓位上限</span>
                 </div>
+                <div class="step-tags">
+                  <span class="mini-tag">核心宽基指数</span>
+                  <span class="mini-tag">多空红绿灯</span>
+                </div>
               </div>
-              <p class="step-desc">解决【大盘能不能做？给几成仓？】严禁外部搜索，调用 GetMarketData 评估大盘估值与多空红绿灯。</p>
+              <p class="step-desc">
+                评估大盘多空红绿灯与全市场赚钱效应，严禁外部搜索，精准测算机构总仓位上限。
+              </p>
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep1">
                   🚀 测算大盘择时与仓位
@@ -278,14 +325,20 @@
             </div>
 
             <!-- Step 2: 🧭 选赛道 (L2 Sector & ETF) -->
-            <div class="pipeline-card step-card-2">
-              <div class="step-header">
+            <div class="pipeline-card step-card-2" :class="{ current: pipelineContext.currentStep === 2 }">
+              <div class="step-card-header">
                 <div class="step-badge-wrap">
                   <span class="step-badge l2">L2 主线</span>
                   <span class="step-title">赛道动量与主力席位</span>
                 </div>
+                <div class="step-tags">
+                  <span class="mini-tag">21日加权动量</span>
+                  <span class="mini-tag">龙虎榜机构</span>
+                </div>
               </div>
-              <p class="step-desc">解决【资金流向哪里？】纯 Go 本地 VectorBT 运行21日加权动量，锁定场内领涨行业 ETF 与龙虎榜席位。</p>
+              <p class="step-desc">
+                运行纯 Go 本地 VectorBT 计算加权动量，捕捉场内领涨行业 ETF 与龙虎榜机构席位。
+              </p>
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep2('etf')">
                   🚀 ETF 动量排名
@@ -297,79 +350,89 @@
             </div>
 
             <!-- Step 3: 🎯 筛标的 (L3 Alpha Screening) -->
-            <div class="pipeline-card step-card-3">
-              <div class="step-header">
+            <div class="pipeline-card step-card-3" :class="{ current: pipelineContext.currentStep === 3 }">
+              <div class="step-card-header">
                 <div class="step-badge-wrap">
                   <span class="step-badge l3">L3 选股</span>
                   <span class="step-title">量化多因子初筛池</span>
                 </div>
+                <div class="step-tags">
+                  <span class="mini-tag">平台放量突破</span>
+                  <span class="mini-tag">均线多头</span>
+                </div>
               </div>
-              <p class="step-desc">解决【优势赛道里买哪只？】调用 ScreenByStrategy 多因子选拔高胜率候选股票，首选标的自动贯通至 Step 4。</p>
+              <p class="step-desc">
+                多因子量化模型初筛全市场高胜率标的，龙头标的自动无缝贯通至 Step 4 深度验质。
+              </p>
               <div class="step-actions">
                 <button class="step-btn primary" @click="executeStep3('breakout')">
-                  🚀 放量突破
+                  🚀 放量突破选股
                 </button>
-                <button class="step-btn sub" @click="executeStep3('trend')">
-                  📈 均线多头
-                </button>
-                <button class="step-btn sub" @click="executeStep3('macd')">
-                  ⚡ MACD金叉
-                </button>
-                <button class="step-btn sub" @click="executeStep3('dividend')">
-                  🛡️ 高股息
-                </button>
+                <div class="sub-actions-row">
+                  <button class="step-btn sub mini" @click="executeStep3('trend')">
+                    📈 均线多头
+                  </button>
+                  <button class="step-btn sub mini" @click="executeStep3('macd')">
+                    ⚡ 金叉
+                  </button>
+                  <button class="step-btn sub mini" @click="executeStep3('dividend')">
+                    🛡️ 高股息
+                  </button>
+                </div>
               </div>
             </div>
 
             <!-- Step 4: 🔬 验体质与极限排雷 (L4 Deep-Dive & Red Flags) -->
-            <div class="pipeline-card step-card-4 highlight-step">
-              <div class="step-header">
+            <div class="pipeline-card step-card-4 highlight-step" :class="{ current: pipelineContext.currentStep === 4 }">
+              <div class="step-card-header">
                 <div class="step-badge-wrap">
                   <span class="step-badge l4">L4 验质</span>
                   <span class="step-title">四维体检与极限排雷</span>
                 </div>
+                <div class="step-tags">
+                  <span class="mini-tag">VectorBT胜率</span>
+                  <span class="mini-tag">质押/解禁</span>
+                </div>
               </div>
-              <p class="step-desc">解决【标的有无暗雷？盈亏比划算吗？】对贯通标的进行 VectorBT 胜率测算、60日均线、质押解禁与现金流排雷。</p>
-              
-              <!-- 内置标的快速填装器，彻底消灭占位符 -->
-              <div class="inline-stock-picker">
-                <n-input
-                  v-model:value="step4StockInput"
-                  placeholder="标的代码 (如 600519)"
-                  size="small"
-                  class="picker-input"
-                  @update:value="onStep4StockInputChange"
-                />
-              </div>
-
+              <p class="step-desc">
+                对贯通标的展开 VectorBT 胜率测算、均线量价及财务体检，排查股权质押与现金流暗雷。
+              </p>
               <div class="step-actions">
-                <button class="step-btn primary" @click="executeStep4('diag')">
-                  🔬 四维深度体检
+                <button class="step-btn primary highlight" @click="executeStep4('diag')">
+                  🔬 深度体检 ({{ pipelineContext.stockName || pipelineContext.stockCode }})
                 </button>
-                <button class="step-btn warning" @click="executeStep4('risk')">
-                  🛡️ 股权质押排雷
-                </button>
-                <button class="step-btn sub" @click="executeStep4('finance')">
-                  📑 经营现金流
-                </button>
+                <div class="sub-actions-row">
+                  <button class="step-btn warning mini" @click="executeStep4('risk')">
+                    🛡️ 股权质押排雷
+                  </button>
+                  <button class="step-btn sub mini" @click="executeStep4('finance')">
+                    📑 经营现金流
+                  </button>
+                </div>
               </div>
             </div>
 
             <!-- Step 5: 📑 定落子与立论 (L5 Verdict & Thesis Ledger) -->
-            <div class="pipeline-card step-card-5 highlight-step">
-              <div class="step-header">
+            <div class="pipeline-card step-card-5 highlight-step" :class="{ current: pipelineContext.currentStep === 5 }">
+              <div class="step-card-header">
                 <div class="step-badge-wrap">
                   <span class="step-badge l5">L5 终局</span>
                   <span class="step-title">买方立论与 5-Verdict</span>
                 </div>
+                <div class="step-tags">
+                  <span class="mini-tag">5-Verdict评级</span>
+                  <span class="mini-tag">证伪底线入库</span>
+                </div>
               </div>
-              <p class="step-desc">解决【知行合一与止损防守】对贯通标的作出买方确定性评级与下行证伪线，并强制写入 SQLite 认知账本数据库。</p>
+              <p class="step-desc">
+                严谨确立买方确定性评级与下行证伪防守底线，核心投资立论持久化写入认知账本。
+              </p>
               <div class="step-actions">
-                <button class="step-btn primary" @click="executeStep5()">
-                  🚀 5-Verdict 裁决入库
+                <button class="step-btn primary success" @click="executeStep5()">
+                  🚀 5-Verdict 裁决入库 ({{ pipelineContext.stockName || pipelineContext.stockCode }})
                 </button>
                 <button class="step-btn sub" @click="viewVerdictStandards">
-                  📖 5-Verdict 规范
+                  📖 5-Verdict 评级规范
                 </button>
               </div>
             </div>
@@ -389,17 +452,27 @@
                 </div>
               </div>
               <div class="tool-form">
-                <n-input
-                  v-model:value="directDiagCode"
-                  placeholder="输入 6 位代码或名称 (如 300750)"
-                  size="small"
-                  class="tool-input"
-                />
+                <div class="tool-input-row">
+                  <n-input
+                    v-model:value="directDiagCode"
+                    placeholder="输入 6 位代码或名称 (如 300750)"
+                    size="small"
+                    class="tool-input"
+                  />
+                  <button
+                    class="tool-fill-target-btn"
+                    @click="directDiagCode = pipelineContext.stockCode"
+                    title="填入当前贯通标的代码"
+                  >
+                    🎯 填入贯通标的
+                  </button>
+                </div>
                 <div class="quick-hot-row">
                   <button
                     v-for="stk in hotStocks.slice(0, 5)"
                     :key="stk.code"
                     class="hot-chip"
+                    :class="{ active: directDiagCode === stk.code }"
                     @click="directDiagCode = stk.code"
                   >
                     {{ stk.name }}
@@ -461,17 +534,27 @@
                 </div>
               </div>
               <div class="tool-form">
-                <n-input
-                  v-model:value="directRiskCode"
-                  placeholder="输入代码或名称 (如 600519)"
-                  size="small"
-                  class="tool-input"
-                />
+                <div class="tool-input-row">
+                  <n-input
+                    v-model:value="directRiskCode"
+                    placeholder="输入代码或名称 (如 600519)"
+                    size="small"
+                    class="tool-input"
+                  />
+                  <button
+                    class="tool-fill-target-btn"
+                    @click="directRiskCode = pipelineContext.stockCode"
+                    title="填入当前贯通标的代码"
+                  >
+                    🎯 填入贯通标的
+                  </button>
+                </div>
                 <div class="quick-hot-row">
                   <button
                     v-for="stk in hotStocks.slice(0, 5)"
                     :key="stk.code"
                     class="hot-chip"
+                    :class="{ active: directRiskCode === stk.code }"
                     @click="directRiskCode = stk.code"
                   >
                     {{ stk.name }}
@@ -530,8 +613,8 @@
 
     <!-- 底部输入与操作中枢 -->
     <footer class="chat-input-cockpit" :class="{ compact: isCompact }">
-      <!-- 快捷指令横条 (芯片式工具条) -->
-      <div class="input-quick-bar" v-if="!isCompact">
+      <!-- 快捷指令横条 (芯片式工具条，对话进行时展现，欢迎屏时不与工作台重复冲突) -->
+      <div class="input-quick-bar" v-if="!isCompact && messages.length > 0">
         <div class="quick-chips">
           <button
             v-for="chip in quickChips"
@@ -951,17 +1034,44 @@ function setPipelineStock(code: string, name?: string) {
   if (!trimmed) return
   pipelineContext.stockCode = trimmed
   step4StockInput.value = trimmed
+  directDiagCode.value = trimmed
+  directRiskCode.value = trimmed
   if (name) {
     pipelineContext.stockName = name.trim()
   } else {
     const found = hotStocks.find(s => s.code === trimmed)
     if (found) pipelineContext.stockName = found.name
+    else pipelineContext.stockName = ''
+  }
+}
+
+function onPipelineStockCodeChange(val: string) {
+  const trimmed = (val || '').trim()
+  pipelineContext.stockCode = trimmed
+  step4StockInput.value = trimmed
+  directDiagCode.value = trimmed
+  directRiskCode.value = trimmed
+  const found = hotStocks.find(s => s.code === trimmed)
+  if (found) {
+    pipelineContext.stockName = found.name
+  } else if (!val) {
+    pipelineContext.stockName = ''
+  }
+}
+
+function onPipelineStockCodeEnter() {
+  const trimmed = (pipelineContext.stockCode || '').trim()
+  if (trimmed) {
+    setPipelineStock(trimmed)
   }
 }
 
 function onStep4StockInputChange(val: string) {
   const trimmed = (val || '').trim()
   pipelineContext.stockCode = trimmed
+  step4StockInput.value = trimmed
+  directDiagCode.value = trimmed
+  directRiskCode.value = trimmed
   const found = hotStocks.find(s => s.code === trimmed)
   if (found) {
     pipelineContext.stockName = found.name
@@ -2407,18 +2517,18 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 欢迎页卡片矩阵 */
+/* 欢迎页买方量化工作台 (BUIS Quantitative Cockpit) */
 .welcome-workspace {
-  max-width: 1200px;
+  max-width: 1360px;
   width: 100%;
-  margin: 20px auto 40px;
+  margin: 12px auto 36px;
   display: flex;
   flex-direction: column;
   align-items: center;
 
   .welcome-hero {
     text-align: center;
-    margin-bottom: 24px;
+    margin-bottom: 20px;
 
     .hero-badge {
       display: inline-block;
@@ -2426,18 +2536,18 @@ onBeforeUnmount(() => {
       font-weight: 700;
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      padding: 3px 10px;
+      padding: 3px 12px;
       border-radius: 12px;
       background: linear-gradient(135deg, rgba(0, 82, 217, 0.12) 0%, rgba(43, 164, 113, 0.12) 100%);
       color: var(--td-brand-color, #0052d9);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       border: 1px solid rgba(0, 82, 217, 0.2);
     }
 
     .hero-title {
       font-size: 22px;
       font-weight: 800;
-      margin: 0 0 8px;
+      margin: 0 0 6px;
       letter-spacing: 0.3px;
       background: linear-gradient(135deg, var(--td-brand-color, #0052d9) 0%, #2ba471 100%);
       -webkit-background-clip: text;
@@ -2447,12 +2557,12 @@ onBeforeUnmount(() => {
     .hero-desc {
       font-size: 13px;
       color: var(--td-text-color-secondary, #86909c);
-      max-width: 680px;
+      max-width: 720px;
       line-height: 1.6;
-      margin: 0 auto 18px;
+      margin: 0 auto 16px;
     }
 
-    /* 模式切换：标准五阶流水线 vs 专项极速控制台 */
+    /* 模式切换：标准五阶决策梯 vs 专项极速穿透台 */
     .welcome-mode-toggle {
       display: inline-flex;
       background: var(--td-bg-color-component, #f2f3f5);
@@ -2466,7 +2576,7 @@ onBeforeUnmount(() => {
         background: transparent;
         font-size: 13px;
         font-weight: 500;
-        padding: 7px 18px;
+        padding: 6px 16px;
         border-radius: 16px;
         cursor: pointer;
         color: var(--td-text-color-secondary, #4e5969);
@@ -2494,14 +2604,15 @@ onBeforeUnmount(() => {
     width: 100%;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
 
+    /* 阶段引导流程轴 */
     .pipeline-flow-guide {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 10px;
-      padding: 10px 16px;
+      gap: 8px;
+      padding: 8px 16px;
       background: var(--td-bg-color-container, #ffffff);
       border: 1px solid var(--td-border-level-1-color, #e5e6eb);
       border-radius: 10px;
@@ -2509,7 +2620,7 @@ onBeforeUnmount(() => {
       white-space: nowrap;
 
       .flow-step-node {
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         color: var(--td-text-color-secondary, #4e5969);
         padding: 5px 12px;
@@ -2528,8 +2639,15 @@ onBeforeUnmount(() => {
           width: 18px;
           height: 18px;
           border-radius: 50%;
-          background: rgba(0, 0, 0, 0.1);
           font-size: 11px;
+          font-weight: 700;
+          color: #ffffff;
+
+          &.l1 { background: #0052d9; }
+          &.l2 { background: #fa8c16; }
+          &.l3 { background: #722ed1; }
+          &.l4 { background: #e11d48; }
+          &.l5 { background: #059669; }
         }
 
         &:hover {
@@ -2542,25 +2660,25 @@ onBeforeUnmount(() => {
           color: #ffffff;
 
           .step-num {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.3);
           }
         }
       }
 
       .flow-arrow {
         color: var(--td-text-color-placeholder, #c9cdd4);
-        font-size: 13px;
+        font-size: 12px;
       }
     }
 
-    /* 全局流水线贯通指示栏 */
+    /* 全局流水线贯通指示栏 (单入口闭环设计) */
     .pipeline-context-banner {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
       padding: 10px 16px;
-      background: linear-gradient(135deg, rgba(0, 82, 217, 0.05) 0%, rgba(102, 126, 234, 0.08) 100%);
+      background: linear-gradient(135deg, rgba(0, 82, 217, 0.05) 0%, rgba(102, 126, 234, 0.07) 100%);
       border: 1px solid rgba(0, 82, 217, 0.18);
       border-radius: 10px;
       flex-wrap: wrap;
@@ -2577,7 +2695,7 @@ onBeforeUnmount(() => {
 
         .banner-label {
           font-size: 13px;
-          font-weight: 600;
+          font-weight: 700;
           color: var(--td-text-color-primary, #1d2129);
         }
 
@@ -2593,7 +2711,7 @@ onBeforeUnmount(() => {
           cursor: pointer;
           display: inline-flex;
           align-items: center;
-          gap: 4px;
+          gap: 5px;
           transition: all 0.2s ease;
 
           &:hover {
@@ -2608,6 +2726,14 @@ onBeforeUnmount(() => {
           .pill-code {
             font-size: 12px;
             opacity: 0.85;
+            font-family: monospace;
+          }
+        }
+
+        .banner-quick-input-wrap {
+          width: 90px;
+          .banner-quick-input {
+            font-size: 12px;
             font-family: monospace;
           }
         }
@@ -2651,7 +2777,7 @@ onBeforeUnmount(() => {
 
           .hot-chip-btn {
             font-size: 11px;
-            padding: 2px 7px;
+            padding: 2px 8px;
             border-radius: 10px;
             background: var(--td-bg-color-container, #ffffff);
             border: 1px solid var(--td-border-level-1-color, #e5e6eb);
@@ -2676,7 +2802,7 @@ onBeforeUnmount(() => {
           border: 1px solid var(--td-border-level-2-color, #dcdcdc);
           background: var(--td-bg-color-container, #ffffff);
           color: var(--td-text-color-primary, #1d2129);
-          padding: 4px 10px;
+          padding: 3px 10px;
           border-radius: 6px;
           font-size: 12px;
           font-weight: 500;
@@ -2691,10 +2817,15 @@ onBeforeUnmount(() => {
       }
     }
 
+    /* 五阶时序决策卡片矩阵：严格等高、网格对称对齐 */
     .pipeline-steps-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+
+      @media (max-width: 1200px) {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
 
       @media (max-width: 768px) {
         grid-template-columns: 1fr;
@@ -2705,12 +2836,13 @@ onBeforeUnmount(() => {
       background: var(--td-bg-color-container, #ffffff);
       border: 1px solid var(--td-border-level-1-color, #e5e6eb);
       border-radius: 12px;
-      padding: 16px;
+      padding: 14px 12px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       transition: all 0.25s ease;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+      min-height: 220px;
 
       &:hover {
         border-color: var(--td-brand-color, #0052d9);
@@ -2718,37 +2850,63 @@ onBeforeUnmount(() => {
         box-shadow: 0 6px 16px rgba(0, 82, 217, 0.08);
       }
 
+      &.current {
+        border-color: var(--td-brand-color, #0052d9);
+        box-shadow: 0 0 0 1px var(--td-brand-color, #0052d9);
+      }
+
       &.highlight-step {
         border-color: rgba(0, 82, 217, 0.35);
         background: linear-gradient(180deg, var(--td-bg-color-container, #ffffff) 0%, rgba(0, 82, 217, 0.02) 100%);
       }
 
-      .step-header {
+      .step-card-header {
         margin-bottom: 8px;
 
         .step-badge-wrap {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
+          margin-bottom: 6px;
 
           .step-badge {
             font-size: 11px;
-            padding: 2px 7px;
+            padding: 2px 6px;
             border-radius: 4px;
             font-weight: 700;
             letter-spacing: 0.3px;
+            white-space: nowrap;
 
             &.l1 { background: rgba(0, 82, 217, 0.12); color: #0052d9; }
             &.l2 { background: rgba(240, 160, 32, 0.14); color: #d46b08; }
-            &.l3 { background: rgba(102, 126, 234, 0.14); color: #5c6ac4; }
-            &.l4 { background: rgba(220, 53, 69, 0.12); color: #dc3545; }
-            &.l5 { background: rgba(43, 164, 113, 0.14); color: #2ba471; }
+            &.l3 { background: rgba(114, 46, 209, 0.14); color: #722ed1; }
+            &.l4 { background: rgba(225, 29, 72, 0.12); color: #e11d48; }
+            &.l5 { background: rgba(5, 150, 105, 0.14); color: #059669; }
           }
 
           .step-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             color: var(--td-text-color-primary, #1d2129);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+        }
+
+        .step-tags {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex-wrap: wrap;
+
+          .mini-tag {
+            font-size: 10px;
+            padding: 1px 5px;
+            border-radius: 4px;
+            background: var(--td-bg-color-component, #f2f3f5);
+            color: var(--td-text-color-secondary, #4e5969);
+            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
           }
         }
       }
@@ -2757,76 +2915,31 @@ onBeforeUnmount(() => {
         font-size: 12px;
         color: var(--td-text-color-secondary, #4e5969);
         line-height: 1.5;
-        margin: 0 0 14px;
-        flex: 1;
-      }
-
-      .inline-stock-picker {
-        background: var(--td-bg-color-component, #f7f8fa);
-        padding: 10px;
-        border-radius: 8px;
-        margin-bottom: 12px;
-
-        .picker-input-row {
-          margin-bottom: 8px;
-        }
-
-        .picker-hot-chips {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          flex-wrap: wrap;
-
-          .hot-label {
-            font-size: 11px;
-            color: var(--td-text-color-placeholder, #86909c);
-          }
-
-          .hot-chip {
-            font-size: 11px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            background: var(--td-bg-color-container, #ffffff);
-            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
-            cursor: pointer;
-            transition: all 0.2s ease;
-
-            &:hover,
-            &.active {
-              color: var(--td-brand-color, #0052d9);
-              border-color: var(--td-brand-color, #0052d9);
-              background: var(--td-brand-color-light, #ecf2fe);
-            }
-          }
-        }
-      }
-
-      .ledger-guide-box {
-        display: flex;
-        align-items: flex-start;
-        gap: 6px;
-        background: rgba(43, 164, 113, 0.08);
-        border: 1px dashed rgba(43, 164, 113, 0.3);
-        padding: 8px 10px;
-        border-radius: 6px;
-        margin-bottom: 12px;
-        font-size: 11px;
-        color: #198754;
-        line-height: 1.4;
-
-        .guide-icon {
-          font-size: 13px;
-        }
+        margin: 0 0 12px;
+        min-height: 48px;
+        max-height: 48px;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
       }
 
       .step-actions {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
+        margin-top: auto;
+
+        .sub-actions-row {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex-wrap: wrap;
+        }
 
         .step-btn {
           border: none;
-          padding: 7px 12px;
+          padding: 6px 10px;
           border-radius: 6px;
           font-size: 12px;
           font-weight: 500;
@@ -2836,34 +2949,61 @@ onBeforeUnmount(() => {
           justify-content: center;
           gap: 4px;
           transition: all 0.2s ease;
+          width: 100%;
+
+          &.mini {
+            flex: 1;
+            padding: 4px 6px;
+            font-size: 11px;
+            white-space: nowrap;
+          }
 
           &.primary {
             background: var(--td-brand-color, #0052d9);
             color: #ffffff;
+            font-weight: 600;
 
             &:hover {
               background: #0044b8;
               box-shadow: 0 2px 8px rgba(0, 82, 217, 0.25);
             }
+
+            &.highlight {
+              background: linear-gradient(135deg, #0052d9 0%, #722ed1 100%);
+              &:hover {
+                box-shadow: 0 2px 8px rgba(114, 46, 209, 0.3);
+              }
+            }
+
+            &.success {
+              background: #059669;
+              &:hover {
+                background: #047857;
+                box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+              }
+            }
           }
 
           &.warning {
-            background: #fa8c16;
-            color: #ffffff;
+            background: rgba(225, 29, 72, 0.1);
+            color: #e11d48;
+            border: 1px solid rgba(225, 29, 72, 0.25);
 
             &:hover {
-              background: #d46b08;
-              box-shadow: 0 2px 8px rgba(250, 140, 22, 0.25);
+              background: #e11d48;
+              color: #ffffff;
             }
           }
 
           &.sub {
             background: var(--td-bg-color-component, #f2f3f5);
             color: var(--td-text-color-primary, #1d2129);
+            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
 
             &:hover {
               background: var(--td-brand-color-light, #ecf2fe);
               color: var(--td-brand-color, #0052d9);
+              border-color: var(--td-brand-color, #0052d9);
             }
           }
         }
@@ -2871,16 +3011,16 @@ onBeforeUnmount(() => {
     }
   }
 
-  /* 视图 2：专项极速控制台 */
+  /* 视图 2：专项极速穿透台 */
   .direct-tools-container {
     width: 100%;
 
     .direct-tools-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 16px;
 
-      @media (max-width: 768px) {
+      @media (max-width: 900px) {
         grid-template-columns: 1fr;
       }
     }
@@ -2889,7 +3029,7 @@ onBeforeUnmount(() => {
       background: var(--td-bg-color-container, #ffffff);
       border: 1px solid var(--td-border-level-1-color, #e5e6eb);
       border-radius: 12px;
-      padding: 18px 20px;
+      padding: 16px 18px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -2906,10 +3046,10 @@ onBeforeUnmount(() => {
         display: flex;
         align-items: center;
         gap: 10px;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
 
         .tool-icon {
-          font-size: 24px;
+          font-size: 22px;
         }
 
         .tool-head-text {
@@ -2918,7 +3058,7 @@ onBeforeUnmount(() => {
           gap: 2px;
 
           .tool-name {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             color: var(--td-text-color-primary, #1d2129);
           }
@@ -2930,17 +3070,38 @@ onBeforeUnmount(() => {
         }
       }
 
-      .tool-desc {
-        font-size: 12px;
-        color: var(--td-text-color-secondary, #4e5969);
-        line-height: 1.5;
-        margin: 0 0 16px;
-      }
-
       .tool-form {
         display: flex;
         flex-direction: column;
         gap: 10px;
+
+        .tool-input-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+
+          .tool-input {
+            flex: 1;
+          }
+
+          .tool-fill-target-btn {
+            border: 1px solid var(--td-border-level-2-color, #dcdcdc);
+            background: var(--td-bg-color-component, #f2f3f5);
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+            color: var(--td-brand-color, #0052d9);
+            font-weight: 500;
+            transition: all 0.2s ease;
+
+            &:hover {
+              background: var(--td-brand-color-light, #ecf2fe);
+              border-color: var(--td-brand-color, #0052d9);
+            }
+          }
+        }
 
         .pk-inputs-row {
           display: flex;
@@ -2958,20 +3119,21 @@ onBeforeUnmount(() => {
         .quick-hot-row {
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 5px;
           flex-wrap: wrap;
 
           .hot-chip {
             font-size: 11px;
-            padding: 3px 8px;
+            padding: 2px 7px;
             border-radius: 4px;
             border: 1px solid var(--td-border-level-1-color, #e5e6eb);
             background: var(--td-bg-color-component, #f2f3f5);
             color: var(--td-text-color-secondary, #4e5969);
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
 
-            &:hover {
+            &:hover,
+            &.active {
               background: var(--td-brand-color-light, #ecf2fe);
               border-color: var(--td-brand-color, #0052d9);
               color: var(--td-brand-color, #0052d9);
@@ -2983,7 +3145,7 @@ onBeforeUnmount(() => {
           border: none;
           padding: 8px 14px;
           border-radius: 6px;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 600;
           cursor: pointer;
           background: var(--td-brand-color, #0052d9);
