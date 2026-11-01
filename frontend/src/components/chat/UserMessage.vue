@@ -158,15 +158,16 @@ function onReference() {
 }
 
 .msg-bubble {
-  background: var(--td-brand-color, #0052d9);
-  color: #fff;
-  padding: 10px 14px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  color: #f0f6fc;
+  padding: 8px 14px;
   border-radius: 12px 2px 12px 12px;
   word-break: break-word;
   white-space: pre-wrap;
-  font-size: 14px;
-  line-height: 1.6;
-  box-shadow: 0 2px 8px rgba(0, 82, 217, 0.15);
+  font-size: 13.5px;
+  line-height: 1.55;
+  box-shadow: 0 2px 8px rgba(0, 40, 150, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .msg-actions {

@@ -374,18 +374,21 @@ function handleCopyResult(call: ToolCall) {
 }
 
 .tool-status.pending {
-  color: #e6a23c;
-  background: #fff3d4;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
 .tool-status.success {
-  color: #2e7d32;
-  background: #e8f5e9;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .tool-status.error {
-  color: #c62828;
-  background: #fdeaea;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
 @keyframes status-dot-pulse {

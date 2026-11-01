@@ -401,13 +401,28 @@ async function copyAnchorLink() {
 }
 
 :deep(.collapsible-content) {
-  padding: 12px;
-  max-height: 400px;
+  padding: 10px 14px;
+  max-height: 380px;
   overflow-y: auto;
-  font-size: 13px;
-  line-height: 1.6;
-  :deep(.t-chat-content) {
-    font-size: 13px;
+  font-size: 12.5px !important;
+  line-height: 1.58 !important;
+  color: var(--td-text-color-secondary, rgba(220, 226, 235, 0.78)) !important;
+
+  .t-chat__text {
+    font-size: 12.5px !important;
+    line-height: 1.58 !important;
+    padding: 0 !important;
+  }
+
+  .t-chat__text__content {
+    font-size: 12.5px !important;
+    line-height: 1.58 !important;
+
+    p {
+      font-size: 12.5px !important;
+      line-height: 1.58 !important;
+      margin: 4px 0 !important;
+    }
   }
 }
 
@@ -478,19 +493,184 @@ async function copyAnchorLink() {
   word-break: break-word;
 }
 
-/* 主内容区 */
+/* 主内容区（买方投研报告高密度、护眼排版） */
 .msg-main-content {
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-border);
+  background: var(--td-bg-color-container, #171b22);
+  border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08));
   border-radius: 8px;
-  padding: 14px;
+  padding: 12px 16px;
   position: relative;
-  min-height: 60px;
+  min-height: 48px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
 
-  :deep(.t-chat-content) {
-    font-size: 14px;
-    line-height: 1.7;
-    color: var(--td-text-color-primary);
+  /* 彻底纠正原 TDesign 强制 16px 与 2.0 超大行高导致的字体过大与松散膨胀 */
+  :deep(.t-chat__text) {
+    font: inherit !important;
+    font-size: 13.5px !important;
+    line-height: 1.62 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    word-break: break-word !important;
+  }
+
+  :deep(.t-chat__text__assistant) {
+    color: var(--td-text-color-primary, rgba(230, 235, 242, 0.88)) !important;
+    line-height: 1.62 !important;
+  }
+
+  :deep(.t-chat__text__content) {
+    font-size: 13.5px !important;
+    line-height: 1.62 !important;
+    letter-spacing: 0.15px;
+
+    /* 正文段落 */
+    p {
+      font-size: 13.5px !important;
+      line-height: 1.62 !important;
+      margin: 6px 0 !important;
+      color: inherit;
+    }
+
+    /* 标题阶梯约束：彻底杜绝 32px/24px 巨幅突兀与刺目眩光 */
+    h1 {
+      font-size: 16px !important;
+      font-weight: 650 !important;
+      line-height: 1.4 !important;
+      margin: 14px 0 8px 0 !important;
+      padding-left: 8px !important;
+      border-left: 3px solid var(--td-brand-color, #38ada9) !important;
+      color: var(--td-text-color-primary, rgba(240, 245, 250, 0.95)) !important;
+    }
+
+    h2 {
+      font-size: 15px !important;
+      font-weight: 600 !important;
+      line-height: 1.4 !important;
+      margin: 12px 0 6px 0 !important;
+      padding-left: 6px !important;
+      border-left: 2.5px solid #409eff !important;
+      color: var(--td-text-color-primary, rgba(240, 245, 250, 0.92)) !important;
+    }
+
+    h3 {
+      font-size: 14px !important;
+      font-weight: 600 !important;
+      line-height: 1.4 !important;
+      margin: 10px 0 4px 0 !important;
+      color: var(--td-text-color-primary, rgba(240, 245, 250, 0.9)) !important;
+    }
+
+    h4, h5, h6 {
+      font-size: 13px !important;
+      font-weight: 600 !important;
+      line-height: 1.4 !important;
+      margin: 8px 0 4px 0 !important;
+    }
+
+    /* 列表紧凑化 */
+    ul, ol {
+      margin: 4px 0 6px 0 !important;
+      padding-left: 20px !important;
+      line-height: 1.6 !important;
+    }
+
+    li {
+      font-size: 13.5px !important;
+      margin: 3px 0 !important;
+      line-height: 1.6 !important;
+    }
+
+    /* 加粗文本：柔和护眼权重与高光（杜绝生硬 700+ 纯白反光） */
+    strong, b {
+      font-weight: 600 !important;
+      color: #79bbff !important;
+    }
+
+    /* 彻底消除原 TDesign 刺目的红色报警色行内代码块 (rgb(198, 71, 81)) */
+    code:not(pre code) {
+      color: #58a6ff !important;
+      background: rgba(64, 158, 255, 0.12) !important;
+      border: 1px solid rgba(64, 158, 255, 0.22) !important;
+      border-radius: 4px !important;
+      padding: 1px 6px !important;
+      font-size: 12px !important;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace !important;
+      margin: 0 3px !important;
+      word-break: break-word !important;
+    }
+
+    /* 结构化表格优化：紧凑型买方金融数据报表 */
+    table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      margin: 10px 0 !important;
+      font-size: 12.5px !important;
+      line-height: 1.5 !important;
+      border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+      border-radius: 6px !important;
+      overflow: hidden !important;
+    }
+
+    th {
+      background: var(--td-bg-color-secondarycontainer, rgba(255, 255, 255, 0.04)) !important;
+      color: var(--td-text-color-secondary, rgba(255, 255, 255, 0.72)) !important;
+      font-weight: 600 !important;
+      padding: 6px 10px !important;
+      text-align: left !important;
+      border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+    }
+
+    td {
+      padding: 5px 10px !important;
+      border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+      font-variant-numeric: tabular-nums !important;
+    }
+
+    tbody tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02) !important;
+    }
+
+    tbody tr:hover {
+      background: rgba(64, 158, 255, 0.06) !important;
+    }
+
+    /* 引用块优化：温和微卡片 */
+    blockquote {
+      border-left: 3px solid var(--td-brand-color, #38ada9) !important;
+      background: rgba(56, 173, 169, 0.06) !important;
+      color: var(--td-text-color-secondary, rgba(255, 255, 255, 0.72)) !important;
+      padding: 6px 12px !important;
+      margin: 8px 0 !important;
+      border-radius: 0 6px 6px 0 !important;
+      font-size: 13px !important;
+      line-height: 1.55 !important;
+    }
+
+    /* 代码块优化 */
+    pre, .hljs {
+      background: #141820 !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border-radius: 6px !important;
+      font-size: 12px !important;
+      line-height: 1.5 !important;
+      padding: 8px 12px !important;
+      margin: 8px 0 !important;
+    }
+
+    /* 分割线 */
+    hr {
+      border: none !important;
+      border-top: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+      margin: 12px 0 !important;
+    }
+  }
+
+  /* 消除 TDesign chat 内部组件的红色代码侵入 */
+  :deep(.t-chat__text__assistant :where(code):not(:where(pre *))) {
+    color: #58a6ff !important;
+    background: rgba(64, 158, 255, 0.12) !important;
+    border: 1px solid rgba(64, 158, 255, 0.22) !important;
   }
 }
 
