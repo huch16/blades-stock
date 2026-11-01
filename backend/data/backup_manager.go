@@ -248,7 +248,7 @@ func (m *BackupManager) CreateIntelligentBackup(note string) (string, error) {
 	filePath := filepath.Join(dir, fileName)
 
 	bundle := IntelligentBundle{
-		Version:   "1.8.0",
+		Version:   "2.0.0",
 		Format:    "blades_stock_intelligent_bundle",
 		CreatedAt: time.Now(),
 		AppName:   "blades-stock",

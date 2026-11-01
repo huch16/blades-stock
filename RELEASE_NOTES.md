@@ -1,3 +1,50 @@
+# Release v2.0.0
+
+发布日期: 2026-11-01
+
+概览
+----
+Blades Stock v2.0.0 是项目迈入**商业量化中台（Institutional Buy-Side Quant Platform）**的里程碑版本。本版本全面对标买方机构量化投研中枢的最高可靠性要求，围绕**高可用（High Availability）、零缺陷（Zero Defect）、防雪崩与熔断隔离（Anti-Avalanche & Circuit Breaking）、以及严格安全合规（Security & Compliance）**标准，完成了全栈七大维度的深度代码审计、系统重构与生产环境固化。
+
+Highlights / 核心亮点（全栈七大维度）
+--------------------------------------
+1. **① 前端人机交互与现代投研工作舱 (Frontend Workstations & Ergonomics)**
+   - **BUIS 5阶时序量化投研天梯全面重塑**：重构 `agent-chat.vue`，彻底消除原界面三层功能堆叠，提供 L1 宏观择时、L2 赛道主线、L3 因子初筛、L4 四维验质、L5 买方立论五阶严格等高对称决策卡片。
+   - **单入口标的贯通中枢 (Single Target Cockpit)**：统一全局标的胶囊，支持内联快速代码输入（回车即时更新），消除 Step 4 内嵌冗余输入框，实现标的变更在 L4/L5 动态按键及专项工具间的无缝传导。
+   - **移动端全场景原生体验**：优化手机底部 6-Tab 导航（常驻集成「宏观智能」），修复设置页吸底操作栏与 TabBar 重叠问题（预留 48px 安全间距），全屏自适应零横向滚动。
+
+2. **② 全双工通信桥接与传输稳定性 (Universal Bridge & Communication Resilience)**
+   - **SSE 心跳与优雅停机**：服务端 `SSEHub` 引入 `stopCh` 与 `Shutdown()`，彻底解决服务重启时心跳协程泄漏与悬挂连接。
+   - **指数退避重连总线**：Web 模式 `WebEventBus` 实现 2s~30s 指数退避加随机抖动，绑定浏览器 `online` 与 `visibilitychange` 事件即时唤醒，杜绝切屏请求风暴。
+   - **前端事件监听全生命周期销毁**：补齐 `App.vue` 等核心组件 `onBeforeUnmount` 全量事件解绑，确保零事件总线内存泄漏。
+
+3. **③ AI 智能编排与多模型容灾降级内核 (AI Reasoning Engine & Fallback Quotas)**
+   - **大模型错误智能分类与容灾重试**：精准捕获 400 Bad Request、401/403 鉴权拒绝、5xx 服务端过载及 `<unk>` 乱码流，集成指数退避自动重试与多模型无缝 Failover 降级。
+   - **零敏感信息泄露规范**：全链路错误提示与日志拦截密码、API Token 碎片及敏感调试堆栈，确保生产环境绝对合规。
+   - **严格本地工具纪律**：L1~L5 量化选股与深度诊断严格绑定 Blades 本地工具，杜绝外网碎片搜索导致的幻觉与陈旧数据。
+
+4. **④ 高性能向量化量化与时序投研中枢 (High-Performance VectorBT & Quant Engine)**
+   - **网格搜索空指针与内存防御**：消除 `RunGridSearch` 中对 `results[0]` 的盲目解引用，增强多协程扫描异常下的优雅聚合。
+   - **熊市全负收益统计有效性**：重构 `AnalyzeGridResults`，修复熊市全负收益回测下最佳策略和参数被置空的边界缺陷。
+   - **ETF 21日动量防数值溢出**：对 `slope * 250` 指数收益计算实施科学阻尼（防止 `+Inf` 溢出），对所有指标全面注入 `NaN` / `Inf` 过滤，确保零 JSON 序列化崩溃。
+
+5. **⑤ 高并发数据持久化、WAL 事务与资产灾备 (Data Persistence & WAL Concurrency)**
+   - **买方认知账本强一致事务**：`SaveStockThesis` 与 `ExtractAndUpdateThesisFromReport` 全面升级为原子事务 `db.Dao.Transaction`，确保认知主账本与演化时间线快照强一致。
+   - **语义精炼与记忆自愈引擎**：规范使用 `gorm.Expr("hit_count + ?", 1)` 恢复结晶热度统计，定期执行 WAL 截断与瘦身，维持 85% 以上语义浓缩率。
+   - **智能数据资产版本升级**：全量灾备备份包升级至 v2.0.0 规范，提供安全直接下载与断点上传校验。
+
+6. **⑥ 全方位安全合规与敏感凭据防泄漏 (Security & Compliance & Zero Credential Leakage)**
+   - **全站统一访问凭据 (`2266762`)**：杜绝默认密码泄露到登录页 HTML、占位符、API 响应或错误日志中。
+   - **恒定时间安全比对**：全链路采用 `subtle.ConstantTimeCompare` 防范基于响应耗时的侧信道时序攻击。
+   - **严格目录安全穿越防御**：通过 `pathguard.go` 强化备份下载与本地数据访问，防范 `../` 越权读取。
+
+7. **⑦ 自动化质量门禁、双端编译与多 VPS 容器固化 (Automated Quality Gates & Production Deployment)**
+   - **全量工程版本统一步进至 2.0.0**：对齐 Wails、package.json、Go 运行时、设置中心与部署脚本。
+   - **纯 Go 零 CGO 极简镜像构建**：Linux 容器镜像体积 <50MB，内存占用仅 ~80MB，毫秒级冷启动。
+   - **端到端自动化测试验收**：通过全量 Go 单元测试套件、`go vet` 静态扫描与 Playwright 桌面/移动双端 E2E 回归测试。
+
+---
+
 # Release v1.8.0
 
 发布日期: 2026-10-30

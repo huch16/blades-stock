@@ -73,7 +73,7 @@ var defaultSerenityBackup string
 
 //go:generate cp -R ./data ./build/bin
 
-var Version string = "1.8.0"
+var Version string = "2.0.0"
 var VersionCommit string = "release"
 var OFFICIAL_STATEMENT string
 var BuildKey string
