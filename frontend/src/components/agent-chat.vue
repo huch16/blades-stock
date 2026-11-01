@@ -1354,11 +1354,9 @@ function askMacroPerception() {
   if (!perceptionSnapshot.value) return
   const phase = perceptionSnapshot.value.Phase || ''
   const traffic = perceptionSnapshot.value.TrafficLight || ''
-  inputValue.value = `请结合当前市场【${phase}】节律与情绪【${traffic}】状态，对全天大局观、主线机会和实盘持仓风控进行综合推演。`
+  const prompt = `请结合当前市场【${phase}】节律与情绪【${traffic}】状态，对全天大局观、主线机会和实盘持仓风控进行综合推演。`
   agentMode.value = 'plan_execute'
-  nextTick(() => {
-    handleSend()
-  })
+  applyScenario(prompt, false)
 }
 
 const agentModeOptions = [
@@ -1767,10 +1765,23 @@ function handleStop() {
 }
 
 // ========== 场景交互辅助 ==========
-function applyScenario(promptText: string) {
+function applyScenario(promptText: string, autoSend: boolean = false) {
   inputValue.value = promptText
   nextTick(() => {
-    handleSend()
+    const textarea = document.querySelector('.chat-input-cockpit textarea') as HTMLTextAreaElement
+    if (textarea) {
+      textarea.focus()
+      // 自动计算并调整高度，确保多行内容完整可见
+      textarea.style.height = 'auto'
+      textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 68), 240)}px`
+      // 平滑滚动至输入框
+      textarea.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+    if (autoSend) {
+      handleSend()
+    } else {
+      notifyInfo('💡 已将投研指令载入输入框，您可按需调整修改后回车或点击发送 🚀')
+    }
   })
 }
 
