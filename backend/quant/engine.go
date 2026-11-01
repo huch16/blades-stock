@@ -459,23 +459,31 @@ func (e *BacktestEngine) RunGridSearch(strategies []Strategy) *GridSearchResult 
 
 	wg.Wait()
 
-	// 找出最佳参数
-	bestResult := results[0]
-	for _, r := range results[1:] {
-		if r != nil && r.Stats != nil && bestResult != nil && bestResult.Stats != nil {
-			// 按夏普比率排序
-			if r.Stats.SharpeRatio > bestResult.Stats.SharpeRatio {
+	// 找出最佳参数 (防范 results[0] 为 nil 或并发异常引发的空指针崩溃)
+	var bestResult *BacktestResult
+	for _, r := range results {
+		if r != nil && r.Stats != nil {
+			if bestResult == nil || bestResult.Stats == nil || r.Stats.SharpeRatio > bestResult.Stats.SharpeRatio {
 				bestResult = r
 			}
 		}
 	}
 
+	var bestParams map[string]any
+	var bestStats *Stats
+	var bestStrategyName string
+	if bestResult != nil {
+		bestParams = bestResult.Params
+		bestStats = bestResult.Stats
+		bestStrategyName = bestResult.StrategyName
+	}
+
 	return &GridSearchResult{
 		TotalCombinations: len(strategies),
 		Results:           results,
-		BestParams:       bestResult.Params,
-		BestStats:        bestResult.Stats,
-		BestStrategyName:  bestResult.StrategyName,
+		BestParams:       bestParams,
+		BestStats:        bestStats,
+		BestStrategyName:  bestStrategyName,
 		Duration:          time.Since(start),
 	}
 }
@@ -543,6 +551,7 @@ type ResultAnalysis struct {
 func AnalyzeGridResults(results []*GridSearchResult) *ResultAnalysis {
 	analysis := &ResultAnalysis{}
 	var allStats []*Stats
+	firstSeen := false
 
 	for _, gr := range results {
 		if gr == nil || gr.Results == nil {
@@ -555,16 +564,25 @@ func AnalyzeGridResults(results []*GridSearchResult) *ResultAnalysis {
 				if r.Stats.TotalReturn > 0 {
 					analysis.WinningStrategies++
 				}
-				if r.Stats.TotalReturn > analysis.BestReturn {
+				if !firstSeen {
 					analysis.BestReturn = r.Stats.TotalReturn
 					analysis.BestParams = r.Params
 					analysis.BestStrategy = r.StrategyName
-				}
-				if r.Stats.SharpeRatio > analysis.BestSharpe {
 					analysis.BestSharpe = r.Stats.SharpeRatio
-				}
-				if r.Stats.WinRate > analysis.BestWinRate {
 					analysis.BestWinRate = r.Stats.WinRate
+					firstSeen = true
+				} else {
+					if r.Stats.TotalReturn > analysis.BestReturn {
+						analysis.BestReturn = r.Stats.TotalReturn
+						analysis.BestParams = r.Params
+						analysis.BestStrategy = r.StrategyName
+					}
+					if r.Stats.SharpeRatio > analysis.BestSharpe {
+						analysis.BestSharpe = r.Stats.SharpeRatio
+					}
+					if r.Stats.WinRate > analysis.BestWinRate {
+						analysis.BestWinRate = r.Stats.WinRate
+					}
 				}
 			}
 		}

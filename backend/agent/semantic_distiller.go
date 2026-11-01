@@ -16,6 +16,8 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/paths"
+
+	"gorm.io/gorm"
 )
 
 var (
@@ -680,7 +682,7 @@ func (d *SemanticDistiller) SearchKnowledgeCrystals(ctx context.Context, query s
 			}()
 			db.Dao.Model(&KnowledgeCrystal{}).Where("id IN ?", ids).
 				Updates(map[string]interface{}{
-					"hit_count":   gormExpr("hit_count + 1"),
+					"hit_count":   gorm.Expr("hit_count + ?", 1),
 					"last_hit_at": time.Now(),
 				})
 		}(hitIDs)
@@ -722,8 +724,4 @@ func (d *SemanticDistiller) FormatCrystalsForPrompt(crystals []KnowledgeCrystal)
 	}
 	b.WriteString("===========================================\n")
 	return b.String()
-}
-
-func gormExpr(expr string) interface{} {
-	return db.Dao.Raw(expr)
 }

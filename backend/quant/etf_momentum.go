@@ -97,8 +97,19 @@ func CalculateETFMomentum(code, name string, closes []float64) (*ETFMomentumScor
 	slope := num / den
 	intercept := yBar - slope*xBar
 
-	// 年化收益率 = exp(slope * 250) - 1
-	annualized := math.Exp(slope*250.0) - 1.0
+	// 年化收益率 = exp(slope * 250) - 1 (防范极端斜率导致 Exp 溢出为 +Inf / NaN)
+	annualized := 0.0
+	slopeExponent := slope * 250.0
+	if slopeExponent > 20.0 { // exp(20) 约 4.85亿，超过此值强制钳制防范数值爆炸
+		annualized = 50.0 // 限制年化收益上限为 +5000%
+	} else if slopeExponent < -20.0 {
+		annualized = -1.0
+	} else {
+		annualized = math.Exp(slopeExponent) - 1.0
+	}
+	if math.IsNaN(annualized) || math.IsInf(annualized, 0) {
+		annualized = 0.0
+	}
 
 	// 3. 计算加权 R^2
 	var ssRes, ssTot float64
@@ -113,13 +124,19 @@ func CalculateETFMomentum(code, name string, closes []float64) (*ETFMomentumScor
 	if ssTot > 1e-12 {
 		r2 = 1.0 - (ssRes / ssTot)
 	}
-	if r2 < 0 {
+	if math.IsNaN(r2) || math.IsInf(r2, 0) || r2 < 0 {
 		r2 = 0
 	} else if r2 > 1.0 {
 		r2 = 1.0
 	}
 
 	score := annualized * r2
+	if math.IsNaN(score) || math.IsInf(score, 0) {
+		score = 0.0
+	}
+	if math.IsNaN(pullback5D) || math.IsInf(pullback5D, 0) {
+		pullback5D = 0.0
+	}
 
 	return &ETFMomentumScoreResult{
 		Code:         code,

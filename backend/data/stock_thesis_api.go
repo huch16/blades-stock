@@ -8,6 +8,8 @@ import (
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
+
+	"gorm.io/gorm"
 )
 
 type StockThesisApi struct{}
@@ -99,7 +101,7 @@ func (api *StockThesisApi) GetAllStockTheses() (map[string]models.StockThesisLed
 	return result, nil
 }
 
-// SaveStockThesis 手动保存或调整认知假说
+// SaveStockThesis 手动保存或调整认知假说 (使用原子事务保证账本与历史时间线强一致)
 func (api *StockThesisApi) SaveStockThesis(thesis *models.StockThesisLedger) error {
 	if db.Dao == nil || thesis == nil {
 		return nil
@@ -110,40 +112,43 @@ func (api *StockThesisApi) SaveStockThesis(thesis *models.StockThesisLedger) err
 	}
 
 	now := time.Now()
-	var existing models.StockThesisLedger
-	err := db.Dao.Where("stock_code = ?", thesis.StockCode).First(&existing).Error
+	return db.Dao.Transaction(func(tx *gorm.DB) error {
+		var existing models.StockThesisLedger
+		err := tx.Where("stock_code = ?", thesis.StockCode).First(&existing).Error
 
-	if err == nil && existing.ID > 0 {
-		thesis.ID = existing.ID
-		thesis.UpdatedAt = now
-		if err := db.Dao.Save(thesis).Error; err != nil {
+		if err == nil && existing.ID > 0 {
+			thesis.ID = existing.ID
+			thesis.UpdatedAt = now
+			if err := tx.Save(thesis).Error; err != nil {
+				return err
+			}
+		} else {
+			thesis.CreatedAt = now
+			thesis.UpdatedAt = now
+			if err := tx.Create(thesis).Error; err != nil {
+				return err
+			}
+		}
+
+		// 同时沉淀一条历史快照
+		hist := models.StockVerdictHistory{
+			StockCode:    thesis.StockCode,
+			StockName:    thesis.StockName,
+			Verdict:      thesis.Verdict,
+			VerdictText:  thesis.VerdictText,
+			CoreThesis:   thesis.CoreThesis,
+			KeyCatalysts: thesis.KeyCatalysts,
+			RiskFactors:  thesis.RiskFactors,
+			ModelName:    thesis.ModelName,
+			ReportID:     thesis.LastReportID,
+			TriggerEvent: "手动调整/确认假说",
+			CreatedAt:    now,
+		}
+		if err := tx.Create(&hist).Error; err != nil {
 			return err
 		}
-	} else {
-		thesis.CreatedAt = now
-		thesis.UpdatedAt = now
-		if err := db.Dao.Create(thesis).Error; err != nil {
-			return err
-		}
-	}
-
-	// 同时沉淀一条历史快照
-	hist := models.StockVerdictHistory{
-		StockCode:    thesis.StockCode,
-		StockName:    thesis.StockName,
-		Verdict:      thesis.Verdict,
-		VerdictText:  thesis.VerdictText,
-		CoreThesis:   thesis.CoreThesis,
-		KeyCatalysts: thesis.KeyCatalysts,
-		RiskFactors:  thesis.RiskFactors,
-		ModelName:    thesis.ModelName,
-		ReportID:     thesis.LastReportID,
-		TriggerEvent: "手动调整/确认假说",
-		CreatedAt:    now,
-	}
-	_ = db.Dao.Create(&hist)
-
-	return nil
+		return nil
+	})
 }
 
 // CleanExtractText 清理抽取到的文本（去除 markdown 字符、列表符号、emoji 及冗余标点）
@@ -250,7 +255,7 @@ func (api *StockThesisApi) mapVerdictCode(raw string) (string, string) {
 	}
 }
 
-// ExtractAndUpdateThesisFromReport 在单股研报生成后，异步解析认知结论并持久化沉淀
+// ExtractAndUpdateThesisFromReport 在单股研报生成后，异步解析认知结论并原子事务持久化沉淀
 func (api *StockThesisApi) ExtractAndUpdateThesisFromReport(stockCode, stockName, content, modelName string, reportID uint) (*models.StockThesisLedger, error) {
 	if db.Dao == nil {
 		return nil, nil
@@ -261,33 +266,57 @@ func (api *StockThesisApi) ExtractAndUpdateThesisFromReport(stockCode, stockName
 	}
 
 	verdict, verdictText, coreThesis, keyCatalysts, riskFactors := api.ExtractThesisFromContent(content)
-
 	now := time.Now()
-	var ledger models.StockThesisLedger
-	err := db.Dao.Where("stock_code = ?", code).First(&ledger).Error
+	var finalLedger models.StockThesisLedger
 
-	if err == nil && ledger.ID > 0 {
-		ledger.StockName = stockName
-		ledger.Verdict = verdict
-		ledger.VerdictText = verdictText
-		if coreThesis != "" {
-			ledger.CoreThesis = coreThesis
+	err := db.Dao.Transaction(func(tx *gorm.DB) error {
+		var ledger models.StockThesisLedger
+		findErr := tx.Where("stock_code = ?", code).First(&ledger).Error
+
+		if findErr == nil && ledger.ID > 0 {
+			ledger.StockName = stockName
+			ledger.Verdict = verdict
+			ledger.VerdictText = verdictText
+			if coreThesis != "" {
+				ledger.CoreThesis = coreThesis
+			}
+			if keyCatalysts != "" {
+				ledger.KeyCatalysts = keyCatalysts
+			}
+			if riskFactors != "" {
+				ledger.RiskFactors = riskFactors
+			}
+			ledger.ModelName = modelName
+			ledger.LastReportID = reportID
+			ledger.UpdatedAt = now
+			if err := tx.Save(&ledger).Error; err != nil {
+				logger.SugaredLogger.Errorf("[Thesis] 保存更新标的认知档案失败 code=%s: %v", code, err)
+				return err
+			}
+			finalLedger = ledger
+		} else {
+			ledger = models.StockThesisLedger{
+				StockCode:    code,
+				StockName:    stockName,
+				Verdict:      verdict,
+				VerdictText:  verdictText,
+				CoreThesis:   coreThesis,
+				KeyCatalysts: keyCatalysts,
+				RiskFactors:  riskFactors,
+				ModelName:    modelName,
+				LastReportID: reportID,
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}
+			if err := tx.Create(&ledger).Error; err != nil {
+				logger.SugaredLogger.Errorf("[Thesis] 创建标的初始认知档案失败 code=%s: %v", code, err)
+				return err
+			}
+			finalLedger = ledger
 		}
-		if keyCatalysts != "" {
-			ledger.KeyCatalysts = keyCatalysts
-		}
-		if riskFactors != "" {
-			ledger.RiskFactors = riskFactors
-		}
-		ledger.ModelName = modelName
-		ledger.LastReportID = reportID
-		ledger.UpdatedAt = now
-		if err := db.Dao.Save(&ledger).Error; err != nil {
-			logger.SugaredLogger.Errorf("[Thesis] 保存更新标的认知档案失败 code=%s: %v", code, err)
-			return nil, err
-		}
-	} else {
-		ledger = models.StockThesisLedger{
+
+		// 记录历史轨迹
+		hist := models.StockVerdictHistory{
 			StockCode:    code,
 			StockName:    stockName,
 			Verdict:      verdict,
@@ -296,35 +325,21 @@ func (api *StockThesisApi) ExtractAndUpdateThesisFromReport(stockCode, stockName
 			KeyCatalysts: keyCatalysts,
 			RiskFactors:  riskFactors,
 			ModelName:    modelName,
-			LastReportID: reportID,
+			ReportID:     reportID,
+			TriggerEvent: "AI单股综合诊断",
 			CreatedAt:    now,
-			UpdatedAt:    now,
 		}
-		if err := db.Dao.Create(&ledger).Error; err != nil {
-			logger.SugaredLogger.Errorf("[Thesis] 创建标的初始认知档案失败 code=%s: %v", code, err)
-			return nil, err
+		if err := tx.Create(&hist).Error; err != nil {
+			logger.SugaredLogger.Warnf("[Thesis] 沉淀标的历史轨迹记录失败 code=%s: %v", code, err)
+			return err
 		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
 
-	// 记录历史轨迹
-	hist := models.StockVerdictHistory{
-		StockCode:    code,
-		StockName:    stockName,
-		Verdict:      verdict,
-		VerdictText:  verdictText,
-		CoreThesis:   coreThesis,
-		KeyCatalysts: keyCatalysts,
-		RiskFactors:  riskFactors,
-		ModelName:    modelName,
-		ReportID:     reportID,
-		TriggerEvent: "AI单股综合诊断",
-		CreatedAt:    now,
-	}
-	if err := db.Dao.Create(&hist).Error; err != nil {
-		logger.SugaredLogger.Warnf("[Thesis] 沉淀标的历史轨迹记录失败 code=%s: %v", code, err)
-	} else {
-		logger.SugaredLogger.Infof("[Thesis] 成功沉淀买方认知档案 code=%s [%s] verdict=%s", code, stockName, verdictText)
-	}
-
-	return &ledger, nil
+	logger.SugaredLogger.Infof("[Thesis] 成功原子沉淀买方认知档案 code=%s [%s] verdict=%s", code, stockName, verdictText)
+	return &finalLedger, nil
 }
