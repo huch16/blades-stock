@@ -33,7 +33,7 @@ func GetFallbackNotifier(ctx context.Context) FallbackNotifier {
 	return nil
 }
 
-// IsPermanentAuthError 判定错误是否为不可逆的 API Key/鉴权失效 (401/403/token_rejected)
+// IsPermanentAuthError 判定错误是否为不可逆的 API Key/鉴权失效或账户余额/用量耗尽 (401/403/429 quota/token_rejected)
 func IsPermanentAuthError(err error) bool {
 	if err == nil {
 		return false
@@ -45,7 +45,16 @@ func IsPermanentAuthError(err error) bool {
 		strings.Contains(s, "invalid token") ||
 		strings.Contains(s, "invalid_api_key") ||
 		strings.Contains(s, "unauthorized") ||
-		strings.Contains(s, "forbidden")
+		strings.Contains(s, "forbidden") ||
+		strings.Contains(s, "insufficient_quota") ||
+		strings.Contains(s, "quota exceeded") ||
+		strings.Contains(s, "quota_exceeded") ||
+		strings.Contains(s, "用量上限") ||
+		strings.Contains(s, "token plan") ||
+		strings.Contains(s, "2056") || // MiniMax error code for token plan quota exhaustion
+		strings.Contains(s, "balance exhausted") ||
+		strings.Contains(s, "account_deactivated") ||
+		strings.Contains(s, "欠费")
 }
 
 var (
@@ -53,14 +62,14 @@ var (
 	globalDeadModelCooldown = make(map[string]time.Time) // modelIdentifier -> cooldownUntil
 )
 
-// MarkModelPermanentFailure 记录某个模型发生永久鉴权失败，进入 30 分钟全局熔断冷却隔离
+// MarkModelPermanentFailure 记录某个模型发生永久鉴权或用量耗尽失败，进入 30 分钟全局熔断冷却隔离
 func MarkModelPermanentFailure(modelIdentifier string) {
 	globalDeadModelMu.Lock()
 	defer globalDeadModelMu.Unlock()
 	clean := CleanFallbackModelName(modelIdentifier)
 	globalDeadModelCooldown[clean] = time.Now().Add(30 * time.Minute)
 	globalDeadModelCooldown[modelIdentifier] = time.Now().Add(30 * time.Minute)
-	logger.SugaredLogger.Warnf("🚫 [Fallback] 模型 [%s] 发生永久鉴权错误(401/403)，已自动进入全局熔断隔离池 (冷却30分钟)", clean)
+	logger.SugaredLogger.Warnf("🚫 [Fallback] 模型 [%s] 发生不可逆鉴权或用量耗尽错误，已自动进入全局熔断隔离池 (冷却30分钟)", clean)
 }
 
 // IsModelInCooldown 检查模型是否处于全局熔断冷却期
@@ -234,8 +243,16 @@ func (f *FallbackModelProvider) Generate(ctx context.Context, req *blades.ModelR
 		prov := allProviders[idx]
 		curName := names[idx]
 
-		// 备用模型单次请求设置超时保护
-		fbCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		// 备用模型单次请求设置超时保护 (原 60s 硬编码极易导致大模型思考与复杂量化计算超时)
+		// 动态调整为 180s (3分钟)，且不超过外层上下文剩余时限
+		fbTimeout := 180 * time.Second
+		if deadline, ok := ctx.Deadline(); ok {
+			remain := time.Until(deadline)
+			if remain > 15*time.Second && remain < fbTimeout {
+				fbTimeout = remain
+			}
+		}
+		fbCtx, cancel := context.WithTimeout(ctx, fbTimeout)
 		resp, err := prov.Generate(fbCtx, req)
 		cancel()
 
@@ -385,14 +402,23 @@ func BuildFallbackProvidersFromDB(ctx context.Context, currentConfig data.AIConf
 		return nil, nil
 	}
 
+	primaryKey := fmt.Sprintf("%s|%s", strings.TrimSpace(currentConfig.ApiKey), strings.TrimSpace(currentConfig.BaseUrl))
+
 	for _, cfgPtr := range settingConfig.AiConfigs {
 		if cfgPtr == nil {
 			continue
 		}
 		cfg := *cfgPtr
 		modelKey := fmt.Sprintf("%s(%s)", cfg.ModelName, cfg.BaseUrl)
+		cfgKey := fmt.Sprintf("%s|%s", strings.TrimSpace(cfg.ApiKey), strings.TrimSpace(cfg.BaseUrl))
+
 		// 跳过当前主配置、空 Key 或已处于全局熔断隔离池的失效模型
 		if cfg.ID == currentConfig.ID || strings.TrimSpace(cfg.ApiKey) == "" || IsModelInCooldown(modelKey) || IsModelInCooldown(cfg.ModelName) {
+			continue
+		}
+
+		// 若主模型已因鉴权/用量耗尽熔断，跳过共享相同 ApiKey+BaseUrl 的备用配置，避免重复失败空转
+		if (IsModelInCooldown(currentConfig.ModelName) || IsModelInCooldown(fmt.Sprintf("%s(%s)", currentConfig.ModelName, currentConfig.BaseUrl))) && cfgKey == primaryKey {
 			continue
 		}
 
