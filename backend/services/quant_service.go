@@ -101,12 +101,17 @@ func (s *QuantService) RunVectorGridSearch(stockCode, strategyType string) map[s
 		return map[string]any{"code": 0, "message": err.Error()}
 	}
 	return map[string]any{
-		"code":               resp.Code,
-		"message":            resp.Message,
-		"total_combinations": resp.TotalCombinations,
-		"best_strategy":      resp.BestStrategy,
-		"best_params":        resp.BestParams,
-		"best_stats":         resp.BestStats,
-		"duration":           resp.Duration,
+		"code":                  resp.Code,
+		"message":               resp.Message,
+		"total_combinations":    resp.TotalCombinations,
+		"best_strategy":         resp.BestStrategy,
+		"best_params":           resp.BestParams,
+		"best_stats":            resp.BestStats,
+		"duration":              resp.Duration,
+		"in_sample_return":      resp.InSampleReturn,
+		"out_sample_return":     resp.OutSampleReturn,
+		"degradation_ratio":     resp.DegradationRatio,
+		"overfitting_risk":      resp.OverfittingRisk,
+		"train_test_split_desc": resp.TrainTestSplitDesc,
 	}
 }
