@@ -34,7 +34,6 @@ type Settings struct {
 	QuestionTemplate       string `json:"questionTemplate"`
 	CrawlTimeOut           int64  `json:"crawlTimeOut"`
 	KDays                  int64  `json:"kDays"`
-	EnableDanmu            bool   `json:"enableDanmu"`
 	BrowserPath            string `json:"browserPath"`
 	EnableNews             bool   `json:"enableNews"`
 	DarkTheme              bool   `json:"darkTheme"`
@@ -1052,7 +1051,6 @@ func UpdateConfig(s *SettingConfig) string {
 					"question_template":           s.QuestionTemplate,
 					"crawl_time_out":              s.CrawlTimeOut,
 					"k_days":                      s.KDays,
-					"enable_danmu":                s.EnableDanmu,
 					"browser_path":                s.BrowserPath,
 					"enable_news":                 s.EnableNews,
 					"dark_theme":                  s.DarkTheme,

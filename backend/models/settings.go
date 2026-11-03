@@ -23,7 +23,6 @@ type OldSettings struct {
 	QuestionTemplate  string  `json:"questionTemplate"`
 	CrawlTimeOut      int64   `json:"crawlTimeOut"`
 	KDays             int64   `json:"kDays"`
-	EnableDanmu       bool    `json:"enableDanmu"`
 	BrowserPath       string  `json:"browserPath"`
 	EnableNews        bool    `json:"enableNews"`
 	DarkTheme         bool    `json:"darkTheme"`

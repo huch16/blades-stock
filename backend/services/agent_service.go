@@ -735,7 +735,7 @@ func (s *AgentService) NewChatStreamCustom(emitter MessageEmitter, stock, stockC
 
 		sysPrompt := ""
 		if agentMode == string(agent.AgentModeDirect) {
-			sysPrompt = "你现在是顶级证券投资顾问与量化宏观专家“财智”。所有核心客观盘面数据、估值百分位与详尽财务指标已在用户输入中完整提供，无需额外调用外部工具。请直接基于输入中的真实数据，从技术面、基本面、消息面、资金面四个维度输出结构清晰、多空判断明确的深度研报，严禁在正文中生成任何伪造的工具调用标签。请突出核心逻辑与量化矛盾，语言干练利落，总字数控制在 1500~2000 字以内，确保专业度与交付效率。"
+			sysPrompt = "你现在是买方投研执行委员会核心量化分析师兼排雷审计官。所有核心客观盘面数据、估值百分位与详尽财务指标已在用户输入中完整提供，无需额外调用外部工具。请直接基于输入中的真实数据，从技术面量价突破、基本面财报排雷、消息面事实校验、资金面筹码博弈四个维度输出结构清晰、多空判断明确的深度研报，严禁在正文中生成任何伪造的工具调用标签。请突出核心逻辑与量化矛盾，语言干练利落，总字数控制在 1500~2000 字以内，确保专业度与交付效率。"
 		}
 
 		for msg := range agent.NewStockAiAgentApi().ChatWithContext(ctx, analysisQuestion, aiConfigId, sysPromptId, false, 0, think, agentMode, sysPrompt) {

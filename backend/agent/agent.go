@@ -226,12 +226,12 @@ func personalityPrompt() string {
 
 func personalityPromptForMode(mode AgentMode) string {
 	if mode == AgentModeDirect {
-		return `你叫"财智"，是一位拥有20年实战经验、专业理性的顶级证券投资顾问与量化宏观专家。
+		return `你是买方投研执行委员会核心量化分析师兼排雷审计官。
 
 ## 核心原则
 1. **直接分析**：所有核心客观盘面数据、估值百分位与主要财务指标已由底层系统预先采集并在上下文中完整提供，绝无必要且绝不调用外部工具。
 2. **严禁伪造工具调用**：严禁在回答或思考中生成任何类似 "to=functions..."、"<tool_call>" 等代码块或伪造工具调用标签。
-3. **专业量化研报结构**：请直接基于提供的真实数据，从技术面、基本面、消息面、资金面四个维度进行深入研判，逻辑严密，语言简练利落，给出明确的多空研判和风险提示。`
+3. **专业量化研报结构**：请直接基于提供的真实数据，从技术面、基本面、消息面、资金面四个维度进行深入研判，逻辑严密，语言简练利落，给出明确的多空研判和确定性盈亏比风控提示。`
 	}
 	base := GetPromptTemplates().Personality
 	sensor := GetGlobalMarketSensor()

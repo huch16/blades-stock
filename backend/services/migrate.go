@@ -100,6 +100,15 @@ func AutoMigrateAll() {
 	// 11. 自动自愈清理历史遗留的虚假推荐指标与排雷Prompt脏数据
 	_ = agent.CleanDirtyRecommendStocks()
 
+	// 12. 校验并播种机构级基准自选股，剔除退市/ST/问题股等历史遗留垃圾标的
+	SeedDefaultFollowedStocksIfEmpty()
+
+	// 13. 自动生成出厂基线快照（解决灾备中心冷启动 0 备份问题）
+	go func() {
+		defer func() { _ = recover() }()
+		data.NewBackupManager().EnsureBaselineBackupIfEmpty()
+	}()
+
 	logger.SugaredLogger.Info("[Database] All tables migrated and initialized successfully.")
 }
 
@@ -478,4 +487,65 @@ func SeedDefaultKnowledgeCrystalsIfEmpty() {
 		_ = db.Dao.Create(&c).Error
 	}
 	logger.SugaredLogger.Infof("[Database] 成功播种 %d 条初始默认高胜率经验结晶知识库", len(crystals))
+}
+
+// SeedDefaultFollowedStocksIfEmpty 校验自选股池，剔除退市/ST/问题股等历史遗留垃圾标的，并播种机构级基准自选股
+func SeedDefaultFollowedStocksIfEmpty() {
+	if db.Dao == nil {
+		return
+	}
+
+	// 1. 自动软删除自选池中历史遗留的明显劣质/ST/退市风险标的（如天目药业、ST迪威等），避免AI自检时陷入自相嘲讽悖论
+	_ = db.Dao.Model(&data.FollowedStock{}).
+		Where("stock_code IN ('sh600671', 'sz300396') OR name LIKE '%ST%'").
+		Update("is_del", 1).Error
+
+	// 2. 检查当前活跃自选股数量，若为空则播种机构级优质基准核心资产
+	var activeCount int64
+	db.Dao.Model(&data.FollowedStock{}).Where("is_del = 0").Count(&activeCount)
+	if activeCount == 0 {
+		benchmarkStocks := []data.FollowedStock{
+			{
+				StockCode: "sh510300",
+				Name:      "沪深300ETF",
+				Sort:      1,
+				IsDel:     0,
+			},
+			{
+				StockCode: "sh600519",
+				Name:      "贵州茅台",
+				Sort:      2,
+				IsDel:     0,
+			},
+			{
+				StockCode: "sz300750",
+				Name:      "宁德时代",
+				Sort:      3,
+				IsDel:     0,
+			},
+			{
+				StockCode: "sz002594",
+				Name:      "比亚迪",
+				Sort:      4,
+				IsDel:     0,
+			},
+			{
+				StockCode: "sh512480",
+				Name:      "半导体ETF",
+				Sort:      5,
+				IsDel:     0,
+			},
+		}
+
+		for _, s := range benchmarkStocks {
+			var exists int64
+			db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ?", s.StockCode).Count(&exists)
+			if exists == 0 {
+				_ = db.Dao.Create(&s).Error
+			} else {
+				_ = db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ?", s.StockCode).Update("is_del", 0).Error
+			}
+		}
+		logger.SugaredLogger.Infof("[Database] 成功播种 %d 只机构级核心基准自选资产 (沪深300ETF/贵州茅台/宁德时代/比亚迪/半导体ETF)", len(benchmarkStocks))
+	}
 }

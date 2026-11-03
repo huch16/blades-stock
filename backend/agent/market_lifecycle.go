@@ -424,7 +424,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	crystalPrompt := DefaultSemanticDistiller().FormatCrystalsForPrompt(retrievedCrystals)
 
 	// 2. 组装盘前前瞻 + ETF轮动 Prompt (包含 Skill 7 范式)
-	prompt := fmt.Sprintf(`你现在是顶级券商首席策略分析师兼量化宏观专家“财智”。今天是 %s。
+	prompt := fmt.Sprintf(`你现在是买方宏观与大类资产配置委员会（L1 Macro Allocation Committee）主任委员。今天是 %s。
 请严格按照【ETF轮动多Agent分析】实战范式，结合以下一手收集的盘前全球指数、核心ETF动态与要闻资讯，输出一份高水准【A股盘前智能前瞻与ETF轮动内参】：
 
 【隔夜及全球主要指数行情】：
@@ -468,7 +468,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 【数据注入说明】：隔夜外盘行情、核心关注ETF池最新状态、纯数学动量矩阵（21日加权对数回归）以及隔夜宏观核心要闻已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。
 全文请使用专业券商内参语气，数据引用请保持客观，避免过度解读。`, todayStr, globalBrief, etfSummary.String(), momentumTable, newsText.String(), crystalPrompt)
 
-	sysPrompt := "你现在是顶级券商首席策略分析师兼量化宏观专家“财智”。所有核心客观数据（隔夜外盘、ETF行情与纯数学动量矩阵、隔夜财经要闻）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的五维体系输出深度结构化的专业 Markdown 研报。"
+	sysPrompt := "你现在是买方宏观与大类资产配置委员会（L1 Macro Allocation Committee）主任委员。所有核心客观数据（隔夜外盘、ETF行情与纯数学动量矩阵、隔夜财经要闻）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的五维体系输出深度结构化的专业 Markdown 研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	var streamErr string
@@ -606,7 +606,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 		}
 	}
 
-	prompt := fmt.Sprintf(`你是专注于产业链瓶颈与卡脖子技术的研究专家“财智”。今天是 %s。
+	prompt := fmt.Sprintf(`你是产业中观与产业链稀缺性研究组（L2 Industry & Supply-Chain Bottleneck）资深研究员。今天是 %s。
 目标研判赛道/标的：【%s (%s)】
 触发动因：%s。
 
@@ -621,7 +621,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 【数据注入说明】：请直接基于上述一手真实数据及专业产业认知进行深度量化推演，无需额外调用外部工具。
 输出结构清晰、带有深度洞见的 Markdown 产业链深度拆解报告。`, todayStr, sectorOrStockName, code, reason, realDataCtx.String(), sectorOrStockName)
 
-	sysPrompt := "你现在是专注于产业链瓶颈与卡脖子技术的研究专家“财智”。请直接根据输入中详实的一手异动与赛道信息，按照 Serenity 式产业研究框架输出深度结构化的 Markdown 产业链拆解研报。"
+	sysPrompt := "你现在是产业中观与产业链稀缺性研究组（L2 Industry & Supply-Chain Bottleneck）资深研究员。请直接根据输入中详实的一手异动与赛道信息，按照 Serenity 式产业研究框架输出深度结构化的 Markdown 产业链拆解研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	var streamErr string
@@ -724,7 +724,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	crystalPrompt := DefaultSemanticDistiller().FormatCrystalsForPrompt(retrievedCrystals)
 
 	// 3. 组装收盘复盘 Prompt
-	prompt := fmt.Sprintf(`你现在是拥有20年实战经验的顶级A股量化私募投资总监“财智”。今天是 %s 收盘后。
+	prompt := fmt.Sprintf(`你现在是买方投研盘面复盘与量化情绪策略组（L4/L5 Market Sentiment & Post-Market Review）首席分析师。今天是 %s 收盘后。
 请基于今日一手盘面全景数据与量化指标，直接撰写【A股全景收盘复盘与次日推演报告】：
 
 【全天多空分布与市场情绪】：
@@ -751,7 +751,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 
 【输出要求】：请直接开始输出 Markdown 研报正文，思考过程简短克制，严禁过度思考，确保正文完整输出。`, todayStr, statSummary.String(), uplimitSummary, btSummary, crystalPrompt)
 
-	sysPrompt := "你现在是顶级A股投资总监“财智”。所有核心盘面客观数据（涨跌家数比、连板梯队题材、多空情绪指标）已在输入中提供。请直接开始输出 Markdown 研报正文，严禁在思考过程中冗余推导，优先确保报告正文完整输出。"
+	sysPrompt := "你现在是买方投研盘面复盘与量化情绪策略组（L4/L5 Market Sentiment & Post-Market Review）首席分析师。所有核心盘面客观数据（涨跌家数比、连板梯队题材、多空情绪指标）已在输入中提供。请直接开始输出 Markdown 研报正文，严禁在思考过程中冗余推导，优先确保报告正文完整输出。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	var streamErr string
@@ -829,7 +829,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		}
 	}
 
-	prompt := fmt.Sprintf(`你是专注于量化对冲与ETF配置的首席基金经理“财智”。今天是 %s。
+	prompt := fmt.Sprintf(`你是专注于量化对冲与ETF配置的首席基金经理。今天是 %s。
 请严格执行【ETF轮动多Agent分析】（Skill 7）全套决策流程：
 
 %s
@@ -842,7 +842,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 
 【数据注入说明】：核心关注ETF池最新状态已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。`, todayStr, etfSummary.String())
 
-	sysPrompt := "你现在是专注于量化对冲与ETF配置的首席基金经理“财智”。所有核心关注ETF池行情已在用户输入中提供，无需额外调用外部工具。请直接基于输入数据，按照 ETF 轮动决策流程输出完整的量化研报。"
+	sysPrompt := "你现在是专注于量化对冲与ETF配置的首席基金经理。所有核心关注ETF池行情已在用户输入中提供，无需额外调用外部工具。请直接基于输入数据，按照 ETF 轮动决策流程输出完整的量化研报。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	var streamErr string

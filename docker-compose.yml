@@ -1,11 +1,10 @@
-version: '3.8'
-
 # ==============================================================================
-# Blades Stock — Cloud-Native Web/SaaS 生产环境编排 (v1.8.0)
-# 针对多规格 VPS 异构环境自适应调优：
-#   - 甲骨文云 (Oracle Cloud): 2核 CPU / 12G 内存
-#   - Instabox 云沙箱: 4核 CPU / 8G 内存
-#   - 以及通用 Ubuntu 24.04 VPS (1~8核 / 2~16G 内存)
+# Blades Stock — 边缘计算私有量化投研工作站 (Edge-Native Private Quant Workstation v2.0.0)
+# 架构说明 (Single-Node Architecture):
+#   - 定位：面向独立交易员与买方投研团队的单节点私有化量化中台，非多租户弹性横向扩容集群
+#   - 底层存储：纯嵌入式 SQLite WAL 权威库 (_txlock=immediate, busy_timeout=30s)
+#   - 架构优势：免运维、单二进制全静态编译、亚毫秒级行情查询无网络序列化损耗，内存占用 <80MB
+#   - 适配规格：甲骨文云 / Instabox 云沙箱 / Ubuntu 24.04 VPS (1~8核 / 2~16G 内存)
 # ==============================================================================
 
 services:

@@ -1301,7 +1301,6 @@ export namespace data {
 	    questionTemplate: string;
 	    crawlTimeOut: number;
 	    kDays: number;
-	    enableDanmu: boolean;
 	    browserPath: string;
 	    enableNews: boolean;
 	    darkTheme: boolean;
@@ -1358,7 +1357,6 @@ export namespace data {
 	        this.questionTemplate = source["questionTemplate"];
 	        this.crawlTimeOut = source["crawlTimeOut"];
 	        this.kDays = source["kDays"];
-	        this.enableDanmu = source["enableDanmu"];
 	        this.browserPath = source["browserPath"];
 	        this.enableNews = source["enableNews"];
 	        this.darkTheme = source["darkTheme"];

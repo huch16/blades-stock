@@ -167,6 +167,11 @@ func (m *BackupManager) GetBackupOverview() (*BackupOverview, error) {
 	db.Dao.Model(&models.CronTask{}).Count(&overview.CronTaskCount)
 
 	backups, err := m.ListBackups()
+	if err == nil && len(backups) == 0 {
+		// 系统尚无任何备份记录时，自动创建一份系统开箱即用的智能资产基线快照
+		_, _ = m.CreateIntelligentBackup("系统出厂基线快照 (v2.0.0 智能数据资产)")
+		backups, _ = m.ListBackups()
+	}
 	if err == nil {
 		overview.TotalBackupFiles = len(backups)
 		var totalBytes int64
@@ -182,6 +187,14 @@ func (m *BackupManager) GetBackupOverview() (*BackupOverview, error) {
 	}
 
 	return overview, nil
+}
+
+// EnsureBaselineBackupIfEmpty 当备份中心无任何快照记录时，自动生成出厂基线归档快照
+func (m *BackupManager) EnsureBaselineBackupIfEmpty() {
+	backups, err := m.ListBackups()
+	if err == nil && len(backups) == 0 {
+		_, _ = m.CreateIntelligentBackup("系统出厂基线快照 (v2.0.0 智能数据资产)")
+	}
 }
 
 // ListBackups 列出所有历史备份，解析元数据与记录描述并按时间倒序排列

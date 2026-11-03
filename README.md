@@ -37,9 +37,10 @@
   - 内置 Embedding 向量化检索与余弦相似度匹配，精准命中投研技能（如 Serenity 行业分析师提示模板），动态注入 System Prompt，显著提升垂类推理质量。
 - 🌐 **多源情报与 SearXNG 深度联网**：
   - 预设连接开源隐私聚合搜索引擎 SearXNG（默认端点：`https://search.woha.men`），涵盖多源资讯并提供百度 HTTP / 真实无头浏览器双重降级方案；支持 `FetchWebPage` 提取公告与研报正文。
-- ☁️ **双模架构与云原生 SaaS 交付 (Dual-Mode Hybrid Architecture)**：
-  - **一套核心资产，双模形态自适应**：同一仓库既支持编译跨平台独立桌面程序（Windows/macOS/Linux），又可通过内置 Universal Bridge 通信桥接无缝作为 **Web 浏览器投研平台** 运行。
-  - **Docker 容器化秒级交付**：纯 Go 静态无 CGO 依赖编译，体积小于 50MB，内存仅需约 80MB；内置访问口令安全防护（`BLADES_AUTH_TOKEN`）与 SSE 流式实时推送。
+- ☁️ **双模架构与私有云部署 (Dual-Mode & Edge-Native Architecture)**：
+  - **一套核心资产，双模形态自适应**：同一仓库既支持编译跨平台独立桌面程序（Windows/macOS/Linux），又可通过内置 Universal Bridge 通信桥接无缝作为 **Web 私有投研工作站** 运行。
+  - **Docker 容器化秒级交付**：纯 Go 静态无 CGO 依赖编译，镜像体积 <50MB，运行时内存仅需约 80MB；内置访问口令安全防护（`BLADES_AUTH_TOKEN`）与 SSE 流式实时推送。
+  - **单节点权威嵌入式架构（Single-Node SQLite WAL）**：采用 `busy_timeout=30s` 与 `_txlock=immediate` 优化，专为独立交易员与买方投研团队打造，零外部数据库依赖、零网络反序列化损耗，单节点垂直弹性伸缩，提供亚毫秒级行情计算吞吐。
 - 🔌 **MCP (Model Context Protocol) 扩展生态**：
   - 支持外部 MCP 服务动态注册、工具白名单管控、自动化心跳探活与故障自愈降级。
 - 🛡️ **高可用韧性架构**：
