@@ -32,6 +32,18 @@ var (
 	distDirFlag = flag.String("dist-dir", "frontend/dist", "Path to frontend dist directory")
 )
 
+// SecurityHeadersMiddleware 为所有 HTTP 响应注入标准安全响应头 (点击劫持、MIME 混淆、Referrer 泄露及 XSS 防御)
+func SecurityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; frame-ancestors 'none';")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	flag.Parse()
 
@@ -263,8 +275,8 @@ func main() {
 		})
 	}
 
-	// 8. 挂载中间件并启动服务器
-	handler := AuthMiddleware(mux)
+	// 8. 挂载中间件并启动服务器 (安全响应头 + 鉴权拦截)
+	handler := SecurityHeadersMiddleware(AuthMiddleware(mux))
 
 	server := &http.Server{
 		Addr:              addr,

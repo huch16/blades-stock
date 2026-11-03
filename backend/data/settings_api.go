@@ -796,7 +796,8 @@ func restoreStockChangeHistory(fileName string) string {
 }
 
 func (s *SettingsApi) Export() string {
-	d, err := json.MarshalIndent(s.Config, "", "    ")
+	masked := GetMaskedSettingConfig()
+	d, err := json.MarshalIndent(masked, "", "    ")
 	if err != nil {
 		logger.SugaredLogger.Errorf("导出配置序列化失败: %v", err)
 		return ""

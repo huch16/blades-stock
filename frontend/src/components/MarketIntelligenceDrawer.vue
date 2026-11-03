@@ -33,6 +33,7 @@ import {
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
+import { sanitizeMarkdownHtml } from '../utils/sanitize'
 import { dispatchAgentAction, consultAgent } from '../utils/agentControlBus'
 
 const props = defineProps({
@@ -831,6 +832,7 @@ onBeforeUnmount(() => {
             :model-value="displayContent"
             preview-theme="github"
             :show-code-row-number="false"
+            :sanitize="sanitizeMarkdownHtml"
             style="background: transparent;"
           />
         </div>
@@ -1092,6 +1094,7 @@ onBeforeUnmount(() => {
             :model-value="displayContent"
             preview-theme="github"
             :show-code-row-number="false"
+            :sanitize="sanitizeMarkdownHtml"
             style="background: transparent;"
           />
         </div>

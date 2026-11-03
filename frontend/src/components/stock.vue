@@ -72,6 +72,7 @@ import {
 } from '../../wailsjs/runtime'
 import {Add, ChatboxOutline, CreateOutline} from '@vicons/ionicons5'
 import {MdEditor, MdPreview} from 'md-editor-v3';
+import { sanitizeMarkdownHtml } from '../utils/sanitize';
 // preview.css相比style.css少了编辑器那部分样式
 //import 'md-editor-v3/lib/preview.css';
 import 'md-editor-v3/lib/style.css';
@@ -2789,7 +2790,7 @@ watch(modalShow6, (newVal) => {
         </template>
       </MdEditor>
       <div v-if="!enableEditor" ref="aiResultScrollRef" style="height: 440px;max-height: 60vh;text-align: left;overflow-y: auto;">
-        <MdPreview ref="mdPreviewRef" :modelValue="data.airesult" :theme="theme"/>
+        <MdPreview ref="mdPreviewRef" :modelValue="data.airesult" :theme="theme" :sanitize="sanitizeMarkdownHtml"/>
       </div>
     </n-spin>
     <template #footer>

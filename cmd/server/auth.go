@@ -3,11 +3,13 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"blades-stock/backend/logger"
 )
@@ -233,12 +235,64 @@ func HandleInitPassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleLogin 提供口令验证端点
+type loginAttemptTracker struct {
+	mu       sync.Mutex
+	failures map[string]*ipAttempt
+}
+
+type ipAttempt struct {
+	failCount   int
+	lockedUntil time.Time
+	lastAttempt time.Time
+}
+
+var loginTracker = &loginAttemptTracker{
+	failures: make(map[string]*ipAttempt),
+}
+
+func getClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx != -1 {
+		return r.RemoteAddr[:idx]
+	}
+	return r.RemoteAddr
+}
+
+// HandleLogin 提供口令验证端点（集成爆破防御：错误延时 + 5次锁定15分钟）
 func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	ip := getClientIP(r)
+	now := time.Now()
+
+	loginTracker.mu.Lock()
+	attempt, exists := loginTracker.failures[ip]
+	if !exists {
+		attempt = &ipAttempt{}
+		loginTracker.failures[ip] = attempt
+	}
+	if now.Before(attempt.lockedUntil) {
+		remain := int(time.Until(attempt.lockedUntil).Minutes()) + 1
+		loginTracker.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(map[string]any{
+			"code":    429,
+			"error":   fmt.Sprintf("连续密码错误次数过多，IP已被安全锁定，请在 %d 分钟后再试", remain),
+			"data":    map[string]any{"authenticated": false},
+		})
+		return
+	}
+	loginTracker.mu.Unlock()
 
 	var req struct {
 		Token    string `json:"token"`
@@ -261,6 +315,11 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	if subtle.ConstantTimeCompare([]byte(clientPwd), []byte(serverToken)) == 1 ||
 		subtle.ConstantTimeCompare([]byte(clientPwd), []byte(DefaultAdminPassword)) == 1 {
 		
+		// 登录成功：清除此 IP 的失败计数
+		loginTracker.mu.Lock()
+		delete(loginTracker.failures, ip)
+		loginTracker.mu.Unlock()
+
 		// 下发安全 HttpOnly Cookie (有效期30天，彻底消除 URL 泄露 Token 的安全隐患)
 		http.SetCookie(w, &http.Cookie{
 			Name:     "blades_token",
@@ -281,10 +340,30 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 密码错误：注入 1 秒防御性时延，强行打断自动化爆破攻击脚本
+	time.Sleep(1 * time.Second)
+
+	loginTracker.mu.Lock()
+	attempt.failCount++
+	attempt.lastAttempt = time.Now()
+	remainingTries := 5 - attempt.failCount
+	if attempt.failCount >= 5 {
+		attempt.lockedUntil = time.Now().Add(15 * time.Minute)
+		logger.SugaredLogger.Warnf("[Auth] IP %s 连续 5 次输入错误口令，触发安全锁定 15 分钟", ip)
+	}
+	loginTracker.mu.Unlock()
+
 	w.WriteHeader(http.StatusUnauthorized)
+	errMsg := "访问密码错误，请重新输入"
+	if remainingTries > 0 {
+		errMsg = fmt.Sprintf("访问密码错误，请重新输入（剩余尝试次数：%d）", remainingTries)
+	} else {
+		errMsg = "连续密码错误达 5 次，IP 已被安全锁定 15 分钟"
+	}
+
 	json.NewEncoder(w).Encode(map[string]any{
 		"code":    401,
-		"error":   "访问密码错误，请重新输入",
+		"error":   errMsg,
 		"data": map[string]any{
 			"authenticated": false,
 		},

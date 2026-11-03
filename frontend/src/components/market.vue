@@ -25,6 +25,7 @@ import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
 import { CaretDown, CaretUp, PulseOutline,} from "@vicons/ionicons5";
 import {NAvatar, NButton, NFlex, NText, useMessage, useNotification} from "naive-ui";
 import {MdPreview} from "md-editor-v3";
+import { sanitizeMarkdownHtml } from "../utils/sanitize";
 import {useRoute, useRouter} from 'vue-router'
 import RankTable from "./rankTable.vue";
 import IndustryMoneyRank from "./industryMoneyRank.vue";
@@ -1397,6 +1398,7 @@ function goToIntelligence(type) {
           ref="mdPreviewRef"
           :model-value="aiSummary"
           :theme="theme"
+          :sanitize="sanitizeMarkdownHtml"
         />
       </div>
     </n-spin>

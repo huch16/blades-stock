@@ -638,12 +638,13 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		RecordLLMRun(ctx, totalDur, firstChunkLat, finalStatus, retryCount)
 
 		// Audit log for LLM run
+		isSuccess := agentErr == nil
 		llmAuditEntry := models.AuditLog{
-			ToolName:    "LLM_RUN",
-			Success:     finalStatus == "",
-			DurationMs:  int64(totalDur.Milliseconds()),
+			ToolName:   "LLM_RUN",
+			Success:    isSuccess,
+			DurationMs: int64(totalDur.Milliseconds()),
 		}
-		if finalStatus != "" {
+		if !isSuccess {
 			llmAuditEntry.ErrorMsg = finalStatus
 		}
 		go RecordAuditLog(llmAuditEntry)

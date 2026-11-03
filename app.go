@@ -1558,17 +1558,12 @@ func (a *App) GetStockThesisHistory(stockCode string, limit int) ([]models.Stock
 
 // SaveStockThesis 手动保存或调整买方认知假说
 func (a *App) SaveStockThesis(stockCode, stockName, verdict, verdictText, coreThesis, keyCatalysts, riskFactors, modelName string) error {
-	thesis := &models.StockThesisLedger{
-		StockCode:    stockCode,
-		StockName:    stockName,
-		Verdict:      verdict,
-		VerdictText:  verdictText,
-		CoreThesis:   coreThesis,
-		KeyCatalysts: keyCatalysts,
-		RiskFactors:  riskFactors,
-		ModelName:    modelName,
-	}
-	return data.NewStockThesisApi().SaveStockThesis(thesis)
+	return a.agentService.SaveStockThesis(stockCode, stockName, verdict, verdictText, coreThesis, keyCatalysts, riskFactors, modelName)
+}
+
+// DeleteStockThesis 物理删除指定标的的买方认知假说
+func (a *App) DeleteStockThesis(stockCode string) error {
+	return a.agentService.DeleteStockThesis(stockCode)
 }
 
 // GetAllStockTheses 获取全量标的认知状态映射表 (供自选列表极速匹配)

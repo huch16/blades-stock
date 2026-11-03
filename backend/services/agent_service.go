@@ -782,6 +782,10 @@ func (s *AgentService) GetStockThesisHistory(stockCode string, limit int) ([]mod
 
 // SaveStockThesis 手动保存或调整买方认知假说
 func (s *AgentService) SaveStockThesis(stockCode, stockName, verdict, verdictText, coreThesis, keyCatalysts, riskFactors, modelName string) error {
+	stockCode = strings.TrimSpace(stockCode)
+	if len(stockCode) < 4 || stockCode == "x" {
+		return fmt.Errorf("无效的标的代码: %s", stockCode)
+	}
 	thesis := &models.StockThesisLedger{
 		StockCode:    stockCode,
 		StockName:    stockName,
@@ -793,6 +797,11 @@ func (s *AgentService) SaveStockThesis(stockCode, stockName, verdict, verdictTex
 		ModelName:    modelName,
 	}
 	return data.NewStockThesisApi().SaveStockThesis(thesis)
+}
+
+// DeleteStockThesis 删除指定标的的认知假说
+func (s *AgentService) DeleteStockThesis(stockCode string) error {
+	return data.NewStockThesisApi().DeleteStockThesis(stockCode)
 }
 
 // GetAllStockTheses 获取全量标的认知状态映射表 (供自选列表极速匹配)

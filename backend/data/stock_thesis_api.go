@@ -1,6 +1,7 @@
 package data
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"time"
@@ -101,14 +102,40 @@ func (api *StockThesisApi) GetAllStockTheses() (map[string]models.StockThesisLed
 	return result, nil
 }
 
+// DeleteStockThesis 物理删除指定标的的买方认知假说
+func (api *StockThesisApi) DeleteStockThesis(stockCode string) error {
+	if db.Dao == nil {
+		return nil
+	}
+	code := api.NormalizeStockCode(stockCode)
+	if code == "" {
+		return nil
+	}
+	pure := strings.TrimPrefix(strings.TrimPrefix(code, "sh"), "sz")
+	return db.Dao.Where("stock_code = ? OR stock_code = ?", code, pure).Delete(&models.StockThesisLedger{}).Error
+}
+
 // SaveStockThesis 手动保存或调整认知假说 (使用原子事务保证账本与历史时间线强一致)
 func (api *StockThesisApi) SaveStockThesis(thesis *models.StockThesisLedger) error {
 	if db.Dao == nil || thesis == nil {
 		return nil
 	}
 	thesis.StockCode = api.NormalizeStockCode(thesis.StockCode)
-	if thesis.StockCode == "" {
-		return nil
+	// 严格参数校验：杜绝 "x" 等无意义空壳脏数据
+	if len(thesis.StockCode) < 4 || thesis.StockCode == "x" || !regexp.MustCompile(`^[a-zA-Z0-9_.]{4,12}$`).MatchString(thesis.StockCode) {
+		return fmt.Errorf("无效的股票代码: %s", thesis.StockCode)
+	}
+	if thesis.Verdict == "" {
+		thesis.Verdict = models.VerdictNoChange
+	}
+
+	// 补全真实股票名称，杜绝 "的最新"、"全天" 等残缺脏名
+	if thesis.StockName == "" || strings.Contains(thesis.StockName, "最新") || strings.Contains(thesis.StockName, "全天") {
+		pure := strings.TrimPrefix(strings.TrimPrefix(thesis.StockCode, "sh"), "sz")
+		var sb StockBasic
+		if err := db.Dao.Where("symbol = ? OR ts_code LIKE ?", pure, thesis.StockCode+"%").First(&sb).Error; err == nil && sb.Name != "" {
+			thesis.StockName = sb.Name
+		}
 	}
 
 	now := time.Now()
@@ -118,6 +145,12 @@ func (api *StockThesisApi) SaveStockThesis(thesis *models.StockThesisLedger) err
 
 		if err == nil && existing.ID > 0 {
 			thesis.ID = existing.ID
+			// 修复 CreatedAt 抹零 Bug：保留原始创建时间，杜绝 0001-01-01 事故
+			if !existing.CreatedAt.IsZero() {
+				thesis.CreatedAt = existing.CreatedAt
+			} else {
+				thesis.CreatedAt = now
+			}
 			thesis.UpdatedAt = now
 			if err := tx.Save(thesis).Error; err != nil {
 				return err

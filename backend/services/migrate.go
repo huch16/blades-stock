@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 
 	"blades-stock/backend/agent"
 	"blades-stock/backend/agent/evaluator"
@@ -105,7 +106,10 @@ func AutoMigrateAll() {
 	// 12. 校验并播种机构级基准自选股，剔除退市/ST/问题股等历史遗留垃圾标的，并完成代码格式标准化去重
 	SeedDefaultFollowedStocksIfEmpty()
 
-	// 13. 自动生成出厂基线快照（解决灾备中心冷启动 0 备份问题）
+	// 13. 清理测试空壳与破损认知账本数据，自动校准残缺股票名称
+	RepairAndCleanStockTheses()
+
+	// 14. 自动生成出厂基线快照（解决灾备中心冷启动 0 备份问题）
 	go func() {
 		defer func() { _ = recover() }()
 		data.NewBackupManager().EnsureBaselineBackupIfEmpty()
@@ -575,4 +579,28 @@ func SeedDefaultFollowedStocksIfEmpty() {
 		}
 	}
 	logger.SugaredLogger.Infof("[Database] 成功校验并常驻播种 %d 只机构级核心基准自选资产 (沪深300ETF/贵州茅台/宁德时代/比亚迪/半导体ETF)", len(benchmarkStocks))
+}
+
+// RepairAndCleanStockTheses 清理测试空壳与破损认知账本数据，自动校准残缺股票名称
+func RepairAndCleanStockTheses() {
+	if db.Dao == nil {
+		return
+	}
+	// 1. 删除测试空壳数据（如 "x" 或代码长度不足的伪造记录）
+	_ = db.Dao.Where("stock_code = 'x' OR length(stock_code) < 4").Delete(&models.StockThesisLedger{}).Error
+	_ = db.Dao.Where("stock_code = 'x' OR length(stock_code) < 4").Delete(&models.StockVerdictHistory{}).Error
+
+	// 2. 扫描并自动修正股票名称被误抽为“的最新”、“全天”等残损片段的历史记录
+	var brokenTheses []models.StockThesisLedger
+	if err := db.Dao.Where("stock_name IN ('的最新', '全天') OR stock_name LIKE '%最新%' OR stock_name LIKE '%全天%'").Find(&brokenTheses).Error; err == nil {
+		for _, bt := range brokenTheses {
+			pure := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(bt.StockCode), "sh"), "sz")
+			var sb data.StockBasic
+			if err := db.Dao.Where("symbol = ? OR ts_code LIKE ?", pure, bt.StockCode+"%").First(&sb).Error; err == nil && sb.Name != "" {
+				_ = db.Dao.Model(&models.StockThesisLedger{}).Where("id = ?", bt.ID).Update("stock_name", sb.Name).Error
+				_ = db.Dao.Model(&models.StockVerdictHistory{}).Where("stock_code = ?", bt.StockCode).Update("stock_name", sb.Name).Error
+			}
+		}
+	}
+	logger.SugaredLogger.Info("[Database] 成功执行买方认知账本与历史轨迹数据洗洁自愈")
 }

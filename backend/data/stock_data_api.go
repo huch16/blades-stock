@@ -1443,27 +1443,32 @@ func (receiver StockDataApi) GetHK_KLineData(stockCode string, kLineType string,
 		return K
 	}
 	if res["data"] != nil && code == 0 {
-		data := res["data"].(map[string]interface{})[stockCode].(map[string]interface{})
-		if data != nil {
-			var day []any
-			if data["qfqday"] != nil {
-				day = data["qfqday"].([]any)
-			}
-			if data["day"] != nil {
-				day = data["day"].([]any)
-			}
-			for _, v := range day {
-				if v != nil {
-					vv := v.([]any)
-					KLine := &KLineData{
-						Day:    convertor.ToString(vv[0]),
-						Open:   convertor.ToString(vv[1]),
-						Close:  convertor.ToString(vv[2]),
-						High:   convertor.ToString(vv[3]),
-						Low:    convertor.ToString(vv[4]),
-						Volume: convertor.ToString(vv[5]),
+		if dataMap, ok := res["data"].(map[string]interface{}); ok && dataMap != nil {
+			if stockData, ok := dataMap[stockCode].(map[string]interface{}); ok && stockData != nil {
+				data := stockData
+				var day []any
+				if data["qfqday"] != nil {
+					if qday, ok := data["qfqday"].([]any); ok {
+						day = qday
 					}
-					*K = append(*K, *KLine)
+				}
+				if data["day"] != nil {
+					if dday, ok := data["day"].([]any); ok {
+						day = dday
+					}
+				}
+				for _, v := range day {
+					if vv, ok := v.([]any); ok && len(vv) >= 6 {
+						KLine := &KLineData{
+							Day:    convertor.ToString(vv[0]),
+							Open:   convertor.ToString(vv[1]),
+							Close:  convertor.ToString(vv[2]),
+							High:   convertor.ToString(vv[3]),
+							Low:    convertor.ToString(vv[4]),
+							Volume: convertor.ToString(vv[5]),
+						}
+						*K = append(*K, *KLine)
+					}
 				}
 			}
 		}
@@ -1711,27 +1716,32 @@ func (receiver StockDataApi) GetCommonKLineData(stockCode string, kLineType stri
 		return K
 	}
 	if res["data"] != nil && code == 0 {
-		data := res["data"].(map[string]interface{})[stockCode].(map[string]interface{})
-		if data != nil {
-			var day []any
-			if data["qfqday"] != nil {
-				day = data["qfqday"].([]any)
-			}
-			if data["day"] != nil {
-				day = data["day"].([]any)
-			}
-			for _, v := range day {
-				if v != nil {
-					vv := v.([]any)
-					KLine := &KLineData{
-						Day:    convertor.ToString(vv[0]),
-						Open:   convertor.ToString(vv[1]),
-						Close:  convertor.ToString(vv[2]),
-						High:   convertor.ToString(vv[3]),
-						Low:    convertor.ToString(vv[4]),
-						Volume: convertor.ToString(vv[5]),
+		if dataMap, ok := res["data"].(map[string]interface{}); ok && dataMap != nil {
+			if stockData, ok := dataMap[stockCode].(map[string]interface{}); ok && stockData != nil {
+				data := stockData
+				var day []any
+				if data["qfqday"] != nil {
+					if qday, ok := data["qfqday"].([]any); ok {
+						day = qday
 					}
-					*K = append(*K, *KLine)
+				}
+				if data["day"] != nil {
+					if dday, ok := data["day"].([]any); ok {
+						day = dday
+					}
+				}
+				for _, v := range day {
+					if vv, ok := v.([]any); ok && len(vv) >= 6 {
+						KLine := &KLineData{
+							Day:    convertor.ToString(vv[0]),
+							Open:   convertor.ToString(vv[1]),
+							Close:  convertor.ToString(vv[2]),
+							High:   convertor.ToString(vv[3]),
+							Low:    convertor.ToString(vv[4]),
+							Volume: convertor.ToString(vv[5]),
+						}
+						*K = append(*K, *KLine)
+					}
 				}
 			}
 		}

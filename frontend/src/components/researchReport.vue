@@ -3,6 +3,7 @@ import {computed, h, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref,
 import {GetAIResponseResultList, GetConfig, SaveAsMarkdown, DeleteAIResponseResult} from "../../wailsjs/go/main/App";
 import {NAvatar, NButton, NEllipsis, NText, useMessage} from "naive-ui";
 import {MdEditor, MdPreview} from 'md-editor-v3';
+import { sanitizeMarkdownHtml } from '../utils/sanitize';
 
 
 
@@ -313,6 +314,7 @@ function deleteAIResponseResult(id){
         style="height: 540px;max-height: 60vh;text-align: left;overflow-y: auto;"
         :model-value="editorDataRef.content"
         :theme="theme"
+        :sanitize="sanitizeMarkdownHtml"
       />
     </n-spin>
     <template #footer>
