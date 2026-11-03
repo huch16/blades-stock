@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -139,9 +140,75 @@ func (s *MarketService) UnFollow(stockCode string) string {
 	return data.NewStockDataApi().UnFollow(stockCode)
 }
 
-// GetFollowList 获取关注股票列表
+// GetFollowList 获取关注股票列表（自动扫描并回填 0 元空价格标的，杜绝首屏零价惨案）
 func (s *MarketService) GetFollowList(groupId int) *[]data.FollowedStock {
-	return data.NewStockDataApi().GetFollowList(groupId)
+	list := data.NewStockDataApi().GetFollowList(groupId)
+	if list == nil || len(*list) == 0 {
+		return list
+	}
+
+	// 探测是否存在 Price <= 0 的标的，若有则立即批量拉取最新实时行情并回写数据库
+	var zeroCodes []string
+	for _, item := range *list {
+		if item.Price <= 0 && item.StockCode != "" {
+			zeroCodes = append(zeroCodes, data.FormatMarketStockCode(item.StockCode))
+		}
+	}
+
+	if len(zeroCodes) > 0 {
+		quotes, err := data.NewStockDataApi().GetStockCodeRealTimeData(zeroCodes...)
+		if err == nil && quotes != nil && len(*quotes) > 0 {
+			quoteMap := make(map[string]data.StockInfo)
+			for _, q := range *quotes {
+				quoteMap[data.FormatMarketStockCode(q.Code)] = q
+				pure := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(q.Code), "sh"), "sz")
+				quoteMap[pure] = q
+			}
+
+			for i := range *list {
+				item := &(*list)[i]
+				canonical := data.FormatMarketStockCode(item.StockCode)
+				pure := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(item.StockCode), "sh"), "sz")
+				if q, ok := quoteMap[canonical]; ok {
+					s.updateFollowedPrice(item, q)
+				} else if q, ok := quoteMap[pure]; ok {
+					s.updateFollowedPrice(item, q)
+				}
+			}
+		}
+	}
+
+	return list
+}
+
+func (s *MarketService) updateFollowedPrice(item *data.FollowedStock, q data.StockInfo) {
+	p, err := strconv.ParseFloat(q.Price, 64)
+	if err != nil || p <= 0 {
+		return
+	}
+	preClose, _ := strconv.ParseFloat(q.PreClose, 64)
+	chgPct := 0.0
+	chgPrice := 0.0
+	if p > 0 && preClose > 0 {
+		chgPrice = mathutil.RoundToFloat(p-preClose, 2)
+		chgPct = mathutil.RoundToFloat(mathutil.Div(p-preClose, preClose)*100, 3)
+	}
+	item.Price = p
+	item.ChangePercent = chgPct
+	item.PriceChange = chgPrice
+	_ = db.Dao.Model(&data.FollowedStock{}).
+		Where("stock_code = ? AND is_del = 0", item.StockCode).
+		Updates(map[string]any{
+			"price":          p,
+			"change_percent": chgPct,
+			"price_change":   chgPrice,
+			"time":           time.Now(),
+		}).Error
+}
+
+// GetFollowListPaged 分页/别名兼容接口，兼容前端调用
+func (s *MarketService) GetFollowListPaged(query any) *[]data.FollowedStock {
+	return s.GetFollowList(0)
 }
 
 // GetStockList 搜索股票列表
@@ -295,7 +362,13 @@ func (s *MarketService) GetStockKLineWithFallback(stockCode, stockName string, k
 	if klt == "" {
 		klt = "101"
 	}
-	return data.FetchKLineWithFallback(stockCode, stockName, klt, limit, "")
+	res := data.FetchKLineWithFallback(stockCode, stockName, klt, limit, "")
+	// 严格按前端请求参数约束截断切片，杜绝每次强制返回 500 根导致的带宽轰炸
+	if res != nil && res.Data != nil && len(*res.Data) > limit {
+		sliced := (*res.Data)[len(*res.Data)-limit:]
+		res.Data = &sliced
+	}
+	return res
 }
 
 // GetStockKLinePageWithFallback 分页多数据源自动降级K线
@@ -531,6 +604,11 @@ func (s *MarketService) GetFundTop10Holdings(fundCode string) []data.FundHolding
 		return []data.FundHoldingStock{}
 	}
 	return res
+}
+
+// GetFundTop 兼容前端 GetFundTop 调用，映射到前十大重仓股
+func (s *MarketService) GetFundTop(fundCode string) []data.FundHoldingStock {
+	return s.GetFundTop10Holdings(fundCode)
 }
 
 // GetFundRanking 获取基金排行

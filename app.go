@@ -1331,6 +1331,10 @@ func (a *App) GetFollowList(groupId int) *[]data.FollowedStock {
 	return a.marketService.GetFollowList(groupId)
 }
 
+func (a *App) GetFollowListPaged(query any) *[]data.FollowedStock {
+	return a.marketService.GetFollowListPaged(query)
+}
+
 func (a *App) GetStockList(key string) []data.StockBasic {
 	return a.marketService.GetStockList(key)
 }
@@ -1850,6 +1854,9 @@ func (a *App) GetFundHistoryNetValue(fundCode string, pageSize int, startDate st
 }
 func (a *App) GetFundTop10Holdings(fundCode string) []data.FundHoldingStock {
 	return a.marketService.GetFundTop10Holdings(fundCode)
+}
+func (a *App) GetFundTop(fundCode string) []data.FundHoldingStock {
+	return a.marketService.GetFundTop(fundCode)
 }
 func (a *App) GetFundRanking(marketType, fundType, sortField, sortOrder string, pageIndex, pageSize int) *data.FundRankingResult {
 	return a.marketService.GetFundRanking(marketType, fundType, sortField, sortOrder, pageIndex, pageSize)

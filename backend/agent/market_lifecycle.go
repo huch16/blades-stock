@@ -688,6 +688,12 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 // GeneratePostMarketReview 生成收盘盘后复盘与量化战绩 (15:00收盘后触发)
 // 包含：全天涨跌分布、行业资金主力、连板梯队热度、AI预测回测胜率验证及明日推演
 func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, aiConfigId int) (*MarketIntelligenceReport, error) {
+	now := time.Now()
+	// 交易日时段硬核约束：A 股 15:00 闭市。工作日盘前与盘中严禁预判生成尚未收盘交易日的“复盘”研报！
+	if now.Weekday() >= time.Monday && now.Weekday() <= time.Friday && now.Hour() < 15 {
+		return nil, fmt.Errorf("当前交易日尚未收盘（需等待 15:00 闭市归档），严禁在开盘前或盘中提前生成收盘复盘报告！请于 15:00 闭市数据归档后触发。")
+	}
+
 	logger.SugaredLogger.Info("【MarketLifecycle】开始生成智能盘后收盘复盘...")
 	todayStr := time.Now().Format("2006-01-02")
 
@@ -821,11 +827,24 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	var etfSummary strings.Builder
 	etfSummary.WriteString("【全市场核心ETF池实时监测】（沪深300、创业板、半导体、军工、医药、证券、红利、创业板50）：\n")
 	stockAPI := data.NewStockDataApi()
+	now := time.Now()
+	isPreMarket := now.Hour() < 9 || (now.Hour() == 9 && now.Minute() < 15)
+
 	for _, code := range etfCodes {
 		quotes, err := stockAPI.GetStockCodeRealTimeData(code)
 		if err == nil && quotes != nil && len(*quotes) > 0 {
 			q := (*quotes)[0]
-			etfSummary.WriteString(fmt.Sprintf("- %s(%s): 现价 %v, 涨跌幅 %v%%\n", q.Name, code, q.Price, q.ChangePercent))
+			chgPct := q.ChangePercent
+			p, _ := strconv.ParseFloat(q.Price, 64)
+			pre, _ := strconv.ParseFloat(q.PreClose, 64)
+			if chgPct == 0 && pre > 0 && p > 0 {
+				chgPct = math.Round((p-pre)/pre*10000) / 100
+			}
+			stateDesc := ""
+			if isPreMarket {
+				stateDesc = " (盘前未开盘/沿用前收)"
+			}
+			etfSummary.WriteString(fmt.Sprintf("- %s(%s): 现价 %.3f, 涨跌幅 %.2f%%%s\n", q.Name, code, p, chgPct, stateDesc))
 		}
 	}
 
@@ -840,7 +859,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 3. 【投委会5视角加权评分表】：制作投委会打分矩阵（趋势30%%、风控20%%、价值15%%、筹码20%%、情绪15%%）；
 4. 【最终交易决策】：给出明确的仓位建议（买入/持有/观望/减仓），并制定防守止损位。
 
-【数据注入说明】：核心关注ETF池最新状态已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。`, todayStr, etfSummary.String())
+【量化纪律说明】：请基于上述客观数据进行严密量化推演，客观反映真实盘面状态。严禁虚构任何未经量化工具计算得出的伪概率统计数据。`, todayStr, etfSummary.String())
 
 	sysPrompt := "你现在是专注于量化对冲与ETF配置的首席基金经理。所有核心关注ETF池行情已在用户输入中提供，无需额外调用外部工具。请直接基于输入数据，按照 ETF 轮动决策流程输出完整的量化研报。"
 	reasoningBuilder := strings.Builder{}

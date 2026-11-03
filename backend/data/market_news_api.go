@@ -1182,8 +1182,10 @@ func (m MarketNewsApi) InvestCalendar(yearMonth string) []any {
 	//logger.SugaredLogger.Infof("InvestCalendar:%s", resp.Body())
 	respMap := map[string]any{}
 	json.Unmarshal(resp.Body(), &respMap)
-	return respMap["data"].([]any)
-
+	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
+		return dataList
+	}
+	return []any{}
 }
 
 func (m MarketNewsApi) ClsCalendar() []any {
@@ -1200,7 +1202,10 @@ func (m MarketNewsApi) ClsCalendar() []any {
 	}
 	respMap := map[string]any{}
 	json.Unmarshal(resp.Body(), &respMap)
-	return respMap["data"].([]any)
+	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
+		return dataList
+	}
+	return []any{}
 }
 
 func (m MarketNewsApi) GetGDP() *models.GDPResp {

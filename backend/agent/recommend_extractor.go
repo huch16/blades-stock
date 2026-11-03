@@ -37,6 +37,40 @@ func getPayloadString(payload map[string]interface{}, key string) string {
 	return ""
 }
 
+// isHardRiskBlocked 严密扫描研报中该标的前后上下文，识别硬风控拦截与禁止开仓信号
+func isHardRiskBlocked(content, code string) bool {
+	if content == "" || code == "" {
+		return false
+	}
+	lowerContent := strings.ToLower(content)
+	cleanCode := strings.ToLower(models.CleanStockCode(code))
+	idx := strings.Index(lowerContent, cleanCode)
+	if idx == -1 {
+		return false
+	}
+
+	start := idx - 120
+	if start < 0 {
+		start = 0
+	}
+	end := idx + 120
+	if end > len(content) {
+		end = len(content)
+	}
+	segment := content[start:end]
+
+	riskKeywords := []string{
+		"禁止开仓", "硬风控拦截", "风控拦截", "0% 仓位", "0%仓位",
+		"规避", "清仓", "空仓", "严禁开仓", "风控触发", "拦截", "暂不开仓",
+	}
+	for _, kw := range riskKeywords {
+		if strings.Contains(segment, kw) {
+			return true
+		}
+	}
+	return false
+}
+
 // ExtractAndSaveRecommendationsFromReport 从生成的研报中提取标的并自动沉淀入库
 func ExtractAndSaveRecommendationsFromReport(report *MarketIntelligenceReport) ([]*models.AiRecommendStocks, error) {
 	if report == nil {
@@ -51,6 +85,12 @@ func ExtractAndSaveRecommendationsFromReport(report *MarketIntelligenceReport) (
 			code := strings.TrimSpace(getPayloadString(act.Payload, "code"))
 			cleanCode := models.CleanStockCode(code)
 			if cleanCode != "" && len(cleanCode) == 6 {
+				// 严格风控准则：若该标的在报告中已被明确判定为硬风控拦截或禁止开仓，坚决拒收入库
+				if isHardRiskBlocked(report.Content, cleanCode) {
+					logger.SugaredLogger.Warnf("[RecommendExtractor] 标的 %s 被研报硬风控拦截(禁止开仓/0%%仓位)，坚决拒收入库推荐表", cleanCode)
+					continue
+				}
+
 				name := strings.TrimSpace(getPayloadString(act.Payload, "name"))
 				reason := strings.TrimSpace(getPayloadString(act.Payload, "reason"))
 				if reason == "" {
@@ -75,6 +115,10 @@ func ExtractAndSaveRecommendationsFromReport(report *MarketIntelligenceReport) (
 			if len(m) > 1 {
 				cleanCode := models.CleanStockCode(m[1])
 				if cleanCode != "" && len(cleanCode) == 6 {
+					if isHardRiskBlocked(report.Content, cleanCode) {
+						logger.SugaredLogger.Warnf("[RecommendExtractor] 正则扫描到标的 %s 被研报硬风控拦截(禁止开仓)，坚决跳过", cleanCode)
+						continue
+					}
 					if _, exists := draftsMap[cleanCode]; !exists {
 						name := ""
 						if len(m) > 2 {
@@ -110,9 +154,9 @@ func CleanDirtyRecommendStocks() error {
 	if db.Dao == nil {
 		return nil
 	}
-	// 1. 删除误将“排雷诊断清单/自选观察池/Prompt大段文字”作为推荐理由的错误记录
-	db.Dao.Where("recommend_reason LIKE ? OR recommend_reason LIKE ? OR recommend_reason LIKE ?",
-		"%排雷诊断清单%", "%自选观察池%", "%持仓与自选风险分级清单%").
+	// 1. 删除误将“排雷诊断清单/自选观察池/Prompt大段文字”作为推荐理由的错误记录，并物理清理已被硬风控拦截标的
+	db.Dao.Where("recommend_reason LIKE ? OR recommend_reason LIKE ? OR recommend_reason LIKE ? OR risk_remarks LIKE ? OR stock_code IN ('159915', '512480', '159949')",
+		"%排雷诊断清单%", "%自选观察池%", "%持仓与自选风险分级清单%", "%硬风控拦截%").
 		Delete(&models.AiRecommendStocks{})
 
 	// 2. 找到所有开仓价包含 9.85 ~ 10.05 或现价为 0.00 / 空的记录，尝试拉取真实行情回填，若无法获取则清空虚假指标

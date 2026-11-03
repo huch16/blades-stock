@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"blades-stock/backend/agent"
 	"blades-stock/backend/agent/evaluator"
@@ -579,7 +582,51 @@ func SeedDefaultFollowedStocksIfEmpty() {
 			}
 		}
 	}
-	logger.SugaredLogger.Infof("[Database] 成功校验并常驻播种 %d 只机构级核心基准自选资产 (沪深300ETF/贵州茅台/宁德时代/比亚迪/半导体ETF)", len(benchmarkStocks))
+
+	// 立即为自选股全量拉取并回填一手真实行情（彻底终结 0.00 元首屏零价惨案）
+	var zeroStocks []data.FollowedStock
+	if err := db.Dao.Model(&data.FollowedStock{}).Where("is_del = 0 AND (price <= 0 OR change_percent = 0)").Find(&zeroStocks).Error; err == nil && len(zeroStocks) > 0 {
+		var codes []string
+		for _, zs := range zeroStocks {
+			codes = append(codes, data.FormatMarketStockCode(zs.StockCode))
+		}
+		if quotes, err := data.NewStockDataApi().GetStockCodeRealTimeData(codes...); err == nil && quotes != nil && len(*quotes) > 0 {
+			qMap := make(map[string]data.StockInfo)
+			for _, q := range *quotes {
+				qMap[data.FormatMarketStockCode(q.Code)] = q
+				pure := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(q.Code), "sh"), "sz")
+				qMap[pure] = q
+			}
+			for _, zs := range zeroStocks {
+				canonical := data.FormatMarketStockCode(zs.StockCode)
+				pure := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(zs.StockCode), "sh"), "sz")
+				q, ok := qMap[canonical]
+				if !ok {
+					q, ok = qMap[pure]
+				}
+				if ok {
+					if p, err := strconv.ParseFloat(q.Price, 64); err == nil && p > 0 {
+						preClose, _ := strconv.ParseFloat(q.PreClose, 64)
+						chgPct := 0.0
+						chgPrice := 0.0
+						if p > 0 && preClose > 0 {
+							chgPrice = math.Round((p-preClose)*100) / 100
+							chgPct = math.Round((p-preClose)/preClose*10000) / 100
+						}
+						_ = db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ? AND is_del = 0", zs.StockCode).
+							Updates(map[string]any{
+								"price":          p,
+								"change_percent": chgPct,
+								"price_change":   chgPrice,
+								"time":           time.Now(),
+							}).Error
+					}
+				}
+			}
+		}
+	}
+
+	logger.SugaredLogger.Infof("[Database] 成功校验并常驻播种 %d 只机构级核心基准自选资产并完成真实行情回填", len(benchmarkStocks))
 }
 
 // RepairAndCleanStockTheses 清理测试空壳与破损认知账本数据，自动校准残缺股票名称与创建时间抹零问题
@@ -651,6 +698,9 @@ func RepairAndCleanStockTheses() {
 
 	// 5. 修复历史遗留的审计日志逻辑反转条目 (Success: false, ErrorMsg: 'success')
 	_ = db.Dao.Exec("UPDATE audit_logs SET success = 1, error_msg = '' WHERE tool_name = 'LLM_RUN' AND error_msg = 'success'")
+
+	// 6. 物理清理被硬风控拦截却被错误入库到推荐表的标的 (如 159915 创业板ETF、512480 半导体ETF 等)
+	_ = db.Dao.Exec("DELETE FROM ai_recommend_stocks WHERE stock_code IN ('159915', '512480', '159949') OR risk_remarks LIKE '%硬风控拦截%' OR recommend_reason LIKE '%硬风控拦截%' OR recommend_reason LIKE '%禁止开仓%'")
 
 	logger.SugaredLogger.Info("[Database] 成功执行买方认知账本与历史轨迹数据洗洁自愈（代码去重、股票名补齐、创建时间与审计日志自愈）")
 }

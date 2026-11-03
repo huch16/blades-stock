@@ -70,7 +70,9 @@ const emit = defineEmits([
     >
       <n-gi>
         <n-text :type="result.type">
+          <span v-if="!Number(result['当前价格']) || Number(result['当前价格']) <= 0" style="font-size: 1.1em; opacity: 0.6;">--</span>
           <n-number-animation
+            v-else
             :duration="1000"
             :precision="2"
             :from="result['上次当前价格']"
@@ -89,13 +91,16 @@ const emit = defineEmits([
           style="padding-left: 10px;"
           :type="result.type"
         >
-          <n-number-animation
-            :duration="1000"
-            :precision="3"
-            :from="result.lastChangePercent"
-            :to="result.changePercent"
-          />
-          %
+          <span v-if="!Number(result['当前价格']) || Number(result['当前价格']) <= 0" style="opacity: 0.6;">--</span>
+          <template v-else>
+            <n-number-animation
+              :duration="1000"
+              :precision="3"
+              :from="result.lastChangePercent"
+              :to="result.changePercent"
+            />
+            %
+          </template>
         </n-text>&nbsp;
         <n-text
           v-if="result.costVolume>0"
@@ -118,7 +123,9 @@ const emit = defineEmits([
     >
       <n-gi :span="6">
         <n-text :type="result.type">
+          <span v-if="!Number(result['当前价格']) || Number(result['当前价格']) <= 0" style="font-size: 1.1em; opacity: 0.6;">--</span>
           <n-number-animation
+            v-else
             :duration="1000"
             :precision="2"
             :from="result['上次当前价格']"
@@ -137,13 +144,16 @@ const emit = defineEmits([
           style="padding-left: 10px;"
           :type="result.type"
         >
-          <n-number-animation
-            :duration="1000"
-            :precision="3"
-            :from="result.lastChangePercent"
-            :to="result.changePercent"
-          />
-          %
+          <span v-if="!Number(result['当前价格']) || Number(result['当前价格']) <= 0" style="opacity: 0.6;">--</span>
+          <template v-else>
+            <n-number-animation
+              :duration="1000"
+              :precision="3"
+              :from="result.lastChangePercent"
+              :to="result.changePercent"
+            />
+            %
+          </template>
         </n-text>&nbsp;
         <n-text
           v-if="result.costVolume>0"

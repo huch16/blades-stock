@@ -1308,7 +1308,7 @@ func SearchStockInfo(stock, msgType string, crawlTimeOut int64) *[]string {
 // 分时数据
 func (receiver StockDataApi) GetStockMinutePriceData(stockCode string) (*[]MinuteData, string) {
 
-	stockCode = ConvertTushareCodeToStockCode(stockCode)
+	stockCode = FormatMarketStockCode(strings.TrimSpace(stockCode))
 
 	url := fmt.Sprintf("https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=%s", stockCode)
 	if strutil.HasPrefixAny(stockCode, []string{"gb_", "GB_"}) {
@@ -1335,32 +1335,55 @@ func (receiver StockDataApi) GetStockMinutePriceData(stockCode string) (*[]Minut
 	json.Unmarshal(resp.Body(), &res)
 	code, _ := convertor.ToInt(res["code"])
 	if res["data"] != nil && code == 0 {
-		data := res["data"].(map[string]interface{})
-		if stockData, ok := data[stockCode]; ok {
-			m := stockData.(map[string]interface{})
-			if d, ok := m["data"]; ok {
-				if m2, ok := d.(map[string]any); ok {
-					minutePriceData := m2["data"]
-					datas := minutePriceData.([]any)
-					for _, item := range datas {
-						minuteDataSplit := strutil.SplitEx(strutil.ReplaceWithMap(item.(string), map[string]string{
-							"\r\n": " ",
-						}), " ", true)
-						price, _ := convertor.ToFloat(minuteDataSplit[1])
-						volume, _ := convertor.ToFloat(minuteDataSplit[2])
-						amount := float64(0)
-						if len(minuteDataSplit) >= 4 {
-							amount, _ = convertor.ToFloat(minuteDataSplit[3])
+		if dataMap, ok := res["data"].(map[string]interface{}); ok && dataMap != nil {
+			var stockData any
+			pure := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(stockCode), "sh"), "sz")
+			for k, v := range dataMap {
+				kLower := strings.ToLower(k)
+				if kLower == strings.ToLower(stockCode) || strings.Contains(kLower, pure) {
+					stockData = v
+					break
+				}
+			}
+			if stockData != nil {
+				if m, ok := stockData.(map[string]interface{}); ok && m != nil {
+					if d, ok := m["data"]; ok && d != nil {
+						if m2, ok := d.(map[string]any); ok && m2 != nil {
+							if minutePriceData, ok := m2["data"]; ok && minutePriceData != nil {
+								if datas, ok := minutePriceData.([]any); ok {
+									for _, item := range datas {
+										if str, ok := item.(string); ok {
+											minuteDataSplit := strutil.SplitEx(strutil.ReplaceWithMap(str, map[string]string{
+												"\r\n": " ",
+											}), " ", true)
+											if len(minuteDataSplit) >= 3 {
+												price, _ := convertor.ToFloat(minuteDataSplit[1])
+												volume, _ := convertor.ToFloat(minuteDataSplit[2])
+												amount := float64(0)
+												if len(minuteDataSplit) >= 4 {
+													amount, _ = convertor.ToFloat(minuteDataSplit[3])
+												}
+												tStr := minuteDataSplit[0]
+												if len(tStr) >= 4 {
+													tStr = tStr[0:2] + ":" + tStr[2:4]
+												}
+												minuteData := &MinuteData{
+													Time:   tStr,
+													Price:  price,
+													Volume: volume,
+													Amount: amount,
+												}
+												*minuteDatas = append(*minuteDatas, *minuteData)
+											}
+										}
+									}
+									if dateRaw, ok := m2["date"]; ok && dateRaw != nil {
+										date = convertor.ToString(dateRaw)
+									}
+								}
+							}
 						}
-						minuteData := &MinuteData{
-							Time:   minuteDataSplit[0][0:2] + ":" + minuteDataSplit[0][2:4],
-							Price:  price,
-							Volume: volume,
-							Amount: amount,
-						}
-						*minuteDatas = append(*minuteDatas, *minuteData)
 					}
-					date = m2["date"].(string)
 				}
 			}
 		}

@@ -113,9 +113,9 @@ func (s *StockChangeHistoryService) GetHistoryList(query models.StockChangeHisto
 	if query.Page <= 0 {
 		query.Page = 1
 	}
-	//if query.PageSize <= 0 || query.PageSize > 100 {
-	//	query.PageSize = 50
-	//}
+	if query.PageSize <= 0 || query.PageSize > 100 {
+		query.PageSize = 20
+	}
 
 	dbQuery := db.Dao.Model(&models.StockChangeHistory{})
 
@@ -176,6 +176,9 @@ func (s *StockChangeHistoryService) GetHistoryList(query models.StockChangeHisto
 		return nil, err
 	}
 
+	if query.PageSize <= 0 {
+		query.PageSize = 20
+	}
 	totalPages := int(total) / query.PageSize
 	if int(total)%query.PageSize > 0 {
 		totalPages++
