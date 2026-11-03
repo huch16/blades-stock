@@ -556,7 +556,7 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 }
 
 func (receiver StockDataApi) Follow(stockCode string) string {
-	//logger.SugaredLogger.Infof("Follow %s", stockCode)
+	stockCode = FormatMarketStockCode(strings.TrimSpace(stockCode))
 	stockInfos, err := receiver.GetStockCodeRealTimeData(stockCode)
 	if err != nil || len(*stockInfos) == 0 {
 		logger.SugaredLogger.Error(err)
@@ -570,12 +570,12 @@ func (receiver StockDataApi) Follow(stockCode string) string {
 	}
 	count := int64(0)
 	db.Dao.Model(&FollowedStock{}).Where("is_del = ?", 0).Count(&count)
-	//logger.SugaredLogger.Errorf("Follow-count %v", count)
 	stockCode = strings.ToLower(stockCode)
 
-	// 检查是否已经关注过该股票
+	// 检查是否已经关注过该股票（同时兼容纯数字代码与标准化前缀代码查重）
+	pureCode := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(stockCode, "sh"), "sz"), "bj")
 	var existingStock FollowedStock
-	result := db.Dao.Model(&FollowedStock{}).Where("stock_code = ? AND is_del = ?", stockCode, 0).First(&existingStock)
+	result := db.Dao.Model(&FollowedStock{}).Where("(stock_code = ? OR stock_code = ?) AND is_del = ?", stockCode, pureCode, 0).First(&existingStock)
 	if result.Error == nil {
 		// 股票已经关注过
 		return "已经关注了"

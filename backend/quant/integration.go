@@ -11,6 +11,7 @@ import (
 	"blades-stock/backend/models"
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -608,6 +609,26 @@ func VectorBTHandler(stockCode string, strategyType string, params map[string]an
 			window = int(w)
 		}
 		strategy = &RSIStrategy{Window: window, Overbought: 70, Oversold: 30}
+	case "BOLL":
+		window := 20
+		numStd := 2.0
+		if w, ok := params["window"].(float64); ok {
+			window = int(w)
+		}
+		if ns, ok := params["num_std"].(float64); ok {
+			numStd = ns
+		}
+		strategy = &BollingerStrategy{Window: window, NumStd: numStd}
+	case "DualThrust", "DUAL_THRUST":
+		k := 0.5
+		period := 5
+		if kVal, ok := params["k"].(float64); ok {
+			k = kVal
+		}
+		if p, ok := params["period"].(float64); ok {
+			period = int(p)
+		}
+		strategy = &DualThrustStrategy{K: k, Period: period}
 	default:
 		strategy = &MAStrategy{FastWindow: 5, SlowWindow: 20}
 	}
@@ -837,13 +858,18 @@ func RunVectorizedBacktestMulti(stockCodes []string, strategyType string, params
 
 // VectorBTGridSearchResponse 参数扫描结果响应
 type VectorBTGridSearchResponse struct {
-	Code            int
-	Message         string
-	TotalCombinations int
-	BestStrategy    string
-	BestParams      map[string]any
-	BestStats       *Stats
-	Duration        string
+	Code               int            `json:"code"`
+	Message            string         `json:"message"`
+	TotalCombinations  int            `json:"total_combinations"`
+	BestStrategy       string         `json:"best_strategy"`
+	BestParams         map[string]any `json:"best_params"`
+	BestStats          *Stats         `json:"best_stats"`
+	Duration           string         `json:"duration"`
+	InSampleReturn     float64        `json:"in_sample_return"`
+	OutSampleReturn    float64        `json:"out_sample_return"`
+	DegradationRatio   float64        `json:"degradation_ratio"`
+	OverfittingRisk    string         `json:"overfitting_risk"`
+	TrainTestSplitDesc string         `json:"train_test_split_desc"`
 }
 
 // VectorBTGridSearchHandler 参数网格扫描 API
@@ -868,6 +894,18 @@ func VectorBTGridSearchHandler(stockCode string, strategyType string) (*VectorBT
 	case "RSI":
 		windows := []int{7, 14, 21, 28}
 		strategies = GenerateRSIStrategies(windows, 70, 30)
+	case "BOLL":
+		for _, w := range []int{10, 20, 30} {
+			for _, ns := range []float64{1.5, 2.0, 2.5} {
+				strategies = append(strategies, &BollingerStrategy{Window: w, NumStd: ns})
+			}
+		}
+	case "DualThrust", "DUAL_THRUST":
+		for _, p := range []int{3, 5, 10} {
+			for _, k := range []float64{0.3, 0.5, 0.7} {
+				strategies = append(strategies, &DualThrustStrategy{Period: p, K: k})
+			}
+		}
 	default:
 		fastW := []int{5, 10, 20}
 		slowW := []int{30, 60}
@@ -875,20 +913,108 @@ func VectorBTGridSearchHandler(stockCode string, strategyType string) (*VectorBT
 	}
 
 	cfg := DefaultBacktestConfig()
-	engine := NewBacktestEngine().
-		Data(close, high, low, open, volume, dates).
+	totalLen := len(close)
+	splitIdx := int(float64(totalLen) * 0.70)
+	if splitIdx < 30 || totalLen-splitIdx < 15 {
+		// 数据量过少无法有效切分，全量运行
+		engine := NewBacktestEngine().
+			Data(close, high, low, open, volume, dates).
+			Config(cfg).
+			Build()
+		result := engine.RunGridSearch(strategies)
+		return &VectorBTGridSearchResponse{
+			Code:               1,
+			Message:            fmt.Sprintf("扫描完成，共 %d 种参数组合，耗时 %v", result.TotalCombinations, result.Duration),
+			TotalCombinations:  result.TotalCombinations,
+			BestStrategy:       result.BestStrategyName,
+			BestParams:         result.BestParams,
+			BestStats:          result.BestStats,
+			Duration:           result.Duration.String(),
+			OverfittingRisk:    "样本量较少（全量回测）",
+			TrainTestSplitDesc: "未切分",
+		}, nil
+	}
+
+	// 1. 样本内数据 (In-Sample: 前 70%)
+	isClose := close[:splitIdx]
+	isHigh := high[:splitIdx]
+	isLow := low[:splitIdx]
+	isOpen := open[:splitIdx]
+	isVolume := volume[:splitIdx]
+	isDates := dates[:splitIdx]
+
+	// 2. 样本外数据 (Out-of-Sample: 后 30%)
+	oosClose := close[splitIdx:]
+	oosHigh := high[splitIdx:]
+	oosLow := low[splitIdx:]
+	oosOpen := open[splitIdx:]
+	oosVolume := volume[splitIdx:]
+	oosDates := dates[splitIdx:]
+
+	// 仅在样本内执行网格扫描选出最优参数，杜绝窥探未来数据
+	isEngine := NewBacktestEngine().
+		Data(isClose, isHigh, isLow, isOpen, isVolume, isDates).
 		Config(cfg).
 		Build()
+	isResult := isEngine.RunGridSearch(strategies)
 
-	result := engine.RunGridSearch(strategies)
+	// 3. 将样本内最优策略拿到样本外盲测检验泛化能力
+	bestIdx := -1
+	var bestResult *BacktestResult
+	for idx, r := range isResult.Results {
+		if r != nil && r.Stats != nil {
+			if bestResult == nil || bestResult.Stats == nil || r.Stats.SharpeRatio > bestResult.Stats.SharpeRatio {
+				bestResult = r
+				bestIdx = idx
+			}
+		}
+	}
+
+	isReturn := 0.0
+	oosReturn := 0.0
+	if isResult.BestStats != nil {
+		isReturn = isResult.BestStats.TotalReturn
+	}
+
+	if bestIdx >= 0 && bestIdx < len(strategies) {
+		oosEngine := NewBacktestEngine().
+			Data(oosClose, oosHigh, oosLow, oosOpen, oosVolume, oosDates).
+			Config(cfg).
+			Build()
+		oosResult := oosEngine.Run(strategies[bestIdx])
+		if oosResult != nil && oosResult.Stats != nil {
+			oosReturn = oosResult.Stats.TotalReturn
+		}
+	}
+
+	degradation := 0.0
+	if isReturn != 0 {
+		degradation = (isReturn - oosReturn) / math.Abs(isReturn) * 100
+	}
+
+	overfittingRisk := "稳健泛化 (样本外留存率良好)"
+	if oosReturn < 0 && isReturn > 0 {
+		overfittingRisk = "高过拟合风险 (样本外收益转负，警惕参数过拟合)"
+	} else if degradation > 50 {
+		overfittingRisk = "中度衰减 (样本外收益衰减超过 50%)"
+	}
+
+	splitDesc := fmt.Sprintf("训练集 %d 天 (%s ~ %s) vs 测试集 %d 天 (%s ~ %s)",
+		splitIdx, isDates[0], isDates[len(isDates)-1],
+		totalLen-splitIdx, oosDates[0], oosDates[len(oosDates)-1])
 
 	return &VectorBTGridSearchResponse{
-		Code:              1,
-		Message:           fmt.Sprintf("扫描完成，共 %d 种参数组合，耗时 %v", result.TotalCombinations, result.Duration),
-		TotalCombinations: result.TotalCombinations,
-		BestStrategy:      result.BestStrategyName,
-		BestParams:        result.BestParams,
-		BestStats:         result.BestStats,
-		Duration:          result.Duration.String(),
+		Code:               1,
+		Message:            fmt.Sprintf("扫描完成，共 %d 种参数组合，样本内外分离校验完成 (耗时 %v)", isResult.TotalCombinations, isResult.Duration),
+		TotalCombinations:  isResult.TotalCombinations,
+		BestStrategy:       isResult.BestStrategyName,
+		BestParams:         isResult.BestParams,
+		BestStats:          isResult.BestStats,
+		Duration:           isResult.Duration.String(),
+		InSampleReturn:     isReturn,
+		OutSampleReturn:    oosReturn,
+		DegradationRatio:   degradation,
+		OverfittingRisk:    overfittingRisk,
+		TrainTestSplitDesc: splitDesc,
 	}, nil
 }

@@ -55,6 +55,7 @@ type StreamMessage struct {
 	Metrics          *AgentRunMetrics    `json:"metrics,omitempty"`
 	ModelName        string              `json:"model_name,omitempty"`
 	FinishReason     string              `json:"finish_reason,omitempty"`
+	StatusText       string              `json:"status_text,omitempty"`
 }
 
 type StockAiAgent struct {
@@ -407,6 +408,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			Role:             "assistant",
 			Content:          "",
 			ReasoningContent: "[STATUS]🤔 正在理解问题并制定分析计划...",
+			StatusText:       "正在理解问题并制定分析计划...",
 		}
 
 		ctx = WithFallbackNotifier(ctx, func(curModel, nextModel string, err error) {
@@ -415,6 +417,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				Role:             "assistant",
 				Content:          "",
 				ReasoningContent: fmt.Sprintf("[STATUS]⚠️ 主模型 [%s] 异常：%s，正在自动降级切换至备用模型 [%s] 继续分析...", curModel, reason, nextModel),
+				StatusText:       fmt.Sprintf("主模型异常，正在自动降级切换至备用模型 [%s]...", nextModel),
 				ModelName:        nextModel,
 			}
 			ch <- &StreamMessage{
@@ -487,6 +490,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 									Role:             "assistant",
 									Content:          "",
 									ReasoningContent: "[STATUS]✍️ 正在根据数据生成回答...",
+									StatusText:       "正在根据数据生成回答...",
 								}
 							}
 							// Skip if this is the final accumulated message (openai stream

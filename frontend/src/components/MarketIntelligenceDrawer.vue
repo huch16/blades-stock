@@ -91,7 +91,11 @@ const reports = ref({
 // Serenity 产业链分析输入参数
 const serenityTarget = ref(props.initialSerenityTarget || '半导体')
 const serenityCode = ref('')
-const serenityPresets = ['半导体设备', '算力CPO', '人形机器人', '低空经济', '创新药', '商业航天', '固态电池']
+const serenityPresets = [
+  '半导体与集成电路', '人工智能算力与CPO', '创新药与生物医药',
+  '高端制造与工业母机', '低空经济与商业航天', '新能源与先进储能',
+  '大消费与白酒食品', '银行与高股息红利', '核心资源品与贵金属'
+]
 
 const navTabs = [
   { key: 'pre_market_briefing', icon: '🌅', title: '盘前前瞻', desc: '隔夜外盘 · 竞价风向' },
@@ -286,13 +290,8 @@ async function loadLatestForTab(tabKey) {
         report = latest
       }
     }
-    // 严密防线：若获取到的研报已被损坏或包含异常中断信令，自动拒收并尝试调用后端物理清理
     if (report && isCorruptedReport(report)) {
-      console.warn('检测到残损或中断的历史研报记录，已自动过滤并触发底层物理清理:', report)
       report = null
-      if (typeof PurgeCorruptedMarketReports === 'function') {
-        PurgeCorruptedMarketReports().catch(() => {})
-      }
     }
     reports.value[tabKey] = report
   } catch (e) {

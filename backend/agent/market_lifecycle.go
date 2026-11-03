@@ -482,7 +482,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 		if msg == nil {
 			continue
 		}
-		if msg.ReasoningContent != "" {
+		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
 		if msg.Content != "" && msg.Content != "agent-DONE" {
@@ -634,7 +634,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 		if msg == nil {
 			continue
 		}
-		if msg.ReasoningContent != "" {
+		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
 		if msg.Content != "" && msg.Content != "agent-DONE" {
@@ -764,7 +764,7 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 		if msg == nil {
 			continue
 		}
-		if msg.ReasoningContent != "" {
+		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
 		if msg.Content != "" && msg.Content != "agent-DONE" {
@@ -855,7 +855,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		if msg == nil {
 			continue
 		}
-		if msg.ReasoningContent != "" {
+		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
 			reasoningBuilder.WriteString(msg.ReasoningContent)
 		}
 		if msg.Content != "" && msg.Content != "agent-DONE" {

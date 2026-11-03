@@ -95,6 +95,36 @@
       </n-gi>
     </n-grid>
 
+    <n-grid v-if="strategyType === 'BOLL'" :cols="2" :x-gap="12" :y-gap="12" style="margin-top: 12px">
+      <n-gi>
+        <div class="input-group">
+          <label>计算周期 (Window)</label>
+          <n-input-number v-model:value="bollWindow" :min="5" :max="100" />
+        </div>
+      </n-gi>
+      <n-gi>
+        <div class="input-group">
+          <label>标准差倍数 (Std)</label>
+          <n-input-number v-model:value="bollNumStd" :min="1.0" :max="4.0" :step="0.1" />
+        </div>
+      </n-gi>
+    </n-grid>
+
+    <n-grid v-if="strategyType === 'DualThrust'" :cols="2" :x-gap="12" :y-gap="12" style="margin-top: 12px">
+      <n-gi>
+        <div class="input-group">
+          <label>K 突破系数</label>
+          <n-input-number v-model:value="dualThrustK" :min="0.1" :max="2.0" :step="0.05" />
+        </div>
+      </n-gi>
+      <n-gi>
+        <div class="input-group">
+          <label>计算周期 (Period)</label>
+          <n-input-number v-model:value="dualThrustPeriod" :min="2" :max="60" />
+        </div>
+      </n-gi>
+    </n-grid>
+
     <!-- 操作按钮 -->
     <div class="action-buttons">
       <n-button type="primary" :loading="loading" @click="runBacktest">
@@ -237,6 +267,43 @@
           </div>
         </n-gi>
       </n-grid>
+
+      <!-- 样本内外分离验证 (杜绝过拟合炼金术) -->
+      <div v-if="gridResult.in_sample_return !== undefined && gridResult.in_sample_return !== 0" class="oos-validation-card" style="margin-top: 14px; padding: 12px; background: rgba(24, 160, 88, 0.08); border-radius: 8px; border-left: 4px solid #18a058;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-weight: 600;">🔬 样本内外分离验证 (Train-Test Split 7:3)</span>
+          <n-tag :type="gridResult.out_sample_return < 0 ? 'error' : (gridResult.degradation_ratio || 0) > 50 ? 'warning' : 'success'">
+            {{ gridResult.overfitting_risk || '样本检验完成' }}
+          </n-tag>
+        </div>
+        <div style="font-size: 12px; color: #888; margin-bottom: 8px;">{{ gridResult.train_test_split_desc }}</div>
+        <n-grid :cols="3" :x-gap="8">
+          <n-gi>
+            <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
+              <div class="stat-label" style="font-size: 12px;">训练集(70%)收益</div>
+              <div class="stat-value" :class="getReturnClass(gridResult.in_sample_return)">
+                {{ formatPct(gridResult.in_sample_return) }}
+              </div>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
+              <div class="stat-label" style="font-size: 12px;">测试集(30%)盲测收益</div>
+              <div class="stat-value" :class="getReturnClass(gridResult.out_sample_return)">
+                {{ formatPct(gridResult.out_sample_return) }}
+              </div>
+            </div>
+          </n-gi>
+          <n-gi>
+            <div class="stat-card" style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 6px;">
+              <div class="stat-label" style="font-size: 12px;">收益衰减率</div>
+              <div class="stat-value" :class="(gridResult.degradation_ratio || 0) > 50 ? 'danger' : ''">
+                {{ (gridResult.degradation_ratio || 0).toFixed(1) }}%
+              </div>
+            </div>
+          </n-gi>
+        </n-grid>
+      </div>
     </div>
 
     <!-- 加载状态 -->
@@ -275,6 +342,10 @@ const macdFast = ref(12)
 const macdSlow = ref(26)
 const macdSignal = ref(9)
 const rsiWindow = ref(14)
+const bollWindow = ref(20)
+const bollNumStd = ref(2.0)
+const dualThrustK = ref(0.5)
+const dualThrustPeriod = ref(5)
 const initCash = ref(100000)
 
 interface StockItem {
@@ -320,16 +391,18 @@ function searchStock(value: string) {
   }
 }
 
-// 选择股票：转换为内部格式（sz000001 / sh600000）
+// 选择股票：规范化代码格式，杜绝前后缀混乱导致的巴别塔现象
 function onSelectStock(item: string) {
-  if (item.indexOf("-") > 0) {
-    item = item.split("-")[1].toLowerCase()
-  }
-  if (item.indexOf(".") > 0) {
-    const parts = item.split(".")
-    stockCode.value = parts[1].toLowerCase() + parts[0]
+  if (!item) return
+  const clean = item.trim().toLowerCase().replace(/[-_]/g, '')
+  if (clean.includes('.')) {
+    const parts = clean.split('.')
+    stockCode.value = (parts[1] || '') + (parts[0] || '')
+  } else if (/^\d{6}$/.test(clean)) {
+    const p = clean.startsWith('6') || clean.startsWith('5') ? 'sh' : 'sz'
+    stockCode.value = p + clean
   } else {
-    stockCode.value = item
+    stockCode.value = clean
   }
 }
 
@@ -359,6 +432,11 @@ interface GridSearchResult {
   best_stats: BacktestStats | null
   total_combinations: number
   duration: string
+  in_sample_return?: number
+  out_sample_return?: number
+  degradation_ratio?: number
+  overfitting_risk?: string
+  train_test_split_desc?: string
 }
 
 const result = ref<BacktestData | null>(null)
@@ -368,8 +446,10 @@ const gridResult = ref<GridSearchResult | null>(null)
 // 策略选项
 const strategyOptions = [
   { label: 'MA 均线交叉', value: 'MA' },
-  { label: 'MACD', value: 'MACD' },
+  { label: 'MACD 经典趋势', value: 'MACD' },
   { label: 'RSI 超买超卖', value: 'RSI' },
+  { label: 'BOLL 布林带均值回归', value: 'BOLL' },
+  { label: 'Dual Thrust 区间突破', value: 'DualThrust' },
 ]
 
 // 获取参数
@@ -384,6 +464,12 @@ function getParams(): Record<string, number> {
     params.signal = macdSignal.value
   } else if (strategyType.value === 'RSI') {
     params.window = rsiWindow.value
+  } else if (strategyType.value === 'BOLL') {
+    params.window = bollWindow.value
+    params.num_std = bollNumStd.value
+  } else if (strategyType.value === 'DualThrust') {
+    params.k = dualThrustK.value
+    params.period = dualThrustPeriod.value
   }
   return params
 }

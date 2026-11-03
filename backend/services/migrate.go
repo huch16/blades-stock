@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 
@@ -99,8 +100,9 @@ func AutoMigrateAll() {
 
 	// 11. 自动自愈清理历史遗留的虚假推荐指标与排雷Prompt脏数据
 	_ = agent.CleanDirtyRecommendStocks()
+	_ = NewAgentService().PurgeCorruptedMarketReports(context.Background())
 
-	// 12. 校验并播种机构级基准自选股，剔除退市/ST/问题股等历史遗留垃圾标的
+	// 12. 校验并播种机构级基准自选股，剔除退市/ST/问题股等历史遗留垃圾标的，并完成代码格式标准化去重
 	SeedDefaultFollowedStocksIfEmpty()
 
 	// 13. 自动生成出厂基线快照（解决灾备中心冷启动 0 备份问题）
@@ -500,7 +502,32 @@ func SeedDefaultFollowedStocksIfEmpty() {
 		Where("stock_code IN ('sh600671', 'sz300396') OR name LIKE '%ST%'").
 		Update("is_del", 1).Error
 
-	// 2. 确保机构级优质核心基准资产（沪深300ETF、贵州茅台、宁德时代等）始终常驻自选池
+	// 2. 标的代码标准化与历史重复代码合并去重（解决 000100 与 sz000100 重复入库的巴别塔灾难）
+	var activeFollows []data.FollowedStock
+	if err := db.Dao.Model(&data.FollowedStock{}).Where("is_del = 0").Find(&activeFollows).Error; err == nil {
+		codeSet := make(map[string]bool)
+		for _, fs := range activeFollows {
+			canonical := data.FormatMarketStockCode(fs.StockCode)
+			if canonical != fs.StockCode {
+				// 若当前记录是不带市场前缀的代码 (如 000100)，检查表中是否已有对应的前缀记录 (如 sz000100)
+				var canonicalCount int64
+				db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ? AND is_del = 0", canonical).Count(&canonicalCount)
+				if canonicalCount > 0 || codeSet[canonical] {
+					// 已存在前缀规范记录，软删除无前缀的重复条目
+					_ = db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ? AND is_del = 0", fs.StockCode).Update("is_del", 1).Error
+					continue
+				} else {
+					// 不存在规范记录，原地规范化更名
+					_ = db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ? AND is_del = 0", fs.StockCode).Update("stock_code", canonical).Error
+					codeSet[canonical] = true
+					continue
+				}
+			}
+			codeSet[canonical] = true
+		}
+	}
+
+	// 3. 确保机构级优质核心基准资产（沪深300ETF、贵州茅台、宁德时代等）始终常驻自选池
 	benchmarkStocks := []data.FollowedStock{
 		{
 			StockCode: "sh510300",
