@@ -1858,6 +1858,30 @@ func (a *App) GetFundTop10Holdings(fundCode string) []data.FundHoldingStock {
 func (a *App) GetFundTop(fundCode string) []data.FundHoldingStock {
 	return a.marketService.GetFundTop(fundCode)
 }
+func (a *App) GetEastMoneyKLineWithMA(stockCode, kLineType string, days int) map[string]any {
+	return a.marketService.GetEastMoneyKLineWithMA(stockCode, kLineType, days)
+}
+func (a *App) GetStockFinancialInfo(stockCode string) map[string]any {
+	return a.marketService.GetStockFinancialInfo(stockCode)
+}
+func (a *App) GetStockLatestFinance(stockCode string) map[string]any {
+	return a.marketService.GetStockLatestFinance(stockCode)
+}
+func (a *App) GetStockHolderTrend(stockCode string) map[string]any {
+	return a.marketService.GetStockHolderTrend(stockCode)
+}
+func (a *App) SearchStockByIndicators(indicators map[string]any) map[string]any {
+	return a.marketService.SearchStockByIndicators(indicators)
+}
+func (a *App) FilterStocks(filter map[string]any) map[string]any {
+	return a.marketService.FilterStocks(filter)
+}
+func (a *App) WebSearch(query string, maxResults int) map[string]any {
+	return a.marketService.WebSearch(query, maxResults)
+}
+func (a *App) GetFundRanking(marketType, fundType, sortField, sortOrder string, pageIndex, pageSize int) *data.FundRankingResult {
+	return a.marketService.GetFundRanking(marketType, fundType, sortField, sortOrder, pageIndex, pageSize)
+}
 func (a *App) GetFundRanking(marketType, fundType, sortField, sortOrder string, pageIndex, pageSize int) *data.FundRankingResult {
 	return a.marketService.GetFundRanking(marketType, fundType, sortField, sortOrder, pageIndex, pageSize)
 }

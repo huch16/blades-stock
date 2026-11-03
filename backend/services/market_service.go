@@ -1143,4 +1143,5 @@ func (s *MarketService) BatchDeleteAIResponseResult(ids []uint) string {
 		return "删除失败: " + err.Error()
 	}
 	return "删除成功"
+// GetEastMoneyKLineWithMA 东方财富 K 线 + 均线
 }

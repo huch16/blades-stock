@@ -1861,25 +1861,18 @@ func (receiver StockDataApi) GetStockHistoryMoneyData(stockCode string) []models
 	resp, err := req.Get(reqURL)
 	if err != nil {
 		logger.SugaredLogger.Errorf("req.Get error: %v", err)
-	}
-	body := string(resp.Body())
-	//logger.SugaredLogger.Infof("resp:%s", body)
-	vm := otto.New()
-	vm.Run("function data(res){return res};")
-	val, err := vm.Run(body)
-	if err != nil {
-		logger.SugaredLogger.Errorf("vm.Run error: %v", err)
-	}
-	value, err := val.Export()
-	if err != nil {
-		logger.SugaredLogger.Errorf("val.Export error: %v", err)
-	}
-	marshal, err := json.Marshal(value)
-	if err != nil {
 		return hisData
 	}
+	body := strings.TrimSpace(string(resp.Body()))
+	// 剔除 JSONP data(...) 包装，直接原生高速反序列化，彻底根除 otto JS 虚拟机的性能瓶颈与语法解析崩溃
+	if strings.HasPrefix(body, "data(") && strings.HasSuffix(body, ");") {
+		body = body[5 : len(body)-2]
+	} else if strings.HasPrefix(body, "data(") && strings.HasSuffix(body, ")") {
+		body = body[5 : len(body)-1]
+	}
+
 	var resData models.StockHistoryMoneyDataResp
-	err = json.Unmarshal(marshal, &resData)
+	err = json.Unmarshal([]byte(body), &resData)
 	if err != nil {
 		return hisData
 	}

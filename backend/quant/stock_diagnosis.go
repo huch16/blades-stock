@@ -20,8 +20,13 @@ type StockDiagnosisResult struct {
 	Confidence       float64                 `json:"confidence"`       // 置信度 / 历史胜率 (%)
 	CurrentPrice     float64                 `json:"currentPrice"`     // 当前现价
 	TargetPrice      float64                 `json:"targetPrice"`      // 建议第一目标价
+	TargetPriceNote  string                  `json:"targetPriceNote,omitempty"` // 目标价说明 (例如偏空建议防守时不设做多目标价)
 	StopLossPrice    float64                 `json:"stopLossPrice"`    // 建议止损价
 	RiskRewardRatio  float64                 `json:"riskRewardRatio"`  // 盈亏比
+	WindowBars       int                     `json:"windowBars"`       // 诊断使用的K线样本根数
+	StartDate        string                  `json:"startDate"`        // 样本起始日期
+	EndDate          string                  `json:"endDate"`          // 样本截止日期
+	DataWindowDesc   string                  `json:"dataWindowDesc"`   // 样本时间窗口说明
 	QuantDim         QuantDimensionResult    `json:"quantDim"`         // 量化回测维度
 	MoneyDim         MoneyDimensionResult    `json:"moneyDim"`         // 资金筹码维度
 	TechnicalDim     TechnicalDimensionResult `json:"technicalDim"`    // 技术形态维度
@@ -47,6 +52,7 @@ type QuantDimensionResult struct {
 
 // MoneyDimensionResult 资金筹码维度
 type MoneyDimensionResult struct {
+	HasData            bool    `json:"hasData"`            // 是否采集到真实有效的资金流向数据
 	Score              int     `json:"score"`              // 评分 0-100
 	MainNetInflow5D    float64 `json:"mainNetInflow5D"`    // 近5日主力净流入（万元）
 	SuperLargeNetPct   float64 `json:"superLargeNetPct"`   // 超大单净占比 %
@@ -83,16 +89,30 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 	}
 
 	loader := NewStockDataLoader()
-	closeP, highP, lowP, _, volP, _, err := loader.LoadKLineData(cleanCode, 365)
+	closeP, highP, lowP, openP, volP, dates, err := loader.LoadKLineData(cleanCode, 250)
 	if err != nil || len(closeP) < 20 {
 		return nil, fmt.Errorf("获取K线数据失败或数据不足: %v", err)
 	}
 
+	// 统一严格截取确定性 250 根（约 1 个标准交易年度），保证不可漂移、100% 幂等可复现
+	if len(closeP) > 250 {
+		startIdx := len(closeP) - 250
+		closeP = closeP[startIdx:]
+		highP = highP[startIdx:]
+		lowP = lowP[startIdx:]
+		openP = openP[startIdx:]
+		volP = volP[startIdx:]
+		dates = dates[startIdx:]
+	}
+
 	n := len(closeP)
 	currentPrice := closeP[n-1]
+	startDate := dates[0]
+	endDate := dates[n-1]
+	dataWindowDesc := fmt.Sprintf("基于 %d 根日K线样本 (%s ~ %s) 确定性回测", n, startDate, endDate)
 
-	// 1. 量化回测维度 (VectorBT 双均线策略)
-	quantRes := runQuantDiagnosis(cleanCode, 365)
+	// 1. 量化回测维度 (直接基于同一份确定性 K 线切片运行 VectorBT，彻底消除 365 vs 500 漂移事故)
+	quantRes := runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP, dates)
 
 	// 2. 技术形态维度
 	techRes := runTechnicalDiagnosis(closeP, highP, lowP, volP)
@@ -100,27 +120,21 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 	// 3. 资金筹码维度
 	moneyRes := runMoneyDiagnosis(cleanCode)
 
-	// 4. 结合 ATR 与波动率计算建议止损价与目标价
+	// 4. 结合 ATR 与波动率计算建议止损价与动态目标价
 	atrVal := techRes.ATR
 	if atrVal <= 0 {
 		atrVal = currentPrice * 0.03 // 默认 3% 波动
 	}
 
-	// 止损设置在 1.8 倍 ATR 下方，目标价设在 2.8 倍 ATR 上方（盈亏比约 1.55）
-	stopLoss := math.Round((currentPrice-1.8*atrVal)*100) / 100
-	if stopLoss < 0 {
-		stopLoss = math.Round(currentPrice*0.92*100) / 100
+	// 5. 综合评分计算：
+	// 若资金流向数据有效：量化40% + 资金35% + 技术25%
+	// 若资金流向数据缺失：动态降级重新加权（量化60% + 技术40%），绝不平白赠送 50 分中性分抬高垃圾股评分！
+	overallScore := 0
+	if moneyRes.HasData {
+		overallScore = int(math.Round(float64(quantRes.Score)*0.40 + float64(moneyRes.Score)*0.35 + float64(techRes.Score)*0.25))
+	} else {
+		overallScore = int(math.Round(float64(quantRes.Score)*0.60 + float64(techRes.Score)*0.40))
 	}
-	targetPrice := math.Round((currentPrice+2.8*atrVal)*100) / 100
-	lossDiff := currentPrice - stopLoss
-	gainDiff := targetPrice - currentPrice
-	riskReward := 1.55
-	if lossDiff > 0 {
-		riskReward = math.Round((gainDiff/lossDiff)*100) / 100
-	}
-
-	// 5. 综合评分计算：量化40% + 资金35% + 技术25%
-	overallScore := int(math.Round(float64(quantRes.Score)*0.40 + float64(moneyRes.Score)*0.35 + float64(techRes.Score)*0.25))
 	if overallScore > 100 {
 		overallScore = 100
 	} else if overallScore < 0 {
@@ -142,12 +156,35 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 		suggestion = "规避离场 (Strong Sell)"
 	}
 
+	targetPrice := 0.0
+	stopLoss := 0.0
+	riskReward := 0.0
+	targetNote := ""
+
+	// 7. 严密量化约束：若综合评分偏空（<50）或评级为减持/规避，坚决不设做多目标价！杜绝一边建议卖出一边显示+18%目标价的荒谬自相矛盾！
+	if overallScore >= 50 {
+		targetGain := math.Max(math.Abs(quantRes.TotalReturnPct/100)*currentPrice, 1.8*atrVal)
+		targetPrice = math.Round((currentPrice+targetGain)*100) / 100
+		stopLoss = math.Round((currentPrice-1.2*atrVal)*100) / 100
+		lossDiff := currentPrice - stopLoss
+		gainDiff := targetPrice - currentPrice
+		if lossDiff > 0 {
+			riskReward = math.Round((gainDiff/lossDiff)*100) / 100
+		}
+		targetNote = fmt.Sprintf("基于 ATR(%.2f) 与策略期望收益动态测算第一做多阻力位", atrVal)
+	} else {
+		targetPrice = 0
+		stopLoss = math.Round((currentPrice-1.0*atrVal)*100) / 100
+		riskReward = 0
+		targetNote = "当前量化评级偏空，以风控防守为主，不设做多目标价"
+	}
+
 	confidence := quantRes.WinRatePct
 	if confidence <= 0 {
 		confidence = float64(overallScore)
 	}
 
-	// 7. 提取历史 AI 在该股上的真实战绩（自反思闭环）
+	// 8. 提取历史 AI 在该股上的真实战绩（自反思闭环）
 	btMgr := NewBacktestManager()
 	var historyTrack string
 	if stats := btMgr.GetStockStats(cleanCode); stats != nil && stats.VerifiedCount > 0 {
@@ -157,8 +194,11 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 		historyTrack = "暂无该标的历史闭环回测样本"
 	}
 
-	// 8. 提炼核心结论与风险提示
+	// 9. 提炼核心结论与风险提示
 	summary := buildDiagnosisSummary(stockName, cleanCode, overallScore, suggestion, quantRes, moneyRes, techRes)
+	if !moneyRes.HasData {
+		summary += "（资金维度数据暂缺，已采用量化60%+技术40%动态降级加权）"
+	}
 	risks := buildDiagnosisRisks(currentPrice, techRes, moneyRes, quantRes)
 
 	return &StockDiagnosisResult{
@@ -169,8 +209,13 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 		Confidence:         math.Round(confidence*10) / 10,
 		CurrentPrice:       currentPrice,
 		TargetPrice:        targetPrice,
+		TargetPriceNote:    targetNote,
 		StopLossPrice:      stopLoss,
 		RiskRewardRatio:    riskReward,
+		WindowBars:         n,
+		StartDate:          startDate,
+		EndDate:            endDate,
+		DataWindowDesc:     dataWindowDesc,
 		QuantDim:           quantRes,
 		MoneyDim:           moneyRes,
 		TechnicalDim:       techRes,
@@ -181,51 +226,63 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 	}, nil
 }
 
-func runQuantDiagnosis(cleanCode string, days int) QuantDimensionResult {
-	params := map[string]any{"fast": 5.0, "slow": 20.0}
-	multiRes, err := RunVectorizedBacktestMulti([]string{cleanCode}, "MA", params, days)
-	if err != nil || len(multiRes.Items) == 0 {
+func runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP []float64, dates []string) QuantDimensionResult {
+	cfg := DefaultBacktestConfig()
+	engine := NewBacktestEngine().
+		Data(closeP, highP, lowP, openP, volP, dates).
+		Config(cfg).
+		Build()
+
+	strategy := &MAStrategy{FastWindow: 5, SlowWindow: 20}
+	res := engine.Run(strategy)
+	if res == nil || res.Stats == nil {
 		return QuantDimensionResult{
 			Score:        50,
-			StrategyName: "MA均线趋势跟踪 (5/20)",
+			StrategyName: "MA趋势跟踪 (5/20)",
 			Evaluation:   "历史K线样本不足或数据异常，采用中性基准评分",
 		}
 	}
 
-	item := multiRes.Items[0]
+	winRatePct := res.Stats.WinRate * 100
+	totalReturnPct := res.Stats.TotalReturn * 100
+	sharpeRatio := res.Stats.SharpeRatio
+	maxDrawdownPct := res.Stats.MaxDrawdownPct
+	profitFactor := res.Stats.ProfitFactor
+	totalTrades := res.Stats.TotalTrades
+
 	score := 50
 
 	// 胜率加权 (40%)
-	if item.WinRatePct >= 65 {
+	if winRatePct >= 65 {
 		score += 25
-	} else if item.WinRatePct >= 50 {
+	} else if winRatePct >= 50 {
 		score += 15
-	} else if item.WinRatePct < 40 {
+	} else if winRatePct < 40 {
 		score -= 15
 	}
 
 	// 收益率加权 (30%)
-	if item.TotalReturnPct >= 20 {
+	if totalReturnPct >= 20 {
 		score += 15
-	} else if item.TotalReturnPct >= 0 {
+	} else if totalReturnPct >= 0 {
 		score += 5
 	} else {
 		score -= 10
 	}
 
 	// 夏普比率 (20%)
-	if item.SharpeRatio >= 1.5 {
+	if sharpeRatio >= 1.5 {
 		score += 15
-	} else if item.SharpeRatio >= 0.8 {
+	} else if sharpeRatio >= 0.8 {
 		score += 8
-	} else if item.SharpeRatio < 0 {
+	} else if sharpeRatio < 0 {
 		score -= 10
 	}
 
 	// 最大回撤扣分 (10%)
-	if item.MaxDrawdownPct > 25 {
+	if maxDrawdownPct > 25 {
 		score -= 10
-	} else if item.MaxDrawdownPct < 15 {
+	} else if maxDrawdownPct < 15 {
 		score += 5
 	}
 
@@ -236,10 +293,10 @@ func runQuantDiagnosis(cleanCode string, days int) QuantDimensionResult {
 	}
 
 	eval := fmt.Sprintf("历史回测胜率 %.1f%%，盈亏比 %.2f，夏普比率 %.2f",
-		item.WinRatePct, item.ProfitFactor, item.SharpeRatio)
-	if item.WinRatePct >= 60 && item.SharpeRatio >= 1.0 {
+		winRatePct, profitFactor, sharpeRatio)
+	if winRatePct >= 60 && sharpeRatio >= 1.0 {
 		eval += "，策略收益风险比优秀，具备明确统计套利优势。"
-	} else if item.WinRatePct < 45 {
+	} else if winRatePct < 45 {
 		eval += "，胜率偏低，历史假突破较多，建议严格把控仓位。"
 	} else {
 		eval += "，整体表现稳健，跟随趋势交易为宜。"
@@ -248,15 +305,28 @@ func runQuantDiagnosis(cleanCode string, days int) QuantDimensionResult {
 	return QuantDimensionResult{
 		Score:          score,
 		StrategyName:   "MA趋势追踪(5/20) + 动态止损",
-		WinRatePct:     math.Round(item.WinRatePct*10) / 10,
-		TotalReturnPct: math.Round(item.TotalReturnPct*10) / 10,
-		SharpeRatio:    math.Round(item.SharpeRatio*100) / 100,
-		MaxDrawdownPct: math.Round(item.MaxDrawdownPct*10) / 10,
-		ProfitFactor:   math.Round(item.ProfitFactor*100) / 100,
-		TotalTrades:    item.TotalTrades,
-		EquityCurve:    item.EquityCurve,
+		WinRatePct:     math.Round(winRatePct*10) / 10,
+		TotalReturnPct: math.Round(totalReturnPct*10) / 10,
+		SharpeRatio:    math.Round(sharpeRatio*100) / 100,
+		MaxDrawdownPct: math.Round(maxDrawdownPct*10) / 10,
+		ProfitFactor:   math.Round(profitFactor*100) / 100,
+		TotalTrades:    totalTrades,
+		EquityCurve:    res.Equity,
 		Evaluation:     eval,
 	}
+}
+
+func runQuantDiagnosis(cleanCode string, days int) QuantDimensionResult {
+	loader := NewStockDataLoader()
+	closeP, highP, lowP, openP, volP, dates, err := loader.LoadKLineData(cleanCode, days)
+	if err != nil || len(closeP) < 20 {
+		return QuantDimensionResult{
+			Score:        50,
+			StrategyName: "MA均线趋势跟踪 (5/20)",
+			Evaluation:   "历史K线样本不足或数据异常，采用中性基准评分",
+		}
+	}
+	return runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP, dates)
 }
 
 func runTechnicalDiagnosis(closeP, highP, lowP, volP []float64) TechnicalDimensionResult {
@@ -333,9 +403,10 @@ func runMoneyDiagnosis(cleanCode string) MoneyDimensionResult {
 	hisData := data.NewStockDataApi().GetStockHistoryMoneyData(cleanCode)
 	if len(hisData) == 0 {
 		return MoneyDimensionResult{
-			Score:             50,
-			RecentInflowTrend: "平淡 / 无异动",
-			Evaluation:        "近期资金流向数据平稳或未采集到大单异动",
+			HasData:           false,
+			Score:             0,
+			RecentInflowTrend: "平淡 / 暂无资金数据",
+			Evaluation:        "近期主力大单资金流向数据暂缺，该维度不参与加权评分",
 		}
 	}
 
@@ -402,6 +473,7 @@ func runMoneyDiagnosis(cleanCode string) MoneyDimensionResult {
 		mainInflowWan, lastSuperPct, trend)
 
 	return MoneyDimensionResult{
+		HasData:           true,
 		Score:             score,
 		MainNetInflow5D:   mainInflowWan,
 		SuperLargeNetPct:  lastSuperPct,
