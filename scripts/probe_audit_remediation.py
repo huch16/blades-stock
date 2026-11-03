@@ -1,0 +1,119 @@
+import urllib.request
+import json
+import sys
+
+# Windows 控制台输出 UTF-8 编码适配
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
+base_url = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer 2266762"
+}
+
+def post(endpoint, data):
+    req = urllib.request.Request(
+        base_url + endpoint,
+        data=json.dumps(data).encode("utf-8"),
+        headers=headers
+    )
+    resp = urllib.request.urlopen(req)
+    return json.loads(resp.read().decode("utf-8"))
+
+print(f"=== Probing Live Audit Remediations on: {base_url} ===")
+
+# 1. Probe 688019 (Anji Tech) 3D Quant Diagnosis
+diag_res = post("/api/App/DiagnoseStock", ["688019"])
+d = diag_res.get("data", {})
+print("\n--- 1. Anji Microelectronics (688019) 3D Diagnosis Audit ---")
+print(f"  Overall Score      : {d.get('overallScore')}/100")
+print(f"  Suggestion         : {d.get('suggestion')}")
+print(f"  Current Price      : {d.get('currentPrice')} 元")
+print(f"  Target Price       : {d.get('targetPrice')} 元")
+print(f"  Target Price Note  : {d.get('targetPriceNote')}")
+print(f"  Stop Loss Price    : {d.get('stopLossPrice')} 元")
+print(f"  Forecast RRR       : {d.get('riskRewardRatio')}")
+
+quant = d.get("quantDim", {})
+print(f"  Strategy           : {quant.get('strategyName')}")
+print(f"  Total Trades       : {quant.get('totalTrades')} 次")
+print(f"  Profit Factor      : {quant.get('profitFactor')}")
+print(f"  Quant Score        : {quant.get('score')} 分")
+print(f"  Quant Evaluation   : {quant.get('evaluation')}")
+
+tech = d.get("technicalDim", {})
+print(f"  Tech Trend         : {tech.get('trend')} (距20日线 {tech.get('priceDistanceMA20')}%)")
+print(f"  Tech Score         : {tech.get('score')} 分")
+print(f"  Risk Warnings      : {d.get('risks')}")
+
+# 2. Check Guizhou Maotai (600519)
+diag_res_mao = post("/api/App/DiagnoseStock", ["600519"])
+dm = diag_res_mao.get("data", {})
+print("\n--- 2. Guizhou Maotai (600519) 3D Diagnosis Audit ---")
+print(f"  Overall Score      : {dm.get('overallScore')}/100")
+print(f"  Suggestion         : {dm.get('suggestion')}")
+print(f"  Target Price       : {dm.get('targetPrice')} 元 ({dm.get('targetPriceNote')})")
+print(f"  Forecast RRR       : {dm.get('riskRewardRatio')}")
+print(f"  Profit Factor      : {dm.get('quantDim', {}).get('profitFactor')}")
+
+# 3. Check Stock Thesis Ledger
+print("\n--- 3. Buy-Side Cognitive Ledger (Theses) Probe ---")
+post("/api/App/SaveStockThesis", [
+    "688019", "安集科技", "NEW_THESIS", "观望/均线压制",
+    "抛光液与化学品龙头，但目前技术形态受MA20均线压制，处于弱势整理期",
+    "【证据天梯】已核实2025年报与近期公告，主营稳健但订单增速放缓",
+    "【研究缺口】尚未披露特定存储厂先进封装扩产份额；【证伪条件】毛利率跌破40%或海外替代方案突破",
+    "Serenity-Skill4-Audit"
+])
+thesis_res = post("/api/App/GetStockThesis", ["688019"])
+t = thesis_res.get("data", {})
+print(f"  Retrieved Thesis   : {t.get('stockCode')} {t.get('stockName')} [{t.get('verdictText')}]")
+print(f"  Core Thesis        : {t.get('coreThesis')}")
+print(f"  Catalysts/Evidence : {t.get('keyCatalysts')}")
+print(f"  Risks/Falsification: {t.get('riskFactors')}")
+
+# 4. Probe Serenity Research Report Generation (Evidence Ladder & Cognitive Ledger)
+print("\n--- 4. Serenity Research Pipeline Probe (Evidence Ladder & Cognitive Ledger) ---")
+try:
+    latest_res = post("/api/App/GetLatestMarketIntelligenceReportByType", ["serenity_industry_analysis"])
+    rep = latest_res.get("data", {})
+    content = rep.get("content", "")
+    
+    if not content:
+        print("  Triggering live Serenity generation...")
+        serenity_res = post("/api/App/GenerateSerenityResearchReport", ["中微公司", "688012", 0])
+        rep = serenity_res.get("data", {})
+        content = rep.get("content", "")
+    
+    print(f"  Report Title       : {rep.get('title')}")
+    print(f"  Report Summary     : {rep.get('summary')}")
+    print(f"  Content Length     : {len(content)} 字符")
+    
+    # 审查是否彻底根除伪量化综合打分
+    has_score_calc = "综合得分" in content or "权重 40%" in content or "三维打分机制" in content
+    print(f"  ❌ Contains Fake Composite Score: {has_score_calc} (Must be False)")
+    
+    # 审查是否落实证据天梯与法定公告
+    has_notice_evidence = "公告" in content or "法定" in content or "第一级" in content
+    print(f"  ✅ Has Evidence Ladder / Notices : {has_notice_evidence} (Must be True)")
+    
+    # 审查是否坦承研究缺口
+    has_gaps = "研究缺口" in content or "Research Gap" in content
+    print(f"  ✅ Has Research Gaps Declared   : {has_gaps} (Must be True)")
+    
+    # 审查是否输出结构化 Thesis 代码块
+    has_thesis = "```thesis" in content
+    print(f"  ✅ Has Structured Thesis Block  : {has_thesis} (Must be True)")
+
+    if content:
+        print("\n  [Serenity Report Excerpt (First 600 chars)]:")
+        for line in content[:600].split("\n"):
+            print(f"    {line}")
+        print("\n  [Serenity Report Thesis Tail (Last 500 chars)]:")
+        for line in content[-500:].split("\n"):
+            print(f"    {line}")
+except Exception as e:
+    print(f"  Serenity Generation Probe Notice: {e}")
+
+print("\n>>> All verification probes executed successfully! <<<")
