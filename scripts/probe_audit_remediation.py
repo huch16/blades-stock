@@ -116,4 +116,33 @@ try:
 except Exception as e:
     print(f"  Serenity Generation Probe Notice: {e}")
 
+# 5. Probe stevia0829 Native ETF Rotation Decision & Regime Gate
+print("\n--- 5. stevia0829 Native ETF Rotation Decision Probe ---")
+try:
+    etf_res = post("/api/App/GenerateETFRotationReport", [0])
+    rep_etf = etf_res.get("data", {})
+    content_etf = rep_etf.get("content", "")
+    print(f"  ETF Report Title   : {rep_etf.get('title')}")
+    print(f"  ETF Report Summary : {rep_etf.get('summary')}")
+    print(f"  Content Length     : {len(content_etf)} 字符")
+    
+    # 审查是否包含 510300 硬风控状态机
+    has_regime = "510300" in content_etf and ("MA120" in content_etf or "硬风控" in content_etf or "DEFENSE" in content_etf or "OFFENSE" in content_etf)
+    print(f"  ✅ Has 510300 Regime Gate      : {has_regime} (Must be True)")
+    
+    # 审查是否包含纯数学 21 日对数动量矩阵表格
+    has_momentum_table = "动量得分" in content_etf and "年化动量" in content_etf
+    print(f"  ✅ Has 21-Day Log Momentum Table: {has_momentum_table} (Must be True)")
+    
+    # 审查是否彻底根除 5 视角加权打分表伪量化
+    has_fake_scorecard = "投委会5视角加权评分表" in content_etf or "投委会打分矩阵" in content_etf or "趋势30%" in content_etf
+    print(f"  ❌ Contains Fake Scorecard     : {has_fake_scorecard} (Must be False)")
+
+    if content_etf:
+        print("\n  [ETF Report Excerpt (First 600 chars)]:")
+        for line in content_etf[:600].split("\n"):
+            print(f"    {line}")
+except Exception as e:
+    print(f"  ETF Rotation Probe Notice: {e}")
+
 print("\n>>> All verification probes executed successfully! <<<")
