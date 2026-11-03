@@ -1882,9 +1882,6 @@ func (a *App) WebSearch(query string, maxResults int) map[string]any {
 func (a *App) GetFundRanking(marketType, fundType, sortField, sortOrder string, pageIndex, pageSize int) *data.FundRankingResult {
 	return a.marketService.GetFundRanking(marketType, fundType, sortField, sortOrder, pageIndex, pageSize)
 }
-func (a *App) GetFundRanking(marketType, fundType, sortField, sortOrder string, pageIndex, pageSize int) *data.FundRankingResult {
-	return a.marketService.GetFundRanking(marketType, fundType, sortField, sortOrder, pageIndex, pageSize)
-}
 func (a *App) SearchFundCodes(keyword string) []data.FundSearchItem {
 	return a.marketService.SearchFundCodes(keyword)
 }

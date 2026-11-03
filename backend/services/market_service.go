@@ -1143,5 +1143,141 @@ func (s *MarketService) BatchDeleteAIResponseResult(ids []uint) string {
 		return "删除失败: " + err.Error()
 	}
 	return "删除成功"
-// GetEastMoneyKLineWithMA 东方财富 K 线 + 均线
+}
+
+// GetEastMoneyKLineWithMA 东方财富 K 线 + 均线数据
+func (s *MarketService) GetEastMoneyKLineWithMA(stockCode, kLineType string, days int) map[string]any {
+	if days <= 0 {
+		days = 60
+	}
+	var content string
+	if data.IsAStockCode(stockCode) {
+		content = data.FetchKLineWithMASection(stockCode, data.NormalizeKLineType(kLineType), days, "")
+	} else {
+		api := data.NewEastMoneyKLineApi(data.GetSettingConfig())
+		content = data.EastMoneyKLineWithMASection(api, stockCode, kLineType, days, "")
+	}
+	return map[string]any{
+		"code": 0,
+		"data": content,
+	}
+}
+
+// GetStockFinancialInfo 获取个股主要财务指标
+func (s *MarketService) GetStockFinancialInfo(stockCode string) map[string]any {
+	info := data.NewStockDataApi().GetStockFinancialInfo(stockCode)
+	return map[string]any{
+		"code": 0,
+		"data": info,
+	}
+}
+
+// GetStockLatestFinance 获取个股最新财务季报 F10 数据 (Markdown)
+func (s *MarketService) GetStockLatestFinance(stockCode string) map[string]any {
+	content := data.NewStockDataApi().GetStockLatestFinanceToMarkdown(stockCode)
+	return map[string]any{
+		"code": 0,
+		"data": content,
+	}
+}
+
+// GetStockHolderTrend 获取个股股东户数增减态势 (Markdown)
+func (s *MarketService) GetStockHolderTrend(stockCode string) map[string]any {
+	content := data.NewStockDataApi().GetStockHolderTrendToMarkdown(stockCode)
+	return map[string]any{
+		"code": 0,
+		"data": content,
+	}
+}
+
+// SearchStockByIndicators 多维度技术与财务指标选股
+func (s *MarketService) SearchStockByIndicators(indicators map[string]any) map[string]any {
+	words := ""
+	if w, ok := indicators["words"].(string); ok {
+		words = w
+	} else if k, ok := indicators["keyword"].(string); ok {
+		words = k
+	}
+	res := data.NewSearchStockApi(words).SearchStock(100)
+	return map[string]any{
+		"code": 0,
+		"data": res,
+	}
+}
+
+// FilterStocks 条件选股筛选
+func (s *MarketService) FilterStocks(filter map[string]any) map[string]any {
+	page := 1
+	pageSize := 20
+	keyword := ""
+	if p, ok := filter["page"].(float64); ok && p > 0 {
+		page = int(p)
+	} else if p, ok := filter["page"].(int); ok && p > 0 {
+		page = p
+	}
+	if ps, ok := filter["pageSize"].(float64); ok && ps > 0 {
+		pageSize = int(ps)
+	} else if ps, ok := filter["pageSize"].(int); ok && ps > 0 {
+		pageSize = ps
+	}
+	if k, ok := filter["keyword"].(string); ok {
+		keyword = k
+	}
+
+	tech := models.TechnicalIndicators{}
+	if b, ok := filter["macdGoldenFork"].(bool); ok {
+		tech.MACDGOLDENFORK = b
+	}
+	if b, ok := filter["kdjGoldenFork"].(bool); ok {
+		tech.KDJGOLDENFORK = b
+	}
+	if b, ok := filter["breakThrough"].(bool); ok {
+		tech.BREAKTHROUGH = b
+	}
+	if b, ok := filter["lowFundsInflow"].(bool); ok {
+		tech.LOWFUNDSINFLOW = b
+	}
+	if b, ok := filter["highFundsOutflow"].(bool); ok {
+		tech.HIGHFUNDSOUTFLOW = b
+	}
+	if b, ok := filter["breakUpMa5Days"].(bool); ok {
+		tech.BREAKUPMA5DAYS = b
+	}
+	if b, ok := filter["longAvgArray"].(bool); ok {
+		tech.LONGAVGARRAY = b
+	}
+	if b, ok := filter["shortAvgArray"].(bool); ok {
+		tech.SHORTAVGARRAY = b
+	}
+	if b, ok := filter["upperLargeVolume"].(bool); ok {
+		tech.UPPERLARGEVOLUME = b
+	}
+	if b, ok := filter["downNarrowVolume"].(bool); ok {
+		tech.DOWNNARROWVOLUME = b
+	}
+	if b, ok := filter["morningStar"].(bool); ok {
+		tech.MORNINGSTAR = b
+	}
+	if b, ok := filter["eveningStar"].(bool); ok {
+		tech.EVENINGSTAR = b
+	}
+
+	res := data.NewStockDataApi().GetAllStocks(page, pageSize, keyword, tech)
+	return map[string]any{
+		"code": 0,
+		"data": res,
+	}
+}
+
+// WebSearch 联网投研检索
+func (s *MarketService) WebSearch(query string, maxResults int) map[string]any {
+	if maxResults <= 0 {
+		maxResults = 10
+	}
+	api := data.NewWebSearchApi(30)
+	results := api.Search(query, maxResults)
+	return map[string]any{
+		"code": 0,
+		"data": results,
+	}
 }
