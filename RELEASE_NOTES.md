@@ -24,19 +24,24 @@ Highlights / 核心亮点（全栈七大维度）
    - **严格本地工具纪律**：L1~L5 量化选股与深度诊断严格绑定 Blades 本地工具，杜绝外网碎片搜索导致的幻觉与陈旧数据。
 
 4. **④ 高性能向量化量化与时序投研中枢 (High-Performance VectorBT & Quant Engine)**
-   - **网格搜索空指针与内存防御**：消除 `RunGridSearch` 中对 `results[0]` 的盲目解引用，增强多协程扫描异常下的优雅聚合。
-   - **熊市全负收益统计有效性**：重构 `AnalyzeGridResults`，修复熊市全负收益回测下最佳策略和参数被置空的边界缺陷。
-   - **ETF 21日动量防数值溢出**：对 `slope * 250` 指数收益计算实施科学阻尼（防止 `+Inf` 溢出），对所有指标全面注入 `NaN` / `Inf` 过滤，确保零 JSON 序列化崩溃。
+   - **可验证指标溯源与确定性窗口**：单股三维量化诊断严格锚定确定性 250 根日 K 线窗口 (`WindowBars = 250`)，输出 `dataWindowDesc`、`dataSource`、`adjust: "qfq"`、`codeVersion: "v2.0.0"` 与 `computedAt`，彻底消除 365 vs 500 样本漂移事故。
+   - **去除合成平坦净值曲线前缀 (`trimEquityCurvePrefix`)**：消除回测策略开仓前人工资金恒定的平坦期干扰，使前台 SVG/轻量净值曲线精准反映实际策略交易路径。
+   - **缺失数据客观归零与动态权重重分配**：对缺失或样本不足（<20 根）的量化维度坚决赋 0 分拒绝虚构 50 分中性分；在资金流向数据不可得时，动态重新加权为量化 60% + 技术 40%。
+   - **动态盈亏比与偏空目标价抑制**：基于真实 ATR 与策略胜率动态计算止损价与目标价；对评分 <50 给出规避建议的偏空标的，严格抑制做多目标价（赋 0 并标注 `targetPriceNote` 防守提示），杜绝逻辑自相矛盾。
+   - **小样本统计警示**：回测样本过少（`totalTrades < 5` 或 `VerifiedCount < 5`）时，强制标注 `— ⚠️ 样本不足，结论仅供参考`，严防过度拟合与统计幻觉。
 
-5. **⑤ 高并发数据持久化、WAL 事务与资产灾备 (Data Persistence & WAL Concurrency)**
-   - **买方认知账本强一致事务**：`SaveStockThesis` 与 `ExtractAndUpdateThesisFromReport` 全面升级为原子事务 `db.Dao.Transaction`，确保认知主账本与演化时间线快照强一致。
-   - **语义精炼与记忆自愈引擎**：规范使用 `gorm.Expr("hit_count + ?", 1)` 恢复结晶热度统计，定期执行 WAL 截断与瘦身，维持 85% 以上语义浓缩率。
-   - **智能数据资产版本升级**：全量灾备备份包升级至 v2.0.0 规范，提供安全直接下载与断点上传校验。
+5. **⑤ 高并发数据持久化、认知账本与审计自愈 (Data Persistence & Cognitive Ledger)**
+   - **AI 自主沉淀防手滑二次确认模态**：在 `agent-chat.vue` 中点击「存入买方认知账本」时，弹出基于 Naive UI 的逐字段 Diff 确认对话框，彻底防范大模型意图漂移引发的错误覆盖。
+   - **股票提取字典严格校验 (`__STOCK_DICT__`)**：从后端 `GetStockList` 全局加载全量证券字典，过滤 "的最新"、"全天" 等非股票片段，防止错误名称写入主账本。
+   - **买方认知账本强一致事务与数据自愈**：`SaveStockThesis` 强制入参代码有效性校验，启动迁移脚本自愈历史异常空名与 `CreatedAt` 零值，提供原子级 `DeleteStockThesis` API。
+   - **缺失工具全量 RPC 导出注册**：将 `GetEastMoneyKLineWithMA`、`GetStockFinancialInfo`、`GetStockLatestFinance`、`GetStockHolderTrend`、`SearchStockByIndicators`、`FilterStocks`、`WebSearch` 正式注册为 RPC 首级方法。
 
-6. **⑥ 全方位安全合规与敏感凭据防泄漏 (Security & Compliance & Zero Credential Leakage)**
-   - **全站统一访问凭据 (`2266762`)**：杜绝默认密码泄露到登录页 HTML、占位符、API 响应或错误日志中。
-   - **恒定时间安全比对**：全链路采用 `subtle.ConstantTimeCompare` 防范基于响应耗时的侧信道时序攻击。
-   - **严格目录安全穿越防御**：通过 `pathguard.go` 强化备份下载与本地数据访问，防范 `../` 越权读取。
+6. **⑥ 全方位安全合规、防暴力破解与凭据脱敏 (Security, Anti-Brute-Force & Secret Masking)**
+   - **全站统一访问凭据 (`2266762`) 与 HttpOnly Cookie**：登录成功下发 `blades_token` Cookie 支持跨域 SSE 事件流安全鉴权，杜绝在 URL 中裸露明文 Token。
+   - **防暴力破解频率限制熔断**：基于客户端 IP 实施 1 秒防御性时钟延迟与 5 次连续失败封禁 15 分钟（HTTP 429），杜绝自动化爆破。
+   - **全量 API 敏感凭据脱敏保护**：`/api/App/GetConfig` 与 `/api/App/ExportConfig` 自动对商业 API Key 执行掩码掩蔽（`****`），杜绝开发者排查日志与配置备份外泄。
+   - **全局 Markdown XSS 深度防御**：全站所有 Markdown 预览组件（`MdPreview`）强制注入 `DOMPurify` 消毒过滤器，杜绝存储型 XSS 漏洞。
+   - **安全响应头矩阵**：生产服务器强制注入 `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin` 与 CSP。
 
 7. **⑦ 自动化质量门禁、双端编译与多 VPS 容器固化 (Automated Quality Gates & Production Deployment)**
    - **全量工程版本统一步进至 2.0.0**：对齐 Wails、package.json、Go 运行时、设置中心与部署脚本。
