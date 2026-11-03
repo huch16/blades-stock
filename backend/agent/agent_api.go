@@ -379,12 +379,20 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		btMgr := quant.NewBacktestManager()
 		if stockCode != "" {
 			if stats := btMgr.GetStockStats(stockCode); stats.VerifiedCount > 0 {
-				trackRecord := fmt.Sprintf("【回测记录】你在 %s 上的历史分析准确率: %.1f%% (已验证 %d 次)", stockCode, stats.AccuracyRate, stats.VerifiedCount)
+				sampleWarning := ""
+				if stats.VerifiedCount < 5 {
+					sampleWarning = " — ⚠️ 样本不足，结论仅供参考"
+				}
+				trackRecord := fmt.Sprintf("【回测记录】你在 %s 上的历史分析准确率: %.1f%% (已验证 %d 次%s)", stockCode, stats.AccuracyRate, stats.VerifiedCount, sampleWarning)
 				sysPrompt += "\n\n" + trackRecord
 			}
 		} else if overall := btMgr.GetOverallStats(); overall.VerifiedCount > 0 {
-			trackRecord := fmt.Sprintf("【回测记录】你的历史分析总体准确率: %.1f%% (已验证 %d 次, 共 %d 份报告)", overall.AccuracyRate, overall.VerifiedCount, overall.TotalReports)
-				sysPrompt += "\n\n" + trackRecord
+			sampleWarning := ""
+			if overall.VerifiedCount < 5 {
+				sampleWarning = " — ⚠️ 样本不足，结论仅供参考"
+			}
+			trackRecord := fmt.Sprintf("【回测记录】你的历史分析总体准确率: %.1f%% (已验证 %d 次, 共 %d 份报告)%s", overall.AccuracyRate, overall.VerifiedCount, overall.TotalReports, sampleWarning)
+			sysPrompt += "\n\n" + trackRecord
 		}
 
 		if memoryService != nil {

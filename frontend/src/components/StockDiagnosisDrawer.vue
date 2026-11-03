@@ -72,6 +72,34 @@ async function openThesisHistory(code) {
   }
 }
 
+// 净值曲线 SVG 计算 (去除前期无交易合成初始资金平坦前缀)
+const equitySvgPoints = computed(() => {
+  const curve = diagnosisData.value?.quantDim?.equityCurve
+  if (!curve || curve.length < 2) return ''
+  const min = Math.min(...curve)
+  const max = Math.max(...curve)
+  const range = max - min || 1
+  const width = 300
+  const height = 40
+  const padding = 2
+  return curve
+    .map((val, idx) => {
+      const x = (idx / (curve.length - 1)) * width
+      const y = height - padding - ((val - min) / range) * (height - padding * 2)
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+})
+
+const equityReturnPct = computed(() => {
+  const curve = diagnosisData.value?.quantDim?.equityCurve
+  if (!curve || curve.length < 2) return 0
+  const start = curve[0]
+  const end = curve[curve.length - 1]
+  if (start <= 0) return 0
+  return Number((((end - start) / start) * 100).toFixed(1))
+})
+
 // 呼叫全屏 Agent 深度推演（跨组件上下文穿透）
 function callAgentForDeepAnalysis() {
   const code = activeCode.value || props.stockCode
@@ -427,11 +455,14 @@ onBeforeUnmount(() => {
             <NGridItem>
               <NStatistic
                 label="第一目标价"
-                :value="diagnosisData.targetPrice.toFixed(2)"
+                :value="diagnosisData.targetPrice > 0 ? diagnosisData.targetPrice.toFixed(2) : '--'"
               >
                 <template #suffix>
-                  <span style="font-size: 10px; color: #18a058;">
+                  <span v-if="diagnosisData.targetPrice > 0" style="font-size: 10px; color: #18a058;">
                     (+{{ (((diagnosisData.targetPrice - diagnosisData.currentPrice) / diagnosisData.currentPrice) * 100).toFixed(1) }}%)
+                  </span>
+                  <span v-else style="font-size: 10px; color: #888;">
+                    ({{ diagnosisData.targetPriceNote || '偏空防守' }})
                   </span>
                 </template>
               </NStatistic>
@@ -455,6 +486,12 @@ onBeforeUnmount(() => {
               />
             </NGridItem>
           </NGrid>
+
+          <!-- 数据可信度与确定性窗口元数据 -->
+          <div v-if="diagnosisData.dataWindowDesc" style="margin-top: 10px; font-size: 11px; color: #888; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; padding: 4px 8px; background: rgba(0,0,0,0.02); border-radius: 4px;">
+            <span>📅 {{ diagnosisData.dataWindowDesc }}</span>
+            <span>来源: {{ diagnosisData.dataSource || '前复权QFQ' }} ({{ diagnosisData.codeVersion || 'v2.0.0' }})</span>
+          </div>
         </NCard>
 
         <!-- 维度1: 量化回测维度 -->
@@ -482,6 +519,27 @@ onBeforeUnmount(() => {
           <div style="font-size: 12px; color: #666; margin-bottom: 6px;">
             策略: {{ diagnosisData.quantDim.strategyName }} (交易样本: {{ diagnosisData.quantDim.totalTrades }} 次)
           </div>
+
+          <!-- 净值曲线 (去除合成初始资金平坦前缀) -->
+          <div v-if="equitySvgPoints" style="margin: 10px 0 6px 0; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 6px;">
+            <div style="font-size: 11px; color: #888; margin-bottom: 4px; display: flex; justify-content: space-between;">
+              <span>📈 策略实际交易净值曲线 (Out-of-Sample)</span>
+              <span :style="{ color: equityReturnPct >= 0 ? '#18a058' : '#d03050', fontWeight: 'bold' }">
+                {{ equityReturnPct >= 0 ? '+' : '' }}{{ equityReturnPct }}%
+              </span>
+            </div>
+            <svg viewBox="0 0 300 40" style="width: 100%; height: 40px; overflow: visible;">
+              <polyline
+                fill="none"
+                :stroke="equityReturnPct >= 0 ? '#18a058' : '#d03050'"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                :points="equitySvgPoints"
+              />
+            </svg>
+          </div>
+
           <NGrid
             :cols="3"
             :x-gap="6"

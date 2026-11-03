@@ -27,6 +27,10 @@ type StockDiagnosisResult struct {
 	StartDate        string                  `json:"startDate"`        // 样本起始日期
 	EndDate          string                  `json:"endDate"`          // 样本截止日期
 	DataWindowDesc   string                  `json:"dataWindowDesc"`   // 样本时间窗口说明
+	DataSource       string                  `json:"dataSource"`       // 原始数据来源
+	Adjust           string                  `json:"adjust"`           // 复权类型 (如 qfq)
+	CodeVersion      string                  `json:"codeVersion"`      // 计算逻辑版本
+	ComputedAt       string                  `json:"computedAt"`       // 确定性计算时间戳
 	QuantDim         QuantDimensionResult    `json:"quantDim"`         // 量化回测维度
 	MoneyDim         MoneyDimensionResult    `json:"moneyDim"`         // 资金筹码维度
 	TechnicalDim     TechnicalDimensionResult `json:"technicalDim"`    // 技术形态维度
@@ -216,6 +220,10 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 		StartDate:          startDate,
 		EndDate:            endDate,
 		DataWindowDesc:     dataWindowDesc,
+		DataSource:         "EastMoney / Sina / Tushare (QFQ)",
+		Adjust:             "qfq",
+		CodeVersion:        "v2.0.0",
+		ComputedAt:         time.Now().Format("2006-01-02 15:04:05"),
 		QuantDim:           quantRes,
 		MoneyDim:           moneyRes,
 		TechnicalDim:       techRes,
@@ -301,6 +309,11 @@ func runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP []float64, dates [
 	} else {
 		eval += "，整体表现稳健，跟随趋势交易为宜。"
 	}
+	if totalTrades < 5 {
+		eval += fmt.Sprintf(" — ⚠️ 回测样本过少(仅 %d 次交易)，统计结论仅供参考", totalTrades)
+	}
+
+	trimmedEquity := trimEquityCurvePrefix(res.Equity)
 
 	return QuantDimensionResult{
 		Score:          score,
@@ -311,9 +324,29 @@ func runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP []float64, dates [
 		MaxDrawdownPct: math.Round(maxDrawdownPct*10) / 10,
 		ProfitFactor:   math.Round(profitFactor*100) / 100,
 		TotalTrades:    totalTrades,
-		EquityCurve:    res.Equity,
+		EquityCurve:    trimmedEquity,
 		Evaluation:     eval,
 	}
+}
+
+// trimEquityCurvePrefix 去除回测前期无交易时的平坦合成初始资金前缀
+func trimEquityCurvePrefix(equity []float64) []float64 {
+	if len(equity) <= 2 {
+		return equity
+	}
+	initialVal := equity[0]
+	firstChangeIdx := 0
+	for i := 1; i < len(equity); i++ {
+		if math.Abs(equity[i]-initialVal) > 1e-6 {
+			// 保留变动前的一根作为基准原点
+			firstChangeIdx = i - 1
+			break
+		}
+	}
+	if firstChangeIdx > 0 && firstChangeIdx < len(equity) {
+		return equity[firstChangeIdx:]
+	}
+	return equity
 }
 
 func runQuantDiagnosis(cleanCode string, days int) QuantDimensionResult {
@@ -321,9 +354,9 @@ func runQuantDiagnosis(cleanCode string, days int) QuantDimensionResult {
 	closeP, highP, lowP, openP, volP, dates, err := loader.LoadKLineData(cleanCode, days)
 	if err != nil || len(closeP) < 20 {
 		return QuantDimensionResult{
-			Score:        50,
+			Score:        0,
 			StrategyName: "MA均线趋势跟踪 (5/20)",
-			Evaluation:   "历史K线样本不足或数据异常，采用中性基准评分",
+			Evaluation:   "历史K线样本不足(<20根)或数据源异常，无法进行量化回测",
 		}
 	}
 	return runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP, dates)

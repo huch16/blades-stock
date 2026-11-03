@@ -776,7 +776,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeMount, onBeforeUnmount, nextTick, provide } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeMount, onBeforeUnmount, nextTick, provide, h } from 'vue'
 import {
   NSelect,
   NButton,
@@ -799,7 +799,7 @@ import {
   AddIcon,
   ViewListIcon
 } from 'tdesign-icons-vue-next'
-import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveStockThesis, AbortChatWithAgent, SaveImage } from '../../wailsjs/go/main/App'
+import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveStockThesis, AbortChatWithAgent, SaveImage, GetStockList } from '../../wailsjs/go/main/App'
 import html2canvas from 'html2canvas'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
@@ -898,6 +898,50 @@ const hotStocks = [
   { code: '601318', name: '中国平安' },
   { code: '600900', name: '长江电力' },
 ]
+
+// 全局股票代码字典（从后端加载，包含A股/ETF/指数等）
+// 格式: { '600519': '贵州茅台', '300750': '宁德时代', ... }
+const stockDict = ref<Record<string, string>>({})
+
+// 初始化股票字典（从后端加载全量股票列表）
+async function initStockDict() {
+  try {
+    const list = await GetStockList('')
+    if (list && list.length > 0) {
+      const dict: Record<string, string> = {}
+      for (const item of list) {
+        const code = item.stockCode || item.code || item.ts_code
+        const name = item.name || item.stockName
+        if (code && name) {
+          const cleanCode = code.replace(/\.(SH|SZ|BJ)$/i, '').toUpperCase()
+          if (!stockDict.value[cleanCode]) {
+            stockDict.value[cleanCode] = item.name
+          }
+        }
+      }
+      // 合并 hotStocks 作为兜底
+      for (const stk of hotStocks) {
+        if (!stockDict.value[stk.code]) {
+          stockDict.value[stk.code] = stk.name
+        }
+      }
+      // 挂载到全局，供 extractStockFromAssistantText 使用
+      ;(window as any).__STOCK_DICT__ = stockDict.value
+    }
+  } catch (e) {
+    console.warn('[agent-chat] 股票字典初始化失败:', e)
+    // 兜底：使用 hotStocks
+    for (const stk of hotStocks) {
+      stockDict.value[stk.code] = stk.name
+    }
+    ;(window as any).__STOCK_DICT__ = stockDict.value
+  }
+}
+
+// 组件挂载时初始化股票字典
+onMounted(() => {
+  initStockDict()
+})
 
 // 交互式标的填装弹窗状态（彻底消灭占位符）
 const showStockActionModal = ref(false)
@@ -1038,24 +1082,59 @@ function onStep4StockInputChange(val: string) {
 // 从助手回答中智能抽取选股/推荐标的代码与名称，自动贯通到下游体检与立论
 function extractStockFromAssistantText(text: string) {
   if (!text) return
+  // 全局股票代码字典（从后端加载，包含A股/ETF/指数等）
+  const stockDict: Record<string, string> = (window as any).__STOCK_DICT__ || {}
+
+  // 辅助函数：验证股票名称是否在字典中
+  function validateStockName(code: string, name: string): boolean {
+    if (!name || name.length < 2 || name.length > 20) return false
+    // 过滤明显的非股票名称片段
+    const invalidPatterns = [/^的.*/, /^全天$/, /^最新$/, /^最新$/, /^第.*$/, /^共.*$/, /^前.*$/, /^后.*$/, /^上.*$/, /^下.*$/, /^左.*$/, /^右.*$/, /^中.*$/, /^全.*$/]
+    for (const pattern of invalidPatterns) {
+      if (pattern.test(name)) return false
+    }
+    // 如果字典中有该代码，校验名称是否匹配
+    if (stockDict[code]) {
+      return stockDict[code] === name
+    }
+    // 允许未收录的代码，但要求名称看起来像股票名称（2-10个汉字，无明显非法片段）
+    return /^[\u4e00-\u9fa5]{2,10}$/.test(name)
+  }
+
+  // 辅助函数：设置管线股票（带校验）
+  function validatedSetPipelineStock(code: string, name: string) {
+    if (validateStockName(code, name)) {
+      setPipelineStock(code, name)
+    } else {
+      // 仅设置代码，不设置名称（由 setPipelineStock 回退查找 hotStocks）
+      setPipelineStock(code, '')
+    }
+  }
+
   // 1. 优先匹配 Markdown 表格数据行：| 1 | 002371 | 北方华创 |
   const tableMatch = text.match(/\|\s*\d+\s*\|\s*(\d{6})\s*\|\s*([^\|\r\n]+)\s*\|/)
   if (tableMatch && tableMatch[1]) {
     const code = tableMatch[1].trim()
     const name = tableMatch[2].trim().replace(/\s+/g, '')
-    setPipelineStock(code, name)
+    validatedSetPipelineStock(code, name)
     return
   }
   // 2. 匹配 "北方华创 (002371)"
-  const parenMatch = text.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,8})\s*[(（](\d{6})[)）]/)
+  const parenMatch = text.match(/([\u4e00-\u9fa5A-Za-z0-9]{2,12})\s*[(（](\d{6})[)）]/)
   if (parenMatch && parenMatch[2]) {
-    setPipelineStock(parenMatch[2].trim(), parenMatch[1].trim())
+    validatedSetPipelineStock(parenMatch[2].trim(), parenMatch[1].trim())
     return
   }
   // 3. 匹配 "002371 北方华创"
-  const codeNameMatch = text.match(/(?:\b|\D)(\d{6})(?:\b|\D)\s*([\u4e00-\u9fa5]{2,6})/)
+  const codeNameMatch = text.match(/(?:\b|\D)(\d{6})(?:\b|\D)\s*([\u4e00-\u9fa5]{2,10})/)
   if (codeNameMatch && codeNameMatch[1]) {
-    setPipelineStock(codeNameMatch[1].trim(), codeNameMatch[2].trim())
+    validatedSetPipelineStock(codeNameMatch[1].trim(), codeNameMatch[2].trim())
+    return
+  }
+  // 4. 匹配 "代码: 002371 名称: 北方华创" 等格式
+  const labelMatch = text.match(/(?:代码|股票代码|代码)[:：\s]*(\d{6})[^\u4e00-\u9fa5]*([\u4e00-\u9fa5]{2,10})/)
+  if (labelMatch && labelMatch[1]) {
+    validatedSetPipelineStock(labelMatch[1].trim(), labelMatch[2].trim())
     return
   }
 }
@@ -2082,6 +2161,32 @@ async function handleSaveThesisFromMsg(msg: ChatMessage) {
     notifyWarning('未在分析结果中识别到明确的股票代码或买方论点')
     return
   }
+
+  // P1: AI 自主写账本需二次确认 + 逐字段 diff 预览
+  const confirmed = await new Promise<boolean>((resolve) => {
+    dialog.warning({
+      title: '确认沉淀买方认知账本',
+      content: () =>
+        h('div', { style: 'font-size: 14px; line-height: 1.8;' }, [
+          h('p', null, [h('strong', null, '即将把以下买方认知沉淀至认知账本：')]),
+          h('div', { style: 'margin: 12px 0; padding: 12px; background: rgba(0,0,0,0.04); border-radius: 6px; font-size: 13px;' }, [
+            h('div', null, [h('strong', null, '标的：'), ` ${thesis.name || thesis.code} (${thesis.code})`]),
+            h('div', null, [h('strong', null, '核心定论：'), ` ${thesis.verdictText}`]),
+            h('div', null, [h('strong', null, '核心逻辑：'), ` ${(thesis.coreThesis || '').slice(0, 200)}...`]),
+            h('div', null, [h('strong', null, '关键催化：'), ` ${(thesis.keyCatalysts || '无').slice(0, 100)}...`]),
+            h('div', null, [h('strong', null, '证伪条件：'), ` ${(thesis.riskFactors || '无').slice(0, 100)}...`]),
+            h('div', { style: 'margin-top: 8px; color: #e85d04;' }, [h('strong', null, '⚠️ 写入后将更新标的历史买方认知，请确认无误后再继续。')]),
+          ]),
+        ]),
+      positiveText: '确认写入',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    })
+  })
+
+  if (!confirmed) return
 
   try {
     const activeCfg = aiConfigStore.activeConfig
