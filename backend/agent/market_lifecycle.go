@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
@@ -465,7 +466,10 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 - 给出明确的仓位建议（买入/持有/观望/减仓），并制定防守止损位；
 - 如遇风控拦截（回撤冷却或盈亏比不足），则明确给出观望或等待回调的建议；
 
-【数据注入说明】：隔夜外盘行情、核心关注ETF池最新状态、纯数学动量矩阵（21日加权对数回归）以及隔夜宏观核心要闻已在上方详尽提供，无需额外调用外部工具，请直接基于上述一手真实数据进行深度量化推演与结构化研报生成。
+【数据注入说明与边界铁律】：
+1. 隔夜外盘行情与财经快讯均已在上方详尽提供，无需额外调用外部工具。
+2. 提示：核心 ETF 池的 21 日加权对数动量与硬风控状态机已在上方给出纯数学计算结果，更深入的 ETF 轮动换仓决策由独立的量化模块执行。
+3. 铁律：本盘前晨报仅作为全球宏观联动与客观隔夜事件参考，严禁给出任何具体个股的买入建议或预测当日大盘精准收盘点位！
 全文请使用专业券商内参语气，数据引用请保持客观，避免过度解读。`, todayStr, globalBrief, etfSummary.String(), momentumTable, newsText.String(), crystalPrompt)
 
 	sysPrompt := "你现在是买方宏观与大类资产配置委员会（L1 Macro Allocation Committee）主任委员。所有核心客观数据（隔夜外盘、ETF行情与纯数学动量矩阵、隔夜财经要闻）已在用户输入中详尽提供，无需额外调用外部工具。请直接基于输入数据，按照要求的五维体系输出深度结构化的专业 Markdown 研报。"
@@ -568,8 +572,40 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 			realDataCtx.WriteString(fmt.Sprintf("【目标标的真实盘面】%s(%s): 现价:%s 涨跌幅:%.2f%% 昨收:%s 最高:%s 最低:%s 成交额:%s\n",
 				q.Name, q.Code, q.Price, q.ChangePercent, q.PreClose, q.High, q.Low, q.Amount))
 		}
+		// 注入第一级证据：上市公司真实法定公告 (最高权威)
+		notices := data.NewMarketNewsApi().StockNotice(targetStockCode)
+		if len(notices) > 0 {
+			realDataCtx.WriteString("【第一级证据：上市公司法定公告 (StockNotice 官方披露，最高权威)】\n")
+			count := 0
+			for _, item := range notices {
+				m, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				title, _ := m["title"].(string)
+				date, _ := m["notice_date"].(string)
+				if len(date) > 10 {
+					date = date[:10]
+				}
+				cat := "临时公告"
+				if cols, ok := m["columns"].([]any); ok && len(cols) > 0 {
+					if colMap, ok := cols[0].(map[string]any); ok {
+						if cName, ok := colMap["column_name"].(string); ok {
+							cat = cName
+						}
+					}
+				}
+				realDataCtx.WriteString(fmt.Sprintf("- [%s] %s (%s)\n", date, title, cat))
+				count++
+				if count >= 10 {
+					break
+				}
+			}
+			realDataCtx.WriteString("\n")
+		}
+		// 注入第二级证据：定期报告财务与估值
 		if finMd := stockAPI.GetStockLatestFinanceToMarkdown(targetStockCode); finMd != "" && !strings.HasPrefix(finMd, "获取") {
-			realDataCtx.WriteString("【最新财务指标】\n" + finMd + "\n\n")
+			realDataCtx.WriteString("【第二级证据：定期报告财务指标与研发/现金流】\n" + finMd + "\n\n")
 		}
 		if valMd := stockAPI.GetStockValuationPercentileToMarkdown(targetStockCode); valMd != "" && !strings.HasPrefix(valMd, "获取") {
 			realDataCtx.WriteString("【估值分位参考】\n" + valMd + "\n\n")
@@ -601,7 +637,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 				}
 			}
 			if len(matchedNews) > 0 {
-				realDataCtx.WriteString("【相关产业链要闻脉冲】:\n" + strings.Join(matchedNews, "\n") + "\n\n")
+				realDataCtx.WriteString("【第三级证据：相关产业链要闻脉冲】:\n" + strings.Join(matchedNews, "\n") + "\n\n")
 			}
 		}
 	}
@@ -611,15 +647,40 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 触发动因：%s。
 
 %s
-请严格遵守【Serenity式产业分析框架】（Skill 4）：
-1. 【产业链全景拆解】：梳理%s在产业链中的位置（上中下游与核心参与者）；
-2. 【稀缺层识别】：识别其中技术壁垒最高、国产替代率<30%%或CR5>60%%的绝对稀缺环节；
-3. 【优先级打分】：按稀缺性、可投资性、确定性三维度打分并排序；
-4. 【证据链验证】：列出营收增速、毛利率或重要客户支撑；
-5. 【证伪条件】：列出结论失效的触发条件。
 
-【数据注入说明】：请直接基于上述一手真实数据及专业产业认知进行深度量化推演，无需额外调用外部工具。
-输出结构清晰、带有深度洞见的 Markdown 产业链深度拆解报告。`, todayStr, sectorOrStockName, code, reason, realDataCtx.String(), sectorOrStockName)
+【必须严格遵守的 Serenity 投研铁律 (Skill 4 原作规范)】：
+1. 【产业链全景拆解】：梳理%s在产业链8层（终端需求、系统集成、模块子系统、芯片器件、工艺封测、设备量测、材料耗材、物理基础设施）中的位置及主要玩家；
+2. 【稀缺层识别】：识别其中技术壁垒最高、验证周期长、扩产约束最紧的绝对稀缺环节；
+3. 【严禁综合打分，只输出定性优先级】：
+   - 严禁计算综合得分（严禁出现"综合得分 9.0"、"稀缺性 9.5"等伪量化数学游戏）；
+   - 用文字清晰解释相对差异，仅输出定性优先级：
+     * P0（控制稀缺层，卡住关键瓶颈，公告证据强）
+     * P1（供应稀缺层，核心供应商，逻辑成立）
+     * P2（需求受益但控制力有限，定价权弱）
+     * P3（有故事缺证据，背景参考）
+4. 【证据天梯 (Evidence Ladder) 溯源】：
+   - 区分证据等级：第一级（法定公告与申报）、第二级（定期报告财务）、第三级（行业快讯）；
+   - 引用核心财务与经营数据时必须标明报告期或出处锚点（如 [来源: 2025年报]、[来源: 临时公告]）；
+   - 严禁凭空捏造无事实来源的百分比（如虚构市占率 78.4%%、替代率等）；
+5. 【必须坦承研究缺口 (Research Gaps)】：
+   - 查不到公开披露或缺少公告验证的关键细节（如排他性长协协议、具体大客户采购份额），必须诚实列为【研究缺口 (Research Gaps)】，严禁用臆测填补；
+6. 【严格区分商业化六阶段】：
+   - 必须严格区分：研发中、送样中、产线验证中、量产试制、在手订单、已确认收入；
+7. 【明确证伪条件 (Counterarguments)】：
+   - 详细说明什么具体事实发生时（如关键零部件被替代、毛利率跌破阈值、二供份额超预期），本投资假说失效；
+8. 【结构化 Thesis 输出】：
+   在报告末尾必须输出以下合法 JSON 格式的代码块（用于直通存入买方认知账本）：
+`+"```thesis\n"+`{
+  "stockCode": "%s",
+  "stockName": "%s",
+  "thesis": "一句话核心投资假说与瓶颈卡点定论",
+  "verdict": "BUY / OBSERVE / AVOID",
+  "evidenceChain": "官方公告与定期报告证据摘要",
+  "researchGaps": "未被公告证实的关键缺口",
+  "counterarguments": "何时假说被证伪的触发条件",
+  "trackingChecklist": "后续需跟踪的关键公告或节点"
+}
+`+"```\n\n"+`输出结构严密、文字克制、求真务实的 Markdown 产业链深度拆解报告。`, todayStr, sectorOrStockName, code, reason, realDataCtx.String(), sectorOrStockName, targetStockCode, sectorOrStockName)
 
 	sysPrompt := "你现在是产业中观与产业链稀缺性研究组（L2 Industry & Supply-Chain Bottleneck）资深研究员。请直接根据输入中详实的一手异动与赛道信息，按照 Serenity 式产业研究框架输出深度结构化的 Markdown 产业链拆解研报。"
 	reasoningBuilder := strings.Builder{}
@@ -678,6 +739,65 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	data.NewDeepSeekOpenAi(context.Background(), aiConfigId).SaveAIResponseResult(saveCode, saveName, finalReport, "serenity_"+todayStr+"_"+saveCode, prompt)
 	go ExtractAndSaveRecommendationsFromReport(report)
 
+	// 异步尝试从 Serenity 研报中提炼结构化假说，自动沉淀至买方认知账本 (StockThesisLedger)
+	go func(reportContent, defaultCode, defaultName string) {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Errorf("Serenity auto thesis save recover: %v", r)
+			}
+		}()
+		re := regexp.MustCompile("(?s)```thesis\\s*\\{?\\s*(.*?)\\s*\\}?\\s*```")
+		matches := re.FindStringSubmatch(reportContent)
+		if len(matches) > 1 {
+			rawJson := "{" + strings.TrimSpace(matches[1]) + "}"
+			var parsed struct {
+				StockCode         string `json:"stockCode"`
+				StockName         string `json:"stockName"`
+				Thesis            string `json:"thesis"`
+				Verdict           string `json:"verdict"`
+				EvidenceChain     string `json:"evidenceChain"`
+				ResearchGaps      string `json:"researchGaps"`
+				Counterarguments  string `json:"counterarguments"`
+				TrackingChecklist string `json:"trackingChecklist"`
+			}
+			if err := json.Unmarshal([]byte(rawJson), &parsed); err == nil {
+				c := parsed.StockCode
+				if c == "" {
+					c = defaultCode
+				}
+				n := parsed.StockName
+				if n == "" {
+					n = defaultName
+				}
+				if c != "" && c != "serenity" {
+					v := models.VerdictNoChange
+					vt := "观望"
+					switch strings.ToUpper(strings.TrimSpace(parsed.Verdict)) {
+					case "BUY", "强烈看多", "买入":
+						v = models.VerdictThesisStrengthen
+						vt = "买入/逻辑强化"
+					case "AVOID", "规避", "离场":
+						v = models.VerdictThesisBroken
+						vt = "规避/逻辑证伪"
+					default:
+						v = models.VerdictNewThesis
+						vt = "观望/新建档"
+					}
+					_ = data.NewStockThesisApi().SaveStockThesis(&models.StockThesisLedger{
+						StockCode:    c,
+						StockName:    n,
+						Verdict:      v,
+						VerdictText:  vt,
+						CoreThesis:   parsed.Thesis,
+						KeyCatalysts: fmt.Sprintf("【证据链】%s\n【跟踪项】%s", parsed.EvidenceChain, parsed.TrackingChecklist),
+						RiskFactors:  fmt.Sprintf("【研究缺口】%s\n【证伪条件】%s", parsed.ResearchGaps, parsed.Counterarguments),
+						ModelName:    "Serenity-Skill4",
+					})
+				}
+			}
+		}
+	}(finalReport, targetStockCode, sectorOrStockName)
+
 	cacheReport(report)
 
 	safeRuntimeEventsEmit(s.ctx, "marketIntelligenceReport", report)
@@ -731,12 +851,12 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 
 	// 3. 组装收盘复盘 Prompt
 	prompt := fmt.Sprintf(`你现在是买方投研盘面复盘与量化情绪策略组（L4/L5 Market Sentiment & Post-Market Review）首席分析师。今天是 %s 收盘后。
-请基于今日一手盘面全景数据与量化指标，直接撰写【A股全景收盘复盘与次日推演报告】：
+请基于今日一手盘面全景数据与客观量化统计，直接撰写【A股全景收盘复盘与次日推演报告】：
 
 【全天多空分布与市场情绪】：
 %s
 
-【涨停连板与题材热度概要】：
+【涨停连板与题材热度概要（连板高度梯队与核心标的）】：
 %s
 
 【量化研报跟踪】：
@@ -744,16 +864,18 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 %s
 请按以下结构直接输出结构化 Markdown 报告：
 ### 📊 一、全天行情概览与多空情绪定调
-- 涨跌家数比、多空力量对比与广谱赚钱效应评估。
+- 涨跌家数比、多空力量对比与广谱赚钱效应客观评估；
 
 ### 🚀 二、核心主线与资金筹码博弈
-- 今日连板梯队高度、最强题材热点与领涨龙头持续性推演。
+- 今日连板梯队高度、最强题材热点与领涨龙头持续性推演；
+- 重点指出是否存在"高标断层"、"中位股塌陷"等盘面结构性特征；
 
 ### 🧪 三、量化启示与策略认知
-- 基于今日盘面特征的量化策略启示与认知纠偏。
+- 基于今日盘面特征的量化策略启示与认知纠偏；
 
-### 🔮 四、明日走势推演与操作锦囊
-- 明日开盘剧本推演与持仓风控金句。
+### 🔮 四、明日走势推演与操作观察
+- 明日开盘观察重点（如高标连板晋级率、中位股分歧承接力）；
+- 【铁律】：严禁给出神棍式的概率预测（严禁出现"剧本 A 概率 60%% / 剧本 B 概率 40%%"等无数学根据的臆造数字），所有推演必须以盘面客观事实与确认信号为准；严禁编造未在榜单上的所谓主力席位。
 
 【输出要求】：请直接开始输出 Markdown 研报正文，思考过程简短克制，严禁过度思考，确保正文完整输出。`, todayStr, statSummary.String(), uplimitSummary, btSummary, crystalPrompt)
 

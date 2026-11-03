@@ -145,6 +145,14 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 		overallScore = 0
 	}
 
+	// 5.1 均线空头与弱势压制硬风控门禁 (Trend Risk Gate):
+	// 若技术形态处于空头排列或价格被 MA20 均线死叉压制（距20日线 <= -1.5% 或技术分 < 45）：
+	// 坚决一票否决做多信号！绝不允许在均线空头压制下向用户发出“强烈看多”或“逢低买入”信号，防止逆势接飞刀！
+	isTrendSuppressed := techRes.PriceDistanceMA20 <= -1.5 || techRes.Score < 45 || strings.Contains(techRes.Trend, "空头") || strings.Contains(techRes.Trend, "弱势")
+	if isTrendSuppressed && overallScore >= 50 {
+		overallScore = 50 // 强制压制至中性防守上限 50 分
+	}
+
 	// 6. 确定操作建议与胜率置信度
 	var suggestion string
 	switch {
@@ -153,7 +161,11 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 	case overallScore >= 65:
 		suggestion = "逢低买入 (Buy on Dips)"
 	case overallScore >= 50:
-		suggestion = "震荡观望 (Hold / Neutral)"
+		if isTrendSuppressed {
+			suggestion = "震荡观望 (Hold / Neutral) — ⚠️受均线压制"
+		} else {
+			suggestion = "震荡观望 (Hold / Neutral)"
+		}
 	case overallScore >= 35:
 		suggestion = "逢高减持 (Trim / Sell)"
 	default:
@@ -165,22 +177,29 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 	riskReward := 0.0
 	targetNote := ""
 
-	// 7. 严密量化约束：若综合评分偏空（<50）或评级为减持/规避，坚决不设做多目标价！杜绝一边建议卖出一边显示+18%目标价的荒谬自相矛盾！
-	if overallScore >= 50 {
-		targetGain := math.Max(math.Abs(quantRes.TotalReturnPct/100)*currentPrice, 1.8*atrVal)
+	// 7. 严密量化约束：
+	// 剔除将过去250天历史回测收益率硬套在现价上的反金融工程算法！
+	// 统一采用真实日K线 ATR 波动通道（Upper ATR Volatility Band）测算阻力位。
+	if overallScore >= 50 && !isTrendSuppressed {
+		targetGain := 2.0 * atrVal
 		targetPrice = math.Round((currentPrice+targetGain)*100) / 100
-		stopLoss = math.Round((currentPrice-1.2*atrVal)*100) / 100
+		stopLoss = math.Round((currentPrice-1.5*atrVal)*100) / 100
 		lossDiff := currentPrice - stopLoss
 		gainDiff := targetPrice - currentPrice
 		if lossDiff > 0 {
 			riskReward = math.Round((gainDiff/lossDiff)*100) / 100
 		}
-		targetNote = fmt.Sprintf("基于 ATR(%.2f) 与策略期望收益动态测算第一做多阻力位", atrVal)
+		targetNote = fmt.Sprintf("基于 ATR(%.2f) 波动通道测算上轨阻力位 (现价 + 2.0×ATR: %.2f)，不作预测承诺", atrVal, targetPrice)
+	} else if overallScore >= 50 && isTrendSuppressed {
+		targetPrice = math.Round((currentPrice+1.5*atrVal)*100) / 100
+		stopLoss = math.Round((currentPrice-1.5*atrVal)*100) / 100
+		riskReward = 1.0
+		targetNote = fmt.Sprintf("价格受MA20均线压制，仅测算波动中枢阻力位(%.2f)，以防守观望为主", targetPrice)
 	} else {
 		targetPrice = 0
 		stopLoss = math.Round((currentPrice-1.0*atrVal)*100) / 100
 		riskReward = 0
-		targetNote = "当前量化评级偏空，以风控防守为主，不设做多目标价"
+		targetNote = "当前量化评级偏空，以风控防守为主，不设做多阻力位"
 	}
 
 	confidence := quantRes.WinRatePct
@@ -294,13 +313,19 @@ func runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP []float64, dates [
 		score += 5
 	}
 
+	// 小样本统计显著性惩罚 (Wilson Score 启发式)：
+	// 若交易次数 < 20 次，胜率置信区间过宽，缺乏大样本统计显著性，对得分向基准 50 分做收缩折价
+	if totalTrades < 20 {
+		score = 50 + int(math.Round(float64(score-50)*float64(totalTrades)/20.0))
+	}
+
 	if score > 98 {
 		score = 98
 	} else if score < 15 {
 		score = 15
 	}
 
-	eval := fmt.Sprintf("历史回测胜率 %.1f%%，盈亏比 %.2f，夏普比率 %.2f",
+	eval := fmt.Sprintf("历史回测胜率 %.1f%%，获利因子 %.2f，夏普比率 %.2f",
 		winRatePct, profitFactor, sharpeRatio)
 	if winRatePct >= 60 && sharpeRatio >= 1.0 {
 		eval += "，策略收益风险比优秀，具备明确统计套利优势。"
@@ -309,15 +334,15 @@ func runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP []float64, dates [
 	} else {
 		eval += "，整体表现稳健，跟随趋势交易为宜。"
 	}
-	if totalTrades < 5 {
-		eval += fmt.Sprintf(" — ⚠️ 回测样本过少(仅 %d 次交易)，统计结论仅供参考", totalTrades)
+	if totalTrades < 20 {
+		eval += fmt.Sprintf(" — ⚠️ 回测样本过少(仅 %d 次交易 < 20次)，统计显著性不足，策略得分已做中性折价", totalTrades)
 	}
 
 	trimmedEquity := trimEquityCurvePrefix(res.Equity)
 
 	return QuantDimensionResult{
 		Score:          score,
-		StrategyName:   "MA趋势追踪(5/20) + 动态止损",
+		StrategyName:   "MA趋势跟踪(5/20) · 原生向量化回测",
 		WinRatePct:     math.Round(winRatePct*10) / 10,
 		TotalReturnPct: math.Round(totalReturnPct*10) / 10,
 		SharpeRatio:    math.Round(sharpeRatio*100) / 100,
@@ -528,6 +553,9 @@ func buildDiagnosisSummary(name, code string, score int, suggestion string, q Qu
 
 func buildDiagnosisRisks(currentPrice float64, t TechnicalDimensionResult, m MoneyDimensionResult, q QuantDimensionResult) []string {
 	var risks []string
+	if t.PriceDistanceMA20 <= -1.5 || t.Score < 45 || strings.Contains(t.Trend, "空头") || strings.Contains(t.Trend, "弱势") {
+		risks = append(risks, fmt.Sprintf("均线压制风险：现价运行在MA20下方 (距20日线 %.1f%%)，处于%s，未右侧企稳前严禁逆势盲目抄底", t.PriceDistanceMA20, t.Trend))
+	}
 	if t.PriceDistanceMA20 > 12 {
 		risks = append(risks, fmt.Sprintf("短期乖离率达到 %.1f%%，注意技术指标超买引发的高位剧烈洗盘", t.PriceDistanceMA20))
 	}
@@ -536,6 +564,9 @@ func buildDiagnosisRisks(currentPrice float64, t TechnicalDimensionResult, m Mon
 	}
 	if q.MaxDrawdownPct > 20 {
 		risks = append(risks, fmt.Sprintf("该股历史波动剧烈，量化回测最大回撤达 %.1f%%，务必严格执行设定的止损价", q.MaxDrawdownPct))
+	}
+	if q.TotalTrades < 20 {
+		risks = append(risks, fmt.Sprintf("统计置信度风险：回测样本仅 %d 次交易 (<20次)，策略得分已做折价，不可单独作为投资依据", q.TotalTrades))
 	}
 	if len(risks) == 0 {
 		risks = append(risks, "未检测到显著异常风险，但需保持对大盘整体系统性行情的防范")

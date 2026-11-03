@@ -481,9 +481,15 @@ onBeforeUnmount(() => {
             </NGridItem>
             <NGridItem>
               <NStatistic
-                label="盈亏比"
+                label="前瞻风报比 (RRR)"
                 :value="diagnosisData.riskRewardRatio.toFixed(2)"
-              />
+              >
+                <template #suffix>
+                  <span style="font-size: 10px; color: #888;">
+                    (阻力/止损)
+                  </span>
+                </template>
+              </NStatistic>
             </NGridItem>
           </NGrid>
 
@@ -505,7 +511,7 @@ onBeforeUnmount(() => {
               justify="space-between"
               align="center"
             >
-              <span>📊 量化回测验证 (VectorBT)</span>
+              <span>📊 纯 Go 向量化策略回测</span>
               <span style="font-weight: 700; color: #2080f0;">{{ diagnosisData.quantDim.score }} 分</span>
             </NFlex>
           </template>
@@ -523,7 +529,7 @@ onBeforeUnmount(() => {
           <!-- 净值曲线 (去除合成初始资金平坦前缀) -->
           <div v-if="equitySvgPoints" style="margin: 10px 0 6px 0; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 6px;">
             <div style="font-size: 11px; color: #888; margin-bottom: 4px; display: flex; justify-content: space-between;">
-              <span>📈 策略实际交易净值曲线 (Out-of-Sample)</span>
+              <span>📈 策略实际交易净值曲线 (250根样本内回测)</span>
               <span :style="{ color: equityReturnPct >= 0 ? '#18a058' : '#d03050', fontWeight: 'bold' }">
                 {{ equityReturnPct >= 0 ? '+' : '' }}{{ equityReturnPct }}%
               </span>
@@ -541,7 +547,7 @@ onBeforeUnmount(() => {
           </div>
 
           <NGrid
-            :cols="3"
+            :cols="4"
             :x-gap="6"
             style="margin-bottom: 8px"
           >
@@ -551,6 +557,14 @@ onBeforeUnmount(() => {
               </div>
               <div class="mini-stat-value">
                 {{ diagnosisData.quantDim.winRatePct }}%
+              </div>
+            </NGridItem>
+            <NGridItem>
+              <div class="mini-stat-label">
+                获利因子
+              </div>
+              <div class="mini-stat-value">
+                {{ diagnosisData.quantDim.profitFactor }}
               </div>
             </NGridItem>
             <NGridItem>

@@ -28,9 +28,10 @@ import {
   GetMarketLifecycleStatus,
   GetAiConfigs,
   GetConfig,
-  PurgeCorruptedMarketReports
+  PurgeCorruptedMarketReports,
+  SaveStockThesis
 } from '../../wailsjs/go/main/App'
-import { EventsOn, EventsOff } from '../../wailsjs/runtime'
+import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
 import { sanitizeMarkdownHtml } from '../utils/sanitize'
@@ -180,6 +181,77 @@ const currentTitle = computed(() => {
   const found = navTabs.find(t => t.key === currentTab.value)
   return found ? `${found.icon} ${found.title}` : '智能市场研报'
 })
+
+// 针对 Serenity 研报自动解析结构化买方认知假说 (Thesis)，实现从研报到认知账本的直通沉淀
+const extractedThesis = computed(() => {
+  if (currentTab.value !== 'serenity_industry_analysis') return null
+  const content = displayContent.value
+  if (!content) return null
+  const match = content.match(/```thesis\s*\{?([\s\S]*?)\}?\s*```/)
+  if (!match || !match[1]) return null
+  try {
+    const raw = '{' + match[1].trim() + '}'
+    const parsed = JSON.parse(raw)
+    if (!parsed || (!parsed.thesis && !parsed.stockCode)) return null
+    return {
+      stockCode: parsed.stockCode || serenityCode.value || '',
+      stockName: parsed.stockName || serenityTarget.value || '',
+      thesis: parsed.thesis || '',
+      verdict: parsed.verdict || 'OBSERVE',
+      evidenceChain: parsed.evidenceChain || '',
+      researchGaps: parsed.researchGaps || '',
+      counterarguments: parsed.counterarguments || '',
+      trackingChecklist: parsed.trackingChecklist || ''
+    }
+  } catch (e) {
+    return null
+  }
+})
+
+const isSavingThesis = ref(false)
+async function handleSaveThesisToLedger() {
+  const t = extractedThesis.value
+  if (!t || !t.stockCode) {
+    message.warning('请先输入有效的股票代码或在研报中指定标的')
+    return
+  }
+  isSavingThesis.value = true
+  try {
+    const activeCfg = aiConfigs.value?.find(c => (c.ID || c.id) === selectedAiConfigId.value)
+    const modelName = activeCfg?.modelName || activeCfg?.ModelName || 'Serenity-Skill4'
+    let verdictCode = 'NEW_THESIS'
+    let verdictText = '观望/新建档'
+    const vUpper = (t.verdict || '').toUpperCase()
+    if (vUpper.includes('BUY') || vUpper.includes('买入') || vUpper.includes('多')) {
+      verdictCode = 'THESIS_STRENGTHENED'
+      verdictText = '买入/逻辑强化'
+    } else if (vUpper.includes('AVOID') || vUpper.includes('规避') || vUpper.includes('离场')) {
+      verdictCode = 'THESIS_BROKEN'
+      verdictText = '规避/逻辑证伪'
+    }
+
+    const keyCat = `【证据天梯】${t.evidenceChain}\n【跟踪清单】${t.trackingChecklist}`
+    const riskFac = `【研究缺口】${t.researchGaps}\n【证伪条件】${t.counterarguments}`
+
+    await SaveStockThesis(
+      t.stockCode,
+      t.stockName || t.stockCode,
+      verdictCode,
+      verdictText,
+      t.thesis,
+      keyCat,
+      riskFac,
+      modelName
+    )
+    message.success(`🎉 成功将【${t.stockName || t.stockCode}】买方认知假说沉淀入库！`)
+    EventsEmit('stockThesisUpdated', { stockCode: t.stockCode })
+  } catch (err) {
+    console.error('SaveStockThesis failed:', err)
+    message.error(`沉淀买方认知失败: ${err?.message || err}`)
+  } finally {
+    isSavingThesis.value = false
+  }
+}
 
 const phaseTagType = computed(() => {
   const phase = lifecycle.value?.phase
@@ -815,6 +887,47 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
+      <!-- Serenity 认知账本结构化沉淀卡片 (Embedded) -->
+      <div v-if="extractedThesis && !isReportCorrupted" class="thesis-card">
+        <div class="thesis-header">
+          <div class="thesis-title">
+            <span class="thesis-badge">🧠 Serenity 买方认知沉淀 (认知账本直通)</span>
+            <NTag v-if="extractedThesis.stockCode" type="info" size="small" round>
+              {{ extractedThesis.stockCode }} {{ extractedThesis.stockName }}
+            </NTag>
+            <NTag :type="extractedThesis.verdict?.toUpperCase().includes('BUY') ? 'success' : (extractedThesis.verdict?.toUpperCase().includes('AVOID') ? 'error' : 'warning')" size="small" round>
+              {{ extractedThesis.verdict }}
+            </NTag>
+          </div>
+          <NButton
+            type="primary"
+            size="small"
+            :loading="isSavingThesis"
+            @click="handleSaveThesisToLedger"
+          >
+            📥 确认沉淀至认知账本
+          </NButton>
+        </div>
+        <div class="thesis-body">
+          <div class="thesis-row">
+            <span class="thesis-label">🎯 核心投资假说：</span>
+            <span class="thesis-val">{{ extractedThesis.thesis }}</span>
+          </div>
+          <div v-if="extractedThesis.evidenceChain" class="thesis-row">
+            <span class="thesis-label">📜 客观证据天梯：</span>
+            <span class="thesis-val">{{ extractedThesis.evidenceChain }}</span>
+          </div>
+          <div v-if="extractedThesis.researchGaps" class="thesis-row gap-row">
+            <span class="thesis-label">⚠️ 关键研究缺口 (Research Gaps)：</span>
+            <span class="thesis-val">{{ extractedThesis.researchGaps }}</span>
+          </div>
+          <div v-if="extractedThesis.counterarguments" class="thesis-row risk-row">
+            <span class="thesis-label">🛑 证伪失效条件 (Counterarguments)：</span>
+            <span class="thesis-val">{{ extractedThesis.counterarguments }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- 6. 研报正文展示容器 -->
       <NSpin :show="loading">
         <div v-if="!currentReport || !displayContent" class="empty-report-view">
@@ -1074,6 +1187,47 @@ onBeforeUnmount(() => {
           >
             {{ getActionDesc(act) }}
           </NButton>
+        </div>
+      </div>
+
+      <!-- Serenity 认知账本结构化沉淀卡片 (Modal) -->
+      <div v-if="extractedThesis && !isReportCorrupted" class="thesis-card">
+        <div class="thesis-header">
+          <div class="thesis-title">
+            <span class="thesis-badge">🧠 Serenity 买方认知沉淀 (认知账本直通)</span>
+            <NTag v-if="extractedThesis.stockCode" type="info" size="small" round>
+              {{ extractedThesis.stockCode }} {{ extractedThesis.stockName }}
+            </NTag>
+            <NTag :type="extractedThesis.verdict?.toUpperCase().includes('BUY') ? 'success' : (extractedThesis.verdict?.toUpperCase().includes('AVOID') ? 'error' : 'warning')" size="small" round>
+              {{ extractedThesis.verdict }}
+            </NTag>
+          </div>
+          <NButton
+            type="primary"
+            size="small"
+            :loading="isSavingThesis"
+            @click="handleSaveThesisToLedger"
+          >
+            📥 确认沉淀至认知账本
+          </NButton>
+        </div>
+        <div class="thesis-body">
+          <div class="thesis-row">
+            <span class="thesis-label">🎯 核心投资假说：</span>
+            <span class="thesis-val">{{ extractedThesis.thesis }}</span>
+          </div>
+          <div v-if="extractedThesis.evidenceChain" class="thesis-row">
+            <span class="thesis-label">📜 客观证据天梯：</span>
+            <span class="thesis-val">{{ extractedThesis.evidenceChain }}</span>
+          </div>
+          <div v-if="extractedThesis.researchGaps" class="thesis-row gap-row">
+            <span class="thesis-label">⚠️ 关键研究缺口 (Research Gaps)：</span>
+            <span class="thesis-val">{{ extractedThesis.researchGaps }}</span>
+          </div>
+          <div v-if="extractedThesis.counterarguments" class="thesis-row risk-row">
+            <span class="thesis-label">🛑 证伪失效条件 (Counterarguments)：</span>
+            <span class="thesis-val">{{ extractedThesis.counterarguments }}</span>
+          </div>
         </div>
       </div>
 
@@ -1428,6 +1582,108 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* Serenity 买方认知沉淀卡片 - 结构化账本直通 */
+.thesis-card {
+  padding: 12px 16px;
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-left: 4px solid #10b981;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.thesis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.thesis-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.thesis-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #059669;
+}
+
+.thesis-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.thesis-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.thesis-label {
+  font-weight: 600;
+  color: var(--n-text-color, #475569);
+  flex-shrink: 0;
+}
+
+.thesis-val {
+  color: var(--n-text-color, #1e293b);
+  word-break: break-word;
+}
+
+.gap-row .thesis-label {
+  color: #d97706;
+}
+
+.gap-row .thesis-val {
+  color: #b45309;
+}
+
+.risk-row .thesis-label {
+  color: #dc2626;
+}
+
+.risk-row .thesis-val {
+  color: #b91c1c;
+}
+
+.is-dark .thesis-card {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.is-dark .thesis-badge {
+  color: #34d399;
+}
+
+.is-dark .thesis-label {
+  color: #cbd5e1;
+}
+
+.is-dark .thesis-val {
+  color: #f1f5f9;
+}
+
+.is-dark .gap-row .thesis-label,
+.is-dark .gap-row .thesis-val {
+  color: #fbbf24;
+}
+
+.is-dark .risk-row .thesis-label,
+.is-dark .risk-row .thesis-val {
+  color: #f87171;
 }
 
 /* Markdown 预览区 - 精美舒适投研排版，杜绝字体过大刺眼 */
