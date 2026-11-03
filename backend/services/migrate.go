@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 
@@ -599,6 +600,18 @@ func RepairAndCleanStockTheses() {
 			if err := db.Dao.Where("symbol = ? OR ts_code LIKE ?", pure, bt.StockCode+"%").First(&sb).Error; err == nil && sb.Name != "" {
 				_ = db.Dao.Model(&models.StockThesisLedger{}).Where("id = ?", bt.ID).Update("stock_name", sb.Name).Error
 				_ = db.Dao.Model(&models.StockVerdictHistory{}).Where("stock_code = ?", bt.StockCode).Update("stock_name", sb.Name).Error
+			} else {
+				resolvedName := ""
+				var ib data.IndexBasic
+				if err := db.Dao.Where("ts_code LIKE ?", bt.StockCode+"%").First(&ib).Error; err == nil && ib.Name != "" {
+					resolvedName = ib.Name
+				} else if bt.StockCode == "801159" {
+					resolvedName = "申万行业指数"
+				} else {
+					resolvedName = fmt.Sprintf("标的 %s", bt.StockCode)
+				}
+				_ = db.Dao.Model(&models.StockThesisLedger{}).Where("id = ?", bt.ID).Update("stock_name", resolvedName).Error
+				_ = db.Dao.Model(&models.StockVerdictHistory{}).Where("stock_code = ?", bt.StockCode).Update("stock_name", resolvedName).Error
 			}
 		}
 	}
