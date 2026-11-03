@@ -311,11 +311,14 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
     const contentType = response.headers.get('content-type') || ''
     if (contentType.includes('application/json')) {
       const json = await response.json()
-      if (json && typeof json === 'object' && 'code' in json && 'data' in json) {
-        if (json.code !== 0) {
-          throw new Error(json.error || json.message || '请求失败')
+      if (json && typeof json === 'object') {
+        if ('code' in json && json.code !== 0) {
+          throw new Error(json.error || json.message || `请求失败 (code: ${json.code})`)
         }
-        return json.data
+        if ('data' in json) {
+          return json.data
+        }
+        return json
       }
       return json
     } else {
