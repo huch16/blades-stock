@@ -582,7 +582,7 @@ func SeedDefaultFollowedStocksIfEmpty() {
 	logger.SugaredLogger.Infof("[Database] 成功校验并常驻播种 %d 只机构级核心基准自选资产 (沪深300ETF/贵州茅台/宁德时代/比亚迪/半导体ETF)", len(benchmarkStocks))
 }
 
-// RepairAndCleanStockTheses 清理测试空壳与破损认知账本数据，自动校准残缺股票名称
+// RepairAndCleanStockTheses 清理测试空壳与破损认知账本数据，自动校准残缺股票名称与创建时间抹零问题
 func RepairAndCleanStockTheses() {
 	if db.Dao == nil {
 		return
@@ -591,9 +591,38 @@ func RepairAndCleanStockTheses() {
 	_ = db.Dao.Where("stock_code = 'x' OR length(stock_code) < 4").Delete(&models.StockThesisLedger{}).Error
 	_ = db.Dao.Where("stock_code = 'x' OR length(stock_code) < 4").Delete(&models.StockVerdictHistory{}).Error
 
-	// 2. 扫描并自动修正股票名称被误抽为“的最新”、“全天”等残损片段的历史记录
+	// 2. 修复 CreatedAt 抹零 Bug：将历史遗留为 0001-01-01 的记录自动用 UpdatedAt 或当前时间补齐
+	_ = db.Dao.Exec("UPDATE stock_thesis_ledger SET created_at = updated_at WHERE created_at < '2000-01-01'")
+	_ = db.Dao.Exec("UPDATE stock_verdict_history SET created_at = CURRENT_TIMESTAMP WHERE created_at < '2000-01-01'")
+
+	// 3. 认知账本标的代码标准化与重复项物理合并（解决 000100 与 sz000100、600671 与 sh600671 重复建档的巴别塔灾难）
+	var allTheses []models.StockThesisLedger
+	if err := db.Dao.Find(&allTheses).Error; err == nil {
+		codeMap := make(map[string]models.StockThesisLedger)
+		for _, t := range allTheses {
+			codeMap[t.StockCode] = t
+		}
+		for _, t := range allTheses {
+			canonical := data.FormatMarketStockCode(t.StockCode)
+			if canonical != t.StockCode {
+				// 若当前记录是不带前缀的代码 (如 000100)，检查表中是否有带前缀规范记录 (如 sz000100)
+				if _, exists := codeMap[canonical]; exists {
+					// 已存在规范记录，物理删除无前缀的冗余行
+					_ = db.Dao.Delete(&t).Error
+					continue
+				} else {
+					// 不存在规范记录，原地规范化更名
+					_ = db.Dao.Model(&models.StockThesisLedger{}).Where("id = ?", t.ID).Update("stock_code", canonical).Error
+					codeMap[canonical] = t
+					t.StockCode = canonical
+				}
+			}
+		}
+	}
+
+	// 4. 扫描并自动修正股票名称为空或被误抽为“的最新”、“全天”等残损片段的历史记录
 	var brokenTheses []models.StockThesisLedger
-	if err := db.Dao.Where("stock_name IN ('的最新', '全天') OR stock_name LIKE '%最新%' OR stock_name LIKE '%全天%'").Find(&brokenTheses).Error; err == nil {
+	if err := db.Dao.Where("stock_name IN ('的最新', '全天', '') OR stock_name LIKE '%最新%' OR stock_name LIKE '%全天%'").Find(&brokenTheses).Error; err == nil {
 		for _, bt := range brokenTheses {
 			pure := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(bt.StockCode), "sh"), "sz")
 			var sb data.StockBasic
@@ -607,6 +636,10 @@ func RepairAndCleanStockTheses() {
 					resolvedName = ib.Name
 				} else if bt.StockCode == "801159" {
 					resolvedName = "申万行业指数"
+				} else if bt.StockCode == "510300" || bt.StockCode == "sh510300" {
+					resolvedName = "沪深300ETF"
+				} else if bt.StockCode == "589020" || bt.StockCode == "sh589020" {
+					resolvedName = "科创板ETF"
 				} else {
 					resolvedName = fmt.Sprintf("标的 %s", bt.StockCode)
 				}
@@ -615,5 +648,9 @@ func RepairAndCleanStockTheses() {
 			}
 		}
 	}
-	logger.SugaredLogger.Info("[Database] 成功执行买方认知账本与历史轨迹数据洗洁自愈")
+
+	// 5. 修复历史遗留的审计日志逻辑反转条目 (Success: false, ErrorMsg: 'success')
+	_ = db.Dao.Exec("UPDATE audit_logs SET success = 1, error_msg = '' WHERE tool_name = 'LLM_RUN' AND error_msg = 'success'")
+
+	logger.SugaredLogger.Info("[Database] 成功执行买方认知账本与历史轨迹数据洗洁自愈（代码去重、股票名补齐、创建时间与审计日志自愈）")
 }
