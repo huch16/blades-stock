@@ -1221,7 +1221,7 @@ setTimeout(() => {
     loadingMsg.value = "加载完成..."
     EventsEmit("loadingDone", "app")
   }
-}, 8000)
+}, isWails() ? 8000 : 300)
 
 onBeforeUnmount(() => {
   if (marketStatusTimer) {
