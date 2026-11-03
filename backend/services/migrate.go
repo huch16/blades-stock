@@ -500,52 +500,52 @@ func SeedDefaultFollowedStocksIfEmpty() {
 		Where("stock_code IN ('sh600671', 'sz300396') OR name LIKE '%ST%'").
 		Update("is_del", 1).Error
 
-	// 2. 检查当前活跃自选股数量，若为空则播种机构级优质基准核心资产
-	var activeCount int64
-	db.Dao.Model(&data.FollowedStock{}).Where("is_del = 0").Count(&activeCount)
-	if activeCount == 0 {
-		benchmarkStocks := []data.FollowedStock{
-			{
-				StockCode: "sh510300",
-				Name:      "沪深300ETF",
-				Sort:      1,
-				IsDel:     0,
-			},
-			{
-				StockCode: "sh600519",
-				Name:      "贵州茅台",
-				Sort:      2,
-				IsDel:     0,
-			},
-			{
-				StockCode: "sz300750",
-				Name:      "宁德时代",
-				Sort:      3,
-				IsDel:     0,
-			},
-			{
-				StockCode: "sz002594",
-				Name:      "比亚迪",
-				Sort:      4,
-				IsDel:     0,
-			},
-			{
-				StockCode: "sh512480",
-				Name:      "半导体ETF",
-				Sort:      5,
-				IsDel:     0,
-			},
-		}
+	// 2. 确保机构级优质核心基准资产（沪深300ETF、贵州茅台、宁德时代等）始终常驻自选池
+	benchmarkStocks := []data.FollowedStock{
+		{
+			StockCode: "sh510300",
+			Name:      "沪深300ETF",
+			Sort:      1,
+			IsDel:     0,
+		},
+		{
+			StockCode: "sh600519",
+			Name:      "贵州茅台",
+			Sort:      2,
+			IsDel:     0,
+		},
+		{
+			StockCode: "sz300750",
+			Name:      "宁德时代",
+			Sort:      3,
+			IsDel:     0,
+		},
+		{
+			StockCode: "sz002594",
+			Name:      "比亚迪",
+			Sort:      4,
+			IsDel:     0,
+		},
+		{
+			StockCode: "sh512480",
+			Name:      "半导体ETF",
+			Sort:      5,
+			IsDel:     0,
+		},
+	}
 
-		for _, s := range benchmarkStocks {
-			var exists int64
-			db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ?", s.StockCode).Count(&exists)
-			if exists == 0 {
+	for _, s := range benchmarkStocks {
+		var exists int64
+		db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ? AND is_del = 0", s.StockCode).Count(&exists)
+		if exists == 0 {
+			var total int64
+			db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ?", s.StockCode).Count(&total)
+			if total == 0 {
 				_ = db.Dao.Create(&s).Error
 			} else {
 				_ = db.Dao.Model(&data.FollowedStock{}).Where("stock_code = ?", s.StockCode).Update("is_del", 0).Error
 			}
 		}
-		logger.SugaredLogger.Infof("[Database] 成功播种 %d 只机构级核心基准自选资产 (沪深300ETF/贵州茅台/宁德时代/比亚迪/半导体ETF)", len(benchmarkStocks))
 	}
+	logger.SugaredLogger.Infof("[Database] 成功校验并常驻播种 %d 只机构级核心基准自选资产 (沪深300ETF/贵州茅台/宁德时代/比亚迪/半导体ETF)", len(benchmarkStocks))
 }
