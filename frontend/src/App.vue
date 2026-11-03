@@ -881,29 +881,6 @@ const menuOptions = ref([
                     to: {
                       name: 'research',
                       query: {
-                        name:"股票推荐记录",
-                      },
-                    },
-                    onClick: () => {
-                      activeKey.value = 'research'
-                      setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 1, name: '股票推荐记录'})
-                      }, 100)
-                    },
-                  },
-                  {default: () => '股票推荐记录'}
-              ),
-          key: 'research2',
-          icon: renderIcon(Star),
-        },
-        {
-          label: () =>
-              h(
-                  RouterLink,
-                  {
-                    to: {
-                      name: 'research',
-                      query: {
                         name:"异动监控",
                       },
                     },
@@ -1033,47 +1010,6 @@ const menuOptions = ref([
               ),
           key: 'research6',
           icon: renderIcon(MoneyCollectOutlined),
-        },
-        {
-          label: () =>
-              h(
-                  RouterLink,
-                  {
-                    to: {
-                      name: 'research',
-                    },
-                    onClick: () => {
-                      activeKey.value = 'research'
-                      setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 7, name: 'MCP服务'})
-                      }, 100)
-                    },
-                  },
-                  {default: () => 'MCP服务'}
-              ),
-          key: 'mcpServers',
-          icon: renderIcon(ServerOutline),
-        },
-        {
-          label: () =>
-              h(
-                  RouterLink,
-                  {
-                    to: {
-                      name: 'research',
-                    },
-                    onClick: () => {
-                      activeKey.value = 'research'
-                      setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 8, name: '技能管理'})
-                      }, 100)
-                    },
-                  },
-                  {default: () => '技能管理'}
-              ),
-          key: 'skills',
-          icon: renderIcon(FlashOutline),
-          show: true,
         },
       ],
     },

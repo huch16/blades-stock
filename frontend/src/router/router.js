@@ -10,7 +10,6 @@ const marketIntelligenceView = () => import("../components/MarketIntelligenceVie
 const agentChat = () => import("../components/agent-chat.vue")
 const research = () => import("../components/researchIndex.vue")
 const cronTaskManager = () => import("../components/cron-task-manager.vue")
-const mcpServerManager = () => import("../components/mcp-server-manager.vue")
 const klineAnalysis = () => import("../components/kline-analysis.vue")
 const vectorBTPanel = () => import("../components/VectorBTPanel.vue")
 const auditView = () => import('../views/admin/Audit.vue')
@@ -24,7 +23,6 @@ const routes = [
     { path: '/agent', component: agentChat, name: 'agent' },
     { path: '/research', component: research, name: 'research' },
     { path: '/cron-tasks', component: cronTaskManager, name: 'cronTasks' },
-    { path: '/mcp-servers', component: mcpServerManager, name: 'mcpServers' },
     { path: '/kline-analysis', component: klineAnalysis, name: 'klineAnalysis' },
     { path: '/vectorbt', component: vectorBTPanel, name: 'vectorbt' },
     { path: '/audit', component: auditView, name: 'audit' },

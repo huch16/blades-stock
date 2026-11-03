@@ -146,28 +146,29 @@ func main() {
 		}
 	}()
 
-	// 5.2 启动云端 AI 语义向量精炼与存储自愈守护协程 (解决云端长期运行数据爆炸、保持 Agent 持续进化)
+	// 5.2 启动静默后台定时灾备守护协程 (灾备中心降为后端静默定时任务：每日自动执行无锁快照与自动生命周期修剪)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.SugaredLogger.Warnf("[SemanticDistillerCron] recovered from panic: %v", r)
+				logger.SugaredLogger.Warnf("[SilentBackupCron] recovered from panic: %v", r)
 			}
 		}()
 
-		// 启动后延迟 30 秒执行首次轻量精炼，清除前序残留冗余
-		time.Sleep(30 * time.Second)
-		logger.SugaredLogger.Info("[SemanticDistillerCron] 启动初次后台语义精炼与知识结晶...")
-		_, _ = agent.DefaultSemanticDistiller().RunMaintenanceCycle(context.Background())
+		// 启动后延迟 60 秒执行首次基准检查与生命周期修剪
+		time.Sleep(60 * time.Second)
+		bm := data.NewBackupManager()
+		bm.EnsureBaselineBackupIfEmpty()
+		_, _ = bm.PruneOldBackups(7, 5, 14)
 
-		// 每 6 小时自动执行一次完整的语义去重、回测结晶、记忆折叠与 SQLite 物理瘦身
-		distillTicker := time.NewTicker(6 * time.Hour)
-		defer distillTicker.Stop()
-		for range distillTicker.C {
-			logger.SugaredLogger.Info("[SemanticDistillerCron] 执行定时周期性语义精炼与存储自愈循环...")
-			_, err := agent.DefaultSemanticDistiller().RunMaintenanceCycle(context.Background())
-			if err != nil {
-				logger.SugaredLogger.Warnf("[SemanticDistillerCron] 语义精炼循环提示: %v", err)
+		// 每 24 小时静默自动执行一次数据库原子快照与修剪
+		backupTicker := time.NewTicker(24 * time.Hour)
+		defer backupTicker.Stop()
+		for range backupTicker.C {
+			logger.SugaredLogger.Info("[SilentBackupCron] 执行每日后台静默数据库快照与数据资产保护...")
+			if _, err := bm.CreateDatabaseSnapshot(); err != nil {
+				logger.SugaredLogger.Warnf("[SilentBackupCron] 创建静默快照告警: %v", err)
 			}
+			_, _ = bm.PruneOldBackups(7, 5, 14)
 		}
 	}()
 

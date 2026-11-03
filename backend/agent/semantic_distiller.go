@@ -250,25 +250,12 @@ func (d *SemanticDistiller) DistillMarketNews(ctx context.Context, ageHours int)
 		}
 	}
 
-	// 批量删除冗余快讯
+	// 严禁物理硬删除任何快讯新闻（杜绝删新闻负优化），仅保留只读聚类统计
 	if len(toDeleteIDs) > 0 {
-		// 分批删除以防 SQLite 参数超限
-		batchSize := 200
-		for k := 0; k < len(toDeleteIDs); k += batchSize {
-			end := k + batchSize
-			if end > len(toDeleteIDs) {
-				end = len(toDeleteIDs)
-			}
-			db.Dao.Where("id IN ?", toDeleteIDs[k:end]).Delete(&models.Telegraph{})
-		}
-		logger.SugaredLogger.Infof("[SemanticDistiller] 清理重复快讯: 聚类簇=%d, 剔除冗余条数=%d", clusterCount, len(toDeleteIDs))
+		logger.SugaredLogger.Infof("[SemanticDistiller] 识别到同一主题快讯聚类簇=%d (关联条数=%d)，保持数据库原始客观快讯完整性，不作物理剔除", clusterCount, len(toDeleteIDs))
 	}
 
-	// 自动清理 30 天前的陈旧过期快讯（仅保留最近 30 天）
-	ancientCutoff := time.Now().AddDate(0, 0, -30)
-	db.Dao.Where("created_at < ?", ancientCutoff).Delete(&models.Telegraph{})
-
-	return len(toDeleteIDs), clusterCount, nil
+	return 0, clusterCount, nil
 }
 
 // ============================================================================

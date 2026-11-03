@@ -3,13 +3,10 @@ import {computed, h, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref,
 import {GetAIResponseResultList} from "../../wailsjs/go/main/App";
 import {NButton, NEllipsis, NText} from "naive-ui";
 import ResearchReport from "./researchReport.vue";
-import AiRecommendStocksList from "./aiRecommendStocksList.vue";
 import AllStockList from "./allStockList.vue";
 import CronTaskManager from "./cron-task-manager.vue";
 import TradingRecordManager from "./TradingRecordManager.vue";
 import StockChangesMonitor from "./stockChangesMonitor.vue";
-import MCPServiceManager from "./mcp-server-manager.vue";
-import SkillManager from "./skill-manager.vue";
 import UplimitLadder from "./uplimitLadder.vue";
 import SelectStock from "./SelectStock.vue";
 import {EventsOff, EventsOn} from "../../wailsjs/runtime";
@@ -50,9 +47,6 @@ function updateTab(name) {
       <n-tab-pane name="AI分析报告">
         <ResearchReport />
       </n-tab-pane>
-      <n-tab-pane name="股票推荐记录">
-        <AiRecommendStocksList />
-      </n-tab-pane>
       <n-tab-pane name="异动监控">
         <StockChangesMonitor />
       </n-tab-pane>
@@ -70,12 +64,6 @@ function updateTab(name) {
       </n-tab-pane>
       <n-tab-pane name="交易日志">
         <TradingRecordManager />
-      </n-tab-pane>
-      <n-tab-pane name="MCP服务">
-        <MCPServiceManager />
-      </n-tab-pane>
-      <n-tab-pane name="技能管理">
-        <SkillManager />
       </n-tab-pane>
     </n-tabs>
   </n-card>

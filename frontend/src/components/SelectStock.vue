@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {h, onBeforeMount, onMounted, onUnmounted, ref, reactive, computed} from 'vue'
-import {SearchStock, GetHotStrategy, OpenURL, Follow, GetFollowList, GetAllCustomStrategies, SaveCustomStrategy, DeleteCustomStrategy, GetConfig, GetGroupList, AddStockGroup, AddGroup} from "../../wailsjs/go/main/App";
+import {SearchStock, OpenURL, Follow, GetFollowList, GetAllCustomStrategies, SaveCustomStrategy, DeleteCustomStrategy, GetConfig, GetGroupList, AddStockGroup, AddGroup} from "../../wailsjs/go/main/App";
 import {useMessage, NText, NTag, NButton, NPopconfirm, NDropdown, NIcon} from 'naive-ui'
 import {Environment, EventsEmit} from "../../wailsjs/runtime"
 import {BookmarkOutline, TrashOutline, CreateOutline, AddOutline, FolderOpenOutline} from "@vicons/ionicons5";
@@ -12,11 +12,15 @@ const message = useMessage()
 const search = ref('')
 const columns = ref([])
 const dataList = ref([])
-const hotStrategy = ref([])
 const customStrategies = ref([])
+const defaultPresets = [
+  { id: -1, name: '放量突破20日均线', description: '突破短期均线压制', query: '放量突破20日均线' },
+  { id: -2, name: 'MACD金叉且站上MA60', description: '中线趋势右侧确立', query: 'MACD金叉且站上60日均线' },
+  { id: -3, name: '低位连续放量阳线', description: '底部资金温和建仓', query: '低位连续3天放量阳线' },
+  { id: -4, name: '行业龙头且ROE>15%', description: '高质量基本面护城河', query: '行业龙头且ROE大于15%' },
+]
 const traceInfo = ref('')
 const tableScrollX = ref(2800)
-const leftTab = ref('hot')
 const showSaveModal = ref(false)
 const darkTheme = ref(false)
 const klineModalShow = ref(false)
@@ -392,15 +396,8 @@ onBeforeMount(() => {
   GetConfig().then(result => {
     if (result.darkTheme) darkTheme.value = true
   })
-  GetHotStrategy().then(res => {
-    if (res.code == 1) {
-      hotStrategy.value = res.data
-      search.value = hotStrategy.value[0].question
-      Search()
-    }
-  }).catch(err => {
-    message.error(err)
-  })
+  search.value = '放量突破20日均线'
+  Search()
   loadCustomStrategies()
   loadGroupList()
 })
@@ -502,34 +499,19 @@ function openCenteredWindow(url, width, height) {
 <template>
   <n-grid :cols="24" :y-gap="isMobile ? 8 : 0" style="max-height: calc(100vh - 165px)">
     <n-gi :span="isMobile ? 24 : 4">
-      <n-tabs v-model:value="leftTab" type="segment" size="small" style="margin-bottom: 4px;">
-        <n-tab name="hot">热门策略</n-tab>
-        <n-tab name="custom">我的策略</n-tab>
-      </n-tabs>
-
-      <div v-show="leftTab==='hot'">
-        <n-scrollbar :style="{ maxHeight: isMobile ? '120px' : 'calc(100vh - 210px)' }">
-          <n-list bordered style="text-align: left;" hoverable clickable>
-            <n-list-item v-for="item in hotStrategy" :key="item.rank" @click="DoSearch(item.question)">
-              <n-ellipsis line-clamp="1" :tooltip="true">
-                <n-tag size="small" :bordered="false" type="info">#{{ item.rank }}</n-tag>
-                <n-text type="warning">{{ item.question }}</n-text>
-                <template #tooltip>
-                  <div style="text-align: center;max-width: 180px">
-                    <n-text type="warning">{{ item.question }}</n-text>
-                  </div>
-                </template>
-              </n-ellipsis>
-            </n-list-item>
-          </n-list>
-        </n-scrollbar>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 2px 4px;">
+        <span style="font-weight: 600; font-size: 13px;">📌 选股策略库</span>
+        <n-button text type="primary" size="tiny" @click="openSaveModal(false)">
+          <template #icon><n-icon :component="AddOutline"/></template>
+          新建
+        </n-button>
       </div>
 
-      <div v-show="leftTab==='custom'">
-        <n-scrollbar :style="{ maxHeight: isMobile ? '120px' : 'calc(100vh - 250px)' }">
-          <n-list bordered hoverable clickable v-if="customStrategies.length > 0">
-            <n-list-item v-for="item in customStrategies" :key="item.id">
-              <template #suffix>
+      <div>
+        <n-scrollbar :style="{ maxHeight: isMobile ? '140px' : 'calc(100vh - 220px)' }">
+          <n-list bordered hoverable clickable>
+            <n-list-item v-for="item in (customStrategies.length ? customStrategies : defaultPresets)" :key="item.id">
+              <template #suffix v-if="item.id > 0">
                 <n-flex :size="2" align="center">
                   <n-button text type="info" size="small" @click.stop="openSaveModal(true, item)">
                     <template #icon><n-icon :component="CreateOutline"/></template>
@@ -546,7 +528,7 @@ function openCenteredWindow(url, width, height) {
               </template>
               <div @click="DoSearch(item.query)" style="cursor: pointer;">
                 <n-ellipsis line-clamp="1" :tooltip="true">
-                  <n-tag size="small" :bordered="false" type="success">
+                  <n-tag size="small" :bordered="false" :type="item.id > 0 ? 'success' : 'info'">
                     <template #icon><n-icon :component="BookmarkOutline" size="12"/></template>
                   </n-tag>
                   <n-text strong>{{ item.name }}</n-text>
@@ -564,12 +546,7 @@ function openCenteredWindow(url, width, height) {
               </div>
             </n-list-item>
           </n-list>
-          <n-empty v-else description="暂无自定义策略" :style="{ marginTop: isMobile ? '10px' : '40px' }"/>
         </n-scrollbar>
-        <n-button block dashed type="primary" size="small" @click="openSaveModal(false)" style="margin-top: 4px;">
-          <template #icon><n-icon :component="AddOutline"/></template>
-          添加策略
-        </n-button>
       </div>
     </n-gi>
     <n-gi :span="isMobile ? 24 : 20">

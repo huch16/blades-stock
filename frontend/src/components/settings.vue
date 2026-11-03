@@ -46,7 +46,7 @@ const aiConfigStore = useAiConfigStore();
 // ========================
 // 导航与环境状态
 // ========================
-const activeTab = ref<'system' | 'market' | 'ai' | 'notify' | 'backup'>('system');
+const activeTab = ref<'system' | 'market' | 'ai' | 'notify'>('system');
 const isWebMode = ref(!isWails());
 const currentAuthToken = ref(getAuthToken());
 const pingLatency = ref<number | null>(null);
@@ -64,8 +64,7 @@ const tabNameMap: Record<string, string> = {
   system: '基础与运行环境',
   market: '行情与量化数据源',
   ai: 'AI模型与智能体矩阵',
-  notify: '预警与消息推送',
-  backup: '数据资产与灾备中心'
+  notify: '预警与消息推送'
 };
 const activeTabTitle = computed(() => tabNameMap[activeTab.value] || '设置控制中枢');
 
@@ -1265,8 +1264,6 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeydown);
   await loadConfig();
   await checkServerPing();
-  await fetchBackupCenterData();
-  await fetchDistillStats();
 });
 
 onBeforeUnmount(() => {
@@ -1436,6 +1433,17 @@ onBeforeUnmount(() => {
                   />
                 </n-form-item-gi>
               </n-grid>
+            </n-card>
+
+            <!-- 中间数据与系统缓存深度清理 -->
+            <n-card title="中间数据与系统缓存清理" size="small" class="settings-card">
+              <p class="section-desc">清理调试日志、历史截图、无头浏览器临时数据等，释放本地磁盘存储占用。</p>
+              <n-space wrap size="small" style="margin-top: 10px;">
+                <n-button size="tiny" type="warning" secondary @click="cleanup('logs')">清理日志</n-button>
+                <n-button size="tiny" type="warning" secondary @click="cleanup('test_images')">清理测试图</n-button>
+                <n-button size="tiny" type="warning" secondary @click="cleanup('browser_temp')">清理浏览器缓存</n-button>
+                <n-button size="tiny" type="error" secondary @click="cleanup('all')">一键全量清理</n-button>
+              </n-space>
             </n-card>
           </div>
         </n-tab-pane>
@@ -1927,176 +1935,6 @@ onBeforeUnmount(() => {
                 </n-form-item-gi>
               </n-grid>
             </n-card>
-          </div>
-        </n-tab-pane>
-
-        <!-- ------------------------------------------------ -->
-        <!-- Tab 5: 数据资产与灾备中心 (Data Assets & Recovery) -->
-        <!-- ------------------------------------------------ -->
-        <n-tab-pane name="backup" tab="🛡️ 数据资产与灾备中心">
-          <div class="tab-pane-content">
-            <!-- 核心数据资产统计驾驶舱 -->
-            <n-card size="small" class="settings-card highlight-card">
-              <template #header>
-                <div class="card-header-flex">
-                  <span class="card-title">📊 平台核心数据资产全景总览</span>
-                  <n-button size="tiny" quaternary type="primary" :loading="loadingBackupCenter" @click="fetchBackupCenterData">
-                    刷新资产看板
-                  </n-button>
-                </div>
-              </template>
-              <n-grid :cols="7" :x-gap="12" class="asset-stat-grid">
-                <n-gi>
-                  <n-card size="small" embedded :bordered="false" class="stat-mini-card">
-                    <n-statistic label="AI 大模型配置" :value="backupOverview?.aiConfigCount ?? '-'">
-                      <template #suffix>项</template>
-                    </n-statistic>
-                  </n-card>
-                </n-gi>
-                <n-gi>
-                  <n-card size="small" embedded :bordered="false" class="stat-mini-card">
-                    <n-statistic label="提示词与技能" :value="backupOverview?.skillCount ?? '-'">
-                      <template #suffix>个</template>
-                    </n-statistic>
-                  </n-card>
-                </n-gi>
-                <n-gi>
-                  <n-card size="small" embedded :bordered="false" class="stat-mini-card">
-                    <n-statistic label="AI 对话会话" :value="backupOverview?.sessionCount ?? '-'">
-                      <template #suffix>条</template>
-                    </n-statistic>
-                  </n-card>
-                </n-gi>
-                <n-gi>
-                  <n-card size="small" embedded :bordered="false" class="stat-mini-card">
-                    <n-statistic label="长期记忆与结晶" :value="backupOverview?.memoryCount ?? '-'">
-                      <template #suffix>条</template>
-                    </n-statistic>
-                  </n-card>
-                </n-gi>
-                <n-gi>
-                  <n-card size="small" embedded :bordered="false" class="stat-mini-card">
-                    <n-statistic label="深度分析研报" :value="backupOverview?.reportCount ?? '-'">
-                      <template #suffix>篇</template>
-                    </n-statistic>
-                  </n-card>
-                </n-gi>
-                <n-gi>
-                  <n-card size="small" embedded :bordered="false" class="stat-mini-card">
-                    <n-statistic label="自选股票池" :value="backupOverview?.followedStockCount ?? '-'">
-                      <template #suffix>只</template>
-                    </n-statistic>
-                  </n-card>
-                </n-gi>
-                <n-gi>
-                  <n-card size="small" embedded :bordered="false" class="stat-mini-card">
-                    <n-statistic label="量化回测记录" :value="backupOverview?.backtestCount ?? '-'">
-                      <template #suffix>次</template>
-                    </n-statistic>
-                  </n-card>
-                </n-gi>
-              </n-grid>
-            </n-card>
-
-            <!-- 一键灾备与快照创建操作条 -->
-            <n-card size="small" class="settings-card">
-              <div class="backup-action-bar">
-                <div class="action-buttons-group">
-                  <n-button type="primary" strong @click="handleCreateIntelligentBackup">
-                    📦 生成全量智能资产包 (JSON)
-                  </n-button>
-                  <n-button type="info" secondary @click="handleCreateDatabaseSnapshot" style="margin-left: 10px;">
-                    ⚡ 创建数据库无锁物理快照 (SQLite)
-                  </n-button>
-                  <n-button type="warning" secondary @click="uploadAndRestoreBackup" style="margin-left: 10px;">
-                    📂 导入外部智能资产包并合并
-                  </n-button>
-                </div>
-                <div class="action-right-hint">
-                  <n-tag size="small" type="success" :bordered="false">物理对齐与完整性校验通过</n-tag>
-                </div>
-              </div>
-            </n-card>
-
-            <!-- 历史备份归档列表 -->
-            <n-card title="备份归档与快照历史 (支持自动生命周期修剪)" size="small" class="settings-card">
-              <div v-if="!backups.length" class="empty-backup-box">
-                <n-text depth="3">暂无历史备份归档，请点击上方按钮一键创建</n-text>
-              </div>
-              <div v-else class="backup-list-box">
-                <table class="modern-backup-table">
-                  <thead>
-                    <tr>
-                      <th>备份文件名</th>
-                      <th style="width: 130px;">类型</th>
-                      <th style="width: 100px;">文件大小</th>
-                      <th style="width: 170px;">创建时间</th>
-                      <th style="width: 200px; text-align: center;">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in backups" :key="item.fileName">
-                      <td>
-                        <div class="backup-name-cell">
-                          <span class="file-icon">{{ item.type === 'intel_bundle' ? '📦' : '🗄️' }}</span>
-                          <span class="file-name" :title="item.summary">{{ item.fileName }}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <n-tag :type="item.type === 'intel_bundle' ? 'primary' : 'success'" size="tiny" round>
-                          {{ item.typeDesc }}
-                        </n-tag>
-                      </td>
-                      <td>{{ item.sizeHuman }}</td>
-                      <td>{{ item.modTime }}</td>
-                      <td style="text-align: center;">
-                        <n-space justify="center" size="tiny">
-                          <n-button size="tiny" type="primary" secondary @click="downloadBackup(item)">
-                            下载
-                          </n-button>
-                          <n-button size="tiny" type="warning" secondary @click="restoreBackupItem(item)">
-                            恢复
-                          </n-button>
-                          <n-button size="tiny" type="error" quaternary @click="deleteBackupItem(item)">
-                            删除
-                          </n-button>
-                        </n-space>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </n-card>
-
-            <!-- 语义蒸馏与缓存清理 -->
-            <n-grid :cols="24" :x-gap="20" class="sub-maintenance-grid">
-              <n-gi :span="12">
-                <n-card title="知识结晶与长期记忆蒸馏" size="small" class="settings-card">
-                  <p class="section-desc">将零散的多轮投研对话提炼为结构化量化认知，结晶固化沉淀到长期向量记忆库中。</p>
-                  <n-space justify="space-between" align="center" style="margin-top: 10px;">
-                    <div>
-                      <n-tag type="info" size="small">已提炼会话: {{ distillStats.distilledSessions }} / {{ distillStats.totalSessions }}</n-tag>
-                      <n-tag type="success" size="small" style="margin-left: 8px;">固化知识元: {{ distillStats.totalCrystals }}</n-tag>
-                    </div>
-                    <n-button type="primary" secondary :loading="distilling" @click="handleTriggerDistill">
-                      立即触发蒸馏
-                    </n-button>
-                  </n-space>
-                </n-card>
-              </n-gi>
-
-              <n-gi :span="12">
-                <n-card title="中间数据与系统缓存深度清理" size="small" class="settings-card">
-                  <p class="section-desc">清理调试日志、历史截图、无头浏览器临时数据等，释放磁盘与数据库存储占用。</p>
-                  <n-space wrap size="small" style="margin-top: 10px;">
-                    <n-button size="tiny" type="warning" secondary @click="cleanup('logs')">清理日志</n-button>
-                    <n-button size="tiny" type="warning" secondary @click="cleanup('test_images')">清理测试图</n-button>
-                    <n-button size="tiny" type="warning" secondary @click="cleanup('browser_temp')">清理浏览器缓存</n-button>
-                    <n-button size="tiny" type="error" secondary @click="cleanup('all')">一键全量清理</n-button>
-                  </n-space>
-                </n-card>
-              </n-gi>
-            </n-grid>
           </div>
         </n-tab-pane>
       </n-tabs>
