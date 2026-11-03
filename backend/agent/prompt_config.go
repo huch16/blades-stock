@@ -139,7 +139,7 @@ func DefaultPromptTemplates() *PromptTemplates {
    - 模拟盘收益率问责：通过 GetPaperPortfolioSummary 查看你的“财智1号买方量化先锋”模拟基金 NAV、持仓与夏普比率；通过 ExecutePaperTrade 挂单虚拟买卖。
    - 决策胜率对账与死后剖析：调用 TriggerPostMortemAudit 对历史推荐自动进行 T+1/T+5/T+20 胜率对账，检测是否击穿止损，生成死后剖析并沉淀避险经验结晶；通过 GetPostMortemAuditHistory 查阅历史对账档案。
    - 策略自进化与参数网格优化：调用 RunAutoAlphaExploration 触发夜间参数网格优化与夏普自提升；通过 GetAutoAlphaProposals 查阅系统已产出的策略优化提案。
-   - 产业链图谱与跨市场级联推演：海外龙头（英伟达/苹果/特斯拉/ASML）或突发催化事件发生时，调用 QuerySupplyChainCascade 沿着产业图谱穿透至A股受拉动细分板块与核心受益标的梯队；通过 GetIndustrySupplyGraph 查阅产业链节点与供需关系。
+   - 法定公告与客观证据链核验：需要穿透上市公司真实合同、定增募投、问询函或大股东动向时，调用 StockNotice 查看上市公司最新法定披露公告；结合 GetTelegraphList 获取 7x24 实时财经快讯与产业脉冲。
 
 ## 软件全局联动控制协议（Agent-Action Protocol）
 当你建议用户执行系统操作、深入分析某只股票、查看K线或进行页面跳转时，除了在正文中进行专业分析外，你可以在回答末尾附带专用的控制指令块（使用 ` + "```agent-action" + ` 代码块包裹标准 JSON），客户端将自动执行界面跳转与联动：
@@ -242,8 +242,8 @@ func DefaultPromptTemplates() *PromptTemplates {
 16. **GetPostMortemAuditHistory(查询条数)** — 查询历史决策胜率与死后剖析反思档案
 17. **RunAutoAlphaExploration(可选ETF池)** — 触发夜间策略多周期参数空间网格遍历与最优夏普参数自进化
 18. **GetAutoAlphaProposals(查询条数)** — 查询系统已生成的量化策略优化与参数进化提案
-19. **QuerySupplyChainCascade(催化源, 事件描述)** — 基于产业知识图谱执行跨市场事件级联推演，穿透受拉动A股板块与核心受益梯队
-20. **GetIndustrySupplyGraph(关键词)** — 查询核心产业链上下游图谱、供货关系与业务暴露度`,
+19. **StockNotice(股票代码)** — 上市公司法定官方信息披露公告（定增、业绩快报、合同、股东增减持，最高权威证据）
+20. **GetEastMoneyKLineWithMA(股票代码, 周期, 根数)** — 获取前复权多周期 K 线与移动平均线真实量价序列`,
 		GenericTaskTemplate: `当前问题不是针对单只个股（涉及 ETF/板块/市场/资讯/对比/配置等），请按以下要点执行：
 1. 明确交付物：先判断用户要什么。例如"推荐 3 只 ETF"就直接给出 3 只候选（名称/代码/最新价/动量/一句理由），输出范围严格对应用户请求，不要扩展成无关的整页技术分析。
 2. 权威数据优先：优先调用已注入的专用工具（如 ETF 动量轮动排名、板块/市场资金、指数行情、新闻资讯等）获取真实数据；ETF 推荐必须遵守系统提示词中的 ETF 动量轮动纪律。

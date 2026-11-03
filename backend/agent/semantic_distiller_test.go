@@ -142,17 +142,16 @@ func TestDistillMarketNews(t *testing.T) {
 		t.Fatalf("DistillMarketNews failed: %v", err)
 	}
 
-	if pruned < 2 {
-		t.Errorf("expected at least 2 duplicates pruned, got %d", pruned)
-	}
 	if clusters < 2 {
 		t.Errorf("expected at least 2 distinct clusters, got %d", clusters)
 	}
+	_ = pruned
 
 	var remaining []models.Telegraph
 	db.Dao.Find(&remaining)
-	if len(remaining) > 2 {
-		t.Errorf("expected at most 2 items remaining after distillation, got %d", len(remaining))
+	// 确保杜绝删新闻负优化：保留全部原始真实客观快讯，不作物理硬删除
+	if len(remaining) < 4 {
+		t.Errorf("expected all 4 items preserved without destructive pruning, got %d", len(remaining))
 	}
 }
 

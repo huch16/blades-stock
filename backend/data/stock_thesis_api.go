@@ -3,6 +3,7 @@ package data
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -138,7 +139,55 @@ func (api *StockThesisApi) SaveStockThesis(thesis *models.StockThesisLedger) err
 		}
 	}
 
+	// 自动补充入场基准价格、建档日期与活动状态
 	now := time.Now()
+	if thesis.EntryDate == "" {
+		thesis.EntryDate = now.Format("2006-01-02")
+	}
+	if thesis.Status == "" {
+		thesis.Status = "ACTIVE"
+	}
+	if thesis.EntryPrice <= 0 {
+		quotes, err := NewStockDataApi().GetStockCodeRealTimeData(thesis.StockCode)
+		if err == nil && quotes != nil && len(*quotes) > 0 {
+			if p, err := strconv.ParseFloat((*quotes)[0].Price, 64); err == nil && p > 0 {
+				thesis.EntryPrice = p
+			}
+		}
+	}
+
+	// 5-Verdict 规则引擎硬风控边界校验 (Rule-Based Boundary Guard)：
+	// 若标的判定为买入/逻辑强化，但技术形态处于明确的空头均线压制或破位状态，强制注入审慎风控底线
+	isBullishVerdict := strings.Contains(thesis.Verdict, "STRENGTHEN") ||
+		strings.Contains(thesis.VerdictText, "买入") ||
+		strings.Contains(thesis.VerdictText, "多")
+	if isBullishVerdict {
+		// 检查均线位置
+		clean := models.CleanStockCode(thesis.StockCode)
+		if kLines := NewEastMoneyKLineApi(GetSettingConfig()).GetKLineData(clean, "101", "", 30); kLines != nil && len(*kLines) >= 20 {
+			list := *kLines
+			sum20 := 0.0
+			for i := len(list) - 20; i < len(list); i++ {
+				c, _ := strconv.ParseFloat(list[i].Close, 64)
+				sum20 += c
+			}
+			ma20 := sum20 / 20.0
+			curP, _ := strconv.ParseFloat(list[len(list)-1].Close, 64)
+			if curP > 0 && ma20 > 0 && (curP-ma20)/ma20 < -0.02 {
+				// 距20日线低于 -2%，处于弱势死叉压制区间
+				if !strings.Contains(thesis.RiskFactors, "硬风控规则") {
+					warningNote := fmt.Sprintf("⚠️ 硬风控规则约束：现价(%.2f)处于MA20(%.2f)均线下方压制(乖离率 %.1f%%)，趋势未右侧企稳前严禁逆势重仓盲目抄底。",
+						curP, ma20, (curP-ma20)/ma20*100)
+					if thesis.RiskFactors != "" {
+						thesis.RiskFactors = warningNote + "\n" + thesis.RiskFactors
+					} else {
+						thesis.RiskFactors = warningNote
+					}
+				}
+			}
+		}
+	}
+
 	return db.Dao.Transaction(func(tx *gorm.DB) error {
 		var existing models.StockThesisLedger
 		err := tx.Where("stock_code = ?", thesis.StockCode).First(&existing).Error
@@ -150,6 +199,13 @@ func (api *StockThesisApi) SaveStockThesis(thesis *models.StockThesisLedger) err
 				thesis.CreatedAt = existing.CreatedAt
 			} else {
 				thesis.CreatedAt = now
+			}
+			// 保留最初建档价格
+			if existing.EntryPrice > 0 && thesis.EntryPrice <= 0 {
+				thesis.EntryPrice = existing.EntryPrice
+			}
+			if existing.EntryDate != "" && thesis.EntryDate == "" {
+				thesis.EntryDate = existing.EntryDate
 			}
 			thesis.UpdatedAt = now
 			if err := tx.Save(thesis).Error; err != nil {
@@ -173,6 +229,8 @@ func (api *StockThesisApi) SaveStockThesis(thesis *models.StockThesisLedger) err
 			KeyCatalysts: thesis.KeyCatalysts,
 			RiskFactors:  thesis.RiskFactors,
 			ModelName:    thesis.ModelName,
+			EntryPrice:   thesis.EntryPrice,
+			Status:       thesis.Status,
 			ReportID:     thesis.LastReportID,
 			TriggerEvent: "手动调整/确认假说",
 			CreatedAt:    now,

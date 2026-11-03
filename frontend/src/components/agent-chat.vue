@@ -1450,7 +1450,7 @@ const allScenarios = [
   
   // L2 赛道主线与资金风向
   { category: 'L2 赛道与主线', title: 'ETF 加权动量轮动模型', prompt: '请调用系统内置 GetETFMomentumRanking 获取主流场内ETF的21日加权动量排名表，按动量评分排序并给出当前最具超额弹性的进攻主线与防御调仓建议。严禁调用 WebSearch。直接输出研报正文。' },
-  { category: 'L2 赛道与主线', title: '重点产业链知识图谱研判', prompt: '请调用系统内置 GetIndustrySupplyGraph / QuerySupplyChainCascade 工具深入分析半导体及算力产业链的上下游供需格局、核心受益梯队与暴露度。严禁使用 WebSearch。' },
+  { category: 'L2 赛道与主线', title: '上市公司法定公告与行业穿透', prompt: '请调用系统内置 StockNotice / GetTelegraphList 工具深入核验半导体及核心赛道上市公司的最新法定公告披露、订单备案与产业链快讯。严禁使用 WebSearch。直接输出客观证据链。' },
   { category: 'L2 赛道与主线', title: '龙虎榜机构专用席位追踪', prompt: '请调用系统内置 GetLongTigerList / GetStockBillboard 工具获取最近一个交易日的龙虎榜明细，重点筛选机构专用席位大额净买入的股票，分析机构资金的真实建仓意图。严禁使用 WebSearch。' },
 
   // L3 量化多因子选股池

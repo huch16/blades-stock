@@ -942,48 +942,76 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 
 // GenerateETFRotationReport 手动或一键触发ETF轮动量化多Agent分析
 func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, aiConfigId int) (*MarketIntelligenceReport, error) {
-	logger.SugaredLogger.Info("【MarketLifecycle】手动一键触发【ETF轮动多Agent量化决策分析】...")
+	logger.SugaredLogger.Info("【MarketLifecycle】手动一键触发【stevia0829 原生 ETF轮动量化决策分析】...")
 	todayStr := time.Now().Format("2006-01-02")
 
 	etfCodes := []string{"510300.SH", "159915.SZ", "512480.SH", "512660.SH", "512010.SH", "512800.SH", "510880.SH", "159949.SZ"}
-	var etfSummary strings.Builder
-	etfSummary.WriteString("【全市场核心ETF池实时监测】（沪深300、创业板、半导体、军工、医药、证券、红利、创业板50）：\n")
-	stockAPI := data.NewStockDataApi()
-	now := time.Now()
-	isPreMarket := now.Hour() < 9 || (now.Hour() == 9 && now.Minute() < 15)
 
-	for _, code := range etfCodes {
-		quotes, err := stockAPI.GetStockCodeRealTimeData(code)
-		if err == nil && quotes != nil && len(*quotes) > 0 {
-			q := (*quotes)[0]
-			chgPct := q.ChangePercent
-			p, _ := strconv.ParseFloat(q.Price, 64)
-			pre, _ := strconv.ParseFloat(q.PreClose, 64)
-			if chgPct == 0 && pre > 0 && p > 0 {
-				chgPct = math.Round((p-pre)/pre*10000) / 100
-			}
-			stateDesc := ""
-			if isPreMarket {
-				stateDesc = " (盘前未开盘/沿用前收)"
-			}
-			etfSummary.WriteString(fmt.Sprintf("- %s(%s): 现价 %.3f, 涨跌幅 %.2f%%%s\n", q.Name, code, p, chgPct, stateDesc))
+	// 1. 纯 Go 确定性计算：21日加权对数动量回归斜率与 R² 排名 (0 Token 算力消耗，100% 确定性)
+	momentumList, err := quant.BatchCalculateETFMomentum(etfCodes)
+	if err != nil {
+		logger.SugaredLogger.Warnf("计算ETF动量失败: %v", err)
+		momentumList = []*quant.ETFMomentumScoreResult{}
+	}
+	momentumTable := quant.FormatETFMomentumSummary(momentumList)
+
+	// 2. 纯 Go 确定性计算：510300 沪深300ETF 120日均线与 60日高点回撤硬风控状态机 (stevia0829 核心灵魂)
+	regimeStatus, err := quant.CalculateETFRegimeStatus()
+	if err != nil {
+		logger.SugaredLogger.Warnf("计算大盘硬风控状态机失败: %v", err)
+		regimeStatus = &quant.ETFRegimeStatus{
+			BenchmarkCode:   "510300.SH",
+			BenchmarkName:   "沪深300ETF",
+			State:           "DEFENSE",
+			StateDesc:       "🛡️ 绝对防守 (数据异常兜底)",
+			Reason:          "风控数据拉取异常，安全兜底触发防守",
+			SuggestedAction: "保持轻仓防守",
 		}
 	}
 
-	prompt := fmt.Sprintf(`你是专注于量化对冲与ETF配置的首席基金经理。今天是 %s。
-请严格执行【ETF轮动多Agent分析】（Skill 7）全套决策流程：
+	// 3. 确定进攻候选标的与 09:22 集合竞价跳空复核
+	topCandidateCode := "510300.SH"
+	topCandidateName := "沪深300ETF"
+	for _, m := range momentumList {
+		if !m.CooldownGate && m.Score > 0 {
+			topCandidateCode = m.Code
+			topCandidateName = m.Name
+			break
+		}
+	}
+	preOpenCheck, _ := quant.CheckETFPreOpenGap(topCandidateCode)
+	regimeSummary := quant.FormatETFRegimeSummary(regimeStatus, preOpenCheck)
+
+	// 4. 组装零虚构、硬核数学注入的 System / User Prompt
+	prompt := fmt.Sprintf(`你是由 stevia0829/multi-agents-etf-trade-strategy 原生赋能的买方量化配置总监。今天是 %s。
+系统已在下方为你注入由本地纯 Go 量化引擎严格通过 21 日加权对数线性回归与 510300 沪深300ETF 硬风控状态机计算出的确定性数学结果。
 
 %s
 
-### 请输出完整的ETF轮动量化决策报告：
-1. 【动量池概览与筛选】：基于21日加权动量对上述ETF进行排序，并剔除近期回撤过深或盈亏比不佳的弱势标的；
-2. 【6路因子并发分析】：对前4只优选ETF，从技术面、主力资金流、消息舆情、外围联动、宏观行业周期、溢价率多维度进行诊断；
-3. 【投委会5视角加权评分表】：制作投委会打分矩阵（趋势30%%、风控20%%、价值15%%、筹码20%%、情绪15%%）；
-4. 【最终交易决策】：给出明确的仓位建议（买入/持有/观望/减仓），并制定防守止损位。
+### 📊 核心关注 ETF 池 21日纯数学加权动量矩阵 (stevia0829 对数回归与 R² 滤波)：
+%s
 
-【量化纪律说明】：请基于上述客观数据进行严密量化推演，客观反映真实盘面状态。严禁虚构任何未经量化工具计算得出的伪概率统计数据。`, todayStr, etfSummary.String())
+【铁律与量化纪律说明】：
+1. 【严禁虚增数据与编造打分】：上述动量排名、年化动量(%%)、线性拟合优度 R²、动量得分以及大盘硬风控状态全部由纯 Go 引擎精确计算得出，严禁大模型自行编造任何数字，严禁制作虚假打分矩阵！
+2. 【严格服从硬风控状态机 (Regime Gate)】：
+   - 当前 510300 大盘硬风控状态为：【%s】；
+   - 若状态为 DEFENSE（现价 < MA120 或 60日高点回撤 >= 8.0%%）：全市场做多进攻建议【一票否决】！最终决策必须给出【防守避险 (AVOID)】，强制建议持币或持有货币 ETF (511880/511990)，严禁让模型推翻 Go 的硬风控！
+   - 若状态为 OFFENSE：允许买入动量得分最高且未触发回撤冷却的领先标的【%s (%s)】；
+3. 【09:22 集合竞价防诱多机制】：若竞价跳空超过 +2.5%%，提示开盘严禁追高，防范脉冲诱多砸盘；若低开低于 -3.0%%，防范动量失速。
 
-	sysPrompt := "你现在是专注于量化对冲与ETF配置的首席基金经理。所有核心关注ETF池行情已在用户输入中提供，无需额外调用外部工具。请直接基于输入数据，按照 ETF 轮动决策流程输出完整的量化研报。"
+请直接输出客观、严谨、零废话的 Markdown 格式【ETF轮动量化多Agent决策研报】：
+### 🛡️ 一、大盘硬风控状态机判定 (stevia0829 核心)
+- 详细解读 510300 现价与 MA120 均线位置、60日回撤幅度，明确当前多空防守边界；
+
+### 📈 二、21日加权对数动量池全景解剖
+- 基于纯数学动量矩阵，阐述领涨 ETF（如 %s）走强的宏观流动性与产业催化背景；
+- 明确指出哪些标的触发了 5 日回撤冷却拦截（Cooldown Gate），说明为何剔除；
+
+### 🎯 三、最终交易与仓位执行指令
+- 明确给出仓位上限百分比与具体代码；
+- 制定精准的防守止损线与逻辑证伪底线。`, todayStr, regimeSummary, momentumTable, regimeStatus.StateDesc, topCandidateName, topCandidateCode, topCandidateName)
+
+	sysPrompt := "你现在是严格践行 stevia0829/multi-agents-etf-trade-strategy 的买方量化配置总监。所有动量得分与风控状态已由纯 Go 计算完毕，严禁虚增或篡改任何数学数据，交易决策必须严格服从 Go 引擎的硬风控状态机。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	var streamErr string
@@ -1018,8 +1046,9 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		return nil, fmt.Errorf("生成ETF轮动分析报告失败: %s", errMsg)
 	}
 
-	title := fmt.Sprintf("📈 ETF轮动多Agent决策与投委会打分表 (%s)", todayStr)
-	summary := "核心ETF池21日加权动量、6路因子并发扫描与投委会5视角加权评分表。"
+	title := fmt.Sprintf("📈 ETF动量轮动与大盘硬风控研判 (%s)", todayStr)
+	summary := fmt.Sprintf("stevia0829原生量化：510300状态【%s】，首选标的【%s (%s)】",
+		regimeStatus.State, topCandidateName, topCandidateCode)
 
 	report := &MarketIntelligenceReport{
 		Type:        "etf_rotation_decision",
@@ -1029,7 +1058,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		Actions:     actions,
 		GeneratedAt: time.Now(),
 		TradingDate: todayStr,
-		Source:      "ETF轮动决策引擎",
+		Source:      "stevia0829-ETF轮动量化引擎",
 	}
 
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动量化决策", finalReport, "etf_rotation_"+todayStr, prompt)
