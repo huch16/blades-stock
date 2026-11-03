@@ -33,6 +33,20 @@ type AgentRunMetrics struct {
 	FinalStatus       string        `json:"final_status"` // success, retry_success, failed
 }
 
+// MarshalJSON 确保 time.Duration 序列化为前端易于消费的毫秒数 (ms)，彻底根除纳秒引发的“5.8年/75天”幽灵耗时惨案
+func (m AgentRunMetrics) MarshalJSON() ([]byte, error) {
+	type Alias AgentRunMetrics
+	return json.Marshal(&struct {
+		TotalDuration     int64 `json:"total_duration"`
+		FirstChunkLatency int64 `json:"first_chunk_latency"`
+		Alias
+	}{
+		TotalDuration:     m.TotalDuration.Milliseconds(),
+		FirstChunkLatency: m.FirstChunkLatency.Milliseconds(),
+		Alias:             (Alias)(m),
+	})
+}
+
 type StreamMessage struct {
 	Role             string              `json:"role"`
 	Content          string              `json:"content"`

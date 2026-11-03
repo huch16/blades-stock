@@ -429,7 +429,13 @@ export function initUniversalBridge(): void {
         window.location.reload()
       },
       WindowSetTitle: (title: string) => {
-        document.title = title
+        // 网页端标签页标题精简化处理，避免超长免责声明撑爆浏览器 Tab
+        if (title.length > 40) {
+          const parts = title.split('  ')
+          document.title = parts[0] || title.slice(0, 40)
+        } else {
+          document.title = title
+        }
       },
       WindowMinimise: () => {
         console.log('[Web stub] WindowMinimise ignored.')

@@ -66,8 +66,14 @@ export function genMsgId(prefix = 'msg'): string {
   return `${prefix}_${Date.now()}_${++msgCounter}`
 }
 
-export function formatDuration(ms?: number): string {
-  if (!ms || ms < 0) return '0ms'
+export function formatDuration(val?: number): string {
+  if (!val || val < 0) return '0ms'
+  // 兼顾 Go 序列化 time.Duration 为纳秒 (ns) 与标准毫秒 (ms)
+  // 如果数值 > 1e8（即单次请求超过 100,000 秒，在交互式对话中必定是 Go 纳秒序列化残留），自动除以 1e6 转为毫秒
+  let ms = val
+  if (ms > 1e8) {
+    ms = ms / 1e6
+  }
   if (ms < 1000) return `${Math.round(ms)}ms`
   const s = ms / 1000
   if (s < 60) return `${s.toFixed(1)}s`
