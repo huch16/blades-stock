@@ -1914,6 +1914,18 @@ function onWindowAgentConsult(e: any) {
   }
 }
 
+function onBeforeUnloadHandler() {
+  if (isStreaming.value) {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        navigator.sendBeacon('/api/App/AbortChatWithAgent', JSON.stringify([]))
+      } else {
+        AbortChatWithAgent().catch(() => {})
+      }
+    } catch {}
+  }
+}
+
 // 智能提炼买方 5-Verdict 认知结构 (立论、假说、催化、证伪风险)
 function extractThesisFromText(text: string, defaultCode?: string, defaultName?: string) {
   if (!text) return null
@@ -2189,6 +2201,7 @@ onMounted(async () => {
   EventsOn('agent:consult', handleAgentConsult)
   if (typeof window !== 'undefined') {
     window.addEventListener('agent:consult', onWindowAgentConsult)
+    window.addEventListener('beforeunload', onBeforeUnloadHandler)
   }
 
   // 消费挂起的跨组件咨询任务 (消除异步路由加载延迟导致丢消息的问题)
@@ -2221,6 +2234,12 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  // 核心风控：组件卸载或切出时，若正在流式推演，立即物理中止后端推理，严禁空转浪费 Token 与并发配额
+  if (isStreaming.value) {
+    AbortChatWithAgent().catch(() => {})
+    isStreaming.value = false
+  }
+
   if (perceptionTimer) {
     clearInterval(perceptionTimer)
     perceptionTimer = null
@@ -2232,6 +2251,7 @@ onBeforeUnmount(() => {
   }
   if (typeof window !== 'undefined') {
     window.removeEventListener('agent:consult', onWindowAgentConsult)
+    window.removeEventListener('beforeunload', onBeforeUnloadHandler)
   }
   window.removeEventListener('resize', onWindowResize)
   EventsOff('agent-message', handleAgentMessage)

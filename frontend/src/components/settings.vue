@@ -169,7 +169,7 @@ const formValue = ref({
     enable: true
   },
   updateBasicInfoOnStart: false,
-  refreshInterval: 1,
+  refreshInterval: 3,
   enableDanmu: false,
   browserPath: '',
   enableNews: false,
@@ -223,7 +223,16 @@ const defaultDataSourceOptions = [
 
 const formRules = {
   refreshInterval: [
-    { required: true, type: 'number', message: '刷新间隔不能为空', trigger: ['blur', 'change'] }
+    { required: true, type: 'number', message: '刷新间隔不能为空', trigger: ['blur', 'change'] },
+    {
+      validator: (rule: any, value: number) => {
+        if (value < 2) {
+          return new Error('行情刷新频率建议不少于 2 秒（推荐 3~5 秒），防止短轮询拥堵网络')
+        }
+        return true
+      },
+      trigger: ['blur', 'change']
+    }
   ],
   tushareToken: [
     { required: false, message: '请输入 Tushare Token', trigger: ['blur'] }
@@ -1177,7 +1186,7 @@ async function loadConfig() {
         enable: (res.localPushEnable ?? res.localPush?.enable) !== false
       },
       updateBasicInfoOnStart: Boolean(res.updateBasicInfoOnStart),
-      refreshInterval: res.refreshInterval || 1,
+      refreshInterval: (res.refreshInterval && res.refreshInterval >= 2) ? res.refreshInterval : 3,
       enableDanmu: false,
       browserPath: res.browserPath || '',
       enableNews: Boolean(res.enableNews),
@@ -1376,7 +1385,7 @@ onBeforeUnmount(() => {
                 <n-form-item-gi :span="8" label="行情刷新频率 (秒)" path="refreshInterval">
                   <n-input-number
                     v-model:value="formValue.refreshInterval"
-                    :min="1"
+                    :min="2"
                     :max="60"
                     style="width: 100%;"
                   >

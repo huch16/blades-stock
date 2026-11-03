@@ -800,6 +800,11 @@ func (s *AgentService) GetAllStockTheses() (map[string]models.StockThesisLedger,
 	return data.NewStockThesisApi().GetAllStockTheses()
 }
 
+// GetStockTheses 别名兼容接口，兼容前端对全量买方认知映射表的调用
+func (s *AgentService) GetStockTheses() (map[string]models.StockThesisLedger, error) {
+	return s.GetAllStockTheses()
+}
+
 // -----------------------------------------------------------------------------
 // 技能治理与审批流兼容性桩 (Skill Governance Compatibility)
 // -----------------------------------------------------------------------------

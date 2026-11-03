@@ -182,14 +182,10 @@ func (a *App) domReady(ctx context.Context) {
 		go func() { defer PanicHandler(); data.NewMarketNewsApi().TradingViewNews() }()
 
 		interval := config.RefreshInterval
-		if interval <= 0 {
-			interval = 1
+		// 工业级风控防雪崩约束：行情监控最小周期限制为 >=3 秒，彻底根除 1 秒短轮询堵死网络与引发浏览器卡顿
+		if interval < 3 {
+			interval = 3
 		}
-		//ticker := time.NewTicker(time.Second * time.Duration(interval))
-		//defer ticker.Stop()
-		//for range ticker.C {
-		//	MonitorStockPrices(a)
-		//}
 		id, err := a.cron.AddFunc(fmt.Sprintf("@every %ds", interval), func() {
 			MonitorStockPrices(a)
 		})
@@ -1580,6 +1576,11 @@ func (a *App) GetAllStockTheses() (map[string]models.StockThesisLedger, error) {
 	return data.NewStockThesisApi().GetAllStockTheses()
 }
 
+// GetStockTheses 别名兼容接口，兼容前端对全量买方认知映射表的调用
+func (a *App) GetStockTheses() (map[string]models.StockThesisLedger, error) {
+	return a.agentService.GetStockTheses()
+}
+
 // TriggerAIReportBacktest 手动或自动触发 AI 报告历史回测与胜率检验
 func (a *App) TriggerAIReportBacktest(limit int) (*quant.AIReportBacktestResult, error) {
 	return a.quantService.TriggerAIReportBacktest(limit)
@@ -1710,10 +1711,14 @@ func (a *App) UpdateConfig(settingConfig *data.SettingConfig) string {
 	//s1, _ := json.Marshal(settingConfig)
 	//logger.SugaredLogger.Infof("UpdateConfig:%s", s1)
 	if settingConfig.RefreshInterval > 0 {
+		interval := settingConfig.RefreshInterval
+		if interval < 3 {
+			interval = 3
+		}
 		if entryID, exists := a.getCronEntry("MonitorStockPrices"); exists {
 			a.cron.Remove(entryID)
 		}
-		id, _ := a.cron.AddFunc(fmt.Sprintf("@every %ds", settingConfig.RefreshInterval), func() {
+		id, _ := a.cron.AddFunc(fmt.Sprintf("@every %ds", interval), func() {
 			MonitorStockPrices(a)
 		})
 		a.setCronEntry("MonitorStockPrices", id)

@@ -22,10 +22,16 @@ func NewMCPServerApi() *MCPServerApi {
 }
 
 func (a *MCPServerApi) Create(server *models.MCPServer) error {
+	if db.Dao == nil {
+		return fmt.Errorf("数据库连接未就绪")
+	}
 	return db.Dao.Create(server).Error
 }
 
 func (a *MCPServerApi) Update(server *models.MCPServer) error {
+	if db.Dao == nil {
+		return fmt.Errorf("数据库连接未就绪")
+	}
 	if server == nil || server.ID == 0 {
 		return fmt.Errorf("无效的服务器ID")
 	}
@@ -49,10 +55,16 @@ func (a *MCPServerApi) Update(server *models.MCPServer) error {
 }
 
 func (a *MCPServerApi) Delete(id uint) error {
+	if db.Dao == nil {
+		return fmt.Errorf("数据库连接未就绪")
+	}
 	return db.Dao.Delete(&models.MCPServer{}, id).Error
 }
 
 func (a *MCPServerApi) GetByID(id uint) (*models.MCPServer, error) {
+	if db.Dao == nil {
+		return nil, fmt.Errorf("数据库连接未就绪")
+	}
 	var server models.MCPServer
 	err := db.Dao.First(&server, id).Error
 	if err != nil {
@@ -62,8 +74,22 @@ func (a *MCPServerApi) GetByID(id uint) (*models.MCPServer, error) {
 }
 
 func (a *MCPServerApi) List(query *models.MCPServerQuery) *models.MCPServerPageResp {
-	var servers []models.MCPServer
+	servers := make([]models.MCPServer, 0)
 	var total int64
+
+	if db.Dao == nil {
+		return &models.MCPServerPageResp{
+			Total: 0,
+			Data:  servers,
+		}
+	}
+
+	if query == nil {
+		query = &models.MCPServerQuery{
+			Page:     1,
+			PageSize: 10,
+		}
+	}
 
 	dbQuery := db.Dao.Model(&models.MCPServer{})
 
@@ -91,7 +117,10 @@ func (a *MCPServerApi) List(query *models.MCPServerQuery) *models.MCPServerPageR
 	err := dbQuery.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&servers).Error
 	if err != nil {
 		logger.SugaredLogger.Errorf("查询MCP服务器列表失败:%s", err.Error())
-		return nil
+		return &models.MCPServerPageResp{
+			Total: 0,
+			Data:  servers,
+		}
 	}
 
 	return &models.MCPServerPageResp{
@@ -101,18 +130,27 @@ func (a *MCPServerApi) List(query *models.MCPServerQuery) *models.MCPServerPageR
 }
 
 func (a *MCPServerApi) GetAll() []models.MCPServer {
-	var servers []models.MCPServer
+	servers := make([]models.MCPServer, 0)
+	if db.Dao == nil {
+		return servers
+	}
 	db.Dao.Where("enable = ?", true).Order("created_at DESC").Find(&servers)
 	return servers
 }
 
 func (a *MCPServerApi) EnableServer(id uint, enable bool) error {
+	if db.Dao == nil {
+		return fmt.Errorf("数据库连接未就绪")
+	}
 	return db.Dao.Model(&models.MCPServer{}).Where("id = ?", id).Updates(map[string]any{
 		"enable": enable,
 	}).Error
 }
 
 func (a *MCPServerApi) UpdateStatus(id uint, status string, testResult string) error {
+	if db.Dao == nil {
+		return fmt.Errorf("数据库连接未就绪")
+	}
 	return db.Dao.Model(&models.MCPServer{}).Where("id = ?", id).Updates(map[string]any{
 		"status":      status,
 		"test_result": testResult,
@@ -120,7 +158,10 @@ func (a *MCPServerApi) UpdateStatus(id uint, status string, testResult string) e
 }
 
 func (a *MCPServerApi) SearchServers(keyword string) []models.MCPServer {
-	var servers []models.MCPServer
+	servers := make([]models.MCPServer, 0)
+	if db.Dao == nil {
+		return servers
+	}
 	query := db.Dao.Model(&models.MCPServer{})
 	if keyword != "" {
 		keyword = strings.TrimSpace(keyword)
@@ -247,23 +288,35 @@ func (a *MCPServerApi) TestConnection(id uint) (string, error) {
 }
 
 func (a *MCPServerApi) EnableTool(id uint, enable bool) error {
+	if db.Dao == nil {
+		return fmt.Errorf("数据库连接未就绪")
+	}
 	return db.Dao.Model(&models.MCPServerTool{}).Where("id = ?", id).Update("enabled", enable).Error
 }
 
 func (a *MCPServerApi) GetToolsByServerID(serverID uint) []models.MCPServerTool {
-	var tools []models.MCPServerTool
+	tools := make([]models.MCPServerTool, 0)
+	if db.Dao == nil {
+		return tools
+	}
 	db.Dao.Where("mcp_server_id = ?", serverID).Order("tool_name ASC").Find(&tools)
 	return tools
 }
 
 func (a *MCPServerApi) GetEnabledToolsByServerID(serverID uint) []models.MCPServerTool {
-	var tools []models.MCPServerTool
+	tools := make([]models.MCPServerTool, 0)
+	if db.Dao == nil {
+		return tools
+	}
 	db.Dao.Where("mcp_server_id = ? AND enabled = ?", serverID, true).Order("tool_name ASC").Find(&tools)
 	return tools
 }
 
 func (a *MCPServerApi) GetAllTools() []models.MCPServerTool {
-	var tools []models.MCPServerTool
+	tools := make([]models.MCPServerTool, 0)
+	if db.Dao == nil {
+		return tools
+	}
 	db.Dao.Order("mcp_server_id ASC, tool_name ASC").Find(&tools)
 	return tools
 }

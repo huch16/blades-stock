@@ -955,10 +955,55 @@ func validateAIConfig(cfg *AIConfig) string {
 	return ""
 }
 
+// MaskSecret 对敏感商业凭据进行掩码处理（例如 sk-2897****3d9b）
+func MaskSecret(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if len(s) <= 8 {
+		return strings.Repeat("*", len(s))
+	}
+	return s[:4] + "****" + s[len(s)-4:]
+}
+
+// IsMaskedSecret 判断字符串是否包含掩码特征
+func IsMaskedSecret(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "****") {
+		return true
+	}
+	trimmed := strings.ReplaceAll(s, "*", "")
+	return len(trimmed) == 0
+}
+
 func UpdateConfig(s *SettingConfig) string {
 	if s == nil || s.Settings == nil {
 		return "保存失败: 配置数据为空"
 	}
+
+	// 敏感凭据掩码恢复防护：若前端提交的是脱敏掩码，保留数据库现有真实凭据，防止被掩码覆盖
+	if db.Dao != nil {
+		var exist Settings
+		if err := db.Dao.Model(&Settings{}).First(&exist).Error; err == nil {
+			if IsMaskedSecret(s.TushareToken) {
+				s.TushareToken = exist.TushareToken
+			}
+			if IsMaskedSecret(s.EmbeddingApiKey) {
+				s.EmbeddingApiKey = exist.EmbeddingApiKey
+			}
+			if IsMaskedSecret(s.TickFlowAPIKey) {
+				s.TickFlowAPIKey = exist.TickFlowAPIKey
+			}
+			if IsMaskedSecret(s.EmApiKey) {
+				s.EmApiKey = exist.EmApiKey
+			}
+		}
+	}
+
 	for i, cfg := range s.AiConfigs {
 		if cfg == nil {
 			continue
@@ -1123,6 +1168,13 @@ func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
 			addAiConfigs = append(addAiConfigs, item)
 		} else {
 			notDeleteIds = append(notDeleteIds, item.ID)
+			// 若前端提交的 ApiKey 包含掩码，保留数据库原有的真实明文 ApiKey
+			if IsMaskedSecret(item.ApiKey) {
+				var oldCfg AIConfig
+				if err := tx.Model(&AIConfig{}).Select("api_key").Where("id = ?", item.ID).First(&oldCfg).Error; err == nil && oldCfg.ApiKey != "" {
+					item.ApiKey = oldCfg.ApiKey
+				}
+			}
 			e = tx.Model(&AIConfig{}).Where("id=?", item.ID).Updates(map[string]interface{}{
 				"name":                 item.Name,
 				"base_url":             item.BaseUrl,
@@ -1226,7 +1278,16 @@ func GetSettingConfig() *SettingConfig {
 			settings.KDays = 60
 		}
 	}
-	if settings.BrowserPath == "" {
+	// 跨平台自动纠错：若当前存储的 BrowserPath 在本地文件系统不存在（例如 Windows 路径同步到 Linux 上），重新探测
+	if settings.BrowserPath != "" {
+		if _, err := os.Stat(settings.BrowserPath); err != nil {
+			if detected, ok := CheckBrowser(); ok && detected != "" {
+				settings.BrowserPath = detected
+			} else {
+				settings.BrowserPath = ""
+			}
+		}
+	} else {
 		settings.BrowserPath, _ = CheckBrowser()
 	}
 	if settings.ToolRunBudget <= 0 {
@@ -1249,4 +1310,34 @@ func GetSettingConfig() *SettingConfig {
 	settingConfig.AiConfigs = aiConfigs
 
 	return settingConfig
+}
+
+// GetMaskedSettingConfig 获取脱敏后的系统配置，供前端展示与对外 RPC 返回
+func GetMaskedSettingConfig() *SettingConfig {
+	raw := GetSettingConfig()
+	if raw == nil || raw.Settings == nil {
+		return raw
+	}
+
+	// 浅拷贝 Settings，并对其敏感凭据打码
+	maskedSettings := *raw.Settings
+	maskedSettings.TushareToken = MaskSecret(maskedSettings.TushareToken)
+	maskedSettings.EmbeddingApiKey = MaskSecret(maskedSettings.EmbeddingApiKey)
+	maskedSettings.TickFlowAPIKey = MaskSecret(maskedSettings.TickFlowAPIKey)
+	maskedSettings.EmApiKey = MaskSecret(maskedSettings.EmApiKey)
+
+	// 拷贝 AIConfigs，并对每个 ApiKey 打码
+	maskedAiConfigs := make([]*AIConfig, len(raw.AiConfigs))
+	for i, cfg := range raw.AiConfigs {
+		if cfg != nil {
+			clone := *cfg
+			clone.ApiKey = MaskSecret(clone.ApiKey)
+			maskedAiConfigs[i] = &clone
+		}
+	}
+
+	return &SettingConfig{
+		Settings:  &maskedSettings,
+		AiConfigs: maskedAiConfigs,
+	}
 }

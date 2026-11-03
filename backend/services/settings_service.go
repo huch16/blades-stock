@@ -148,9 +148,9 @@ func (s *SettingsService) CheckDeviceBinding(token string, apiBase string) map[s
 	return result
 }
 
-// GetConfig 获取当前配置项
+// GetConfig 获取当前配置项（下发脱敏配置，确保商业 API 密钥不泄露给前端）
 func (s *SettingsService) GetConfig() *data.SettingConfig {
-	return data.GetSettingConfig()
+	return data.GetMaskedSettingConfig()
 }
 
 // UpdateConfig 更新系统配置项
@@ -158,9 +158,13 @@ func (s *SettingsService) UpdateConfig(settingConfig *data.SettingConfig) string
 	return data.UpdateConfig(settingConfig)
 }
 
-// GetAiConfigs 获取 AI 配置列表
+// GetAiConfigs 获取 AI 配置列表（下发脱敏配置）
 func (s *SettingsService) GetAiConfigs() []*data.AIConfig {
-	return data.GetSettingConfig().AiConfigs
+	masked := data.GetMaskedSettingConfig()
+	if masked == nil {
+		return []*data.AIConfig{}
+	}
+	return masked.AiConfigs
 }
 
 // GetAiConfigTemplates 获取预置 AI 配置模板

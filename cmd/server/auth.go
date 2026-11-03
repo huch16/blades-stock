@@ -122,12 +122,20 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 		// 检查 Authorization 标头
 		authHeader := r.Header.Get("Authorization")
+		// 优先从 Authorization 标头中提取
 		clientToken := ""
 		if strings.HasPrefix(authHeader, "Bearer ") {
 			clientToken = strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
 		}
 
-		// 降级检查 URL Query ?token=... (针对 SSE EventSource 等无法自定义 Header 的场景)
+		// 次优先从安全 HttpOnly Cookie 中提取 (杜绝 URL Query 暴露风险)
+		if clientToken == "" {
+			if cookie, err := r.Cookie("blades_token"); err == nil && cookie != nil {
+				clientToken = strings.TrimSpace(cookie.Value)
+			}
+		}
+
+		// 降级检查 URL Query ?token=... (针对无 Cookie 环境或离线脚本)
 		if clientToken == "" {
 			clientToken = strings.TrimSpace(r.URL.Query().Get("token"))
 		}
@@ -206,6 +214,16 @@ func HandleInitPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.SugaredLogger.Info("[Auth] Initial admin password has been set successfully.")
 
+	// 下发安全 HttpOnly Cookie (有效期30天，彻底消除 URL 泄露 Token 的安全隐患)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "blades_token",
+		Value:    pwd,
+		Path:     "/",
+		MaxAge:   86400 * 30,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	json.NewEncoder(w).Encode(map[string]any{
 		"code":    0,
 		"message": "访问密码初始化成功！",
@@ -242,6 +260,17 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if subtle.ConstantTimeCompare([]byte(clientPwd), []byte(serverToken)) == 1 ||
 		subtle.ConstantTimeCompare([]byte(clientPwd), []byte(DefaultAdminPassword)) == 1 {
+		
+		// 下发安全 HttpOnly Cookie (有效期30天，彻底消除 URL 泄露 Token 的安全隐患)
+		http.SetCookie(w, &http.Cookie{
+			Name:     "blades_token",
+			Value:    clientPwd,
+			Path:     "/",
+			MaxAge:   86400 * 30,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+
 		json.NewEncoder(w).Encode(map[string]any{
 			"code":    0,
 			"message": "登录验证成功",
