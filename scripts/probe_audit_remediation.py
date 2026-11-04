@@ -196,7 +196,7 @@ try:
         {'stockCode': '002906', 'stockName': '华阳集团', 'currentPrice': 24.46, 'changePercent': 1.70},
         {'stockCode': '300750', 'stockName': '宁德时代', 'currentPrice': 253.75, 'changePercent': 1.78},
     ]
-    res = req("/api/App/ScanHoldingRisk", [seven_stocks])
+    res = post("/api/App/ScanHoldingRisk", [seven_stocks])
     data = res.get('data', {})
     items = data.get('items', [])
     print(f"  Total Scanned Items            : {len(items)} / 7 只标的")
