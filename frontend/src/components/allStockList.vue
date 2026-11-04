@@ -1,5 +1,5 @@
 <script setup>
-import {h, onBeforeMount, onMounted, ref, reactive, watch, computed} from 'vue'
+import {computed, defineAsyncComponent, h, onBeforeMount, onMounted, reactive, ref, watch} from 'vue'
 import {
   GetAllStockInfoList,
   GetAllStocks,
@@ -8,8 +8,9 @@ import {
 import {NButton, NInput, NTag, NText, useMessage, useNotification, NDataTable, NSpace, NPagination, NDropdown, NIcon} from "naive-ui";
 import sparkLine from "./stockSparkLine.vue"
 import KLineChart from "./KLineChart.vue";
-import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
-import StockDiagnosisDrawer from "./StockDiagnosisDrawer.vue";
+// 异步按需加载轻量 K 线与 3D 量化诊断抽屉
+const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
+const StockDiagnosisDrawer = defineAsyncComponent(() => import("./StockDiagnosisDrawer.vue"));
 import {EventsEmit} from "../../wailsjs/runtime";
 import { consultAgent } from "../utils/agentControlBus";
 import {FolderOpenOutline, AddOutline} from "@vicons/ionicons5";

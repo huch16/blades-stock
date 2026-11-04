@@ -1,10 +1,12 @@
 <script setup>
-import {onBeforeMount, onBeforeUnmount, ref, computed, h} from 'vue'
+import {onBeforeMount, onBeforeUnmount, ref, computed, h, defineAsyncComponent} from 'vue'
 import {GetConfig, GetUplimitHot, IsTradingTime, IsTradingDay, GetLatestTradingDay} from "../../wailsjs/go/main/App";
 import {EventsEmit} from "../../wailsjs/runtime";
 import { consultAgent } from "../utils/agentControlBus";
 import {NButton, NText, NTag, NTooltip, NProgress, useMessage} from "naive-ui";
-import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
+
+// 异步按需加载轻量 K 线与 43 指标模块
+const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
 
 const message = useMessage()
 const loading = ref(false)

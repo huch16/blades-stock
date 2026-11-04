@@ -815,6 +815,9 @@ import {
 import ChatMessageComp from './chat/ChatMessage.vue'
 import MessageAnchorNav from './chat/MessageAnchorNav.vue'
 
+// 仅在 Agent 对话路由按需加载 TDesign 组件库局部样式，彻底解放全局首屏样式体积
+import 'tdesign-vue-next/es/style/index.css'
+
 // ========== 数据接口与持久化类型 ==========
 interface ChatSession {
   id: string

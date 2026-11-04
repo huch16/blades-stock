@@ -1,5 +1,5 @@
 <script setup>
-import {computed, h, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref,reactive} from 'vue'
+import {computed, h, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref,reactive, defineAsyncComponent} from 'vue'
 import {
   GetAiRecommendStocksList,
   GetConfig,
@@ -8,7 +8,8 @@ import {
   SyncRecommendStocksFromIntelligence
 } from "../../wailsjs/go/main/App";
 import {NAvatar, NButton, NEllipsis, NSwitch, NTag, NText, useMessage, useNotification, NSpace, NEmpty} from "naive-ui";
-import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
+// 异步按需加载 K 线图表模块
+const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
 import sparkLine from "./stockSparkLine.vue"
 import {format} from "date-fns";
 import { dispatchAgentAction, consultAgent } from "../utils/agentControlBus";

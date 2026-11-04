@@ -1,5 +1,5 @@
 <script setup>
-import { h, onMounted, onUnmounted, ref, reactive } from 'vue'
+import { h, onMounted, onUnmounted, ref, reactive, defineAsyncComponent } from 'vue'
 import {
   AddTradingRecord,
   GetTradingRecordList,
@@ -35,7 +35,8 @@ import {
   useNotification
 } from 'naive-ui'
 import sparkLine from "./stockSparkLine.vue";
-import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
+// 异步按需加载 K 线图表模块
+const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
 const message = useMessage()
 const notify = useNotification()
 const showKlineModal = ref(false)

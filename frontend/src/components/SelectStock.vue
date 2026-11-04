@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import {h, onBeforeMount, onMounted, onUnmounted, ref, reactive, computed} from 'vue'
+import {h, onBeforeMount, onMounted, onUnmounted, ref, reactive, computed, defineAsyncComponent} from 'vue'
 import {SearchStock, OpenURL, Follow, GetFollowList, GetAllCustomStrategies, SaveCustomStrategy, DeleteCustomStrategy, GetConfig, GetGroupList, AddStockGroup, AddGroup} from "../../wailsjs/go/main/App";
 import {useMessage, NText, NTag, NButton, NPopconfirm, NDropdown, NIcon} from 'naive-ui'
 import {Environment, EventsEmit} from "../../wailsjs/runtime"
 import {BookmarkOutline, TrashOutline, CreateOutline, AddOutline, FolderOpenOutline} from "@vicons/ionicons5";
 import { consultAgent } from "../utils/agentControlBus";
-import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
-import StockDiagnosisDrawer from "./StockDiagnosisDrawer.vue";
+
+// 异步按需加载 K 线图表与量化诊断抽屉
+const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
+const StockDiagnosisDrawer = defineAsyncComponent(() => import("./StockDiagnosisDrawer.vue"));
 
 const message = useMessage()
 const search = ref('')

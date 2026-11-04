@@ -1,6 +1,6 @@
 <script setup>
 import * as echarts from "../utils/echarts";
-import {computed, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref} from 'vue'
+import {computed, defineAsyncComponent, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref} from 'vue'
 import {
   GetAIResponseResult,
   GetConfig,
@@ -21,10 +21,11 @@ import {EventsOff, EventsOn, EventsEmit} from "../../wailsjs/runtime";
 import NewsList from "./newsList.vue";
 import { cleanFinalContent } from "../utils/cleanText";
 import KLineChart from "./KLineChart.vue";
-import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
+// 异步按需加载轻量 K 线图表与 Markdown 渲染引擎
+const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
+const MdPreview = defineAsyncComponent(() => import("md-editor-v3").then(m => m.MdPreview));
 import { CaretDown, CaretUp, PulseOutline,} from "@vicons/ionicons5";
 import {NAvatar, NButton, NFlex, NText, useMessage, useNotification} from "naive-ui";
-import {MdPreview} from "md-editor-v3";
 import { sanitizeMarkdownHtml } from "../utils/sanitize";
 import {useRoute, useRouter} from 'vue-router'
 import RankTable from "./rankTable.vue";

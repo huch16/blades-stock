@@ -30,7 +30,6 @@ import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime
 import WebAuthModal from "./components/WebAuthModal.vue";
 import { isWails, getAuthToken, webEventBus } from "./api/bridge";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
-import StockLightweightKlineChart from "./components/StockLightweightKlineChart.vue";
 import { initAgentControlBus, registerAgentActionHandler, setPendingConsult, consultAgent } from "./utils/agentControlBus";
 import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
 import {ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";

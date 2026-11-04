@@ -1,5 +1,5 @@
 <script setup>
-import {h, ref, computed, reactive, onMounted, watch} from "vue";
+import {h, ref, computed, reactive, onMounted, watch, defineAsyncComponent} from "vue";
 import {NButton, NText, NFlex, NTag, NDataTable, useMessage} from "naive-ui";
 import {
   FollowFund,
@@ -11,7 +11,8 @@ import {
   SearchFundCodes
 } from "../../wailsjs/go/main/App";
 import {Environment} from "../../wailsjs/runtime";
-import StockLightweightKlineChart from "./StockLightweightKlineChart.vue";
+// 异步按需加载 K 线图表模块
+const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
 import StockSparkLine from "./stockSparkLine.vue";
 
 const message = useMessage()
