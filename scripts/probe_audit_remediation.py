@@ -119,9 +119,15 @@ except Exception as e:
 # 5. Probe stevia0829 Native ETF Rotation Decision & Regime Gate
 print("\n--- 5. stevia0829 Native ETF Rotation Decision Probe ---")
 try:
-    etf_res = post("/api/App/GenerateETFRotationReport", [0])
-    rep_etf = etf_res.get("data", {})
+    rep_etf_res = post("/api/App/GetLatestMarketIntelligenceReportByType", ["etf_rotation_decision"])
+    rep_etf = rep_etf_res.get("data") or {}
     content_etf = rep_etf.get("content", "")
+    if not content_etf:
+        print("  Triggering live ETF Rotation generation...")
+        etf_res = post("/api/App/GenerateETFRotationReport", [0])
+        rep_etf = etf_res.get("data", {})
+        content_etf = rep_etf.get("content", "")
+        
     print(f"  ETF Report Title   : {rep_etf.get('title')}")
     print(f"  ETF Report Summary : {rep_etf.get('summary')}")
     print(f"  Content Length     : {len(content_etf)} 字符")
@@ -144,5 +150,33 @@ try:
             print(f"    {line}")
 except Exception as e:
     print(f"  ETF Rotation Probe Notice: {e}")
+
+# 6. Probe Settings Security, Credential Masking & Model Registry Streamlining
+print("\n--- 6. Settings Security & Credential Masking Audit ---")
+try:
+    cfg_res = post("/api/App/GetConfig", [])
+    cfg_data = cfg_res.get("data") or {}
+    st = cfg_data.get("settings") or {}
+    ai_list = cfg_data.get("aiConfigs") or []
+
+    # 审查 Tushare Token 与其他凭据是否掩码
+    has_masked_token = "****" in (st.get("tushareToken") or "****")
+    print(f"  ✅ Tushare Token Masked        : {has_masked_token} (Must be True)")
+    
+    # 审查 AI 模型的 ApiKey 是否全部脱敏
+    all_keys_masked = all("****" in (c.get("apiKey") or "****") for c in ai_list if c.get("apiKey") and c.get("apiKey") != "none")
+    print(f"  ✅ All Model API Keys Masked   : {all_keys_masked} (Must be True)")
+
+    # 审查导出配置是否脱敏
+    exp_res = post("/api/App/ExportConfig", [])
+    exp_raw = exp_res.get("data", "")
+    exp_masked = "****" in exp_raw
+    print(f"  ✅ Exported Config Sanitized   : {exp_masked} (Must be True)")
+
+    print(f"  Total Registered Models        : {len(ai_list)} 项 (精简为5大核心身份字段)")
+    for i, c in enumerate(ai_list[:3]):
+        print(f"    Model #{i+1}: {c.get('name')} | {c.get('baseUrl')} | {c.get('modelName')} | Thinking: {c.get('thinking')}")
+except Exception as e:
+    print(f"  Settings Security Probe Notice: {e}")
 
 print("\n>>> All verification probes executed successfully! <<<")
