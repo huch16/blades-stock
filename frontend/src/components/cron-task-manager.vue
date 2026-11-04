@@ -1373,67 +1373,65 @@ const columns = [
     width: 280,
     fixed: 'right',
     render(row) {
-      return h(NSpace, {}, {
-        default: () => [
-          h(
-            NButton,
-            {
-              size: 'tiny',
-              type: 'success',
-              onClick: () => handleExecute(row)
-            },
-            {
-              icon: () => h(NIcon, { component: PlayOutline }),
-              default: () => '执行'
-            }
-          ),
-          h(
-            NButton,
-            {
-              size: 'tiny',
-              type: row.enable ? 'warning' : 'info',
-              onClick: () => handleToggleEnable(row)
-            },
-            {
-              icon: () => h(NIcon, { component: row.enable ? PauseOutline : PlayOutline }),
-              default: () => (row.enable ? '暂停' : '启用')
-            }
-          ),
-          h(
-            NButton,
-            {
-              size: 'tiny',
-              type: 'primary',
-              onClick: () => handleEdit(row)
-            },
-            {
-              icon: () => h(NIcon, { component: CreateOutline }),
-              default: () => '编辑'
-            }
-          ),
-          h(
-            NPopconfirm,
-            {
-              onPositiveClick: () => handleDelete(row.id)
-            },
-            {
-              trigger: () =>
-                h(
-                  NButton,
-                  {
-                    size: 'tiny',
-                    type: 'error'
-                  },
-                  {
-                    icon: () => h(NIcon, { component: TrashOutline }),
-                    default: () => '删除'
-                  }
-                ),
-              default: () => `确定要删除任务 "${row.name}" 吗？`
-            }
-          )
-        ]
-      })
+      return h('div', { style: 'display: flex; gap: 6px; align-items: center;' }, [
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'success',
+            onClick: () => handleExecute(row)
+          },
+          {
+            icon: () => h(NIcon, { component: PlayOutline }),
+            default: () => '执行'
+          }
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: row.enable ? 'warning' : 'info',
+            onClick: () => handleToggleEnable(row)
+          },
+          {
+            icon: () => h(NIcon, { component: row.enable ? PauseOutline : PlayOutline }),
+            default: () => (row.enable ? '暂停' : '启用')
+          }
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'primary',
+            onClick: () => handleEdit(row)
+          },
+          {
+            icon: () => h(NIcon, { component: CreateOutline }),
+            default: () => '编辑'
+          }
+        ),
+        h(
+          NPopconfirm,
+          {
+            onPositiveClick: () => handleDelete(row.id)
+          },
+          {
+            trigger: () =>
+              h(
+                NButton,
+                {
+                  size: 'tiny',
+                  type: 'error'
+                },
+                {
+                  icon: () => h(NIcon, { component: TrashOutline }),
+                  default: () => '删除'
+                }
+              ),
+            default: () => `确定要删除任务 "${row.name}" 吗？`
+          }
+        )
+      ])
     }
   }
 ]

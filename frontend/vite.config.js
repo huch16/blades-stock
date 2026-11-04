@@ -28,6 +28,13 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
+      onwarn(warning, warn) {
+        // 将未定义标识符、未导出变量等警告直接升级为编译失败 (Build Blocker)
+        if (/is not defined|is not exported|unresolved import/i.test(warning.message)) {
+          throw new Error(`[BUILD-BLOCKER] ${warning.message}`);
+        }
+        warn(warning);
+      },
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) return

@@ -232,7 +232,7 @@ const columnsRef = ref([
     width: 200,
     fixed: 'right',
     render(row) {
-      return h(NSpace, { size: 6, justify: 'start' }, () => [
+      return h('div', { style: 'display: flex; gap: 6px; align-items: center;' }, [
         h(NButton, {
           size: 'tiny',
           type: 'primary',
