@@ -42,16 +42,18 @@ type StockDiagnosisResult struct {
 
 // QuantDimensionResult 量化回测维度
 type QuantDimensionResult struct {
-	Score          int       `json:"score"`           // 评分 0-100
-	StrategyName   string    `json:"strategyName"`    // 回测策略
-	WinRatePct     float64   `json:"winRatePct"`      // 历史胜率 %
-	TotalReturnPct float64   `json:"totalReturnPct"`  // 回测总收益率 %
-	SharpeRatio    float64   `json:"sharpeRatio"`     // 夏普比率
-	MaxDrawdownPct float64   `json:"maxDrawdownPct"`  // 最大回撤 %
-	ProfitFactor   float64   `json:"profitFactor"`    // 盈亏比
-	TotalTrades    int       `json:"totalTrades"`     // 交易样本次数
-	EquityCurve    []float64 `json:"equityCurve"`     // 净值曲线
-	Evaluation     string    `json:"evaluation"`      // 量化评价
+	Score              int       `json:"score"`              // 评分 0-100
+	StrategyName       string    `json:"strategyName"`       // 回测策略
+	WinRatePct         float64   `json:"winRatePct"`         // 历史胜率 %
+	TotalReturnPct     float64   `json:"totalReturnPct"`     // 回测总收益率 %
+	SharpeRatio        float64   `json:"sharpeRatio"`        // 夏普比率
+	MaxDrawdownPct     float64   `json:"maxDrawdownPct"`     // 最大回撤 %
+	ProfitFactor       float64   `json:"profitFactor"`       // 盈亏比
+	TotalTrades        int       `json:"totalTrades"`        // 交易样本次数
+	EquityCurve        []float64 `json:"equityCurve"`        // 净值曲线
+	BenchmarkCurve     []float64 `json:"benchmarkCurve"`     // 买入持有基准收益曲线
+	BenchmarkReturnPct float64   `json:"benchmarkReturnPct"` // 买入持有总收益率 %
+	Evaluation         string    `json:"evaluation"`         // 量化评价
 }
 
 // MoneyDimensionResult 资金筹码维度
@@ -196,10 +198,15 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 		riskReward = 1.0
 		targetNote = fmt.Sprintf("价格受MA20均线压制，仅测算波动中枢阻力位(%.2f)，以防守观望为主", targetPrice)
 	} else {
-		targetPrice = 0
+		// 偏空或逢高减持：给出反抽减仓阻力参考位（如MA20或反抽中枢），杜绝执行位留空
+		reboundTarget := math.Round((currentPrice+1.0*atrVal)*100) / 100
+		if techRes.MA20 > currentPrice {
+			reboundTarget = techRes.MA20
+		}
+		targetPrice = reboundTarget
 		stopLoss = math.Round((currentPrice-1.0*atrVal)*100) / 100
 		riskReward = 0
-		targetNote = "当前量化评级偏空，以风控防守为主，不设做多阻力位"
+		targetNote = fmt.Sprintf("建议反抽减仓阻力位: %.2f (MA20均线压制/反抽减仓窗口)，破 %.2f 防守离场", targetPrice, stopLoss)
 	}
 
 	confidence := quantRes.WinRatePct
@@ -212,7 +219,12 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 	var historyTrack string
 	if stats := btMgr.GetStockStats(cleanCode); stats != nil && stats.VerifiedCount > 0 {
 		historyTrack = fmt.Sprintf("AI历史预测该股 %d 次，实盘验证胜率 %.1f%% (准确 %d 次)",
-			stats.VerifiedCount, stats.AccuracyRate*100, stats.AccurateCount)
+			stats.VerifiedCount, stats.AccuracyRate, stats.AccurateCount)
+		// 自反思惩罚机制：如果历史实盘验证胜率偏低，对置信度执行衰减折价，并注入风险警示
+		if stats.VerifiedCount >= 3 && stats.AccuracyRate < 40.0 {
+			discountFactor := 0.6 + (stats.AccuracyRate / 100.0)
+			confidence = math.Round(confidence*discountFactor*10) / 10
+		}
 	} else {
 		historyTrack = "暂无该标的历史闭环回测样本"
 	}
@@ -223,6 +235,9 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 		summary += "（资金维度数据暂缺，已采用量化60%+技术40%动态降级加权）"
 	}
 	risks := buildDiagnosisRisks(currentPrice, techRes, moneyRes, quantRes)
+	if stats := btMgr.GetStockStats(cleanCode); stats != nil && stats.VerifiedCount >= 3 && stats.AccuracyRate < 40.0 {
+		risks = append(risks, fmt.Sprintf("自反思警示：历史AI在该标的实盘检验胜率偏低(%.1f%%，%d次样本)，已执行置信度折价", stats.AccuracyRate, stats.VerifiedCount))
+	}
 
 	return &StockDiagnosisResult{
 		StockCode:          cleanCode,
@@ -340,17 +355,31 @@ func runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP []float64, dates [
 
 	trimmedEquity := trimEquityCurvePrefix(res.Equity)
 
+	// 计算买入持有 (Buy-and-Hold) 基准累计收益曲线
+	benchmarkCurve := make([]float64, len(closeP))
+	if len(closeP) > 0 && closeP[0] > 0 {
+		for i := 0; i < len(closeP); i++ {
+			benchmarkCurve[i] = math.Round(((closeP[i]-closeP[0])/closeP[0]*100.0)*100) / 100
+		}
+	}
+	bmReturn := 0.0
+	if len(closeP) > 0 && closeP[0] > 0 {
+		bmReturn = math.Round(((closeP[len(closeP)-1]-closeP[0])/closeP[0]*100.0)*10) / 10
+	}
+
 	return QuantDimensionResult{
-		Score:          score,
-		StrategyName:   "MA趋势跟踪(5/20) · 原生向量化回测",
-		WinRatePct:     math.Round(winRatePct*10) / 10,
-		TotalReturnPct: math.Round(totalReturnPct*10) / 10,
-		SharpeRatio:    math.Round(sharpeRatio*100) / 100,
-		MaxDrawdownPct: math.Round(maxDrawdownPct*10) / 10,
-		ProfitFactor:   math.Round(profitFactor*100) / 100,
-		TotalTrades:    totalTrades,
-		EquityCurve:    trimmedEquity,
-		Evaluation:     eval,
+		Score:              score,
+		StrategyName:       "MA趋势跟踪(5/20) · 原生向量化回测",
+		WinRatePct:         math.Round(winRatePct*10) / 10,
+		TotalReturnPct:     math.Round(totalReturnPct*10) / 10,
+		SharpeRatio:        math.Round(sharpeRatio*100) / 100,
+		MaxDrawdownPct:     math.Round(maxDrawdownPct*10) / 10,
+		ProfitFactor:       math.Round(profitFactor*100) / 100,
+		TotalTrades:        totalTrades,
+		EquityCurve:        trimmedEquity,
+		BenchmarkCurve:     benchmarkCurve,
+		BenchmarkReturnPct: bmReturn,
+		Evaluation:         eval,
 	}
 }
 

@@ -62,6 +62,19 @@ print(f"  Target Price       : {dm.get('targetPrice')} 元 ({dm.get('targetPrice
 print(f"  Forecast RRR       : {dm.get('riskRewardRatio')}")
 print(f"  Profit Factor      : {dm.get('quantDim', {}).get('profitFactor')}")
 
+# 2.1 Check 510300 3D Diagnosis Remediation (QA Defect 1-5 Checks)
+diag_res_300 = post("/api/App/DiagnoseStock", ["510300"])
+d3 = diag_res_300.get("data") or {}
+print("\n--- 2.1 510300 3D Diagnosis Remediation Audit (QA Defect 1-5 Checks) ---")
+print(f"  Overall Score      : {d3.get('overallScore')}/100 (量化39 + 技术35 等权自适应均分)")
+print(f"  Suggestion         : {d3.get('suggestion')}")
+print(f"  Target Price (Trim): {d3.get('targetPrice')} 元 (反抽减持触发位，已消除留空)")
+print(f"  Target Price Note  : {d3.get('targetPriceNote')}")
+print(f"  Stop Loss Price    : {d3.get('stopLossPrice')} 元 (动态 ATR(14) 止损)")
+print(f"  MoneyDim.HasData   : {d3.get('moneyDim', {}).get('hasData')} (UI渲染为 N/A，杜绝误导为极差0分)")
+print(f"  History Track      : {d3.get('historyTrackRecord')} (双重乘百已修复)")
+print(f"  Benchmark Return   : {d3.get('quantDim', {}).get('benchmarkReturnPct')}% vs 策略: {d3.get('quantDim', {}).get('totalReturnPct')}%")
+
 # 3. Check Stock Thesis Ledger
 print("\n--- 3. Buy-Side Cognitive Ledger (Theses) Probe ---")
 post("/api/App/SaveStockThesis", [

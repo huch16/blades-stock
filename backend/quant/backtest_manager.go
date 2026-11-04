@@ -145,6 +145,11 @@ func (m *BacktestManager) RunSingleReportBacktest(r models.AIResponseResult) (*m
 	if threshold == 0 {
 		threshold = 5.0
 	}
+	// ETF 资产波动率显著低于个股（通常仅为个股的1/2~1/3），自适应调整方向验证阈值
+	isETF := strings.HasPrefix(pureCode, "51") || strings.HasPrefix(pureCode, "15") || strings.HasPrefix(pureCode, "58")
+	if isETF && threshold > 2.0 {
+		threshold = 1.5
+	}
 
 	endIdx := idx + verifyDays
 	if endIdx > len(close) {
@@ -480,6 +485,10 @@ func (m *BacktestManager) backtestSingleReport(r models.AIResponseResult, stockD
 	if threshold == 0 {
 		threshold = 5.0
 	}
+	// ETF 资产波动率显著低于个股（通常仅为个股的1/2~1/3），自适应调整方向验证阈值
+	if (strings.HasPrefix(r.StockCode, "51") || strings.HasPrefix(r.StockCode, "15") || strings.HasPrefix(r.StockCode, "58")) && threshold > 2.0 {
+		threshold = 1.5
+	}
 
 	endIdx := idx + verifyDays
 	if endIdx > len(pd.close) {
@@ -592,9 +601,16 @@ type prediction struct {
 func extractPredictionFromReport(content string) prediction {
 	p := prediction{Direction: "中性", Confidence: 0.5}
 
-	bullish := countReportKeywords(content, []string{"看涨", "看好", "上涨", "反弹", "乐观", "做多", "买入", "加仓", "牛市", "多头", "强势", "突破"})
-	bearish := countReportKeywords(content, []string{"看跌", "看空", "下跌", "回落", "悲观", "做空", "卖出", "减仓", "回调", "熊市", "空头", "弱势", "破位"})
-	neutral := countReportKeywords(content, []string{"震荡", "盘整", "中性", "观望", "横盘", "整理", "徘徊", "均衡"})
+	// 排除 "严禁做多"、"禁止抄底"、"切忌追高" 等逆向否定短语对做多关键词的误统计
+	cleanedContent := content
+	negations := []string{"严禁做多", "禁止做多", "切忌做多", "严禁抄底", "禁止抄底", "不宜做多", "切忌追高", "禁止追高", "严禁追高"}
+	for _, neg := range negations {
+		cleanedContent = strings.ReplaceAll(cleanedContent, neg, "【已排雷风控否定】")
+	}
+
+	bullish := countReportKeywords(cleanedContent, []string{"看涨", "看好", "上涨", "反弹", "乐观", "做多", "买入", "加仓", "牛市", "多头", "强势", "突破", "进攻"})
+	bearish := countReportKeywords(cleanedContent, []string{"看跌", "看空", "下跌", "回落", "悲观", "做空", "卖出", "减仓", "回调", "熊市", "空头", "弱势", "破位", "防守", "避险", "回避", "冷却", "熔断", "冷冻", "减持", "空仓", "DEFENSE", "AVOID"})
+	neutral := countReportKeywords(cleanedContent, []string{"震荡", "盘整", "中性", "观望", "横盘", "整理", "徘徊", "均衡", "持币"})
 
 	switch {
 	case bullish > bearish && bullish > neutral:
@@ -688,9 +704,9 @@ func checkDirectionAccuracy(direction string, priceChange, threshold float64) bo
 	case "看跌":
 		return priceChange < -threshold
 	case "震荡":
-		return priceChange > -3 && priceChange < 3
+		return priceChange > -threshold && priceChange < threshold
 	case "中性":
-		return priceChange > -5 && priceChange < 5
+		return priceChange > -threshold*1.5 && priceChange < threshold*1.5
 	default:
 		return false
 	}

@@ -75,9 +75,12 @@ async function openThesisHistory(code) {
 // 净值曲线 SVG 计算 (去除前期无交易合成初始资金平坦前缀)
 const equitySvgPoints = computed(() => {
   const curve = diagnosisData.value?.quantDim?.equityCurve
+  const bm = diagnosisData.value?.quantDim?.benchmarkCurve
   if (!curve || curve.length < 2) return ''
-  const min = Math.min(...curve)
-  const max = Math.max(...curve)
+  // 综合策略与基准双曲线极值，确保同一坐标系下等比呈现
+  const allVals = [...curve, ...(bm || [])]
+  const min = Math.min(...allVals)
+  const max = Math.max(...allVals)
   const range = max - min || 1
   const width = 300
   const height = 40
@@ -91,6 +94,26 @@ const equitySvgPoints = computed(() => {
     .join(' ')
 })
 
+const benchmarkSvgPoints = computed(() => {
+  const curve = diagnosisData.value?.quantDim?.equityCurve
+  const bm = diagnosisData.value?.quantDim?.benchmarkCurve
+  if (!bm || bm.length < 2) return ''
+  const allVals = [...(curve || []), ...bm]
+  const min = Math.min(...allVals)
+  const max = Math.max(...allVals)
+  const range = max - min || 1
+  const width = 300
+  const height = 40
+  const padding = 2
+  return bm
+    .map((val, idx) => {
+      const x = (idx / (bm.length - 1)) * width
+      const y = height - padding - ((val - min) / range) * (height - padding * 2)
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+})
+
 const equityReturnPct = computed(() => {
   const curve = diagnosisData.value?.quantDim?.equityCurve
   if (!curve || curve.length < 2) return 0
@@ -98,6 +121,10 @@ const equityReturnPct = computed(() => {
   const end = curve[curve.length - 1]
   if (start <= 0) return 0
   return Number((((end - start) / start) * 100).toFixed(1))
+})
+
+const benchmarkReturnPct = computed(() => {
+  return diagnosisData.value?.quantDim?.benchmarkReturnPct ?? 0
 })
 
 // 呼叫全屏 Agent 深度推演（跨组件上下文穿透）
@@ -383,7 +410,7 @@ onBeforeUnmount(() => {
             <strong style="color: #18a058;">核心假说：</strong>{{ thesisData.coreThesis }}
           </div>
           <NFlex
-            v-if="thesisData.keyCatalysts || thesisData.riskFactors"
+            v-if="thesisData.keyCatalysts || thesisData.riskFactors || (diagnosisData && diagnosisData.stopLossPrice)"
             vertical
             :size="4"
             style="font-size: 11px;"
@@ -399,6 +426,14 @@ onBeforeUnmount(() => {
               style="color: #d03050;"
             >
               <strong>证伪条件：</strong>{{ thesisData.riskFactors }}
+            </div>
+            <div
+              v-if="diagnosisData && diagnosisData.stopLossPrice"
+              style="color: #d03050; display: flex; align-items: center; gap: 6px; margin-top: 2px;"
+            >
+              <strong>动态风控锚点：</strong>
+              <span style="font-weight: bold; color: #d03050;">{{ diagnosisData.stopLossPrice.toFixed(2) }} 元</span>
+              <span style="color: #888; font-size: 10px;">(实时 ATR 波动通道动态测算，统一下单与止损基准)</span>
             </div>
           </NFlex>
         </NCard>
@@ -434,7 +469,8 @@ onBeforeUnmount(() => {
                 {{ diagnosisData.suggestion }}
               </NTag>
               <div style="margin-top: 6px; font-size: 12px; color: #888;">
-                历史回测置信度: <strong style="color: #4098fc">{{ diagnosisData.confidence }}%</strong>
+                历史策略胜率: <strong style="color: #4098fc">{{ diagnosisData.confidence }}%</strong>
+                <span style="font-size: 10px; color: #aaa; margin-left: 4px;">(样本折扣已生效)</span>
               </div>
             </div>
           </NFlex>
@@ -454,12 +490,12 @@ onBeforeUnmount(() => {
             </NGridItem>
             <NGridItem>
               <NStatistic
-                label="第一目标价"
+                :label="diagnosisData.overallScore >= 50 ? '第一目标价' : '建议减持触发位'"
                 :value="diagnosisData.targetPrice > 0 ? diagnosisData.targetPrice.toFixed(2) : '--'"
               >
                 <template #suffix>
-                  <span v-if="diagnosisData.targetPrice > 0" style="font-size: 10px; color: #18a058;">
-                    (+{{ (((diagnosisData.targetPrice - diagnosisData.currentPrice) / diagnosisData.currentPrice) * 100).toFixed(1) }}%)
+                  <span v-if="diagnosisData.targetPrice > 0" :style="{ fontSize: '10px', color: diagnosisData.overallScore >= 50 ? '#18a058' : '#e06c75' }">
+                    ({{ diagnosisData.overallScore >= 50 ? '+' : '' }}{{ (((diagnosisData.targetPrice - diagnosisData.currentPrice) / diagnosisData.currentPrice) * 100).toFixed(1) }}%)
                   </span>
                   <span v-else style="font-size: 10px; color: #888;">
                     ({{ diagnosisData.targetPriceNote || '偏空防守' }})
@@ -526,15 +562,32 @@ onBeforeUnmount(() => {
             策略: {{ diagnosisData.quantDim.strategyName }} (交易样本: {{ diagnosisData.quantDim.totalTrades }} 次)
           </div>
 
-          <!-- 净值曲线 (去除合成初始资金平坦前缀) -->
+          <!-- 净值曲线 (带买入持有基准对比) -->
           <div v-if="equitySvgPoints" style="margin: 10px 0 6px 0; padding: 8px; background: rgba(0,0,0,0.02); border-radius: 6px;">
-            <div style="font-size: 11px; color: #888; margin-bottom: 4px; display: flex; justify-content: space-between;">
-              <span>📈 策略实际交易净值曲线 (250根样本内回测)</span>
-              <span :style="{ color: equityReturnPct >= 0 ? '#18a058' : '#d03050', fontWeight: 'bold' }">
-                {{ equityReturnPct >= 0 ? '+' : '' }}{{ equityReturnPct }}%
-              </span>
+            <div style="font-size: 11px; color: #888; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+              <span>📈 策略实际净值 (250根样本) vs 基准</span>
+              <div style="display: flex; gap: 8px; font-size: 11px;">
+                <span :style="{ color: equityReturnPct >= 0 ? '#18a058' : '#d03050', fontWeight: 'bold' }">
+                  策略: {{ equityReturnPct >= 0 ? '+' : '' }}{{ equityReturnPct }}%
+                </span>
+                <span style="color: #888;">
+                  基准: {{ benchmarkReturnPct >= 0 ? '+' : '' }}{{ benchmarkReturnPct }}%
+                </span>
+              </div>
             </div>
             <svg viewBox="0 0 300 40" style="width: 100%; height: 40px; overflow: visible;">
+              <!-- 买入持有基准线 (灰色虚线) -->
+              <polyline
+                v-if="benchmarkSvgPoints"
+                fill="none"
+                stroke="#aaa"
+                stroke-width="1.2"
+                stroke-dasharray="3,3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                :points="benchmarkSvgPoints"
+              />
+              <!-- 策略实际净值线 (实线) -->
               <polyline
                 fill="none"
                 :stroke="equityReturnPct >= 0 ? '#18a058' : '#d03050'"
@@ -544,6 +597,10 @@ onBeforeUnmount(() => {
                 :points="equitySvgPoints"
               />
             </svg>
+            <div style="font-size: 10px; color: #999; margin-top: 3px; display: flex; justify-content: space-between;">
+              <span :style="{ color: equityReturnPct >= 0 ? '#18a058' : '#d03050' }">— 策略净值 (实线)</span>
+              <span>--- 买入持有基准 (虚线)</span>
+            </div>
           </div>
 
           <NGrid
@@ -604,17 +661,28 @@ onBeforeUnmount(() => {
               align="center"
             >
               <span>💰 资金筹码博弈</span>
-              <span style="font-weight: 700; color: #2080f0;">{{ diagnosisData.moneyDim.score }} 分</span>
+              <span v-if="diagnosisData.moneyDim && diagnosisData.moneyDim.hasData" style="font-weight: 700; color: #2080f0;">
+                {{ diagnosisData.moneyDim.score }} 分
+              </span>
+              <span v-else style="font-weight: 600; color: #888; font-size: 12px;">
+                N/A (暂无数据 · 未计入总分)
+              </span>
             </NFlex>
           </template>
           <NProgress
+            v-if="diagnosisData.moneyDim && diagnosisData.moneyDim.hasData"
             type="line"
             :percentage="diagnosisData.moneyDim.score"
             :color="diagnosisData.moneyDim.score >= 60 ? '#18a058' : '#e06c75'"
             :show-indicator="false"
             style="margin-bottom: 8px;"
           />
+          <div
+            v-else
+            style="height: 6px; background: rgba(0, 0, 0, 0.06); border-radius: 3px; margin-bottom: 8px;"
+          />
           <NGrid
+            v-if="diagnosisData.moneyDim && diagnosisData.moneyDim.hasData"
             :cols="2"
             :x-gap="6"
             style="margin-bottom: 8px"
@@ -639,7 +707,10 @@ onBeforeUnmount(() => {
               </div>
             </NGridItem>
           </NGrid>
-          <div style="font-size: 12px; margin-bottom: 4px;">
+          <div v-else style="font-size: 11px; color: #999; margin-bottom: 6px; padding: 4px 8px; background: rgba(0,0,0,0.02); border-radius: 4px;">
+            ℹ️ 该标的（如场内ETF或宽基品种）暂无二级市场逐笔资金流统计，评分已按量化60%+技术40%动态自适应降级加权。
+          </div>
+          <div v-if="diagnosisData.moneyDim && diagnosisData.moneyDim.hasData" style="font-size: 12px; margin-bottom: 4px;">
             <NTag
               size="tiny"
               type="info"

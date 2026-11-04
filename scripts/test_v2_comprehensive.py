@@ -168,6 +168,20 @@ try:
 except Exception as e:
     check('Diagnosis reproducibility metadata & equity curve check', False, str(e))
 
+# 5.0.1 510300 3D Quant Diagnosis Remediation Probe (QA Defect 1-5 Checks)
+status, headers, body = make_req('/api/App/DiagnoseStock', data=['510300'], headers=auth_headers)
+check('DiagnoseStock(510300) returns 200', status == 200, f'Status: {status}')
+try:
+    d300 = json.loads(body).get('data', {})
+    check('510300 逢高减持输出明确反抽减持触发位 (>0，如 MA20=4.21)', d300.get('targetPrice', 0) > 0 and '反抽' in d300.get('targetPriceNote', ''), f'TargetPrice: {d300.get("targetPrice")}, Note: {d300.get("targetPriceNote")}')
+    q_dim = d300.get('quantDim', {})
+    check('510300 量化回测附带买入持有基准收益曲线 (BenchmarkCurve)', len(q_dim.get('benchmarkCurve', [])) > 10, f'Len: {len(q_dim.get("benchmarkCurve", []))}')
+    ht = d300.get('historyTrackRecord', '')
+    check('510300 AI历史预测复盘胜率剔除双重乘百Bug (无 5500%)', '5500' not in ht, f'Got: {ht}')
+    check('510300 资金维度 HasData 正确识别为 False (无二级资金流)', d300.get('moneyDim', {}).get('hasData') is False, f'HasData: {d300.get("moneyDim", {}).get("hasData")}')
+except Exception as e:
+    check('510300 3D Quant Diagnosis checks', False, str(e))
+
 # 5.1 Deterministic Pre-Market Holding Risk Control Scan (Zero-Token Rule & QA Remediation)
 print('\n--- Testing Deterministic Pre-Market Holding Risk Control Scan ---')
 seven_stocks_payload = [
