@@ -250,16 +250,16 @@ func ScanHoldingRisk(items []HoldingScanItem) (*HoldingRiskScanResult, error) {
 			riskTier = "GREEN"
 			tierPrefix = "🟢"
 			defensePrice = ma20
-			if volRatio < 0.8 {
+			if it.ChangePercent <= 0 || volRatio < 1.0 {
 				tierTitle = "🟢【多头持有】"
 				actionAdvice = fmt.Sprintf("MA5>MA10>MA20多头排列，价高于MA20约%.1f%%，缩量回调属强势整理。持有，防守MA20=%.2f。",
 					distMA20, ma20)
-			} else if consecDays >= 3 {
+			} else if consecDays >= 2 {
 				tierTitle = "🟢【多头趋势】"
 				actionAdvice = fmt.Sprintf("MA5>MA10>MA20多头排列，站上MA20约%.1f%%，连涨%d日。持有，破MA20=%.2f离场。",
 					distMA20, consecDays, ma20)
 			} else {
-				tierTitle = "🟢【进攻跟踪】"
+				tierTitle = "🟢【多头进攻】"
 				defensePrice = ma5
 				actionAdvice = fmt.Sprintf("多头排列完好，价高于MA20约%.1f%%。依托MA5=%.2f持有跟踪，破MA20=%.2f防守。",
 					distMA20, ma5, ma20)
