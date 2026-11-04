@@ -969,7 +969,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		}
 	}
 
-	// 3. 确定进攻候选标的与 09:22 集合竞价跳空复核
+	// 3. 确定候选标的与开盘/盘后跳空复核
 	topCandidateCode := "510300.SH"
 	topCandidateName := "沪深300ETF"
 	for _, m := range momentumList {
@@ -983,35 +983,55 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	regimeSummary := quant.FormatETFRegimeSummary(regimeStatus, preOpenCheck)
 
 	// 4. 组装零虚构、硬核数学注入的 System / User Prompt
-	prompt := fmt.Sprintf(`你是由 stevia0829/multi-agents-etf-trade-strategy 原生赋能的买方量化配置总监。今天是 %s。
+	prompt := fmt.Sprintf(`你是由 blades-stock 原生量化引擎（集成 stevia0829 经典 ETF 动量轮动策略框架）赋能的买方量化配置总监。今天是 %s。
 系统已在下方为你注入由本地纯 Go 量化引擎严格通过 21 日加权对数线性回归与 510300 沪深300ETF 硬风控状态机计算出的确定性数学结果。
 
 %s
 
-### 📊 核心关注 ETF 池 21日纯数学加权动量矩阵 (stevia0829 对数回归与 R² 滤波)：
+### 📊 核心关注 ETF 轮动池 21日纯数学加权动量矩阵 (代表性 8 标的跨风格/行业池 · stevia0829 对数回归与 R² 滤波)：
+说明：本池由 8 只代表性宽基与核心行业 ETF 组成（沪深300、创业板、半导体、军工、医药、银行、红利、创业板50），用于捕捉跨风格与行业轮动，并非全市场 800+ 标的。
+
 %s
 
 【铁律与量化纪律说明】：
 1. 【严禁虚增数据与编造打分】：上述动量排名、年化动量(%%)、线性拟合优度 R²、动量得分以及大盘硬风控状态全部由纯 Go 引擎精确计算得出，严禁大模型自行编造任何数字，严禁制作虚假打分矩阵！
 2. 【严格服从硬风控状态机 (Regime Gate)】：
-   - 当前 510300 大盘硬风控状态为：【%s】；
-   - 若状态为 DEFENSE（现价 < MA120 或 60日高点回撤 >= 8.0%%）：全市场做多进攻建议【一票否决】！最终决策必须给出【防守避险 (AVOID)】，强制建议持币或持有货币 ETF (511880/511990)，严禁让模型推翻 Go 的硬风控！
-   - 若状态为 OFFENSE：允许买入动量得分最高且未触发回撤冷却的领先标的【%s (%s)】；
-3. 【09:22 集合竞价防诱多机制】：若竞价跳空超过 +2.5%%，提示开盘严禁追高，防范脉冲诱多砸盘；若低开低于 -3.0%%，防范动量失速。
+   - 当前 510300 大盘硬风控状态为：【%s】（状态枚举：OFFENSE 或 DEFENSE）；
+   - 若状态为 DEFENSE（现价 < MA120 或 60日高点回撤 >= 8.0%%）：权益资产做多进攻建议【一票否决】！状态严格定义为【🛡️ 绝对防守避险 (DEFENSE)】，强制建议持币或配置货币 ETF (511880银华日利/511990华宝添益)，权益类资产建议仓位严格归零 (0%%)！严禁混用 AVOID、NO_CHANGE 等非标准状态名。
+   - 【防守状态下的标的语义规范】：当处于 DEFENSE 状态时，当前策略的首选资产配置必须明确为【货币ETF (511880/511990) 或空仓持币】；池内动量排名第一的标的【%s (%s)】仅作为【动量领先跟踪观察标的】，严禁表述为即时买入的“首选标的”！必须明确向投资者说明“大盘硬风控熔断，即使个别行业动量尚存也严禁逆势开仓，权益仓位强制归零”。
+   - 若状态为 OFFENSE：大盘处于安全右侧，允许将动量排名第一且未触发回撤冷却的领先标的【%s (%s)】列为【首选进攻标的】；
+3. 【数学符号与排版规范禁忌】：
+   - 所有拟合优度必须以标准 Markdown 纯文本 R² 或 R^2 输出，绝对禁止使用 HTML 尖括号 <R²> 或 <R^2> 包裹，防止被前端安全渲染组件剥离导致文本空洞！
+   - 引用动量指标与拟合优度时，必须完整列出纯 Go 计算给出的具体数值（如 R²=%.3f、动量得分等），严禁遗漏数值或出现空白。
+4. 【动态防守线与时段核查规范】：
+   - 510300 动态跟踪防守位为 %.3f 元 (基于 MA20 %.3f 元动态浮动计算，严禁虚构或套用陈旧历史点位)；
+   - 时段判定为【%s】，请客观引用开盘跳空幅度和累计涨跌幅，非集合竞价时段严禁误报为“集合竞价正在进行”。
 
 请直接输出客观、严谨、零废话的 Markdown 格式【ETF轮动量化多Agent决策研报】：
 ### 🛡️ 一、大盘硬风控状态机判定 (stevia0829 核心)
-- 详细解读 510300 现价与 MA120 均线位置、60日回撤幅度，明确当前多空防守边界；
+- 详细解读 510300 现价与 MA120 均线位置、60日回撤幅度，明确当前多空防守边界与动态防守位(%.3f 元)；
 
 ### 📈 二、21日加权对数动量池全景解剖
-- 基于纯数学动量矩阵，阐述领涨 ETF（如 %s）走强的宏观流动性与产业催化背景；
+- 基于纯数学动量矩阵，阐述池内表现相对领先标的（如 %s）的宏观流动性与产业催化背景；
 - 明确指出哪些标的触发了 5 日回撤冷却拦截（Cooldown Gate），说明为何剔除；
+- 【低波防御与红利资产特性提示】：银行 ETF (512800) 与红利 ETF (510880) 因天然低波动特性，年化回归斜率数值通常较小，但其 R² 拟合优度与抗跌韧性往往极高。在弱市或大盘处于 DEFENSE 周期时，客观解读此类低波资产的防御属性，不得仅依据绝对动量得分高低做单一维度的片面定性；
 
 ### 🎯 三、最终交易与仓位执行指令
-- 明确给出仓位上限百分比与具体代码；
-- 制定精准的防守止损线与逻辑证伪底线。`, todayStr, regimeSummary, momentumTable, regimeStatus.StateDesc, topCandidateName, topCandidateCode, topCandidateName)
+- 明确给出仓位上限百分比（若 DEFENSE 则权益仓位为 0%%，持有货币ETF/持币）与具体代码；
+- 制定精准的防守止损线与逻辑证伪底线。`,
+		todayStr,
+		regimeSummary,
+		momentumTable,
+		regimeStatus.StateDesc,
+		topCandidateName, topCandidateCode,
+		topCandidateName, topCandidateCode,
+		0.859, // 示范格式
+		regimeStatus.DynamicDefensePrice, regimeStatus.MA20,
+		preOpenCheck.SessionName,
+		regimeStatus.DynamicDefensePrice,
+		topCandidateName)
 
-	sysPrompt := "你现在是严格践行 stevia0829/multi-agents-etf-trade-strategy 的买方量化配置总监。所有动量得分与风控状态已由纯 Go 计算完毕，严禁虚增或篡改任何数学数据，交易决策必须严格服从 Go 引擎的硬风控状态机。"
+	sysPrompt := "你现在是 blades-stock 原生量化投资总监（践行 stevia0829/multi-agents-etf-trade-strategy 经典策略框架）。所有动量得分、R²、回撤与大盘硬风控状态已由本地纯 Go 引擎确定性计算完毕，严禁虚增或篡改任何数学数据，交易决策必须严格服从 Go 引擎的硬风控状态机。"
 	reasoningBuilder := strings.Builder{}
 	contentBuilder := strings.Builder{}
 	var streamErr string
@@ -1047,8 +1067,14 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	}
 
 	title := fmt.Sprintf("📈 ETF动量轮动与大盘硬风控研判 (%s)", todayStr)
-	summary := fmt.Sprintf("stevia0829原生量化：510300状态【%s】，首选标的【%s (%s)】",
-		regimeStatus.State, topCandidateName, topCandidateCode)
+	var summary string
+	if regimeStatus.State == "DEFENSE" {
+		summary = fmt.Sprintf("blades-stock量化(stevia0829)：510300处于【DEFENSE】绝对防守避险态，权益建议仓位【0%%】(建议持有货币ETF或持币)，池内动量领先观察【%s (%s)】",
+			topCandidateName, topCandidateCode)
+	} else {
+		summary = fmt.Sprintf("blades-stock量化(stevia0829)：510300处于【OFFENSE】允许动量进攻态，首选进攻标的【%s (%s)】",
+			topCandidateName, topCandidateCode)
+	}
 
 	report := &MarketIntelligenceReport{
 		Type:        "etf_rotation_decision",
@@ -1058,7 +1084,7 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 		Actions:     actions,
 		GeneratedAt: time.Now(),
 		TradingDate: todayStr,
-		Source:      "stevia0829-ETF轮动量化引擎",
+		Source:      "blades-stock-ETF动量轮动引擎(stevia0829)",
 	}
 
 	data.NewDeepSeekOpenAi(ctx, aiConfigId).SaveAIResponseResult("510300.SH", "ETF轮动量化决策", finalReport, "etf_rotation_"+todayStr, prompt)
