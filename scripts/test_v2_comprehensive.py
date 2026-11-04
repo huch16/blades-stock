@@ -79,12 +79,18 @@ try:
 except Exception as e:
     check('GetVersionInfo returns v2.0.0', False, str(e))
 
-# 2. Security Headers
+# 2. Security Headers (HSTS, CSP without unsafe-eval, X-Frame-Options)
 status, headers, body = make_req('/', method='GET')
 check('Header X-Frame-Options: DENY', headers.get('X-Frame-Options') == 'DENY', f'Got: {headers.get("X-Frame-Options")}')
 check('Header X-Content-Type-Options: nosniff', headers.get('X-Content-Type-Options') == 'nosniff', f'Got: {headers.get("X-Content-Type-Options")}')
 check('Header CSP contains default-src', 'default-src' in (headers.get('Content-Security-Policy') or ''), f'Got: {headers.get("Content-Security-Policy")}')
+check('Header CSP strips unsafe-eval (hardened anti-XSS)', 'unsafe-eval' not in (headers.get('Content-Security-Policy') or ''), f'Got: {headers.get("Content-Security-Policy")}')
+check('Header Strict-Transport-Security (HSTS) enforced', bool(headers.get('Strict-Transport-Security')), f'Got: {headers.get("Strict-Transport-Security")}')
 check('Header Referrer-Policy strict-origin', headers.get('Referrer-Policy') == 'strict-origin-when-cross-origin', f'Got: {headers.get("Referrer-Policy")}')
+
+# 2.1 Gzip Compression Negotiation Check (B-003)
+status, headers, body = make_req('/live', method='GET', headers={'Accept-Encoding': 'gzip'})
+check('Gzip Compression enabled on server (Content-Encoding: gzip)', headers.get('Content-Encoding') == 'gzip', f'Got: {headers.get("Content-Encoding")}')
 
 # 3. Auth Login & Rate Limiting Guard
 status, headers, body = make_req('/api/auth/login', data={'token': TOKEN})

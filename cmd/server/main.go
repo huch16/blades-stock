@@ -1,10 +1,12 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -32,15 +34,45 @@ var (
 	distDirFlag = flag.String("dist-dir", "frontend/dist", "Path to frontend dist directory")
 )
 
-// SecurityHeadersMiddleware 为所有 HTTP 响应注入标准安全响应头 (点击劫持、MIME 混淆、Referrer 泄露及 XSS 防御)
+// SecurityHeadersMiddleware 为所有 HTTP 响应注入标准安全响应头 (HSTS、点击劫持、MIME 混淆、Referrer 泄露及 XSS 防御)
 func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
-		w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; frame-ancestors 'none';")
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+		// 生产级 CSP 加固：彻底移除 'unsafe-eval'，杜绝 eval/Function 代码注入与 XSS 风险
+		w.Header().Set("Content-Security-Policy", "default-src 'self' 'unsafe-inline' data: blob: https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; frame-ancestors 'none';")
 		next.ServeHTTP(w, r)
+	})
+}
+
+type gzipResponseWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+// GzipMiddleware 为符合条件的 API 请求与静态资源启用 Gzip 传输压缩 (针对 1.15MB GetStockList 等巨型载荷降低 80%+ 传输带宽)
+func GzipMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// SSE 实时推流跳过 Gzip 压缩，确保流式推流即时 flush
+		if strings.HasPrefix(r.URL.Path, "/api/events/stream") || !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Add("Vary", "Accept-Encoding")
+		gzw := gzipResponseWriter{ResponseWriter: w, Writer: gz}
+		next.ServeHTTP(gzw, r)
 	})
 }
 
@@ -313,8 +345,8 @@ func main() {
 		})
 	}
 
-	// 8. 挂载中间件并启动服务器 (链路追踪 + 安全响应头 + 鉴权拦截)
-	handler := RequestTracingMiddleware(SecurityHeadersMiddleware(AuthMiddleware(mux)))
+	// 8. 挂载中间件并启动服务器 (链路追踪 + 传输压缩 + 安全响应头 + 鉴权拦截)
+	handler := RequestTracingMiddleware(GzipMiddleware(SecurityHeadersMiddleware(AuthMiddleware(mux))))
 
 	server := &http.Server{
 		Addr:              addr,

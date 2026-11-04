@@ -357,13 +357,19 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
 
   const url = `/api/App/${method}`
 
+  // 注入 30 秒硬超时熔断控制器，防止慢速接口无截止时间悬挂占用连接
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
+  const timer = controller ? setTimeout(() => controller.abort(), 30_000) : null
+
   const fetchPromise = (async () => {
     try {
       const response = await fetch(url, {
         method: 'POST',
         headers,
         body: serializedArgs,
+        signal: controller ? controller.signal : undefined,
       })
+      if (timer) clearTimeout(timer)
 
       if (response.status === 401) {
         clearAuthToken()
@@ -414,6 +420,11 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
 
       return result
     } catch (err: any) {
+      if (timer) clearTimeout(timer)
+      if (err.name === 'AbortError') {
+        console.warn(`[UniversalBridge] RPC call to "${method}" timed out after 30s.`)
+        throw new Error(`请求超时：接口 "${method}" 响应耗时超过 30 秒，已执行保护性熔断`)
+      }
       console.error(`[UniversalBridge] RPC call to "${method}" (${requestId}) failed:`, err)
       throw err
     } finally {

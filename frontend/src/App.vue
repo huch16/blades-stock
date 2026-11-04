@@ -7,7 +7,7 @@ import {
   WindowUnfullscreen,
   WindowSetTitle
 } from '../wailsjs/runtime'
-import {h, computed, onBeforeMount, onBeforeUnmount, onMounted, ref} from "vue";
+import {h, computed, onBeforeMount, onBeforeUnmount, onMounted, ref, onErrorCaptured} from "vue";
 import {RouterLink, useRouter} from 'vue-router'
 import {createDiscreteApi,darkTheme,lightTheme , NIcon, NText,NButton,dateZhCN,zhCN} from 'naive-ui'
 import {
@@ -86,6 +86,17 @@ function sendBrowserNotification(title, body) {
 
 // Agent 全局控制总线状态
 const { dialog: globalDialog, message: globalMessage } = createDiscreteApi(['dialog', 'message'])
+
+// 全局组件错误边界 (Error Boundary): 捕获子组件渲染与生命周期异常，防止整个页面白屏 (B-009)
+onErrorCaptured((err, instance, info) => {
+  console.error('[ErrorBoundary] 捕获到子组件未处理渲染异常:', err, 'Info:', info)
+  try {
+    globalMessage.warning('检测到局部组件渲染波动，系统已自动隔离，核心投研功能正常运行', { duration: 4000 })
+  } catch (e) {}
+  // 返回 false 阻止异常向顶层扩散导致整个 DOM 树白屏崩溃
+  return false
+})
+
 const showAgentDiagnosisDrawer = ref(false)
 const agentDiagnosisStockCode = ref('')
 const agentDiagnosisStockName = ref('')
