@@ -24,6 +24,10 @@ Highlights / 核心亮点（全栈七大维度）
    - **严格本地工具纪律**：L1~L5 量化选股与深度诊断严格绑定 Blades 本地工具，杜绝外网碎片搜索导致的幻觉与陈旧数据。
 
 4. **④ 高性能向量化量化与时序投研中枢 (High-Performance VectorBT & Quant Engine)**
+   - **Wilder RMA 平滑算法对齐与边界保护**：将前后端（Go `backend/quant/indicators.go` 与 Vue `frontend/src/components/kline/calc.ts`）RSI 指标统一对齐为 J. Welles Wilder 原生 RMA 平滑算法。平坦停牌序列安全锚定 50.0 中性值（杜绝错误返回 100 极度超买）；布林带（Bollinger Bands）调整为样本标准差 ($\div (n - 1)$)，实现通达信、同花顺与东方财富行情终端的绝对点位对齐。
+   - **510300 三维量化诊断全面矫正**：彻底修复历史复盘胜率双重乘百 Bug（消除 5500% 异常数值）；无二级资金流标的（宽基/ETF）标注 `HasData: false` 并在 UI 呈现为 `N/A`，动态自适应重构为量化与技术等权评分；逢高减持标的明确输出反抽减持参考位（如 MA20），并附带买入持有基准收益曲线（BenchmarkCurve）。
+   - **stevia0829 纯 Go ETF 动量轮动与硬风控状态机**：以沪深300ETF (510300) MA120 及动态回撤作为宏观硬风控熔断（`OFFENSE` vs `DEFENSE`），通过纯 Go 实时计算 21 日对数收益率动量与回归矩阵，杜绝 LLM 幻觉。
+   - **盘前持仓风控扫描器 (`ScanHoldingRisk`)**：纯 Go 原生确定性扫描器，零 Token 消耗严格输出持仓分级（🟢 🟡 🔴）、动态均线防守位（MA5/MA20）与数据溯源，精炼输出控制在 350 字以内。
    - **可验证指标溯源与确定性窗口**：单股三维量化诊断严格锚定确定性 250 根日 K 线窗口 (`WindowBars = 250`)，输出 `dataWindowDesc`、`dataSource`、`adjust: "qfq"`、`codeVersion: "v2.0.0"` 与 `computedAt`，彻底消除 365 vs 500 样本漂移事故。
    - **去除合成平坦净值曲线前缀 (`trimEquityCurvePrefix`)**：消除回测策略开仓前人工资金恒定的平坦期干扰，使前台 SVG/轻量净值曲线精准反映实际策略交易路径。
    - **缺失数据客观归零与动态权重重分配**：对缺失或样本不足（<20 根）的量化维度坚决赋 0 分拒绝虚构 50 分中性分；在资金流向数据不可得时，动态重新加权为量化 60% + 技术 40%。
@@ -38,10 +42,14 @@ Highlights / 核心亮点（全栈七大维度）
 
 6. **⑥ 全方位安全合规、防暴力破解与凭据脱敏 (Security, Anti-Brute-Force & Secret Masking)**
    - **全站统一访问凭据 (`2266762`) 与 HttpOnly Cookie**：登录成功下发 `blades_token` Cookie 支持跨域 SSE 事件流安全鉴权，杜绝在 URL 中裸露明文 Token。
+   - **统一集中 CORS 域名白名单与预检保护 (P1-1)**：在 `AuthMiddleware` 中集中校验 Origin 白名单，彻底剔除下游 SSE 与 RPC 处理器中的通配符 `Access-Control-Allow-Origin: *`，防止恶意站点凭据跨域窃取；非授权 OPTIONS 预检请求直接返回 HTTP 403 Forbidden，合规预检注入 86400 秒缓存。
+   - **OpenAPI 3.0 动态强类型契约引擎 (P0-3, P1-7)**：基于 Go 反射（`goTypeToOpenAPISchema`）动态解析 250 个 RPC 方法的输入与输出数据类型，生成包含参数 schema、`StandardResponse`、`ErrorResponse` 以及 `bearerAuth` 与 `cookieAuth` 规范的 OpenAPI 3.0 文档。
+   - **全端 OpenURL SSRF 深度防御**：在桌面端 `App.OpenURL` 与 Web 端 `SettingsService.OpenURL` 中对外部链接实施严格的协议白名单校验（仅放行 `http`/`https`），封禁云厂商元数据服务（`169.254.x.x`）及本地非法端口。
+   - **跨域 SSE 事件流凭据保持**：客户端 `bridge.ts` 显式开启 `{ withCredentials: true }`，确保反向代理及跨域调试下 `blades_token` 会话无缝透传。
    - **防暴力破解频率限制熔断**：基于客户端 IP 实施 1 秒防御性时钟延迟与 5 次连续失败封禁 15 分钟（HTTP 429），杜绝自动化爆破。
    - **全量 API 敏感凭据脱敏保护**：`/api/App/GetConfig` 与 `/api/App/ExportConfig` 自动对商业 API Key 执行掩码掩蔽（`****`），杜绝开发者排查日志与配置备份外泄。
    - **全局 Markdown XSS 深度防御**：全站所有 Markdown 预览组件（`MdPreview`）强制注入 `DOMPurify` 消毒过滤器，杜绝存储型 XSS 漏洞。
-   - **安全响应头矩阵**：生产服务器强制注入 `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin` 与 CSP。
+   - **安全响应头矩阵**：生产服务器强制注入 `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Strict-Transport-Security` (HSTS)、`Referrer-Policy: strict-origin` 与严格 CSP（剔除 `'unsafe-eval'`）。
 
 7. **⑦ 自动化质量门禁、双端编译与多 VPS 容器固化 (Automated Quality Gates & Production Deployment)**
    - **全量工程版本统一步进至 2.0.0**：对齐 Wails、package.json、Go 运行时、设置中心与部署脚本。
