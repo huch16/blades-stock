@@ -27,8 +27,13 @@ def make_req(path, data=None, headers=None, method='POST'):
     req = urllib.request.Request(url, data=data_bytes, headers=req_headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            body = resp.read().decode('utf-8')
-            return resp.status, resp.headers, body
+            resp_headers = resp.headers
+            raw_bytes = resp.read()
+            if resp_headers.get('Content-Encoding') == 'gzip':
+                import gzip
+                raw_bytes = gzip.decompress(raw_bytes)
+            body = raw_bytes.decode('utf-8')
+            return resp.status, resp_headers, body
     except urllib.error.HTTPError as e:
         body = e.read().decode('utf-8')
         return e.code, e.headers, body
