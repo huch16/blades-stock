@@ -1582,32 +1582,12 @@ func (a *App) GetStockTheses() (map[string]models.StockThesisLedger, error) {
 
 // ScanHoldingRisk 盘前持仓与自选股确定性多维度风控扫描 (零 Token 纯 Go 计算)
 func (a *App) ScanHoldingRisk(items []quant.HoldingScanItem) (*quant.HoldingRiskScanResult, error) {
-	return quant.ScanHoldingRisk(items)
+	return a.quantService.ScanHoldingRisk(items)
 }
 
 // ScanWatchlistRisk 根据自选分组 ID 执行盘前持仓确定性风控扫描
 func (a *App) ScanWatchlistRisk(groupId int) (*quant.HoldingRiskScanResult, error) {
-	followList := a.GetFollowList(groupId)
-	if followList == nil || len(*followList) == 0 {
-		return quant.ScanHoldingRisk(nil)
-	}
-	var items []quant.HoldingScanItem
-	for _, f := range *followList {
-		profitRate := 0.0
-		if f.CostPrice > 0 && f.Price > 0 {
-			profitRate = (f.Price - f.CostPrice) / f.CostPrice * 100.0
-		}
-		items = append(items, quant.HoldingScanItem{
-			StockCode:     f.StockCode,
-			StockName:     f.Name,
-			CurrentPrice:  f.Price,
-			ChangePercent: f.ChangePercent,
-			CostPrice:     f.CostPrice,
-			CostVolume:    float64(f.Volume),
-			ProfitRate:    profitRate,
-		})
-	}
-	return quant.ScanHoldingRisk(items)
+	return a.quantService.ScanWatchlistRisk(groupId)
 }
 
 // TriggerAIReportBacktest 手动或自动触发 AI 报告历史回测与胜率检验

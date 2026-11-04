@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"blades-stock/backend/data"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
 )
@@ -114,4 +115,34 @@ func (s *QuantService) RunVectorGridSearch(stockCode, strategyType string) map[s
 		"overfitting_risk":      resp.OverfittingRisk,
 		"train_test_split_desc": resp.TrainTestSplitDesc,
 	}
+}
+
+// ScanHoldingRisk 执行盘前持仓确定性多维度风控扫描 (零 Token 纯 Go 计算)
+func (s *QuantService) ScanHoldingRisk(items []quant.HoldingScanItem) (*quant.HoldingRiskScanResult, error) {
+	return quant.ScanHoldingRisk(items)
+}
+
+// ScanWatchlistRisk 根据自选分组 ID 执行盘前持仓确定性风控扫描
+func (s *QuantService) ScanWatchlistRisk(groupId int) (*quant.HoldingRiskScanResult, error) {
+	followList := data.NewStockDataApi().GetFollowList(groupId)
+	if followList == nil || len(*followList) == 0 {
+		return quant.ScanHoldingRisk(nil)
+	}
+	var items []quant.HoldingScanItem
+	for _, f := range *followList {
+		profitRate := 0.0
+		if f.CostPrice > 0 && f.Price > 0 {
+			profitRate = (f.Price - f.CostPrice) / f.CostPrice * 100.0
+		}
+		items = append(items, quant.HoldingScanItem{
+			StockCode:     f.StockCode,
+			StockName:     f.Name,
+			CurrentPrice:  f.Price,
+			ChangePercent: f.ChangePercent,
+			CostPrice:     f.CostPrice,
+			CostVolume:    float64(f.Volume),
+			ProfitRate:    profitRate,
+		})
+	}
+	return quant.ScanHoldingRisk(items)
 }
