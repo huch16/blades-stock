@@ -350,15 +350,8 @@ func main() {
 
 			// 2. 静态资源、协议文件或带扩展名文件若缺失，严格返回 404，杜绝返回 index.html (P0-2)
 			reqPath := r.URL.Path
-			if strings.HasPrefix(reqPath, "/assets/") ||
-				strings.HasSuffix(reqPath, ".js") ||
-				strings.HasSuffix(reqPath, ".css") ||
-				strings.HasSuffix(reqPath, ".json") ||
-				strings.HasSuffix(reqPath, ".ico") ||
-				strings.HasSuffix(reqPath, ".png") ||
-				strings.HasSuffix(reqPath, ".woff2") ||
-				reqPath == "/robots.txt" ||
-				reqPath == "/sitemap.xml" {
+			baseName := filepath.Base(reqPath)
+			if strings.HasPrefix(reqPath, "/assets/") || strings.Contains(baseName, ".") {
 				// 检查文件在磁盘上是否存在
 				relPath := strings.TrimPrefix(reqPath, "/")
 				targetPath := filepath.Join(distDir, relPath)
