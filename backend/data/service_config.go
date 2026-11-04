@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-// 服务地址默认值。优先从环境变量读取（BLADES_STOCK_*），否则使用默认值。
+// 服务地址默认值。优先从环境变量读取（BLADES_STOCK_*），否则使用容器内/本地独立微服务默认端口。
 const (
 	defaultStaticDataServiceURL = "http://8.134.249.145:18080"
-	defaultADataServiceURL      = "http://115.190.72.22:8000"
-	defaultAkshareServiceURL    = "http://115.190.72.22:8089"
-	defaultBaostockServiceURL   = "http://115.190.72.22:8090"
+	defaultADataServiceURL      = "http://127.0.0.1:9100"
+	defaultAkshareServiceURL    = "http://127.0.0.1:9000"
+	defaultBaostockServiceURL   = "http://127.0.0.1:9000"
 )
 
 // getEnvOr returns the environment variable value if set and non-empty,

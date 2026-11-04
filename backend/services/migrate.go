@@ -706,5 +706,9 @@ func RepairAndCleanStockTheses() {
 	// 6. 物理清理被硬风控拦截却被错误入库到推荐表的标的 (如 159915 创业板ETF、512480 半导体ETF 等)
 	_ = db.Dao.Exec("DELETE FROM ai_recommend_stocks WHERE stock_code IN ('159915', '512480', '159949') OR risk_remarks LIKE '%硬风控拦截%' OR recommend_reason LIKE '%硬风控拦截%' OR recommend_reason LIKE '%禁止开仓%'")
 
-	logger.SugaredLogger.Info("[Database] 成功执行买方认知账本与历史轨迹数据洗洁自愈（代码去重、股票名补齐、创建时间与审计日志自愈）")
+	// 7. 自愈已废弃的历史失联微服务 IP (115.190.72.22)，重置为容器/本地原生微服务默认端口
+	_ = db.Dao.Exec("UPDATE settings SET akshare_service_url = 'http://127.0.0.1:9000' WHERE akshare_service_url LIKE '%115.190.72.22%'")
+	_ = db.Dao.Exec("UPDATE settings SET adata_service_url = 'http://127.0.0.1:9100' WHERE adata_service_url LIKE '%115.190.72.22%'")
+
+	logger.SugaredLogger.Info("[Database] 成功执行买方认知账本与历史轨迹数据洗洁自愈（代码去重、股票名补齐、创建时间与审计日志自愈、失联微服务IP自愈）")
 }

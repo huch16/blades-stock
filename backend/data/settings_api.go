@@ -53,8 +53,8 @@ type Settings struct {
 	BacktestAccuracyThreshold float64 `json:"backtestAccuracyThreshold" gorm:"column:backtest_accuracy_threshold;default:5.0"`
 	BacktestVerifyDays        int64   `json:"backtestVerifyDays" gorm:"column:backtest_verify_days;default:2"`
 	BacktestEnabled           bool    `json:"backtestEnabled" gorm:"column:backtest_enabled;default:true"`
-	AkshareServiceUrl         string  `json:"akshareServiceUrl" gorm:"column:akshare_service_url;default:http://115.190.72.22:8089"`
-	ADataServiceUrl           string  `json:"aDataServiceUrl" gorm:"column:adata_service_url;default:http://115.190.72.22:8000"`
+	AkshareServiceUrl         string  `json:"akshareServiceUrl" gorm:"column:akshare_service_url;default:http://127.0.0.1:9000"`
+	ADataServiceUrl           string  `json:"aDataServiceUrl" gorm:"column:adata_service_url;default:http://127.0.0.1:9100"`
 	DefaultDataSource         string  `json:"defaultDataSource" gorm:"column:default_data_source;default:eastmoney"`
 	EmbeddingEnabled          bool    `json:"embeddingEnabled" gorm:"column:embedding_enabled;default:false"`
 	EmbeddingModelName        string  `json:"embeddingModelName" gorm:"column:embedding_model_name"`
@@ -922,8 +922,12 @@ func validateAIConfig(cfg *AIConfig) string {
 	if strings.TrimSpace(cfg.Name) == "" {
 		return "AI 配置名称不能为空"
 	}
-	if strings.TrimSpace(cfg.BaseUrl) == "" {
+	cfg.BaseUrl = strings.TrimRight(strings.TrimSpace(cfg.BaseUrl), "/")
+	if cfg.BaseUrl == "" {
 		return "AI 配置 Base URL 不能为空"
+	}
+	if !strings.HasPrefix(cfg.BaseUrl, "http://") && !strings.HasPrefix(cfg.BaseUrl, "https://") {
+		return "AI 配置 Base URL 格式错误，必须以 http:// 或 https:// 开头"
 	}
 	if strings.TrimSpace(cfg.ModelName) == "" {
 		return "AI 配置模型名称不能为空"
@@ -949,6 +953,14 @@ func validateAIConfig(cfg *AIConfig) string {
 		return "TimeOut 必须大于 5 秒"
 	}
 
+	// 固化运行时调度参数为纯 Go 确定性默认值
+	if cfg.LLMConcurrencyLimit <= 0 {
+		cfg.LLMConcurrencyLimit = 2
+	}
+	if cfg.SubAgentTimeout <= 0 {
+		cfg.SubAgentTimeout = 20
+	}
+
 	if cfg.EmbeddingEnabled && strings.TrimSpace(cfg.EmbeddingModelName) == "" {
 		cfg.EmbeddingModelName = "text-embedding-3-small"
 	}
@@ -965,6 +977,23 @@ func MaskSecret(s string) string {
 		return strings.Repeat("*", len(s))
 	}
 	return s[:4] + "****" + s[len(s)-4:]
+}
+
+// MaskWebhook 对 Webhook 链接中的敏感 token 参数脱敏
+func MaskWebhook(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if idx := strings.Index(s, "access_token="); idx != -1 {
+		prefix := s[:idx+len("access_token=")]
+		token := s[idx+len("access_token="):]
+		if len(token) > 8 {
+			return prefix + token[:4] + "****" + token[len(token)-4:]
+		}
+		return prefix + "****"
+	}
+	return MaskSecret(s)
 }
 
 // IsMaskedSecret 判断字符串是否包含掩码特征
@@ -1000,6 +1029,9 @@ func UpdateConfig(s *SettingConfig) string {
 			}
 			if IsMaskedSecret(s.EmApiKey) {
 				s.EmApiKey = exist.EmApiKey
+			}
+			if IsMaskedSecret(s.DingRobot) {
+				s.DingRobot = exist.DingRobot
 			}
 		}
 	}
@@ -1324,6 +1356,7 @@ func GetMaskedSettingConfig() *SettingConfig {
 	maskedSettings.EmbeddingApiKey = MaskSecret(maskedSettings.EmbeddingApiKey)
 	maskedSettings.TickFlowAPIKey = MaskSecret(maskedSettings.TickFlowAPIKey)
 	maskedSettings.EmApiKey = MaskSecret(maskedSettings.EmApiKey)
+	maskedSettings.DingRobot = MaskWebhook(maskedSettings.DingRobot)
 
 	// 拷贝 AIConfigs，并对每个 ApiKey 打码
 	maskedAiConfigs := make([]*AIConfig, len(raw.AiConfigs))
