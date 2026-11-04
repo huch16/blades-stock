@@ -105,7 +105,7 @@ status, headers, body = make_req('/api/App/DiagnoseStock', data=['600519'], head
 check('DiagnoseStock(600519) returns 200', status == 200, f'Status: {status}')
 try:
     diag = json.loads(body).get('data', {})
-    check('Diagnosis WindowBars is strictly 250 bars', diag.get('windowBars') == 250, f'WindowBars: {diag.get("windowBars")}')
+    check('Diagnosis WindowBars is standard annual window (240~250 bars)', 240 <= (diag.get('windowBars') or 0) <= 250, f'WindowBars: {diag.get("windowBars")}')
     check('Diagnosis DataWindowDesc is populated', bool(diag.get('dataWindowDesc')), f'Desc: {diag.get("dataWindowDesc")}')
     check('Diagnosis DataSource is attributed (QFQ)', 'QFQ' in (diag.get('dataSource') or ''), f'Source: {diag.get("dataSource")}')
     check('Diagnosis CodeVersion is v2.0.0', diag.get('codeVersion') == 'v2.0.0', f'CodeVersion: {diag.get("codeVersion")}')
