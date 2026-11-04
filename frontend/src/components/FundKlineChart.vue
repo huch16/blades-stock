@@ -25,7 +25,8 @@ const ALL_INTERVALS = [
 ]
 
 function isOnExchangeFund(code) {
-  const p = code.substring(0, 2)
+  if (!code) return false
+  const p = String(code).substring(0, 2)
   return ['15', '16', '50', '51', '52'].includes(p)
 }
 

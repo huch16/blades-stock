@@ -194,12 +194,12 @@ function getmMarketCode(market,code) {
         </n-td>
         <n-td>
           <n-tag type="info">
-            {{ item.notice_date.substring(0,10) }}
+            {{ item.notice_date ? item.notice_date.substring(0,10) : '--' }}
           </n-tag>
         </n-td>
         <n-td>
           <n-tag type="info">
-            {{ item.display_time.substring(0,19) }}
+            {{ item.display_time ? item.display_time.substring(0,19) : '--' }}
           </n-tag>
         </n-td>
       </n-tr>

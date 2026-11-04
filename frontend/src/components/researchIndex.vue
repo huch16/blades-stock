@@ -1,17 +1,13 @@
 <script setup>
-import {computed, h, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref,reactive} from 'vue'
-import {GetAIResponseResultList} from "../../wailsjs/go/main/App";
-import {NButton, NEllipsis, NText} from "naive-ui";
+import { onBeforeMount, onBeforeUnmount, ref, watch } from 'vue'
 import ResearchReport from "./researchReport.vue";
-import AllStockList from "./allStockList.vue";
 import CronTaskManager from "./cron-task-manager.vue";
 import TradingRecordManager from "./TradingRecordManager.vue";
 import StockChangesMonitor from "./stockChangesMonitor.vue";
 import UplimitLadder from "./uplimitLadder.vue";
 import SelectStock from "./SelectStock.vue";
-import {EventsOff, EventsOn} from "../../wailsjs/runtime";
-import {useRoute} from 'vue-router'
-
+import { EventsOff, EventsOn } from "../../wailsjs/runtime";
+import { useRoute } from 'vue-router'
 
 const nowTab = ref("AI研报与认知账本")
 const route = useRoute()
@@ -31,6 +27,12 @@ function normalizeTabName(name) {
 onBeforeMount(() => {
   if (route.query.name) {
     nowTab.value = normalizeTabName(route.query.name)
+  }
+})
+
+watch(() => route.query.name, (newName) => {
+  if (newName) {
+    updateTab(newName)
   }
 })
 

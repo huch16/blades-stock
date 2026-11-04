@@ -148,7 +148,7 @@ function handleSearch(value) {
           </n-ellipsis>
         </n-td>
         <n-td>{{ item.orgSName }}</n-td>
-        <n-td>{{ item.publishDate.substring(0,10) }}</n-td>
+        <n-td>{{ item.publishDate ? item.publishDate.substring(0,10) : '--' }}</n-td>
       </n-tr>
     </n-tbody>
   </n-table>

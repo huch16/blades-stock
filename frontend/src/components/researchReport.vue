@@ -1,38 +1,13 @@
 <script setup>
-import {computed, h, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref,reactive} from 'vue'
-import {GetAIResponseResultList, GetConfig, SaveAsMarkdown, DeleteAIResponseResult} from "../../wailsjs/go/main/App";
-import {NAvatar, NButton, NEllipsis, NText, useMessage} from "naive-ui";
-import {MdEditor, MdPreview} from 'md-editor-v3';
-import { sanitizeMarkdownHtml } from '../utils/sanitize';
+import { computed, h, onBeforeMount, onMounted, ref, reactive } from 'vue'
+import { GetAIResponseResultList, GetConfig, SaveAsMarkdown, DeleteAIResponseResult } from "../../wailsjs/go/main/App"
+import { NButton, NEllipsis, NText, useMessage } from "naive-ui"
+import { MdPreview } from 'md-editor-v3'
+import { sanitizeMarkdownHtml } from '../utils/sanitize'
 
-
-
-onBeforeMount(()=> {
-  GetConfig().then(result => {
-    if (result.darkTheme) {
-      editorDataRef.darkTheme = true
-    }
-  })
-})
-onMounted(() => {
-  query({
-    page: 1,
-    pageSize: paginationReactive.pageSize,
-    order: "desc",
-    keyword: paginationReactive.keyword,
-    startDate: paginationReactive.range[0],
-    endDate: paginationReactive.range[1]
-  }).then((data) => {
-    dataRef.value = data.data
-    paginationReactive.page = 1
-    paginationReactive.pageCount = data.pageCount
-    paginationReactive.itemCount = data.total
-    loadingRef.value = false
-  })
-})
 const message = useMessage()
 const mdPreviewRef = ref(null)
-const mdEditorRef = ref(null)
+
 const editorDataRef = reactive({
   show: false,
   loading: false,
@@ -45,121 +20,199 @@ const editorDataRef = reactive({
   question: "",
   content: "",
 })
+
 const dataRef = ref([])
 const loadingRef = ref(true)
-const columnsRef = ref([
-  {
-    title: '分析时间',
-    key: 'CreatedAt',
-    render(row, index) {
-      //2026-01-14T22:13:27.2693252+08:00 格式化为常用时间格式
-      return row.CreatedAt.substring(0, 19).replace('T', ' ')
-    }
-  },
-  {
-    title: '模型名称',
-    key: 'modelName'
-  },
-  {
-    title: '分析对象',
-    key: 'stockName'
-  },
-  {
-    title: '提示词',
-    key: 'question',
-    render(row, index) {
-      return h(NEllipsis, { tooltip: true ,style: "max-width: 240px;"}, {default: () => h(NText,{type: "info"},{default: () => row.question}),})
-    }
-  },
-  {
-    title: '操作',
-    render(row, index) {
-      return [h(
-          NButton,
-          {
-            strong: true,
-            tertiary: true,
-            size: 'small',
-            type: 'warning', // 橙色按钮
-            style: 'font-size: 14px; padding: 0 10px;', // 稍微大一点的按钮
-            onClick: () => showReport(row)
-          },
-          { default: () => '查看分析报告' }
-      ),
-      h(
-          NButton,
-          {
-            strong: true,
-            tertiary: true,
-            size: 'small',
-            type: 'error', // 橙色按钮
-            style: 'font-size: 14px; padding: 0 10px;', // 稍微大一点的按钮
-            onClick: () => deleteAIResponseResult(row.ID)
-          },
-          { default: () => '删除' }
-      ),
-      ]
-    }
-  },
-])
+
+function formatDate(d) {
+  if (!d) return ''
+  const date = new Date(d)
+  if (isNaN(date.getTime())) return ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 const paginationReactive = reactive({
   page: 1,
   pageCount: 1,
   pageSize: 12,
   itemCount: 0,
   keyword: "",
-  startDate:"",
   range: [
-    new Date(new Date().getTime() - 3 * 24 * 60 * 60 * 1000), // 前3天
-    new Date() // 当天
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 默认最近30天
+    new Date()
   ],
   prefix({ itemCount }) {
-    return `${itemCount} 条记录`
+    return `${itemCount || 0} 条记录`
   }
 })
+
+function getDateRange() {
+  if (Array.isArray(paginationReactive.range) && paginationReactive.range.length === 2 && paginationReactive.range[0] && paginationReactive.range[1]) {
+    return {
+      startDate: formatDate(paginationReactive.range[0]),
+      endDate: formatDate(paginationReactive.range[1])
+    }
+  }
+  return { startDate: '', endDate: '' }
+}
+
+const columnsRef = ref([
+  {
+    title: '分析时间',
+    key: 'CreatedAt',
+    render(row) {
+      if (!row || !row.CreatedAt) return '--'
+      return String(row.CreatedAt).substring(0, 19).replace('T', ' ')
+    }
+  },
+  {
+    title: '模型名称',
+    key: 'modelName',
+    render(row) {
+      return row?.modelName || '--'
+    }
+  },
+  {
+    title: '分析对象',
+    key: 'stockName',
+    render(row) {
+      if (!row) return '--'
+      if (row.stockName && row.stockCode) {
+        return `${row.stockName} (${row.stockCode})`
+      }
+      return row.stockName || row.stockCode || '--'
+    }
+  },
+  {
+    title: '提示词',
+    key: 'question',
+    render(row) {
+      const q = row?.question || '--'
+      return h(
+        NEllipsis,
+        { tooltip: true, style: "max-width: 240px;" },
+        { default: () => h(NText, { type: "info" }, { default: () => q }) }
+      )
+    }
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    render(row) {
+      if (!row) return null
+      return [
+        h(
+          NButton,
+          {
+            strong: true,
+            tertiary: true,
+            size: 'small',
+            type: 'warning',
+            style: 'font-size: 14px; padding: 0 10px; margin-right: 8px;',
+            onClick: () => showReport(row)
+          },
+          { default: () => '查看分析报告' }
+        ),
+        h(
+          NButton,
+          {
+            strong: true,
+            tertiary: true,
+            size: 'small',
+            type: 'error',
+            style: 'font-size: 14px; padding: 0 10px;',
+            onClick: () => deleteAIResponseResult(row.ID)
+          },
+          { default: () => '删除' }
+        )
+      ]
+    }
+  }
+])
+
+onBeforeMount(() => {
+  GetConfig().then(result => {
+    if (result && result.darkTheme) {
+      editorDataRef.darkTheme = true
+    }
+  }).catch(() => {})
+})
+
+onMounted(() => {
+  const { startDate, endDate } = getDateRange()
+  query({
+    page: 1,
+    pageSize: paginationReactive.pageSize,
+    order: "desc",
+    keyword: paginationReactive.keyword || "",
+    startDate,
+    endDate
+  }).then((data) => {
+    dataRef.value = data?.data || []
+    paginationReactive.page = 1
+    paginationReactive.pageCount = data?.pageCount || 1
+    paginationReactive.itemCount = data?.total || 0
+  }).finally(() => {
+    loadingRef.value = false
+  })
+})
+
 const theme = computed(() => {
   return editorDataRef.darkTheme ? 'dark' : 'light'
 })
-function showReport(row) {
 
+function showReport(row) {
+  if (!row) return
   editorDataRef.show = true
-  editorDataRef.chatId = row.chatId
-  editorDataRef.modelName = row.modelName
-  editorDataRef.CreatedAt = row.CreatedAt.substring(0, 19).replace('T', ' ')
-  editorDataRef.stockName = row.stockName
-  editorDataRef.stockCode = row.stockCode
-  editorDataRef.question = row.question
-  editorDataRef.content = row.content
+  editorDataRef.chatId = row.chatId || ""
+  editorDataRef.modelName = row.modelName || ""
+  editorDataRef.CreatedAt = row.CreatedAt ? String(row.CreatedAt).substring(0, 19).replace('T', ' ') : ""
+  editorDataRef.stockName = row.stockName || "未知标的"
+  editorDataRef.stockCode = row.stockCode || ""
+  editorDataRef.question = row.question || ""
+  editorDataRef.content = row.content || ""
   editorDataRef.loading = false
 }
 
 function query({
-                 page,
-                 pageSize = 10,
-                 order = 'desc',
-                 keyword = "",
-                 startDate = "",
-                 endDate = ""
-               }) {
+  page = 1,
+  pageSize = 12,
+  order = 'desc',
+  keyword = "",
+  startDate = "",
+  endDate = ""
+}) {
   return new Promise((resolve) => {
-
     GetAIResponseResultList({
-      "page": page,
-      "pageSize": pageSize,
-      "modelName":keyword,
-      "question":keyword,
-      "stockName":keyword,
-      "stockCode":keyword,
-      "startDate":startDate,
-      "endDate":endDate
+      page: page,
+      pageSize: pageSize,
+      modelName: keyword,
+      question: keyword,
+      stockName: keyword,
+      stockCode: keyword,
+      startDate: startDate,
+      endDate: endDate
     }).then((res) => {
-      const pagedData =res.list
-      const total = res.total
-      const pageCount =res.totalPages
+      const pagedData = res?.list || []
+      const total = typeof res?.total === 'number' ? res.total : (pagedData.length || 0)
+      const pageCount = res?.totalPages || Math.ceil(total / pageSize) || 1
       resolve({
         pageCount,
         data: pagedData,
-        total
+        total,
+        page: res?.page || page
+      })
+    }).catch((err) => {
+      console.error('[ResearchReport] GetAIResponseResultList failed:', err)
+      message.error('获取分析报告列表失败: ' + (err?.message || err))
+      resolve({
+        pageCount: 1,
+        data: [],
+        total: 0,
+        page: 1
       })
     })
   })
@@ -168,37 +221,42 @@ function query({
 function handlePageChange(currentPage) {
   if (!loadingRef.value) {
     loadingRef.value = true
+    const { startDate, endDate } = getDateRange()
     query({
       page: currentPage,
       pageSize: paginationReactive.pageSize,
       order: "desc",
-      keyword: paginationReactive.keyword,
-      startDate: formatDate(paginationReactive.range[0]),
-      endDate: formatDate(paginationReactive.range[1])
+      keyword: paginationReactive.keyword || "",
+      startDate,
+      endDate
     }).then((data) => {
-      dataRef.value = data.data
+      dataRef.value = data?.data || []
       paginationReactive.page = currentPage
-      paginationReactive.pageCount = data.pageCount
-      paginationReactive.itemCount = data.total
+      paginationReactive.pageCount = data?.pageCount || 1
+      paginationReactive.itemCount = data?.total || 0
+    }).finally(() => {
       loadingRef.value = false
     })
   }
 }
+
 function handleSearch() {
   if (!loadingRef.value) {
     loadingRef.value = true
+    const { startDate, endDate } = getDateRange()
     query({
-      page: paginationReactive?.page ?? 1,
+      page: 1,
       pageSize: paginationReactive.pageSize,
       order: "desc",
-      keyword: paginationReactive.keyword,
-      startDate: formatDate(paginationReactive.range[0]),
-      endDate: formatDate(paginationReactive.range[1])
+      keyword: paginationReactive.keyword || "",
+      startDate,
+      endDate
     }).then((data) => {
-      dataRef.value = data.data
-      paginationReactive.page = data.page
-      paginationReactive.pageCount = data.pageCount
-      paginationReactive.itemCount = data.total
+      dataRef.value = data?.data || []
+      paginationReactive.page = 1
+      paginationReactive.pageCount = data?.pageCount || 1
+      paginationReactive.itemCount = data?.total || 0
+    }).finally(() => {
       loadingRef.value = false
     })
   }
@@ -232,32 +290,29 @@ function saveAsMarkdown(code, name) {
     message.error('导出 Markdown 失败: ' + (err?.message || err))
   })
 }
+
 async function copyToClipboard() {
   try {
-    await navigator.clipboard.writeText(editorDataRef.content);
-    message.success('分析结果已复制到剪切板');
+    if (!editorDataRef.content) {
+      message.warning('暂无内容可复制')
+      return
+    }
+    await navigator.clipboard.writeText(editorDataRef.content)
+    message.success('分析结果已复制到剪切板')
   } catch (err) {
-    message.error('复制失败: ' + err);
+    message.error('复制失败: ' + (err?.message || err))
   }
 }
-function formatDate(dateString) {
-  const date = new Date(dateString)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  // const hours = String(date.getHours()).padStart(2, '0')
-  // const minutes = String(date.getMinutes()).padStart(2, '0')
-  // const seconds = String(date.getSeconds()).padStart(2, '0')
-  //return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-  return `${year}-${month}-${day}`
-}
 
-function deleteAIResponseResult(id){
+function deleteAIResponseResult(id) {
+  if (!id) return
   DeleteAIResponseResult(id).then(result => {
-    if(result !== ""){
+    if (result) {
       message.success(result)
     }
     handleSearch()
+  }).catch(err => {
+    message.error('删除失败: ' + (err?.message || err))
   })
 }
 </script>
@@ -267,18 +322,21 @@ function deleteAIResponseResult(id){
     <n-date-picker
       v-model:value="paginationReactive.range"
       type="daterange"
+      clearable
       style="width: 50%"
+      @update:value="handleSearch"
     />
     <n-input
       v-model:value="paginationReactive.keyword"
       clearable
-      placeholder="输入关键词搜索"
+      placeholder="输入关键词、股票代码/名称或模型搜索"
+      @keyup.enter="handleSearch"
     />
     <n-button
       type="primary"
       ghost
+      :loading="loadingRef"
       @click="handleSearch"
-      @input="handleSearch"
     >
       搜索
     </n-button>
@@ -290,20 +348,18 @@ function deleteAIResponseResult(id){
     :data="dataRef"
     :loading="loadingRef"
     :pagination="paginationReactive"
-    :row-key="(rowData)=>rowData.ID"
+    :row-key="(rowData) => rowData?.ID || Math.random()"
     flex-height
     style="height: calc(100vh - 210px);margin-top: 10px"
     @update:page="handlePageChange"
   />
-
-
 
   <n-modal
     v-model:show="editorDataRef.show"
     transform-origin="center"
     preset="card"
     style="width: 800px;max-width: calc(100vw - 32px);"
-    :title="'['+editorDataRef.stockName+']AI分析'"
+    :title="'[' + (editorDataRef.stockName || '分析') + '] AI分析报告'"
   >
     <n-spin
       size="small"
@@ -354,7 +410,7 @@ function deleteAIResponseResult(id){
         <n-button
           size="tiny"
           type="primary"
-          @click="saveAsMarkdown(editorDataRef.stockCode,editorDataRef.stockName)"
+          @click="saveAsMarkdown(editorDataRef.stockCode, editorDataRef.stockName)"
         >
           保存为Markdown文件
         </n-button>
@@ -364,5 +420,4 @@ function deleteAIResponseResult(id){
 </template>
 
 <style scoped>
-
 </style>

@@ -112,8 +112,9 @@ const columnsRef = ref([
     title: '推荐时间',
     key: 'dataTime',
     render(row, index) {
-      //2026-01-14T22:13:27.2693252+08:00 格式化为常用时间格式
-      return row.CreatedAt.substring(0, 19).replace('T', ' ')
+      // 格式化为常用时间格式，防范 null/undefined 触发保护性熔断
+      if (!row || !row.CreatedAt) return '--'
+      return String(row.CreatedAt).substring(0, 19).replace('T', ' ')
     }
   },
   {
