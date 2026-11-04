@@ -203,7 +203,9 @@ class WebEventBus {
     if (!token && !isWails()) {
       return
     }
-    const url = `/api/events/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`
+    // 修复 P0-1: 严禁在 URL Query 中明文拼接 Token，杜绝其泄露至 Nginx / Cloudflare 边缘访问日志与 Referer
+    // 现代浏览器在同源环境下通过安全 HttpOnly Cookie (blades_token) 自动隐式传递鉴权会话
+    const url = '/api/events/stream'
 
     try {
       this.sseSource = new EventSource(url)
@@ -289,32 +291,46 @@ const queryCache = new Map<string, CacheEntry>()
 
 // 允许短期微缓存的 RPC 方法配置及 TTL (毫秒)
 const TTL_CACHE_RULES: Record<string, number> = {
-  GetConfig: 10_000,           // 10s: 避免各组件 onMounted 狂轰滥炸，UpdateConfig 时立即作废
+  GetConfig: 15_000,           // 15s: 避免各组件 onMounted 狂轰滥炸，UpdateConfig 时立即作废
+  GetAiConfigs: 30_000,        // 30s: AI 模型列表
   GetVersionInfo: 60_000,      // 60s: 系统版本极少变更
   IsTradingTime: 5_000,        // 5s: 交易时段检测
   IsHKTradingTime: 5_000,      // 5s
   IsUSTradingTime: 5_000,      // 5s
   IsTradingDay: 15_000,        // 15s
   GetLatestTradingDay: 15_000, // 15s
-  GetGroupList: 5_000,         // 5s: 分组列表
-  GetStockList: 30_000,        // 30s: 拦截 1.15MB 全量股票列表在页面路由切换时的重复拉取
+  GetGroupList: 10_000,        // 10s: 分组列表
+  GetFollowList: 15_000,       // 15s: 自选股列表 (修复 P1-2: 补齐自选股缓存)
+  GetStockList: 86_400_000,    // 24小时: 修复 P1-1，防止 1.15MB 全量股票字典在交易时段重复下发消耗数百兆流量
+}
+
+// 修复 P1-2: 严禁使用子串 includes("Config") 模糊匹配（否则会导致 GetAiConfigs 误伤清空 GetConfig 缓存）
+// 改用精确白名单映射字典，仅在发生真实写操作时定向失效关联只读查询
+const MUTATION_INVALIDATION_MAP: Record<string, string[]> = {
+  UpdateConfig: ['GetConfig', 'GetAiConfigs'],
+  AddGroup: ['GetGroupList'],
+  RemoveGroup: ['GetGroupList'],
+  UpdateGroup: ['GetGroupList'],
+  UpdateGroupSort: ['GetGroupList'],
+  AddStockGroup: ['GetGroupList'],
+  RemoveStockGroup: ['GetGroupList'],
+  Follow: ['GetFollowList'],
+  UnFollow: ['GetFollowList'],
+  FollowFund: ['GetFollowedFund', 'GetFollowedFundPaged'],
+  SaveStockThesis: ['GetStockThesis', 'GetAllStockTheses', 'GetStockThesisHistory'],
+  DeleteStockThesis: ['GetStockThesis', 'GetAllStockTheses', 'GetStockThesisHistory'],
 }
 
 // 变更操作自动作废关联缓存
 function invalidateQueryCacheOnMutation(method: string) {
-  if (method.includes('Config')) {
-    for (const key of queryCache.keys()) {
-      if (key.startsWith('GetConfig:')) queryCache.delete(key)
-    }
-  }
-  if (method.includes('Group')) {
-    for (const key of queryCache.keys()) {
-      if (key.startsWith('GetGroupList:')) queryCache.delete(key)
-    }
-  }
-  if (method === 'Follow' || method === 'UnFollow') {
-    for (const key of queryCache.keys()) {
-      if (key.startsWith('GetFollowList:')) queryCache.delete(key)
+  const targets = MUTATION_INVALIDATION_MAP[method]
+  if (targets && targets.length > 0) {
+    for (const target of targets) {
+      for (const key of queryCache.keys()) {
+        if (key.startsWith(`${target}:`)) {
+          queryCache.delete(key)
+        }
+      }
     }
   }
 }
@@ -550,12 +566,8 @@ export function initUniversalBridge(): void {
           document.title = title
         }
       },
-      WindowMinimise: () => {
-        console.log('[Web stub] WindowMinimise ignored.')
-      },
-      WindowMaximise: () => {
-        console.log('[Web stub] WindowMaximise ignored.')
-      },
+      WindowMinimise: () => {},
+      WindowMaximise: () => {},
       WindowToggleMaximise: () => {
         if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen().catch(() => {})

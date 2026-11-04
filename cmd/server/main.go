@@ -285,22 +285,43 @@ func main() {
 		})
 	})
 
-	// 7.2 安全鉴权端点 (状态探测、首次初始化与登录)
+	// 7.2 标准协议与机器可读契约端点 (P0-2, P1-7)
+	mux.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		fmt.Fprintln(w, "User-agent: *")
+		fmt.Fprintln(w, "Disallow: /api/")
+		fmt.Fprintln(w, "Allow: /")
+	})
+
+	mux.HandleFunc("GET /sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		fmt.Fprintln(w, `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://kline.woha.men/</loc><changefreq>daily</changefreq><priority>1.0</priority></url></urlset>`)
+	})
+
+	mux.HandleFunc("GET /openapi.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		json.NewEncoder(w).Encode(dispatcher.GetOpenAPISpec())
+	})
+
+	// 7.3 安全鉴权端点 (状态探测、首次初始化与登录)
 	mux.HandleFunc("GET /api/auth/status", HandleAuthStatus)
 	mux.HandleFunc("POST /api/auth/init", HandleInitPassword)
 	mux.HandleFunc("POST /api/auth/login", HandleLogin)
 
-	// 7.3 智能数据资产备份与恢复流端点 (支持 Web 模式安全直接下载与上传)
+	// 7.4 智能数据资产备份与恢复流端点 (支持 Web 模式安全直接下载与上传)
 	mux.HandleFunc("GET /api/backup/download", HandleBackupDownload)
 	mux.HandleFunc("POST /api/backup/upload", HandleBackupUpload)
 
-	// 7.4 SSE 实时推流端点
+	// 7.5 SSE 实时推流端点
 	mux.HandleFunc("GET /api/events/stream", HandleSSE)
 
-	// 7.5 通用 RPC 分发端点
+	// 7.6 通用 RPC 分发端点
 	mux.HandleFunc("/api/App/", dispatcher.HandleRPC)
 
-	// 7.5 前端静态资源与 SPA Fallback 托管
+	// 7.7 前端静态资源与 SPA 路由托管 (精准隔离静态文件 404 与客户端路由 Fallback)
 	distDir := *distDirFlag
 	if _, err := os.Stat(distDir); os.IsNotExist(err) {
 		// 尝试当前目录下的 dist
@@ -315,29 +336,62 @@ func main() {
 		indexPath := filepath.Join(distDir, "index.html")
 
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// API 路由未匹配到时的 404
+			// 1. API 路由未匹配到时严格返回 404 JSON，杜绝返回 HTML (P0-2)
 			if strings.HasPrefix(r.URL.Path, "/api/") {
-				http.NotFound(w, r)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]any{
+					"code":  404,
+					"error": "接口不存在",
+					"path":  r.URL.Path,
+				})
 				return
 			}
 
-			// 检查请求的文件是否存在
-			relPath := strings.TrimPrefix(r.URL.Path, "/")
+			// 2. 静态资源、协议文件或带扩展名文件若缺失，严格返回 404，杜绝返回 index.html (P0-2)
+			reqPath := r.URL.Path
+			if strings.HasPrefix(reqPath, "/assets/") ||
+				strings.HasSuffix(reqPath, ".js") ||
+				strings.HasSuffix(reqPath, ".css") ||
+				strings.HasSuffix(reqPath, ".json") ||
+				strings.HasSuffix(reqPath, ".ico") ||
+				strings.HasSuffix(reqPath, ".png") ||
+				strings.HasSuffix(reqPath, ".woff2") ||
+				reqPath == "/robots.txt" ||
+				reqPath == "/sitemap.xml" {
+				// 检查文件在磁盘上是否存在
+				relPath := strings.TrimPrefix(reqPath, "/")
+				targetPath := filepath.Join(distDir, relPath)
+				if fi, err := os.Stat(targetPath); err != nil || fi.IsDir() {
+					http.NotFound(w, r)
+					return
+				}
+			}
+
+			// 3. 检查请求的具体静态资源是否存在
+			relPath := strings.TrimPrefix(reqPath, "/")
 			targetPath := filepath.Join(distDir, relPath)
 			fi, err := os.Stat(targetPath)
 			if err == nil && !fi.IsDir() {
+				// 核心优化：为 /assets/ 内容哈希文件注入 1 年不可变长效缓存 (P1-5)
+				if strings.HasPrefix(reqPath, "/assets/") {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				}
 				fileServer.ServeHTTP(w, r)
 				return
 			}
 
-			// SPA 客户端路由 Fallback 到 index.html
+			// 4. 纯 SPA 客户端前端路由导航，回退到 index.html
+			w.Header().Set("Cache-Control", "no-cache")
 			http.ServeFile(w, r, indexPath)
 		})
 	} else {
 		logger.SugaredLogger.Warnf("[Static] Frontend dist directory not found at '%s', running API-only mode.", distDir)
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if strings.HasPrefix(r.URL.Path, "/api/") {
-				http.NotFound(w, r)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]any{"code": 404, "error": "接口不存在"})
 				return
 			}
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")

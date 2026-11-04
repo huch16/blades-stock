@@ -87,10 +87,18 @@ func setAuthToken(token string) error {
 // AuthMiddleware 校验公网访问 Token
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		allowOrigin := "*"
+		if origin != "" {
+			allowOrigin = origin
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+		w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+
 		// 跨域预检请求直接放行
 		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, Last-Event-ID")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -98,15 +106,45 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 		path := r.URL.Path
 
-		// 静态资源与免鉴权端点放行 (含标准容器探针 /live, /ready, /health)
+		// 静态资源、协议文件与免鉴权端点放行 (含标准容器探针 /live, /ready, /health, /robots.txt, /sitemap.xml, /openapi.json)
 		if path == "/live" ||
 			path == "/ready" ||
 			path == "/health" ||
+			path == "/robots.txt" ||
+			path == "/sitemap.xml" ||
+			path == "/openapi.json" ||
 			path == "/api/auth/status" ||
 			path == "/api/auth/login" ||
 			path == "/api/auth/init" ||
 			!strings.HasPrefix(path, "/api/") {
 			next.ServeHTTP(w, r)
+			return
+		}
+
+		// 路由存在性预检 (P0-2 修复)：若请求的方法根本不存在，严格返回 404 而非 401！杜绝客户端混淆
+		if strings.HasPrefix(path, "/api/App/") {
+			methodName := strings.TrimPrefix(path, "/api/App/")
+			methodName = strings.Trim(methodName, "/")
+			if globalDispatcher != nil && !globalDispatcher.HasMethod(methodName) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]any{
+					"code":  404,
+					"error": fmt.Sprintf("RPC method '%s' not found", methodName),
+				})
+				return
+			}
+		} else if !strings.HasPrefix(path, "/api/auth/") &&
+			!strings.HasPrefix(path, "/api/backup/") &&
+			path != "/api/events/stream" {
+			// 未知非 App RPC 路径直接返回 404
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]any{
+				"code":  404,
+				"error": "API endpoint not found",
+				"path":  path,
+			})
 			return
 		}
 

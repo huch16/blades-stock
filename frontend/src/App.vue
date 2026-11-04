@@ -30,6 +30,7 @@ import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime
 import WebAuthModal from "./components/WebAuthModal.vue";
 import { isWails, getAuthToken, webEventBus } from "./api/bridge";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
+import ErrorBoundary from "./components/common/ErrorBoundary.vue";
 import { initAgentControlBus, registerAgentActionHandler, setPendingConsult, consultAgent } from "./utils/agentControlBus";
 import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
 import {ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
@@ -1468,7 +1469,9 @@ onMounted(() => {
                         class="agent-standalone-host"
                         :style="agentHostStyle"
                       >
-                        <RouterView />
+                        <ErrorBoundary>
+                          <RouterView />
+                        </ErrorBoundary>
                       </div>
                       <n-scrollbar
                         v-else
@@ -1478,7 +1481,9 @@ onMounted(() => {
                           v-if="loading"
                           height="calc(100vh)"
                         />
-                        <RouterView />
+                        <ErrorBoundary>
+                          <RouterView />
+                        </ErrorBoundary>
                         <!-- 全局合规免责声明底栏 -->
                         <div class="global-compliance-bar">
                           <span>【合规风险提示与免责声明】：本系统为量化投研算法与辅助分析软件，所有量化策略指标、历史回测数据、AI 研判推演及风控测算均基于公开客观历史数据与既定算法模型生成，不构成任何形式的投资建议、买卖要约或收益承诺。证券市场有风险，投资决策需审慎独立。</span>

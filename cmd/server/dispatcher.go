@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"sort"
 	"strings"
 
 	"blades-stock/backend/logger"
 	"blades-stock/backend/services"
 )
+
+var globalDispatcher *RPCDispatcher
 
 // methodEntry 描述一个已注册的 RPC 方法及其所属的目标接收者
 type methodEntry struct {
@@ -40,7 +43,82 @@ func NewRPCDispatcher(
 	d.registerTarget(agent)
 	d.registerTarget(settings)
 
+	globalDispatcher = d
 	return d
+}
+
+// HasMethod 检查指定 RPC 方法是否已注册
+func (d *RPCDispatcher) HasMethod(name string) bool {
+	if d == nil {
+		return false
+	}
+	_, ok := d.methods[name]
+	return ok
+}
+
+// GetMethodNames 获取所有已注册的 RPC 方法名列表
+func (d *RPCDispatcher) GetMethodNames() []string {
+	if d == nil {
+		return nil
+	}
+	names := make([]string, 0, len(d.methods))
+	for name := range d.methods {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// GetOpenAPISpec 动态生成机器可读的 OpenAPI 3.0 契约文档规范 (P0-3, P1-7)
+func (d *RPCDispatcher) GetOpenAPISpec() map[string]any {
+	paths := make(map[string]any)
+	for name := range d.methods {
+		paths["/api/App/"+name] = map[string]any{
+			"post": map[string]any{
+				"summary":     "RPC method " + name,
+				"operationId": name,
+				"tags":        []string{"AppRPC"},
+				"requestBody": map[string]any{
+					"required": true,
+					"content": map[string]any{
+						"application/json": map[string]any{
+							"schema": map[string]any{
+								"type":        "array",
+								"description": "RPC positional arguments [arg0, arg1, ...]",
+								"items":       map[string]any{},
+							},
+						},
+					},
+				},
+				"responses": map[string]any{
+					"200": map[string]any{
+						"description": "Successful RPC response",
+						"content": map[string]any{
+							"application/json": map[string]any{
+								"schema": map[string]any{
+									"type": "object",
+									"properties": map[string]any{
+										"code": map[string]any{"type": "integer", "example": 0},
+										"data": map[string]any{"description": "Method return payload"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	return map[string]any{
+		"openapi": "3.0.0",
+		"info": map[string]any{
+			"title":       "Blades Stock RPC API",
+			"version":     "2.0.0",
+			"description": "Deterministic Multi-Agent Quantitative Research & Trading RPC Specification (135 Endpoints)",
+		},
+		"paths": paths,
+	}
 }
 
 // registerTarget 遍历结构体上的所有 Public 方法并注册到路由表
@@ -63,7 +141,14 @@ func (d *RPCDispatcher) registerTarget(target any) {
 // HandleRPC 处理 POST /api/App/{method} 请求
 func (d *RPCDispatcher) HandleRPC(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	origin := r.Header.Get("Origin")
+	if origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Vary", "Origin")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	} else {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	}
 
 	// 工业级容灾边界：全捕获 RPC 调用内部可能的 panic，杜绝崩溃并回吐标准化错误响应（脱敏内部堆栈与类型细节）
 	defer func() {

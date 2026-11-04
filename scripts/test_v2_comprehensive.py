@@ -97,6 +97,25 @@ check('Header Referrer-Policy strict-origin', headers.get('Referrer-Policy') == 
 status, headers, body = make_req('/live', method='GET', headers={'Accept-Encoding': 'gzip'})
 check('Gzip Compression enabled on server (Content-Encoding: gzip)', headers.get('Content-Encoding') == 'gzip', f'Got: {headers.get("Content-Encoding")}')
 
+# 2.2 Protocol Endpoints & Non-existent Route 404 Isolation (P0-2, P1-7)
+status, headers, body = make_req('/robots.txt', method='GET')
+check('Robots.txt returns 200 text/plain', status == 200 and 'Disallow: /api/' in body, f'Status {status}, Body: {body[:60]}')
+
+status, headers, body = make_req('/sitemap.xml', method='GET')
+check('Sitemap.xml returns 200 XML', status == 200 and 'urlset' in body, f'Status {status}, Body: {body[:60]}')
+
+status, headers, body = make_req('/openapi.json', method='GET')
+check('OpenAPI specification returns 200 JSON (P0-3, P1-7)', status == 200 and 'openapi' in body and '/api/App/' in body, f'Status {status}')
+
+status, headers, body = make_req('/nonexistent_static_file.txt', method='GET')
+check('Nonexistent static file returns real 404 Not Found (P0-2)', status == 404, f'Status: {status}')
+
+status, headers, body = make_req('/api/nonexistent_route', method='GET')
+check('Nonexistent /api/ path returns 404 JSON instead of 401 (P0-2)', status == 404, f'Status: {status}')
+
+status, headers, body = make_req('/api/App/NonExistentMethod', method='POST', data=[])
+check('Nonexistent RPC method returns 404 JSON instead of 401 (P0-2)', status == 404, f'Status: {status}')
+
 # 3. Auth Login & Rate Limiting Guard
 status, headers, body = make_req('/api/auth/login', data={'token': TOKEN})
 check('Auth Login with unified token 2266762 succeeds (200)', status == 200, f'Status: {status}, Body: {body}')
