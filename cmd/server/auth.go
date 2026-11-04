@@ -98,8 +98,10 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 		path := r.URL.Path
 
-		// 静态资源与免鉴权端点放行
-		if path == "/health" ||
+		// 静态资源与免鉴权端点放行 (含标准容器探针 /live, /ready, /health)
+		if path == "/live" ||
+			path == "/ready" ||
+			path == "/health" ||
 			path == "/api/auth/status" ||
 			path == "/api/auth/login" ||
 			path == "/api/auth/init" ||

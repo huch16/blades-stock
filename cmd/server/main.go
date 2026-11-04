@@ -44,6 +44,19 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// RequestTracingMiddleware 注入并透传全链路分布式追踪 X-Request-ID
+func RequestTracingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqID := r.Header.Get("X-Request-ID")
+		if reqID == "" {
+			reqID = fmt.Sprintf("req-%d-%06d", time.Now().UnixMilli(), time.Now().Nanosecond()%1000000)
+		}
+		w.Header().Set("X-Request-ID", reqID)
+		ctx := context.WithValue(r.Context(), "request_id", reqID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func main() {
 	flag.Parse()
 
@@ -203,16 +216,40 @@ func main() {
 	// 7. 注册路由 (http.ServeMux)
 	mux := http.NewServeMux()
 
-	// 7.1 健康检查端点
+	// 7.1 标准容器与云原生探针 (Kubernetes Liveness & Readiness Probes)
+	// 存活探针 (Liveness): 仅返回服务进程存活状态，杜绝泄露版本或内核配置
+	mux.HandleFunc("GET /live", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
+	})
+
+	// 就绪探针 (Readiness): 深度探测底层持久化 SQLite 数据库活性，失败时返回 503
+	mux.HandleFunc("GET /ready", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if db.Dao == nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]any{"status": "not ready", "error": "db not initialized"})
+			return
+		}
+		var check int
+		if err := db.Dao.Raw("SELECT 1").Scan(&check).Error; err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]any{"status": "not ready", "error": "db ping failed"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]any{"status": "ready"})
+	})
+
+	// 综合健康检查端点 (收敛脱敏：保留自动化测试所需的 version 字段，移除 commit/cores 等主机敏感指纹)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":    "healthy",
-			"timestamp": time.Now().Unix(),
+			"service":   "blades-stock",
 			"version":   Version,
-			"commit":    VersionCommit,
-			"cores":     runtime.NumCPU(),
-			"maxprocs":  runtime.GOMAXPROCS(0),
+			"timestamp": time.Now().Unix(),
 		})
 	})
 
@@ -276,8 +313,8 @@ func main() {
 		})
 	}
 
-	// 8. 挂载中间件并启动服务器 (安全响应头 + 鉴权拦截)
-	handler := SecurityHeadersMiddleware(AuthMiddleware(mux))
+	// 8. 挂载中间件并启动服务器 (链路追踪 + 安全响应头 + 鉴权拦截)
+	handler := RequestTracingMiddleware(SecurityHeadersMiddleware(AuthMiddleware(mux)))
 
 	server := &http.Server{
 		Addr:              addr,

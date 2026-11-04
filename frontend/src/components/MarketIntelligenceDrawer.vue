@@ -1,5 +1,5 @@
 <script setup>
-import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NModal,
@@ -32,8 +32,13 @@ import {
   SaveStockThesis
 } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
-import { MdPreview } from 'md-editor-v3'
-import 'md-editor-v3/lib/preview.css'
+
+// 异步按需加载 Markdown 预览渲染引擎
+const MdPreview = defineAsyncComponent(() => import('md-editor-v3').then(m => {
+  import('md-editor-v3/lib/preview.css')
+  return m.MdPreview
+}))
+
 import { sanitizeMarkdownHtml } from '../utils/sanitize'
 import { dispatchAgentAction, consultAgent } from '../utils/agentControlBus'
 

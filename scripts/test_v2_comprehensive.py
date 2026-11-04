@@ -48,14 +48,26 @@ def check(name, condition, details=''):
         print(f'  [FAIL] {name} - {details}')
         failed += 1
 
-# 1. Health & Version Info
+# 1. Health & Cloud-Native Probes (/live, /ready, /health)
 auth_headers = {'Authorization': f'Bearer {TOKEN}'}
 
+# 1.1 Liveness probe (/live)
+status, headers, body = make_req('/live', method='GET')
+check('Liveness Probe /live returns 200 OK', status == 200, f'Status {status}')
+check('Liveness Probe returns status: ok', '"status":"ok"' in body.replace(' ', ''), f'Got: {body}')
+
+# 1.2 Readiness probe (/ready)
+status, headers, body = make_req('/ready', method='GET')
+check('Readiness Probe /ready returns 200 OK', status == 200, f'Status {status}')
+check('Readiness Probe returns status: ready', '"status":"ready"' in body.replace(' ', ''), f'Got: {body}')
+
+# 1.3 Health check & Sanitization (/health)
 status, headers, body = make_req('/health', method='GET')
 check('Health Check Endpoint (200 OK)', status == 200, f'Status {status}')
 try:
     h_data = json.loads(body)
     check('Health Check reports v2.0.0', h_data.get('version') == '2.0.0', f'Got: {h_data}')
+    check('Health Check sanitizes sensitive host cores/commit info', 'cores' not in h_data and 'commit' not in h_data, f'Got: {h_data}')
 except Exception as e:
     check('Health Check JSON decode', False, str(e))
 
@@ -63,6 +75,7 @@ status, headers, body = make_req('/api/App/GetVersionInfo', data=[], headers=aut
 try:
     v_data = json.loads(body).get('data', {})
     check('GetVersionInfo returns v2.0.0', v_data.get('version') == '2.0.0' or '2.0.0' in str(v_data), f'Got: {v_data}')
+    check('Response Header contains X-Request-ID for distributed tracing', bool(headers.get('X-Request-ID')), f'Got: {headers.get("X-Request-ID")}')
 except Exception as e:
     check('GetVersionInfo returns v2.0.0', False, str(e))
 

@@ -273,6 +273,52 @@ export const webEventBus = new WebEventBus()
 
 let lastUnauthorizedDispatch = 0
 
+// ==========================================
+// 4. 高性能请求聚合、去重与微缓存引擎 (Request Coalescing & Micro-Cache)
+// ==========================================
+
+// 正在飞行中的并发请求池 (用于拦截同瞬时重复请求，返回同一个 Promise)
+const inFlightRequests = new Map<string, Promise<any>>()
+
+// 高频幂等只读查询的短期内存缓存 (TTL 毫秒)
+interface CacheEntry {
+  data: any
+  expiresAt: number
+}
+const queryCache = new Map<string, CacheEntry>()
+
+// 允许短期微缓存的 RPC 方法配置及 TTL (毫秒)
+const TTL_CACHE_RULES: Record<string, number> = {
+  GetConfig: 10_000,           // 10s: 避免各组件 onMounted 狂轰滥炸，UpdateConfig 时立即作废
+  GetVersionInfo: 60_000,      // 60s: 系统版本极少变更
+  IsTradingTime: 5_000,        // 5s: 交易时段检测
+  IsHKTradingTime: 5_000,      // 5s
+  IsUSTradingTime: 5_000,      // 5s
+  IsTradingDay: 15_000,        // 15s
+  GetLatestTradingDay: 15_000, // 15s
+  GetGroupList: 5_000,         // 5s: 分组列表
+  GetStockList: 30_000,        // 30s: 拦截 1.15MB 全量股票列表在页面路由切换时的重复拉取
+}
+
+// 变更操作自动作废关联缓存
+function invalidateQueryCacheOnMutation(method: string) {
+  if (method.includes('Config')) {
+    for (const key of queryCache.keys()) {
+      if (key.startsWith('GetConfig:')) queryCache.delete(key)
+    }
+  }
+  if (method.includes('Group')) {
+    for (const key of queryCache.keys()) {
+      if (key.startsWith('GetGroupList:')) queryCache.delete(key)
+    }
+  }
+  if (method === 'Follow' || method === 'UnFollow') {
+    for (const key of queryCache.keys()) {
+      if (key.startsWith('GetFollowList:')) queryCache.delete(key)
+    }
+  }
+}
+
 // 4. Web 模式下的通用 HTTP RPC 发起器
 export async function callWebApi(method: string, ...args: any[]): Promise<any> {
   const token = getAuthToken()
@@ -283,51 +329,104 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
     headers['Authorization'] = `Bearer ${token}`
   }
 
+  // 注入链路追踪 Request-ID
+  const requestId = `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+  headers['X-Request-ID'] = requestId
+
+  const serializedArgs = JSON.stringify(args)
+  const cacheKey = `${method}:${serializedArgs}`
+
+  // 1. 若命中短期内存微缓存，直接同步返回副本，零网络开销
+  const cached = queryCache.get(cacheKey)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.data
+  }
+
+  // 2. 判定该请求是否支持并发合并（仅针对查询类、幂等类接口启用）
+  const isQueryMethod =
+    method.startsWith('Get') ||
+    method.startsWith('Is') ||
+    method.startsWith('Search') ||
+    method.startsWith('Filter') ||
+    method.startsWith('Calculate')
+
+  // 若当前已有完全相同的网络请求正在飞行中，直接复用该 Promise，彻底根除请求瀑布
+  if (isQueryMethod && inFlightRequests.has(cacheKey)) {
+    return inFlightRequests.get(cacheKey)!
+  }
+
   const url = `/api/App/${method}`
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(args),
-    })
+  const fetchPromise = (async () => {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: serializedArgs,
+      })
 
-    if (response.status === 401) {
-      clearAuthToken()
-      const now = Date.now()
-      // 节流派发 blades:unauthorized 事件，防止数十个并发请求瞬间引爆事件总线
-      if (now - lastUnauthorizedDispatch > 2000) {
-        lastUnauthorizedDispatch = now
-        window.dispatchEvent(new CustomEvent('blades:unauthorized'))
-      }
-      throw new Error('未授权访问：请先输入有效访问口令')
-    }
-
-    if (!response.ok) {
-      const errText = await response.text()
-      throw new Error(`HTTP ${response.status}: ${errText}`)
-    }
-
-    const contentType = response.headers.get('content-type') || ''
-    if (contentType.includes('application/json')) {
-      const json = await response.json()
-      if (json && typeof json === 'object') {
-        if ('code' in json && json.code !== 0) {
-          throw new Error(json.error || json.message || `请求失败 (code: ${json.code})`)
+      if (response.status === 401) {
+        clearAuthToken()
+        const now = Date.now()
+        // 节流派发 blades:unauthorized 事件，防止数十个并发请求瞬间引爆事件总线
+        if (now - lastUnauthorizedDispatch > 2000) {
+          lastUnauthorizedDispatch = now
+          window.dispatchEvent(new CustomEvent('blades:unauthorized'))
         }
-        if ('data' in json) {
-          return json.data
-        }
-        return json
+        throw new Error('未授权访问：请先输入有效访问口令')
       }
-      return json
-    } else {
-      return await response.text()
+
+      if (!response.ok) {
+        const errText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${errText}`)
+      }
+
+      const contentType = response.headers.get('content-type') || ''
+      let result: any
+      if (contentType.includes('application/json')) {
+        const json = await response.json()
+        if (json && typeof json === 'object') {
+          if ('code' in json && json.code !== 0) {
+            throw new Error(json.error || json.message || `请求失败 (code: ${json.code})`)
+          }
+          if ('data' in json) {
+            result = json.data
+          } else {
+            result = json
+          }
+        } else {
+          result = json
+        }
+      } else {
+        result = await response.text()
+      }
+
+      // 3. 成功返回后，处理微缓存与写操作失效
+      invalidateQueryCacheOnMutation(method)
+
+      const ttl = TTL_CACHE_RULES[method]
+      if (ttl && ttl > 0) {
+        queryCache.set(cacheKey, {
+          data: result,
+          expiresAt: Date.now() + ttl,
+        })
+      }
+
+      return result
+    } catch (err: any) {
+      console.error(`[UniversalBridge] RPC call to "${method}" (${requestId}) failed:`, err)
+      throw err
+    } finally {
+      // 4. 请求结束，从正在飞行队列中移除
+      inFlightRequests.delete(cacheKey)
     }
-  } catch (err: any) {
-    console.error(`[UniversalBridge] RPC call to "${method}" failed:`, err)
-    throw err
+  })()
+
+  if (isQueryMethod) {
+    inFlightRequests.set(cacheKey, fetchPromise)
   }
+
+  return fetchPromise
 }
 
 // 5. 全局运行时桩注入（最早时刻执行）

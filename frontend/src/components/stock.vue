@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
+import {computed, defineAsyncComponent, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import * as echarts from '../utils/echarts';
 import type { AIConfig } from '../../wailsjs/go/models'
 import {
@@ -71,16 +71,21 @@ import {
   WindowUnfullscreen
 } from '../../wailsjs/runtime'
 import {Add, ChatboxOutline, CreateOutline} from '@vicons/ionicons5'
-import {MdEditor, MdPreview} from 'md-editor-v3';
 import { sanitizeMarkdownHtml } from '../utils/sanitize';
-// preview.css相比style.css少了编辑器那部分样式
-//import 'md-editor-v3/lib/preview.css';
-import 'md-editor-v3/lib/style.css';
 
-import {ExportPDF} from '@vavt/v3-extension';
-import '@vavt/v3-extension/lib/asset/ExportPDF.css';
-import html2canvas from "html2canvas";
-import {asBlob} from 'html-docx-js-typescript';
+// 异步按需懒加载重型 Markdown、CodeMirror、PDF 及 Word 导出库，避免首页冷启动全量加载 ~1MB JS
+const MdEditor = defineAsyncComponent(() => import('md-editor-v3').then(m => {
+  import('md-editor-v3/lib/style.css');
+  return m.MdEditor;
+}))
+const MdPreview = defineAsyncComponent(() => import('md-editor-v3').then(m => {
+  import('md-editor-v3/lib/style.css');
+  return m.MdPreview;
+}))
+const ExportPDF = defineAsyncComponent(() => import('@vavt/v3-extension').then(m => {
+  import('@vavt/v3-extension/lib/asset/ExportPDF.css');
+  return m.ExportPDF;
+}))
 
 import {keys, padStart} from "lodash";
 import {useRoute, useRouter} from 'vue-router'
@@ -2203,6 +2208,8 @@ function saveAsImage(name, code) {
   nextTick(async () => {
     const isDark = document.documentElement.getAttribute('theme-mode') === 'dark'
     try {
+      const html2canvasModule = await import('html2canvas')
+      const html2canvas = html2canvasModule.default || html2canvasModule
       const canvas = await html2canvas(element, {
         useCORS: true,
         scale: 2,
@@ -2334,6 +2341,7 @@ AI赋能股票分析：自选股行情获取，成本盈亏展示，涨跌报警
 </a></p>
 `
   // landscape就是横着的，portrait是竖着的，默认是竖屏portrait。
+  const { asBlob } = await import('html-docx-js-typescript')
   const blob = await asBlob(value, {orientation: 'portrait'})
   const {platform} = await Environment()
   switch (platform) {
