@@ -1780,10 +1780,10 @@ function triggerAiWatchlistScreening() {
 
   const summary = []
   if (holdings.length > 0) {
-    summary.push(`【真实持仓 (${holdings.length}只)】:\n` + holdings.slice(0, 10).join(';\n'))
+    summary.push(`【真实持仓 (${holdings.length}只)】:\n` + holdings.slice(0, 50).join(';\n'))
   }
   if (watchlist.length > 0) {
-    summary.push(`【自选观察池 (${watchlist.length}只)】:\n` + watchlist.slice(0, 15).join(';\n'))
+    summary.push(`【自选观察池 (${watchlist.length}只)】:\n` + watchlist.slice(0, 50).join(';\n'))
   }
 
   const prompt = `【盘前持仓风控扫描与防守边界审计】

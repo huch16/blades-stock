@@ -179,6 +179,49 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		}
 		skillPrompt := BuildShortSkillPrompt(matchedSkills)
 
+		// 零 Token 确定性持仓风控扫描拦截：
+		// 严格践行零 Token 确定性法则，根治 LLM 幻觉生成虚假均线、虚假量比与反向投资评级。由纯 Go 量化引擎解析并计算！
+		if strings.Contains(question, "【盘前持仓风控扫描与防守边界审计】") ||
+			strings.Contains(question, "【盘前自选股与持仓综合排雷诊断清单】") ||
+			strings.Contains(question, "【盘前自选股与持仓综合排雷诊断】") {
+			scanItems := quant.ParseHoldingScanItemsFromPrompt(question)
+			if len(scanItems) > 0 {
+				ch <- &StreamMessage{
+					Role:             "assistant",
+					Content:          "",
+					ReasoningContent: "[STATUS]🛡️ 正在执行纯 Go 确定性持仓风控与均线量比扫描...",
+					StatusText:       "正在执行纯 Go 确定性持仓风控与均线量比扫描...",
+				}
+				scanRes, err := quant.ScanHoldingRisk(scanItems)
+				if err == nil && scanRes != nil && scanRes.MarkdownReport != "" {
+					ch <- &StreamMessage{
+						Role:    "assistant",
+						Content: scanRes.MarkdownReport,
+					}
+					ch <- &StreamMessage{
+						Role:             "assistant",
+						Content:          "",
+						ReasoningContent: "[DONE]",
+						StatusText:       "[DONE]",
+					}
+					// 异步记录审计日志与持久化对话记录
+					go RecordAuditLog(models.AuditLog{
+						ToolName:    "ScanHoldingRisk",
+						RequestBody: fmt.Sprintf("扫描标的数: %d", len(scanItems)),
+						Response:    scanRes.MarkdownReport,
+						Success:     true,
+					})
+					if memoryMode && sessionIDOverride != "" {
+						memSvc := NewChatMemoryService(sessionIDOverride, memoryCount)
+						_ = memSvc.AddUserMessage(question)
+						_ = memSvc.AddAssistantMessage(scanRes.MarkdownReport)
+					}
+					close(ch)
+					return
+				}
+			}
+		}
+
 		stockAiAgent := receiver.newStockAiAgent(&ctx, aiConfigId, thinkingMode, question, agentMode, matchedSkills)
 		if stockAiAgent == nil {
 			logger.SugaredLogger.Errorf("stockAiAgent is nil")

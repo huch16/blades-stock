@@ -168,6 +168,65 @@ try:
 except Exception as e:
     check('Diagnosis reproducibility metadata & equity curve check', False, str(e))
 
+# 5.1 Deterministic Pre-Market Holding Risk Control Scan (Zero-Token Rule & QA Remediation)
+print('\n--- Testing Deterministic Pre-Market Holding Risk Control Scan ---')
+seven_stocks_payload = [
+    [
+        {'stockCode': '600519', 'stockName': '贵州茅台', 'currentPrice': 1469.27, 'changePercent': -0.72},
+        {'stockCode': '512480', 'stockName': '半导体ETF', 'currentPrice': 0.730, 'changePercent': 3.85},
+        {'stockCode': '002594', 'stockName': '比亚迪', 'currentPrice': 85.77, 'changePercent': 0.97},
+        {'stockCode': '000100', 'stockName': 'TCL科技', 'currentPrice': 4.65, 'changePercent': 2.20},
+        {'stockCode': '510300', 'stockName': '沪深300ETF', 'currentPrice': 4.12, 'changePercent': 0.81},
+        {'stockCode': '002906', 'stockName': '华阳集团', 'currentPrice': 24.46, 'changePercent': 1.70},
+        {'stockCode': '300750', 'stockName': '宁德时代', 'currentPrice': 253.75, 'changePercent': 1.78},
+    ]
+]
+
+status, headers, body = make_req('/api/App/ScanHoldingRisk', data=seven_stocks_payload, headers=auth_headers)
+check('ScanHoldingRisk returns 200', status == 200, f'Status: {status}')
+try:
+    scan_res = json.loads(body).get('data', {})
+    items_list = scan_res.get('items', [])
+    check('ScanHoldingRisk returned all 7 target stocks', len(items_list) == 7, f'Got: {len(items_list)}')
+    item_map = {it.get('stockCode'): it for it in items_list}
+
+    # 1. 贵州茅台 (600519) 必须为 🟢 多头持有 (反向误判根治)
+    maotai = item_map.get('600519', {})
+    check('贵州茅台 (600519) 判定为 🟢 GREEN 多头持有 (禁止误判为 🔴 止损)', maotai.get('riskTier') == 'GREEN' and '多头' in maotai.get('tierTitle', ''), f'Tier: {maotai.get("tierTitle")}')
+    check('贵州茅台 (600519) 均线为多头排列且站上MA20', maotai.get('alignment') == '多头排列' and maotai.get('distanceToMA20', 0) > 0, f'Alignment: {maotai.get("alignment")}, Dist: {maotai.get("distanceToMA20")}')
+
+    # 2. 半导体ETF (512480) 必须为 🔴 禁止新增仓/破位 (反向误判根治)
+    semi = item_map.get('512480', {})
+    check('半导体ETF (512480) 判定为 🔴 RED (禁止误判为 🟢 进攻跟踪)', semi.get('riskTier') == 'RED', f'Tier: {semi.get("tierTitle")}')
+    check('半导体ETF (512480) 策略严禁包含进攻或依托MA5', '进攻' not in semi.get('actionAdvice', '') and '依托MA5' not in semi.get('actionAdvice', ''), f'Advice: {semi.get("actionAdvice")}')
+
+    # 3. 比亚迪 (002594) 必须为 🟢 GREEN (禁止误判为 🟡 MA20下方)
+    byd = item_map.get('002594', {})
+    check('比亚迪 (002594) 判定为 🟢 GREEN 多头趋势', byd.get('riskTier') == 'GREEN' and byd.get('distanceToMA20', 0) > 0, f'Tier: {byd.get("tierTitle")}, Dist: {byd.get("distanceToMA20")}')
+
+    # 4. TCL科技 (000100) 必须为 🟡 YELLOW (待放量确认，禁止误判为 🟢 进攻)
+    tcl = item_map.get('000100', {})
+    check('TCL科技 (000100) 判定为 🟡 YELLOW 待放量确认', tcl.get('riskTier') == 'YELLOW', f'Tier: {tcl.get("tierTitle")}')
+
+    # 5. 沪深300ETF (510300) 防守点位必须实时动态计算 (不可搬运旧数据 4.02)
+    etf300 = item_map.get('510300', {})
+    check('沪深300ETF (510300) 实时动态计算防守/均线点位 (约 4.15~4.25)', 4.15 <= etf300.get('ma20', 0) <= 4.25, f'MA20: {etf300.get("ma20")}')
+
+    # 6. 华阳集团 (002906) 判定为 🔴 RED (空头禁抄底)
+    hy = item_map.get('002906', {})
+    check('华阳集团 (002906) 判定为 🔴 RED 空头禁抄底', hy.get('riskTier') == 'RED', f'Tier: {hy.get("tierTitle")}')
+
+    # 7. 宁德时代 (300750) 判定为 🟡 YELLOW (MA20下方)
+    catl = item_map.get('300750', {})
+    check('宁德时代 (300750) 判定为 🟡 YELLOW MA20下方', catl.get('riskTier') == 'YELLOW', f'Tier: {catl.get("tierTitle")}')
+
+    md_report = scan_res.get('markdownReport', '')
+    cjk_count = len([c for c in md_report if '\u4e00' <= c <= '\u9fff'])
+    check('Markdown 报告精炼且符合字数约束 (<= 350 CJK字)', cjk_count <= 350, f'CJK Count: {cjk_count}')
+    check('Markdown 报告包含完整数据溯源 (日期+前复权+指标口径)', '前复权' in md_report and 'MA(5/10/20)' in md_report, f'Report tail: {md_report[-120:]}')
+except Exception as e:
+    check('ScanHoldingRisk payload evaluation', False, str(e))
+
 # 6. Buy-Side Stock Thesis Ledger CRUD & Validation
 print('\n--- Testing Buy-Side Thesis Ledger ---')
 status, headers, body = make_req('/api/App/SaveStockThesis', data=['x', 'Invalid', 'NEW_THESIS', '定论', '核心逻辑', '催化', '风险', 'test'], headers=auth_headers)

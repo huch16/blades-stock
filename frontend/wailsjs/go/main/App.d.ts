@@ -484,5 +484,9 @@ export function GetStockThesisHistory(arg1:string,arg2:number):Promise<any>;
 
 export function SaveStockThesis(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<void>;
 
+export function ScanHoldingRisk(arg1:Array<any>):Promise<any>;
+
+export function ScanWatchlistRisk(arg1:number):Promise<any>;
+
 export function GetAllStockTheses():Promise<Record<string, any>>;
 

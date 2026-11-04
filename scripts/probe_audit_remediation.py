@@ -184,4 +184,42 @@ try:
 except Exception as e:
     print(f"  Settings Security Probe Notice: {e}")
 
+# 7. Pre-Market Holding Risk Control Scan (Pure Go Deterministic Engine Probe)
+print("\n--- 7. Pre-Market Holding Risk Control Scan (Pure Go Deterministic Engine) ---")
+try:
+    seven_stocks = [
+        {'stockCode': '600519', 'stockName': '贵州茅台', 'currentPrice': 1469.27, 'changePercent': -0.72},
+        {'stockCode': '512480', 'stockName': '半导体ETF', 'currentPrice': 0.730, 'changePercent': 3.85},
+        {'stockCode': '002594', 'stockName': '比亚迪', 'currentPrice': 85.77, 'changePercent': 0.97},
+        {'stockCode': '000100', 'stockName': 'TCL科技', 'currentPrice': 4.65, 'changePercent': 2.20},
+        {'stockCode': '510300', 'stockName': '沪深300ETF', 'currentPrice': 4.12, 'changePercent': 0.81},
+        {'stockCode': '002906', 'stockName': '华阳集团', 'currentPrice': 24.46, 'changePercent': 1.70},
+        {'stockCode': '300750', 'stockName': '宁德时代', 'currentPrice': 253.75, 'changePercent': 1.78},
+    ]
+    res = req("/api/App/ScanHoldingRisk", [seven_stocks])
+    data = res.get('data', {})
+    items = data.get('items', [])
+    print(f"  Total Scanned Items            : {len(items)} / 7 只标的")
+    print(f"  Macro Regime Gate              : {data.get('regimeState')}")
+    print(f"  Data Source & Date             : {data.get('dataSource')} ({data.get('dataDate')})")
+    
+    for it in items:
+        tier_p = it.get('tierPrefix', '')
+        print(f"    {tier_p} [{it.get('riskTier')}] {it.get('stockName')}({it.get('stockCode')}): {it.get('tierTitle')} | 均线: {it.get('alignment')} (MA5={it.get('ma5')}, MA10={it.get('ma10')}, MA20={it.get('ma20')}) | 量比: {it.get('volumeRatio')} ({it.get('volumeDesc')}) | 防守位: {it.get('defensePrice')}")
+
+    md_report = data.get('markdownReport', '')
+    cjk_count = len([c for c in md_report if '\u4e00' <= c <= '\u9fff'])
+    print(f"  Generated Report CJK Length    : {cjk_count} 字符 (约束: <= 350 字)")
+    print(f"  ✅ 贵州茅台 600519 为 🟢 GREEN   : {any(it.get('stockCode') == '600519' and it.get('riskTier') == 'GREEN' for it in items)}")
+    print(f"  ✅ 半导体ETF 512480 为 🔴 RED     : {any(it.get('stockCode') == '512480' and it.get('riskTier') == 'RED' for it in items)}")
+    print(f"  ✅ 比亚迪 002594 为 🟢 GREEN     : {any(it.get('stockCode') == '002594' and it.get('riskTier') == 'GREEN' for it in items)}")
+    print(f"  ✅ TCL科技 000100 为 🟡 YELLOW   : {any(it.get('stockCode') == '000100' and it.get('riskTier') == 'YELLOW' for it in items)}")
+    print(f"  ✅ 沪深300ETF 实时动态防守位     : {next((it.get('defensePrice') for it in items if it.get('stockCode') == '510300'), None)} (已废弃旧数 4.02)")
+
+    print(f"\n  [Deterministic Scan Report Excerpt]:")
+    for line in md_report.strip().split("\n"):
+        print(f"    {line}")
+except Exception as e:
+    print(f"  Pre-Market Scan Probe Error: {e}")
+
 print("\n>>> All verification probes executed successfully! <<<")

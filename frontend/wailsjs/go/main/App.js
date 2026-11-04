@@ -954,6 +954,14 @@ export function SaveStockThesis(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) 
   return window['go']['main']['App']['SaveStockThesis'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
+export function ScanHoldingRisk(arg1) {
+  return window['go']['main']['App']['ScanHoldingRisk'](arg1);
+}
+
+export function ScanWatchlistRisk(arg1) {
+  return window['go']['main']['App']['ScanWatchlistRisk'](arg1);
+}
+
 export function GetAllStockTheses() {
   return window['go']['main']['App']['GetAllStockTheses']();
 }
