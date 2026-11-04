@@ -952,35 +952,41 @@ onBeforeUnmount(() => {
       </NSpin>
 
       <!-- 底部辅助工具条 -->
-      <div class="workstation-bottom-bar">
-        <span class="footer-hint">
-          {{ currentReport && !isReportCorrupted ? '🧠 由 blades-stock 量化矩阵引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
-        </span>
-        <NSpace>
-          <NButton
-            v-if="currentReport && !isReportCorrupted"
-            secondary
-            type="info"
-            title="带上本研报核心要点与上下文，直通 AI 智能体推演工作台进行互动追问与标的挖掘"
-            @click="askAgentAssistant"
-          >
-            💬 针对本报告提问 AI 助手 ➔
-          </NButton>
-          <NButton
-            v-if="currentReport && !isReportCorrupted"
-            tertiary
-            @click="loadLatestForTab(currentTab)"
-          >
-            刷新缓存
-          </NButton>
-          <NButton
-            type="primary"
-            :loading="loading"
-            @click="generate"
-          >
-            {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
-          </NButton>
-        </NSpace>
+      <div class="workstation-bottom-bar" style="flex-direction: column; align-items: stretch; gap: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <span class="footer-hint">
+            {{ currentReport && !isReportCorrupted ? '🧠 由 blades-stock 纯Go量化引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
+          </span>
+          <NSpace>
+            <NButton
+              v-if="currentReport && !isReportCorrupted"
+              secondary
+              type="info"
+              title="带上本研报核心要点与上下文，直通 AI 智能体推演工作台进行互动追问与标的挖掘"
+              @click="askAgentAssistant"
+            >
+              💬 针对本报告提问 AI 助手 ➔
+            </NButton>
+            <NButton
+              v-if="currentReport && !isReportCorrupted"
+              tertiary
+              @click="loadLatestForTab(currentTab)"
+            >
+              刷新缓存
+            </NButton>
+            <NButton
+              type="primary"
+              :loading="loading"
+              @click="generate"
+            >
+              {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
+            </NButton>
+          </NSpace>
+        </div>
+        <!-- 合规免责声明条 -->
+        <div style="font-size: 11px; color: #888; border-top: 1px dashed rgba(255, 255, 255, 0.08); padding-top: 6px; line-height: 1.4;">
+          ⚖️ <strong>【合规风险提示与免责声明】</strong>：本系统宏观研报由纯Go量化引擎与买方投研Agent协同推演生成，所有策略指标、资产仓位与多空研判仅供量化投研学术探讨与辅助参考，不构成任何形式的投资建议或买卖要约。市场有风险，投资决策需审慎独立。
+        </div>
       </div>
     </div>
   </div>
@@ -1256,35 +1262,41 @@ onBeforeUnmount(() => {
     </div>
 
     <template #footer>
-      <div class="modal-footer-row">
-        <span class="footer-hint">
-          {{ currentReport && !isReportCorrupted ? '🧠 由 blades-stock 量化矩阵引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
-        </span>
-        <NSpace>
-          <NButton
-            v-if="currentReport && !isReportCorrupted"
-            secondary
-            type="info"
-            title="带上本研报核心要点与上下文，直通 AI 智能体推演工作台进行互动追问与标的挖掘"
-            @click="askAgentAssistant"
-          >
-            💬 针对本报告提问 AI 助手 ➔
-          </NButton>
-          <NButton
-            v-if="currentReport && !isReportCorrupted"
-            tertiary
-            @click="loadLatestForTab(currentTab)"
-          >
-            刷新缓存
-          </NButton>
-          <NButton
-            type="primary"
-            :loading="loading"
-            @click="generate"
-          >
-            {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
-          </NButton>
-        </NSpace>
+      <div class="modal-footer-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+          <span class="footer-hint">
+            {{ currentReport && !isReportCorrupted ? '🧠 由 blades-stock 纯Go量化引擎与投委会多Agent协同生成' : '提示：选择上方标签即可切换对应研报' }}
+          </span>
+          <NSpace>
+            <NButton
+              v-if="currentReport && !isReportCorrupted"
+              secondary
+              type="info"
+              title="带上本研报核心要点与上下文，直通 AI 智能体推演工作台进行互动追问与标的挖掘"
+              @click="askAgentAssistant"
+            >
+              💬 针对本报告提问 AI 助手 ➔
+            </NButton>
+            <NButton
+              v-if="currentReport && !isReportCorrupted"
+              tertiary
+              @click="loadLatestForTab(currentTab)"
+            >
+              刷新缓存
+            </NButton>
+            <NButton
+              type="primary"
+              :loading="loading"
+              @click="generate"
+            >
+              {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
+            </NButton>
+          </NSpace>
+        </div>
+        <!-- 合规免责声明条 -->
+        <div style="font-size: 11px; color: #888; border-top: 1px dashed rgba(255, 255, 255, 0.08); padding-top: 6px; line-height: 1.4;">
+          ⚖️ <strong>【合规风险提示与免责声明】</strong>：本系统宏观研报由纯Go量化引擎与买方投研Agent协同推演生成，所有策略指标、资产仓位与多空研判仅供量化投研学术探讨与辅助参考，不构成任何形式的投资建议或买卖要约。市场有风险，投资决策需审慎独立。
+        </div>
       </div>
     </template>
   </NModal>

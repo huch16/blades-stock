@@ -1782,24 +1782,24 @@ function triggerAiWatchlistScreening() {
     summary.push(`【自选观察池 (${watchlist.length}只)】:\n` + watchlist.slice(0, 15).join(';\n'))
   }
 
-  const prompt = `【盘前自选股与持仓综合排雷诊断清单】
+  const prompt = `【盘前持仓风控扫描与防守边界审计】
 自选分组：${groupTitle}（共 ${targetList.length} 只标的）
 标的与持仓详情：
 ${summary.join('\n\n')}
 
-请以对冲基金职业投资经理与实盘操盘手视角，对上述自选与持仓标的进行盘前综合排雷诊断并给出今日实操策略（250字以内）：
+请以买方投资总监与风控合规视角，对上述自选与持仓标的进行盘前多维度持仓风控扫描并给出今日实操防守策略（250字以内）：
 1. 【持仓与自选风险分级清单】：
-   - 🟢【重点关注/进攻】：具备多头趋势、主线共振、或持仓浮盈可格局的标的；
-   - 🟡【防守观望/冲高止盈】：已逼近上方重压力位、或缩量滞涨的标的；
-   - 🔴【破位预警/果断止损】：跌破关键均线支撑、浮亏扩大或存在解禁业绩雷区的标的；
-2. 【今日盘中盯盘主线与红线】：今日操作重点聚焦哪只标的？绝对禁止冲动追高哪只？`
+   - 🟢【多头企稳/进攻跟踪】：具备多头均线排列、主线共振、或持仓浮盈具备防守垫的标的；
+   - 🟡【均线压制/防守观望】：运行在MA20均线下方、逼近上方阻力位、或缩量滞涨的标的；
+   - 🔴【破位预警/果断止损】：有效跌破关键趋势支撑、浮亏扩大或存在解禁商誉风险的标的；
+2. 【今日盘中盯盘主线与红线】：今日操作重点聚焦哪只标的？绝对禁止逆势冲动追高哪只？`
 
   consultAgent({
     question: prompt,
     mode: 'plan_execute',
     autoSend: true,
   })
-  message.success(`已发起 [${groupTitle}] 盘前综合排雷诊断！`)
+  message.success(`已发起 [${groupTitle}] 盘前持仓风控扫描！`)
 }
 
 async function showLightweightKline(code, name) {
@@ -2524,7 +2524,7 @@ watch(modalShow6, (newVal) => {
 
     <template #suffix>
       <n-button size="small" type="warning" secondary @click="triggerAiWatchlistScreening" style="margin-left:4px;">
-        ⚡ <span class="hidden-xs">盘前自选股一键综合诊断 / 排雷</span><span class="visible-xs">排雷诊断</span>
+        🛡️ <span class="hidden-xs">盘前持仓风控扫描</span><span class="visible-xs">风控扫描</span>
       </n-button>
       <n-button v-if="currentGroupId>0" size="small" tertiary type="primary" @click="openRenameGroup" style="margin-left:4px;">
         <n-icon :component="CreateOutline"/>&nbsp;<span class="hidden-xs">重命名</span>

@@ -13,25 +13,38 @@ import {EventsOff, EventsOn} from "../../wailsjs/runtime";
 import {useRoute} from 'vue-router'
 
 
-const nowTab = ref("AI分析报告")
+const nowTab = ref("AI研报与认知账本")
 const route = useRoute()
+
+// 规范化 Tab 名称映射，兼容旧版链接与新版专业命名
+function normalizeTabName(name) {
+  if (!name) return "AI研报与认知账本"
+  if (name.includes("AI") || name.includes("研报")) return "AI研报与认知账本"
+  if (name.includes("异动")) return "盘面大单异动监控"
+  if (name.includes("涨停") || name.includes("梯队")) return "涨停连板梯队复盘"
+  if (name.includes("选股") || name.includes("指标") || name.includes("形态")) return "量化选股策略库"
+  if (name.includes("交易") || name.includes("日志") || name.includes("台账")) return "实盘交易台账"
+  if (name.includes("定时") || name.includes("任务")) return "定时自动化任务"
+  return name
+}
+
 onBeforeMount(() => {
-  nowTab.value = route.query.name
+  if (route.query.name) {
+    nowTab.value = normalizeTabName(route.query.name)
+  }
 })
 
 onBeforeUnmount(() => {
   EventsOff("changeResearchTab")
 })
 
-onUnmounted(() => {
-
-});
-
 EventsOn("changeResearchTab", async (msg) => {
-  updateTab(msg.name)
+  if (msg && msg.name) {
+    updateTab(normalizeTabName(msg.name))
+  }
 })
 function updateTab(name) {
-  nowTab.value = name
+  nowTab.value = normalizeTabName(name)
 }
 </script>
 
@@ -44,26 +57,23 @@ function updateTab(name) {
       style="--wails-draggable:no-drag"
       @update-value="updateTab"
     >
-      <n-tab-pane name="AI分析报告">
+      <n-tab-pane name="AI研报与认知账本" tab="📑 AI研报与认知账本">
         <ResearchReport />
       </n-tab-pane>
-      <n-tab-pane name="异动监控">
+      <n-tab-pane name="盘面大单异动监控" tab="⚡ 盘面大单异动监控">
         <StockChangesMonitor />
       </n-tab-pane>
-      <n-tab-pane name="涨停梯队">
+      <n-tab-pane name="涨停连板梯队复盘" tab="🪜 涨停连板梯队复盘">
         <UplimitLadder />
       </n-tab-pane>
-      <n-tab-pane name="形态选股">
-        <AllStockList />
-      </n-tab-pane>
-      <n-tab-pane name="指标选股">
+      <n-tab-pane name="量化选股策略库" tab="🎯 量化选股策略库">
         <SelectStock />
       </n-tab-pane>
-      <n-tab-pane name="定时任务">
-        <CronTaskManager />
-      </n-tab-pane>
-      <n-tab-pane name="交易日志">
+      <n-tab-pane name="实盘交易台账" tab="📝 实盘交易台账">
         <TradingRecordManager />
+      </n-tab-pane>
+      <n-tab-pane name="定时自动化任务" tab="⏰ 定时自动化任务">
+        <CronTaskManager />
       </n-tab-pane>
     </n-tabs>
   </n-card>

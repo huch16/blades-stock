@@ -734,6 +734,17 @@ onBeforeUnmount(() => {
           >
             💬 与 AI 投研助手深度探讨
           </NButton>
+
+          <!-- 🏛️ 量化回测参数披露与合规免责声明 -->
+          <div class="diagnosis-disclaimer-box" style="margin-top: 14px; padding: 10px 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; font-size: 11.5px; color: #888; line-height: 1.55; text-align: left;">
+            <div style="font-weight: 600; color: #bbb; margin-bottom: 4px;">📊 数据溯源与量化回测模型全参数披露：</div>
+            <div>• <strong>样本窗口</strong>：近 250 个交易日（前复权 QFQ）· 纯 Go 确定性向量化引擎计算</div>
+            <div>• <strong>策略模型</strong>：MA 趋势跟踪 (MA5/MA20) · 单笔费率：佣金 0.025% + 滑点 0.1%</div>
+            <div>• <strong>风控硬门禁</strong>：现价跌破 MA20 均线时强制锁定防守，严禁逆势盲目买入；交易样本 &lt; 20 次策略得分已做折价</div>
+            <div style="margin-top: 6px; border-top: 1px dashed rgba(255, 255, 255, 0.08); padding-top: 6px; color: #777;">
+              ⚖️ <strong>【合规风险提示与免责声明】</strong>：本系统为量化投研算法辅助工具，所有指标分析、回测数据、ATR 阻力通道及风控结论均基于客观公开数据推演，不构成任何实质性投资建议或买卖要约。证券市场有风险，投资决策需审慎独立。
+            </div>
+          </div>
         </div>
       </div>
     </NDrawerContent>

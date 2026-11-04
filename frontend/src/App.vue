@@ -43,8 +43,8 @@ import {FireFilled, MoneyCollectOutlined, NotificationFilled, StockOutlined} fro
 
 const router = useRouter()
 const isAuthenticated = ref(isWails() || Boolean(getAuthToken()))
-const loading = ref(true)
-const loadingMsg = ref("加载数据中...")
+const loading = ref(false)
+const loadingMsg = ref("加载完成...")
 const enableNews = ref(false)
 const contentStyle = ref("")
 const enableFund = ref(false)
@@ -858,17 +858,17 @@ const menuOptions = ref([
                       to: {
                         name: 'research',
                         query: {
-                          name:"AI分析报告",
+                          name:"AI研报与认知账本",
                         },
                       },
                       onClick: () => {
                         activeKey.value = 'research'
                         setTimeout(() => {
-                          EventsEmit("changeResearchTab", {ID: 0, name: 'AI分析报告'})
+                          EventsEmit("changeResearchTab", {ID: 0, name: 'AI研报与认知账本'})
                         }, 100)
                       },
                     },
-                    {default: () => 'AI分析报告'}
+                    {default: () => 'AI研报与认知账本'}
                 ),
             key: 'research1',
             icon: renderIcon(ReportAnalytics),
@@ -881,17 +881,17 @@ const menuOptions = ref([
                     to: {
                       name: 'research',
                       query: {
-                        name:"异动监控",
+                        name:"盘面大单异动",
                       },
                     },
                     onClick: () => {
                       activeKey.value = 'research'
                       setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 2, name: '异动监控'})
+                        EventsEmit("changeResearchTab", {ID: 2, name: '盘面大单异动'})
                       }, 100)
                     },
                   },
-                  {default: () => '异动监控'}
+                  {default: () => '盘面大单异动'}
               ),
           key: 'stockChanges',
           icon: renderIcon(TrendingUp),
@@ -904,17 +904,17 @@ const menuOptions = ref([
                     to: {
                       name: 'research',
                       query: {
-                        name:"涨停梯队",
+                        name:"涨停连板梯队",
                       },
                     },
                     onClick: () => {
                       activeKey.value = 'research'
                       setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 9, name: '涨停梯队'})
+                        EventsEmit("changeResearchTab", {ID: 9, name: '涨停连板梯队'})
                       }, 100)
                     },
                   },
-                  {default: () => '涨停梯队'}
+                  {default: () => '涨停连板梯队'}
               ),
           key: 'uplimitLadder',
           icon: renderIcon(LocalFireDepartmentRound),
@@ -927,40 +927,17 @@ const menuOptions = ref([
                     to: {
                       name: 'research',
                       query: {
-                        name:"形态选股",
+                        name:"量化选股策略库",
                       },
                     },
                     onClick: () => {
                       activeKey.value = 'research'
                       setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 3, name: '形态选股'})
+                        EventsEmit("changeResearchTab", {ID: 0, name: '量化选股策略库'})
                       }, 100)
                     },
                   },
-                  {default: () => '形态选股'}
-              ),
-          key: 'research4',
-          icon: renderIcon(SearchOutline),
-        },
-        {
-          label: () =>
-              h(
-                  RouterLink,
-                  {
-                    to: {
-                      name: 'research',
-                      query: {
-                        name:"指标选股",
-                      },
-                    },
-                    onClick: () => {
-                      activeKey.value = 'research'
-                      setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 0, name: '指标选股'})
-                      }, 100)
-                    },
-                  },
-                  {default: () => '指标选股'}
+                  {default: () => '量化选股策略库'}
               ),
           key: 'research_select_stock',
           icon: renderIcon(BoxSearch20Regular),
@@ -973,20 +950,20 @@ const menuOptions = ref([
                     to: {
                       name: 'research',
                       query: {
-                        name:"定时任务",
+                        name:"实盘交易台账",
                       },
                     },
                     onClick: () => {
                       activeKey.value = 'research'
                       setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 5, name: '定时任务'})
+                        EventsEmit("changeResearchTab", {ID: 6, name: '实盘交易台账'})
                       }, 100)
                     },
                   },
-                  {default: () => '定时任务'}
+                  {default: () => '实盘交易台账'}
               ),
-          key: 'research5',
-          icon: renderIcon(TimeOutline),
+          key: 'research6',
+          icon: renderIcon(MoneyCollectOutlined),
         },
         {
           label: () =>
@@ -996,20 +973,20 @@ const menuOptions = ref([
                     to: {
                       name: 'research',
                       query: {
-                        name:"交易日志",
+                        name:"定时自动化任务",
                       },
                     },
                     onClick: () => {
                       activeKey.value = 'research'
                       setTimeout(() => {
-                        EventsEmit("changeResearchTab", {ID: 6, name: '交易日志'})
+                        EventsEmit("changeResearchTab", {ID: 5, name: '定时自动化任务'})
                       }, 100)
                     },
                   },
-                  {default: () => '交易日志(beta)'}
+                  {default: () => '定时自动化任务'}
               ),
-          key: 'research6',
-          icon: renderIcon(MoneyCollectOutlined),
+          key: 'research5',
+          icon: renderIcon(TimeOutline),
         },
       ],
     },
@@ -1157,7 +1134,7 @@ setTimeout(() => {
     loadingMsg.value = "加载完成..."
     EventsEmit("loadingDone", "app")
   }
-}, isWails() ? 8000 : 300)
+}, 50)
 
 onBeforeUnmount(() => {
   if (marketStatusTimer) {
@@ -1492,6 +1469,10 @@ onMounted(() => {
                           height="calc(100vh)"
                         />
                         <RouterView />
+                        <!-- 全局合规免责声明底栏 -->
+                        <div class="global-compliance-bar">
+                          <span>【合规风险提示与免责声明】：本系统为量化投研算法与辅助分析软件，所有量化策略指标、历史回测数据、AI 研判推演及风控测算均基于公开客观历史数据与既定算法模型生成，不构成任何形式的投资建议、买卖要约或收益承诺。证券市场有风险，投资决策需审慎独立。</span>
+                        </div>
                       </n-scrollbar>
                     </n-spin>
                   </n-gi>
@@ -1712,5 +1693,21 @@ html.dark .mobile-tab-agent.active .agent-icon-glow,
 html[theme-mode='dark'] .mobile-tab-agent.active .agent-icon-glow,
 body.is-dark .mobile-tab-agent.active .agent-icon-glow {
   filter: drop-shadow(0 0 8px rgba(99, 226, 183, 0.6));
+}
+
+/* 全局合规免责声明条 */
+.global-compliance-bar {
+  text-align: center;
+  padding: 12px 20px 20px 20px;
+  font-size: 11.5px;
+  color: #8b949e;
+  line-height: 1.6;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  margin-top: 24px;
+}
+html.light .global-compliance-bar,
+html[theme-mode='light'] .global-compliance-bar {
+  color: #666;
+  border-top-color: rgba(0, 0, 0, 0.08);
 }
 </style>

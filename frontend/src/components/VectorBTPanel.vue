@@ -306,6 +306,16 @@
       </div>
     </div>
 
+    <!-- 🏛️ 量化回测参数披露与合规风险提示 -->
+    <div class="vectorbt-disclaimer-box" style="margin-top: 16px; padding: 10px 14px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; font-size: 11.5px; color: #888; line-height: 1.55;">
+      <div style="font-weight: 600; color: #bbb; margin-bottom: 4px;">📊 向量化回测模型参数透明度披露：</div>
+      <div>• <strong>样本窗口</strong>：近 250~500 根前复权 K 线 · 包含双向滑点 (0.1%) 与交易手续费 (万2.5)</div>
+      <div>• <strong>样本内外验证</strong>：网格寻优提供 70% 训练集 vs 30% 盲测集对比，严防历史过拟合与未来函数</div>
+      <div style="margin-top: 6px; border-top: 1px dashed rgba(255, 255, 255, 0.08); padding-top: 6px; color: #777;">
+        ⚖️ <strong>【合规风险提示】</strong>：历史回测统计数据仅供量化策略研发参考，过往收益不代表未来表现。实盘交易受流动性、冲击成本与突发黑天鹅影响，请严格控制头寸与防守止损。
+      </div>
+    </div>
+
     <!-- 加载状态 -->
     <n-spin v-if="loading || gridLoading" stroke="primary" />
   </div>
