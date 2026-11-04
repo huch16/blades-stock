@@ -4,7 +4,7 @@ import json
 import time
 import sys
 
-BASE_URL = 'https://8000-agqxrg26lk2za3jpqp2izbt7za.instabox.tech'
+BASE_URL = sys.argv[1] if len(sys.argv) > 1 else 'https://8000-agqxrg26lk2za3jpqp2izbt7za.instabox.tech'
 TOKEN = '2266762'
 
 def make_req(path, data=None, headers=None, method='POST'):
