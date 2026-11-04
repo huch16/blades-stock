@@ -4,6 +4,12 @@ import json
 import time
 import sys
 
+# Windows 控制台输出 UTF-8 编码适配 (避免 🟢 🟡 🔴 等 Emoji 触发 GBK 编码异常)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 BASE_URL = sys.argv[1] if len(sys.argv) > 1 else 'https://8000-agqxrg26lk2za3jpqp2izbt7za.instabox.tech'
 TOKEN = '2266762'
 

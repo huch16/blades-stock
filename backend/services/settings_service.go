@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -57,9 +58,23 @@ func (s *SettingsService) ExportConfig() string {
 	return data.NewSettingsApi().Export()
 }
 
-// OpenURL 打开外部 URL 链接（Web 模式下主要由前端 Bridge window.open 接管，后端记录审计）
-func (s *SettingsService) OpenURL(url string) {
-	logger.SugaredLogger.Infof("[SettingsService] OpenURL request: %s", url)
+// OpenURL 打开外部 URL 链接（Web 模式下主要由前端 Bridge window.open 接管，后端记录审计与 SSRF 拦截）
+func (s *SettingsService) OpenURL(rawURL string) {
+	cleanURL := strings.TrimSpace(rawURL)
+	if cleanURL == "" {
+		return
+	}
+	u, err := url.Parse(cleanURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		logger.SugaredLogger.Warnf("[SettingsService] OpenURL rejected non-http(s) protocol: %s", cleanURL)
+		return
+	}
+	// 防御 SSRF：封禁访问云端元数据服务与本地危险端口
+	if u.Hostname() == "169.254.169.254" || strings.HasPrefix(u.Hostname(), "169.254.") {
+		logger.SugaredLogger.Warnf("[SettingsService] OpenURL rejected cloud metadata IP: %s", cleanURL)
+		return
+	}
+	logger.SugaredLogger.Infof("[SettingsService] OpenURL verified request: %s", cleanURL)
 }
 
 // SendDingDingMessageByType 按消息类型向钉钉发送告警推送

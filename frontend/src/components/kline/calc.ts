@@ -102,6 +102,8 @@ export function bollingerBands(closes, period, mult) {
   const mid = smaValues(closes, period)
   const upper = []
   const lower = []
+  // 通达信/东方财富等国内行情平台默认使用样本标准差 (÷ n - 1)
+  const denom = period > 1 ? period - 1 : 1
   for (let i = 0; i < closes.length; i++) {
     if (i < period - 1) {
       upper.push(null)
@@ -114,7 +116,7 @@ export function bollingerBands(closes, period, mult) {
       const d = closes[i - j] - m
       sumSq += d * d
     }
-    const std = Math.sqrt(sumSq / period)
+    const std = Math.sqrt(sumSq / denom)
     upper.push(m + mult * std)
     lower.push(m - mult * std)
   }
@@ -179,18 +181,50 @@ export function kdjBundle(highs, lows, closes, n = 9) {
 }
 
 export function rsiBundle(closes, period = 14) {
-  const out = new Array(closes.length).fill(null)
-  for (let i = period; i < closes.length; i++) {
-    let gain = 0
-    let loss = 0
-    for (let j = 0; j < period; j++) {
-      const ch = closes[i - j] - closes[i - j - 1]
-      if (ch >= 0) gain += ch
-      else loss -= ch
+  const len = closes ? closes.length : 0
+  const out = new Array(len).fill(null)
+  if (!len || period <= 0 || len <= period) return out
+
+  // 严格遵循 J. Welles Wilder 标准平滑算法（RMA指数平滑）与通达信/同花顺/TradingView完全对齐
+  let sumGain = 0
+  let sumLoss = 0
+  for (let i = 1; i <= period; i++) {
+    const ch = closes[i] - closes[i - 1]
+    if (ch >= 0) sumGain += ch
+    else sumLoss -= ch
+  }
+
+  let avgGain = sumGain / period
+  let avgLoss = sumLoss / period
+
+  // 边界保护：平坦序列（停牌/无波动）返回 50（中性），而非错误返回 100 极度超买
+  if (avgGain === 0 && avgLoss === 0) {
+    out[period] = 50
+  } else if (avgLoss === 0) {
+    out[period] = 100
+  } else if (avgGain === 0) {
+    out[period] = 0
+  } else {
+    out[period] = 100 - 100 / (1 + avgGain / avgLoss)
+  }
+
+  for (let i = period + 1; i < len; i++) {
+    const ch = closes[i] - closes[i - 1]
+    const gain = ch >= 0 ? ch : 0
+    const loss = ch < 0 ? -ch : 0
+
+    avgGain = (avgGain * (period - 1) + gain) / period
+    avgLoss = (avgLoss * (period - 1) + loss) / period
+
+    if (avgGain === 0 && avgLoss === 0) {
+      out[i] = 50
+    } else if (avgLoss === 0) {
+      out[i] = 100
+    } else if (avgGain === 0) {
+      out[i] = 0
+    } else {
+      out[i] = 100 - 100 / (1 + avgGain / avgLoss)
     }
-    const ag = gain / period
-    const al = loss / period
-    out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al)
   }
   return out
 }

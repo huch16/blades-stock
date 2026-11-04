@@ -142,7 +142,6 @@ func HandleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // 禁用 Nginx 缓冲
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	clientChan := make(chan []byte, 1024)
 	globalSSEHub.addClient(clientChan)

@@ -13,6 +13,7 @@ import (
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
 	"blades-stock/backend/services"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -2160,11 +2161,24 @@ func (a *App) GetStockMoneyTrendByDay(stockCode string, days int) []map[string]a
 
 // OpenURL
 //
-//	@Description:  跨平台打开默认浏览器
+//	@Description:  跨平台打开默认浏览器（增强协议校验与 SSRF 拦截）
 //	@receiver a
 //	@param url
-func (a *App) OpenURL(url string) {
-	runtime.BrowserOpenURL(a.ctx, url)
+func (a *App) OpenURL(rawURL string) {
+	cleanURL := strings.TrimSpace(rawURL)
+	if cleanURL == "" {
+		return
+	}
+	u, err := url.Parse(cleanURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		logger.SugaredLogger.Warnf("[DesktopApp] OpenURL rejected non-http(s) protocol: %s", cleanURL)
+		return
+	}
+	if u.Hostname() == "169.254.169.254" || strings.HasPrefix(u.Hostname(), "169.254.") {
+		logger.SugaredLogger.Warnf("[DesktopApp] OpenURL rejected cloud metadata IP: %s", cleanURL)
+		return
+	}
+	runtime.BrowserOpenURL(a.ctx, cleanURL)
 }
 
 // SaveImage

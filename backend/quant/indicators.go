@@ -99,29 +99,58 @@ func (m *MACDResult) MACDCrossBelowZero() *BoolVector {
 }
 
 // ============================================================================
-// RSI - 相对强弱指数
+// RSI - 相对强弱指数 (Wilder's Smoothing RMA)
 // ============================================================================
 
-// NewRSI 创建 RSI 指标
+// NewRSI 创建 RSI 指标 (严格对齐 J. Welles Wilder 平滑算法及主流金融平台)
 func NewRSI(close *Vector, window int) *Vector {
-	if close.Len < window+1 {
+	if close.Len < window+1 || window <= 0 {
 		return NewZeros(close.Len)
 	}
+	out := NewZeros(close.Len)
 	delta := close.Diff(1)
-	gain := NewZeros(close.Len)
-	loss := NewZeros(close.Len)
-	for i := 1; i < close.Len; i++ {
-		if delta.Values[i] > 0 {
-			gain.Values[i] = delta.Values[i]
+
+	var sumGain, sumLoss float64
+	for i := 1; i <= window; i++ {
+		d := delta.Values[i]
+		if d >= 0 {
+			sumGain += d
 		} else {
-			loss.Values[i] = -delta.Values[i]
+			sumLoss -= d
 		}
 	}
-	avgGain := gain.RollingMean(window)
-	avgLoss := loss.RollingMean(window)
-	rs := avgGain.Div(avgLoss.NanToNum(1e-10))
-	rsi := rs.MulScalar(100).Div(rs.AddScalar(100))
-	return rsi.NanToNum(50)
+	avgGain := sumGain / float64(window)
+	avgLoss := sumLoss / float64(window)
+
+	calcRSI := func(ag, al float64) float64 {
+		if ag == 0 && al == 0 {
+			return 50.0 // 平坦序列中性返回 50
+		}
+		if al == 0 {
+			return 100.0
+		}
+		if ag == 0 {
+			return 0.0
+		}
+		return 100.0 - 100.0/(1.0+ag/al)
+	}
+
+	out.Values[window] = calcRSI(avgGain, avgLoss)
+
+	for i := window + 1; i < close.Len; i++ {
+		d := delta.Values[i]
+		g, l := 0.0, 0.0
+		if d >= 0 {
+			g = d
+		} else {
+			l = -d
+		}
+		avgGain = (avgGain*float64(window-1) + g) / float64(window)
+		avgLoss = (avgLoss*float64(window-1) + l) / float64(window)
+		out.Values[i] = calcRSI(avgGain, avgLoss)
+	}
+
+	return out
 }
 
 // RSIOverbought RSI 超买（默认 >70）

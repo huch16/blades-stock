@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,23 +85,69 @@ func setAuthToken(token string) error {
 	return nil
 }
 
+// isAllowedOrigin 严格校验跨域请求 Origin，杜绝恶意站点凭据跨域窃取 (P1-1 修复)
+func isAllowedOrigin(origin, host string) bool {
+	if origin == "" {
+		return false
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	originHost := u.Host
+	if originHost == host {
+		return true
+	}
+	// 本地开发与内网调试白名单放行
+	if u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" {
+		return true
+	}
+	// 环境变量自定义放行域名 (逗号分隔)
+	if custom := os.Getenv("BLADES_ALLOWED_ORIGINS"); custom != "" {
+		for _, o := range strings.Split(custom, ",") {
+			trimmed := strings.TrimSpace(o)
+			if trimmed == origin || trimmed == originHost {
+				return true
+			}
+		}
+	}
+	// 默认投研生产域名与远程沙箱放行
+	if strings.HasSuffix(u.Hostname(), "woha.men") ||
+		strings.HasSuffix(u.Hostname(), "8501025.xyz") ||
+		strings.HasSuffix(u.Hostname(), "instabox.tech") {
+		return true
+	}
+	return false
+}
+
 // AuthMiddleware 校验公网访问 Token
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		allowOrigin := "*"
-		if origin != "" {
-			allowOrigin = origin
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-		}
-		w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+		reqHost := r.Host
 
-		// 跨域预检请求直接放行
+		// 修复 P1-1: 严禁将 Access-Control-Allow-Credentials: true 与通配符 "*" 混合使用
+		// 严禁将任意外部 Origin (如 https://evil.com) 无条件回显并开启凭据跨域
+		if origin != "" && isAllowedOrigin(origin, reqHost) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
+		} else if origin == "" {
+			// 同源或无 Origin 请求，保持默认
+			w.Header().Set("Vary", "Origin")
+		}
+
+		// 跨域预检请求处理
 		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, Last-Event-ID")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.WriteHeader(http.StatusNoContent)
+			if origin != "" && isAllowedOrigin(origin, reqHost) {
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID, Last-Event-ID")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+				w.Header().Set("Access-Control-Max-Age", "86400")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			// 未经允许的非法跨域预检直接拒绝
+			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 

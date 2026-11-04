@@ -204,11 +204,12 @@ class WebEventBus {
       return
     }
     // 修复 P0-1: 严禁在 URL Query 中明文拼接 Token，杜绝其泄露至 Nginx / Cloudflare 边缘访问日志与 Referer
-    // 现代浏览器在同源环境下通过安全 HttpOnly Cookie (blades_token) 自动隐式传递鉴权会话
+    // 现代浏览器在同源或跨域白名单环境下通过安全 HttpOnly Cookie (blades_token) 自动隐式传递鉴权会话
+    // 同时配置 withCredentials: true，确保在跨端口/反向代理开发与沙箱集成中凭据不丢失
     const url = '/api/events/stream'
 
     try {
-      this.sseSource = new EventSource(url)
+      this.sseSource = new EventSource(url, { withCredentials: true } as any)
       this.sseConnected = true
       this.attachedEvents.clear()
 

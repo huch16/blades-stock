@@ -111,6 +111,26 @@ func TestNewRSI(t *testing.T) {
 	if rsi.Values[19] < 0 || rsi.Values[19] > 100 {
 		t.Fatalf("RSI last value %f out of [0,100]", rsi.Values[19])
 	}
+
+	// 边界测试：平坦价格序列（无波动/停牌）应返回 50.0 中性，绝不能误判为 100.0 极度超买
+	flatCloses := make([]float64, 30)
+	for i := range flatCloses {
+		flatCloses[i] = 100.0
+	}
+	flatRSI := NewRSI(NewVec(flatCloses...), 14)
+	if flatRSI.Values[len(flatCloses)-1] != 50.0 {
+		t.Fatalf("Flat sequence RSI should be 50.0, got %f", flatRSI.Values[len(flatCloses)-1])
+	}
+
+	// 单边上涨序列应返回 100.0
+	riseCloses := make([]float64, 30)
+	for i := range riseCloses {
+		riseCloses[i] = float64(100 + i)
+	}
+	riseRSI := NewRSI(NewVec(riseCloses...), 14)
+	if riseRSI.Values[len(riseCloses)-1] != 100.0 {
+		t.Fatalf("Monotonic rising RSI should be 100.0, got %f", riseRSI.Values[len(riseCloses)-1])
+	}
 }
 
 func TestNewRSI_InsufficientData(t *testing.T) {

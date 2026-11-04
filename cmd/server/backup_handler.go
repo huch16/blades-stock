@@ -61,14 +61,12 @@ func HandleBackupDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", cleanName))
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	http.ServeFile(w, r, filePath)
 }
 
 // HandleBackupUpload 针对 Web SaaS 模式的本地资产包上传并执行安全恢复
 func HandleBackupUpload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// 验证权限
 	serverToken := getAuthToken()
