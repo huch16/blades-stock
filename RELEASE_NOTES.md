@@ -11,7 +11,7 @@ v3.0.0 是一次**精简 · 清理 · 固化**版本。前置的 v2.x 系列已�
 Highlights / 核心亮点
 --------------------
 
-### 一、代码仓库精减 75.5%（追踪字节 57,304,765 → 14,035,226）
+### 一、代码仓库精减 75.5%（追踪字节 57,304,765 → 14,041,438）
 
 | 项目 | 体积 | 判定依据 | 处置 |
 |---|---|---|---|
@@ -119,7 +119,45 @@ Highlights / 核心亮点
 
 行情相关的绝对分级改为 `t.Logf` 观测输出，仅供人工核对。
 
-### 六、版本号全面升级至 3.0.0
+### 六、生产部署阻断修复：CSP 门禁在 Docker 布局下失效
+
+**现象**（首次真机执行 `bash scripts/deploy-vps.sh` 时报出）：
+
+```text
+[frontend-builder 6/6] RUN npm run build
+0.876 ❌ [CSP-Compat] 无法从 cmd/server 读取 Content-Security-Policy，门禁无法工作。
+ERROR: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+```
+
+**根因**：`frontend/scripts/check_csp_compat.js` 以服务端为 CSP 的**唯一权威来源**
+（刻意避免两处定义漂移），需读取仓库根的 `cmd/server/main.go`。但 Dockerfile 的
+`frontend-builder` 阶段只 `COPY frontend/ ./`，`cmd/` 根本不在构建上下文里 → 门禁拿不到 CSP。
+
+这是一类典型的「门禁在开发环境有效、在交付环境失效」协同缺口：
+本地 `npm run build` 正常（能找到 `cmd/server/main.go`），而 Docker 构建必失败。
+
+**修复**（两侧同时加固）：
+
+1. **Dockerfile**：`frontend-builder` 阶段新增 `COPY cmd/ /build/cmd/`。
+   目标路径故意写为绝对的 `/build/cmd`，以匹配脚本从 `/build/frontend` 向上查找的逻辑；
+   `npm run build` 只作用于 `frontend/`，`/build/cmd` 在 vite root 之外，不会被打包进产物。
+2. **门禁脚本健壮化**：从脚本目录**逐级向上查找** `cmd/server/{main.go,static.go}`（最多 5 级），
+   同时兼容本地 monorepo 与 Docker 两种布局；新增 `BLADES_CSP_SOURCE` 显式指定入口；
+   失败时列出**所有已尝试路径**与修复指引，保持 **fail-closed**（绝不静默跳过）。
+
+**四种布局场景均已实测**（无 Docker 时的最强验证手段）：
+
+| 场景 | 预期 | 实测 |
+|---|---|---|
+| Docker 布局 + 已 COPY cmd/ | 通过 | ✅ exit 0 |
+| Docker 布局 + 源码含 `http://` 违规 | 拦截 | ✅ exit 1（门禁仍有效） |
+| Docker 布局 + 忘记 COPY cmd/ | fail-closed 且提示可操作 | ✅ exit 1 + 列出 10 条已尝试路径 |
+| `BLADES_CSP_SOURCE` 显式指定 | 生效 | ✅ exit 0 |
+
+另已核对：`smoke-after-deploy.sh` 引用的是服务端 CSP 之外的产物特征，与本次改动无耦合；
+首屏预加载仍为 8 个资源且不含 codemirror / markdown / tdesign chunk，部署后 27 项冒烟自检预期全绿。
+
+### 七、版本号全面升级至 3.0.0
 
 共 17 个文件 / 27 处（`main.go`、`cmd/server`、`wails.json`、`frontend/package.json`、
 `frontend/index.html`、设置页与认证弹窗、`scripts/deploy-vps.sh`、`docker-compose.yml`、
@@ -149,7 +187,7 @@ Highlights / 核心亮点
 |---|---|---|
 | v2.0.0 基线 | 57,304,765 | 718 |
 | v3.0.0 第一轮 | 14,693,884 | 593 |
-| **v3.0.0 第二轮（终态）** | **14,035,226** | **593** |
+| **v3.0.0 第二轮（终态）** | **14,041,438** | **593** |
 
 累计减重 **75.5%**（−43.27 MB）。
 

@@ -34,19 +34,43 @@ const srcDir = path.join(rootDir, 'src');
 const LOCAL_HOSTS = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?$/i;
 const NAMESPACE_HOSTS = /^www\.w3\.org$/i;
 
-/** 从 Go 服务端源码读取唯一权威的 CSP（避免两处定义漂移） */
+/**
+ * 从 Go 服务端源码读取唯一权威的 CSP（避免两处定义漂移）
+ *
+ * ⚠️ 路径解析必须同时兼容两种运行环境，否则门禁会在 CI/Docker 里直接炸掉：
+ *   1. 本地 monorepo：cwd = <repo>/frontend，CSP 在 <repo>/cmd/server/main.go
+ *   2. Docker 多阶段构建：cwd = /build/frontend，Dockerfile 会把 cmd/ 拷到 /build/cmd
+ *
+ * 因此这里不能写死单一路径，而是从脚本目录逐级向上查找。
+ * 另支持 BLADES_CSP_SOURCE 显式指定（用于非常规目录布局）。
+ */
+function findServerCSPFiles() {
+  const found = [];
+  const explicit = process.env.BLADES_CSP_SOURCE;
+  if (explicit) found.push(path.resolve(explicit));
+
+  // 从脚本所在目录逐级向上查找，最多 5 级（frontend -> repo -> ... -> 根）
+  let dir = rootDir;
+  for (let i = 0; i < 5; i++) {
+    found.push(path.join(dir, 'cmd', 'server', 'main.go'));
+    found.push(path.join(dir, 'cmd', 'server', 'static.go'));
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return found;
+}
+
 function readServerCSP() {
-  const candidates = [
-    path.join(repoRoot, 'cmd', 'server', 'main.go'),
-    path.join(repoRoot, 'cmd', 'server', 'static.go'),
-  ];
-  for (const file of candidates) {
+  const tried = [];
+  for (const file of findServerCSPFiles()) {
+    tried.push(file);
     if (!fs.existsSync(file)) continue;
     const content = fs.readFileSync(file, 'utf-8');
     const m = content.match(/Content-Security-Policy",\s*"([^"]+)"/);
-    if (m) return m[1];
+    if (m) return { csp: m[1], file };
   }
-  return null;
+  return { csp: null, tried };
 }
 
 /** 解析 CSP，返回 { directive: [sources] } */
@@ -80,9 +104,13 @@ function getAllFiles(dir, exts = ['.vue', '.js', '.ts', '.tsx', '.jsx']) {
   return results;
 }
 
-const csp = readServerCSP();
+const { csp, file: cspFile, tried } = readServerCSP();
 if (!csp) {
   console.error('❌ [CSP-Compat] 无法从 cmd/server 读取 Content-Security-Policy，门禁无法工作。');
+  console.error('   已尝试以下位置（均不存在或未匹配到 CSP 定义）：');
+  for (const p of tried) console.error('     · ' + p);
+  console.error('\n   → 本地运行：请在仓库根目录执行，或设置 BLADES_CSP_SOURCE=<路径>/main.go');
+  console.error('   → Docker 构建：请确认 frontend-builder 阶段已 COPY cmd/（见 Dockerfile）\n');
   process.exit(1);
 }
 const directives = parseCSP(csp);
@@ -131,5 +159,6 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `✅ [CSP-Compat] 已校验 ${files.length} 个源文件：无被 CSP 阻断的资源引用（img-src/connect-src 均已对齐）。\n`
+  `✅ [CSP-Compat] 已校验 ${files.length} 个源文件：无被 CSP 阻断的资源引用（img-src/connect-src 均已对齐）。`
 );
+console.log(`   ↳ CSP 权威来源: ${path.relative(repoRoot, cspFile) || cspFile}\n`);

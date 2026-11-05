@@ -18,6 +18,13 @@ RUN npm install
 
 # 拷贝前端源码并进行生产环境打包
 COPY frontend/ ./
+
+# CSP 一致性门禁（frontend/scripts/check_csp_compat.js）需要读取服务端的**唯一权威**
+# CSP 定义（cmd/server/main.go），因此必须把 cmd/ 一并放进该阶段的构建上下文。
+# 若不拷贝，门禁会因找不到 CSP 而 fail-closed，导致 `npm run build` 直接失败。
+# 目标路径故意写成绝对的 /build/cmd，以匹配脚本从 /build/frontend 逐级向上查找的解析逻辑。
+COPY cmd/ /build/cmd/
+
 ENV VITE_MODE=web
 RUN npm run build
 
