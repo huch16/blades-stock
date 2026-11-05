@@ -275,6 +275,36 @@ npm run lint       # 只读检查（CI 口径，0 errors 才放行）
 npm run lint:fix   # 自动修复未使用导入 / prefer-const / no-var
 ```
 
+### 🔍 部署后冒烟自检（必跑）
+
+`scripts/smoke-after-deploy.sh` 用 20 秒把 **27 项关键不变量**逐条验一遍，直接回应「改 A 坏 B」：
+每次修复都可能在别处埋坑，而这个脚本把坑变成红灯。`deploy-vps.sh` 已自动调用它，
+**自检失败时会以 exit 1 结束并明确提示「请勿宣布发布成功」**。
+
+```bash
+bash scripts/smoke-after-deploy.sh                                  # 默认 http://127.0.0.1:8000
+bash scripts/smoke-after-deploy.sh http://127.0.0.1:8000            # 指定地址
+BLADES_AUTH_TOKEN=xxxx bash scripts/smoke-after-deploy.sh           # 指定口令（默认读 .env）
+```
+
+覆盖的 8 组不变量：
+
+| 组 | 内容 |
+|---|---|
+| 1 | `/health` `/live` `/ready` 三探针 |
+| 2 | **发布韧性**：`previous_dist_armed == true`、`stale_chunk_miss == 0` |
+| 3 | **首屏体积基线**：预加载资源 ≤ 10 且不得含 `codemirror` / `markdown` / `tdesign` |
+| 4 | `/assets/*` 必须含 `immutable` |
+| 5 | 敏感路径（`.git` / `Dockerfile` / `Makefile` / `package.json` / `.env` / `node_modules`）必须 404 |
+| 6 | **SSE 链路**：无凭证 401、带 Bearer 200、`Content-Type: text/event-stream` |
+| 7 | HSTS / nosniff / X-Frame-Options / CSP 均已注入，且 CSP 无 `unsafe-eval` |
+| 8 | 入口 bundle 无被 CSP 阻断的 `http://` 外部资源，且 `staleChunkGuard` 已打进产物 |
+
+> ⚠️ 维护提醒：本脚本使用 `set -o pipefail`。**禁止**在脚本里写 `echo "$BIG_VAR" | grep -q pat` ——
+> `grep -q` 命中即退出会让 `echo` 收到 SIGPIPE（141），pipefail 将整个管道判为非 0，
+> 即使真正命中也会走 `else` 分支。对「禁止项」检查而言这是致命假阴性
+> （首屏真的出现了 codemirror 也会报 ✅）。请统一使用脚本内置的 `has()` 做子串判定。
+
 ### 常用运维指令
 - **查看容器日志**：`docker compose logs -f blades-stock`
 - **重启服务**：`docker compose restart`

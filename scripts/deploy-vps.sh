@@ -184,6 +184,13 @@ done
 echo ""
 
 if [ "$HEALTHY" = true ]; then
+    # 6.5 部署后冒烟自检（防止“改 A 坏 B”：把关键不变量逐条验一遍）
+    echo -e "${BLUE}[6.5/6] 执行部署后冒烟自检 (27 项关键不变量)...${NC}"
+    SMOKE_FAILED=0
+    if ! bash scripts/smoke-after-deploy.sh "http://127.0.0.1:${APP_PORT}"; then
+        SMOKE_FAILED=1
+    fi
+
     # 获取公网 IP
     PUBLIC_IP=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me || echo "你的VPS公网IP")
 
@@ -207,7 +214,18 @@ if [ "$HEALTHY" = true ]; then
     echo -e " 🔄 重启容器服务:       docker compose restart"
     echo -e " 🛡️ 发布韧性自检:        curl -s http://127.0.0.1:${APP_PORT}/health"
     echo -e "    （previous_dist_armed=true 表示旧 chunk 回退已生效，部署不再打断在线用户）"
+    echo -e " 🔍 冒烟自检重跑:        bash scripts/smoke-after-deploy.sh http://127.0.0.1:${APP_PORT}"
     echo -e "${GREEN}==================================================================${NC}\n"
+
+    if [ "$SMOKE_FAILED" = "1" ]; then
+        echo -e "${RED}==================================================================${NC}"
+        echo -e "${RED}❌ 部署已完成，但冒烟自检存在失败项。${NC}"
+        echo -e "${YELLOW}   请勿宣布发布成功 —— 请按上方 ❌ 清单逐项修复后重跑：${NC}"
+        echo -e "${YELLOW}   bash scripts/smoke-after-deploy.sh http://127.0.0.1:${APP_PORT}${NC}"
+        echo -e "${RED}==================================================================${NC}\n"
+        exit 1
+    fi
 else
     echo -e "${RED}[警告] 服务启动健康检查超时，请通过 'docker compose logs blades-stock' 查看详细容器启动日志。${NC}"
+    exit 1
 fi
