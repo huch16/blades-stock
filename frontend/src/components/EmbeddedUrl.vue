@@ -32,7 +32,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
   url: {

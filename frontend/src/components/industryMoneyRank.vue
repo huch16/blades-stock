@@ -1,8 +1,8 @@
 <script setup>
 
-import {CaretDown, CaretUp, RefreshCircleOutline} from "@vicons/ionicons5";
+import {CaretDown, CaretUp} from "@vicons/ionicons5";
 import {NText,useMessage} from "naive-ui";
-import {onBeforeUnmount, onMounted, onUnmounted, ref} from "vue";
+import {onBeforeUnmount, onMounted, ref} from "vue";
 import {GetIndustryMoneyRankSina} from "../../wailsjs/go/main/App";
 import KLineChart from "./KLineChart.vue";
 

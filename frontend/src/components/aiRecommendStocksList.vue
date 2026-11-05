@@ -1,5 +1,5 @@
 <script setup>
-import {computed, h, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref,reactive, defineAsyncComponent} from 'vue'
+import { h, onBeforeMount, onMounted, ref,reactive, defineAsyncComponent} from 'vue'
 import {
   GetAiRecommendStocksList,
   GetConfig,
@@ -7,11 +7,10 @@ import {
   UpdateAiRecommendStocksAlert,
   SyncRecommendStocksFromIntelligence
 } from "../../wailsjs/go/main/App";
-import {NAvatar, NButton, NEllipsis, NSwitch, NTag, NText, useMessage, useNotification, NSpace, NEmpty} from "naive-ui";
+import { NButton, NEllipsis, NSwitch, NTag, NText, useMessage, useNotification, NSpace, NEmpty} from "naive-ui";
 // 异步按需加载 K 线图表模块
 const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
 import sparkLine from "./stockSparkLine.vue"
-import {format} from "date-fns";
 import { dispatchAgentAction, consultAgent } from "../utils/agentControlBus";
 import { setCurrentStock } from "../utils/stockContextBus";
 
@@ -68,8 +67,6 @@ function handleTriggerAgentRecommendation() {
     autoSend: true,
   })
 }
-const mdPreviewRef = ref(null)
-const mdEditorRef = ref(null)
 const editorDataRef = reactive({
   show: false,
   loading: false,
@@ -97,21 +94,21 @@ const columnsRef = ref([
   {
     title: '推荐模型',
     key: 'modelName',
-    render(row, index) {
+    render(row, _index) {
       return h(NText, { type: "info" }, { default: () => row.modelName })
     }
   },
   {
     title: '评级',
     key: 'rating',
-    render(row, index) {
+    render(row, _index) {
       return h(NText, { type: "info" }, { default: () => row.rating || '-' })
     }
   },
   {
     title: '推荐时间',
     key: 'dataTime',
-    render(row, index) {
+    render(row, _index) {
       // 格式化为常用时间格式，防范 null/undefined 触发保护性熔断
       if (!row || !row.CreatedAt) return '--'
       return String(row.CreatedAt).substring(0, 19).replace('T', ' ')
@@ -124,7 +121,7 @@ const columnsRef = ref([
   {
     title: '股票名称',
     key: 'stockName',
-    render(row, index) {
+    render(row, _index) {
       return h(NText, { type: "info" }, { default: () => row.stockName })
     }
   },
@@ -135,7 +132,7 @@ const columnsRef = ref([
   {
     title: '最新分时',
     key: 'stockCode',
-    render(row, index) {
+    render(row, _index) {
       const cur = Number(row.stockCurrentPrice)
       const pre = Number(row.stockPrePrice)
       if (!row.stockCurrentPrice || isNaN(cur) || cur <= 0 || !row.stockPrePrice || isNaN(pre) || pre <= 0) {
@@ -148,13 +145,13 @@ const columnsRef = ref([
     title: '最新',
     key: 'stockCurrentPrice',
     minWidth: 120,
-    render(row, index) {
+    render(row, _index) {
       const cur = Number(row.stockCurrentPrice)
       const pre = Number(row.stockPrePrice)
       if (!row.stockCurrentPrice || isNaN(cur) || cur <= 0 || !row.stockPrePrice || isNaN(pre) || pre <= 0) {
         return h(NText, { depth: 3 }, { default: () => '-' })
       }
-      let diff = ((cur - pre) / pre * 100).toFixed(2)
+      const diff = ((cur - pre) / pre * 100).toFixed(2)
       if (cur < pre) {
         return [h(NText, { type: "success", bordered: false }, { default: () => `${row.stockCurrentPrice} | ${diff}%` })]
       } else {
@@ -165,7 +162,7 @@ const columnsRef = ref([
   {
     title: '推荐时',
     key: 'stockPrice',
-    render(row, index) {
+    render(row, _index) {
       const p = Number(row.stockPrice)
       const cur = Number(row.stockCurrentPrice)
       if (!row.stockPrice || isNaN(p) || p <= 0) {
@@ -174,7 +171,7 @@ const columnsRef = ref([
       if (!row.stockCurrentPrice || isNaN(cur) || cur <= 0) {
         return h(NText, { type: "info" }, { default: () => row.stockPrice })
       }
-      let diff = ((cur - p) / p * 100).toFixed(2)
+      const diff = ((cur - p) / p * 100).toFixed(2)
       let flagStr = "持平"
       let flag = "info"
       if (cur > p) {
@@ -193,7 +190,7 @@ const columnsRef = ref([
   {
     title: '昨收',
     key: 'stockPrePrice',
-    render(row, index) {
+    render(row, _index) {
       const pre = Number(row.stockPrePrice)
       if (!row.stockPrePrice || isNaN(pre) || pre <= 0) {
         return h(NText, { depth: 3 }, { default: () => '-' })
@@ -204,7 +201,7 @@ const columnsRef = ref([
   {
     title: '开仓价',
     key: 'recommendBuyPrice',
-    render(row, index) {
+    render(row, _index) {
       if (!row.recommendBuyPrice || row.recommendBuyPrice === '-' || row.recommendBuyPrice.includes('9.85 ~ 10.05')) {
         return h(NText, { depth: 3 }, { default: () => '-' })
       }
@@ -213,7 +210,7 @@ const columnsRef = ref([
         return h(NText, { type: "info" }, { default: () => row.recommendBuyPrice })
       }
       if (row.recommendBuyPrice.includes("-")) {
-        let prices = row.recommendBuyPrice.split("-").map(p => Number(p.trim()))
+        const prices = row.recommendBuyPrice.split("-").map(p => Number(p.trim()))
         if (prices.length >= 2 && cur >= prices[0] && cur <= prices[1]) {
           return [
             h(NText, { type: "success", style: "margin-right: 6px;" }, { default: () => row.recommendBuyPrice }),
@@ -233,7 +230,7 @@ const columnsRef = ref([
   {
     title: '止盈价',
     key: 'recommendStopProfitPrice',
-    render(row, index) {
+    render(row, _index) {
       if (!row.recommendStopProfitPrice || row.recommendStopProfitPrice === '-' || row.recommendStopProfitPrice.includes('10.60 ~ 11.20')) {
         return h(NText, { depth: 3 }, { default: () => '-' })
       }
@@ -242,7 +239,7 @@ const columnsRef = ref([
         return h(NText, { type: "info" }, { default: () => row.recommendStopProfitPrice })
       }
       if (row.recommendStopProfitPrice.includes("-")) {
-        let prices = row.recommendStopProfitPrice.split("-").map(p => Number(p.trim()))
+        const prices = row.recommendStopProfitPrice.split("-").map(p => Number(p.trim()))
         if (prices.length >= 2 && cur >= prices[0] && cur <= prices[1]) {
           return [
             h(NText, { type: "success", style: "margin-right: 6px;" }, { default: () => row.recommendStopProfitPrice }),
@@ -262,7 +259,7 @@ const columnsRef = ref([
   {
     title: '止损价',
     key: 'recommendStopLossPrice',
-    render(row, index) {
+    render(row, _index) {
       if (!row.recommendStopLossPrice || row.recommendStopLossPrice === '-' || row.recommendStopLossPrice === '9.55') {
         return h(NText, { depth: 3 }, { default: () => '-' })
       }
@@ -280,7 +277,7 @@ const columnsRef = ref([
   {
     title: '推荐理由',
     key: 'recommendReason',
-    render(row, index) {
+    render(row, _index) {
       if (!row.recommendReason || row.recommendReason === '-') {
         return h(NText, { depth: 3 }, { default: () => '-' })
       }
@@ -294,7 +291,7 @@ const columnsRef = ref([
   {
     title: '风险提示',
     key: 'riskRemarks',
-    render(row, index) {
+    render(row, _index) {
       if (!row.riskRemarks || row.riskRemarks === '-') {
         return h(NText, { depth: 3 }, { default: () => '-' })
       }
@@ -304,7 +301,7 @@ const columnsRef = ref([
   {
     title: '备注',
     key: 'remarks',
-    render(row, index) {
+    render(row, _index) {
       if (!row.remarks || row.remarks === '-') {
         return h(NText, { depth: 3 }, { default: () => '-' })
       }
@@ -315,7 +312,7 @@ const columnsRef = ref([
     title: '监控预警',
     key: 'enableAlert',
     width: 80,
-    render(row, index) {
+    render(row, _index) {
       return h(NSwitch, {
         value: row.enableAlert,
         onUpdateValue: (newValue) => toggleAlert(row, newValue)
@@ -325,7 +322,7 @@ const columnsRef = ref([
   {
     title: '操作',
     width: 170,
-    render(row, index) {
+    render(row, _index) {
       return h(NSpace, { size: 'small' }, {
         default: () => [
           h(
@@ -417,9 +414,6 @@ const modalDataRef = reactive({
   longTakeProfitPrice: '',
 })
 
-const theme = computed(() => {
-  return editorDataRef.darkTheme ? 'dark' : 'light'
-})
 
 
 function query({
@@ -436,6 +430,9 @@ function query({
     GetAiRecommendStocksList({
       "page": page,
       "pageSize": pageSize,
+      // 修复：order 参数此前被声明却从未使用，请求体硬编码为 "desc"，
+      // 调用方传入的排序方向被静默忽略。现按签名契约如实透传。
+      "order": order,
       "modelName":keyword,
       "stockName":keyword,
       "stockCode":keyword,
@@ -538,14 +535,6 @@ function showDetail(row) {
   modalDataRef.longEntryPrice = recommendRangeToSinglePrice(row.recommendBuyPrice)
   modalDataRef.longStopLossPrice = recommendRangeToSinglePrice(row.recommendStopLossPrice)
   modalDataRef.longTakeProfitPrice = recommendRangeToSinglePrice(row.recommendStopProfitPrice)
-}
-function rowProps(row) {
-  return {
-    style: 'cursor: pointer;',
-    onClick: () => {
-      showDetail(row)
-    }
-  }
 }
 function deleteAiRecommendStocks(id) {
   DeleteAiRecommendStocks(id).then((res) => {

@@ -1,6 +1,5 @@
 <script setup>
-import * as echarts from "../utils/echarts";
-import {computed, defineAsyncComponent, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted,onUnmounted, ref} from 'vue'
+import {computed, defineAsyncComponent, nextTick, onBeforeMount, onBeforeUnmount,onUnmounted, ref} from 'vue'
 import {
   GetAIResponseResult,
   GetConfig,
@@ -17,7 +16,7 @@ import {
   SummaryStockNews,
   GetAiConfigs,
 } from "../../wailsjs/go/main/App";
-import {EventsOff, EventsOn, EventsEmit} from "../../wailsjs/runtime";
+import {EventsOff, EventsOn} from "../../wailsjs/runtime";
 import NewsList from "./newsList.vue";
 import { cleanFinalContent } from "../utils/cleanText";
 import KLineChart from "./KLineChart.vue";
@@ -25,7 +24,7 @@ import KLineChart from "./KLineChart.vue";
 const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
 const MdPreview = defineAsyncComponent(() => import("md-editor-v3").then(m => m.MdPreview));
 import { CaretDown, CaretUp, PulseOutline,} from "@vicons/ionicons5";
-import {NAvatar, NButton, NFlex, NText, useMessage, useNotification} from "naive-ui";
+import { NButton, NFlex, NText, useMessage, useNotification} from "naive-ui";
 import { sanitizeMarkdownHtml } from "../utils/sanitize";
 import {useRoute, useRouter} from 'vue-router'
 import RankTable from "./rankTable.vue";
@@ -35,7 +34,6 @@ import StockNoticeList from "./StockNoticeList.vue";
 import LongTigerRankList from "./LongTigerRankList.vue";
 import IndustryResearchReportList from "./IndustryResearchReportList.vue";
 import HotStockList from "./HotStockList.vue";
-import HotEvents from "./HotEvents.vue";
 import HotTopics from "./HotTopics.vue";
 import InvestCalendarTimeLine from "./InvestCalendarTimeLine.vue";
 import ClsCalendarTimeLine from "./ClsCalendarTimeLine.vue";
@@ -45,7 +43,6 @@ import ConceptFundFlowChart from "./conceptFundFlowChart.vue";
 
 const route = useRoute()
 const router = useRouter()
-const icon = ref('');
 
 const message = useMessage()
 const notify = useNotification()
@@ -135,8 +132,6 @@ const aiResultScrollRef = ref(null)
 const stockCode= ref('')
 const enableTools= ref(true)
 const thinkingMode = ref(true)
-const treemapRef = ref(null);
-let treemapchart =null;
 
 function getIndex() {
   GlobalStockIndexes().then((res) => {

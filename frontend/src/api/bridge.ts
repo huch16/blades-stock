@@ -73,8 +73,20 @@ export const logoutWebAuth = (): void => {
 }
 
 // 3. Web 模式下的全局事件总线（完全对齐 Wails Events 语义）
+
+/**
+ * Wails 事件回调签名。
+ *
+ * 修复（@typescript-eslint/no-unsafe-function-type）：此前统一写作内置 `Function`，
+ * 它会吞掉所有参数与返回值类型（`Function` 等价于「任意可调用值」），
+ * 既无法静态校验调用点，也掩盖了真实的类型错误。
+ * 事件总线本身对载荷不做约束，因此统一使用 `unknown[]` 而非 `any[]`，
+ * 使调用方必须显式收窄类型。
+ */
+type EventCallback = (...args: unknown[]) => void
+
 interface ListenerWrapper {
-  callback: Function
+  callback: EventCallback
   maxCallbacks: number
   calledCount: number
 }
@@ -104,7 +116,7 @@ class WebEventBus {
     }
   }
 
-  public onMultiple(event: string, callback: Function, maxCallbacks: number = -1): void {
+  public onMultiple(event: string, callback: EventCallback, maxCallbacks: number = -1): void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, [])
     }
@@ -122,7 +134,7 @@ class WebEventBus {
     this.attachSSEListener(event)
   }
 
-  public off(eventName: string, callbackOrNextEvent?: Function | string, ...rest: (Function | string)[]): void {
+  public off(eventName: string, callbackOrNextEvent?: EventCallback | string, ...rest: (EventCallback | string)[]): void {
     if (typeof callbackOrNextEvent === 'function') {
       const list = this.listeners.get(eventName)
       if (list) {
@@ -182,7 +194,7 @@ class WebEventBus {
       const eventName = explicitEvent || (payload && payload.event) || 'message'
       const eventData = (payload && typeof payload === 'object' && 'data' in payload) ? payload.data : payload
       this.emit(eventName, eventData)
-    } catch (err) {
+    } catch (_err) {
       this.emit(explicitEvent || 'message', e.data)
     }
   }
@@ -251,7 +263,7 @@ class WebEventBus {
           }, delay)
         }
       }
-    } catch (e) {
+    } catch (_e) {
       this.sseConnected = false
     }
   }
@@ -440,7 +452,8 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
       if (timer) clearTimeout(timer)
       if (err.name === 'AbortError') {
         console.warn(`[UniversalBridge] RPC call to "${method}" timed out after 30s.`)
-        throw new Error(`请求超时：接口 "${method}" 响应耗时超过 30 秒，已执行保护性熔断`)
+        // 附带 cause，保留原始 AbortError 以供上层排查（preserve-caught-error）
+        throw new Error(`请求超时：接口 "${method}" 响应耗时超过 30 秒，已执行保护性熔断`, { cause: err })
       }
       console.error(`[UniversalBridge] RPC call to "${method}" (${requestId}) failed:`, err)
       throw err
@@ -498,13 +511,13 @@ export function initUniversalBridge(): void {
   if (!win.runtime) {
     win.runtime = {
       // 事件系统
-      EventsOnMultiple: (eventName: string, callback: Function, maxCallbacks: number) => {
+      EventsOnMultiple: (eventName: string, callback: EventCallback, maxCallbacks: number) => {
         webEventBus.onMultiple(eventName, callback, maxCallbacks)
       },
-      EventsOn: (eventName: string, callback: Function) => {
+      EventsOn: (eventName: string, callback: EventCallback) => {
         webEventBus.onMultiple(eventName, callback, -1)
       },
-      EventsOnce: (eventName: string, callback: Function) => {
+      EventsOnce: (eventName: string, callback: EventCallback) => {
         webEventBus.onMultiple(eventName, callback, 1)
       },
       EventsOff: (eventName: string, ...additionalArgs: any[]) => {

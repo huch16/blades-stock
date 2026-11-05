@@ -11,32 +11,28 @@ import {h, computed, onBeforeMount, onBeforeUnmount, onMounted, ref, onErrorCapt
 import {RouterLink, useRouter} from 'vue-router'
 import {createDiscreteApi,darkTheme,lightTheme , NIcon, NText,NButton,dateZhCN,zhCN} from 'naive-ui'
 import {
-  AlarmOutline,
   AnalyticsOutline,
-  BarChartSharp, Bonfire, BonfireOutline, DiamondOutline, EaselSharp,
-  ExpandOutline, Flag,
-  Flame, FlameSharp, FlaskOutline, InformationOutline,
+  BarChartSharp,
+  ExpandOutline, Flag, FlaskOutline,
   NewspaperOutline,
-  NewspaperSharp, Notifications,
+  NewspaperSharp,
   Pulse,
-  ReorderTwoOutline,
-  SettingsOutline, ServerOutline, Skull, SkullOutline, SkullSharp,
-  SparklesOutline, FlashOutline, Star,
+  SettingsOutline,
+  SparklesOutline,
   StarOutline,
-  StatsChartOutline,
-  Wallet, WarningOutline, TimeOutline, SearchOutline,
+  StatsChartOutline, TimeOutline,
 } from '@vicons/ionicons5'
-import {AnalyzeSentiment, GetConfig, GetGroupList, GetVersionInfo, IsTradingTime, IsHKTradingTime, IsUSTradingTime, SaveStockThesis} from "../wailsjs/go/main/App";
+import { GetConfig, GetGroupList, GetVersionInfo, IsTradingTime, IsHKTradingTime, IsUSTradingTime, SaveStockThesis} from "../wailsjs/go/main/App";
 import WebAuthModal from "./components/WebAuthModal.vue";
 import { isWails, getAuthToken, webEventBus } from "./api/bridge";
 import StockDiagnosisDrawer from "./components/StockDiagnosisDrawer.vue";
 import ErrorBoundary from "./components/common/ErrorBoundary.vue";
 import { initAgentControlBus, registerAgentActionHandler, setPendingConsult, consultAgent } from "./utils/agentControlBus";
-import {Dragon, Fire, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
+import {Dragon, FirefoxBrowser, Gripfire, Robot} from "@vicons/fa";
 import {ReportAnalytics, ReportMoney, ReportSearch, TrendingUp} from "@vicons/tabler";
 import {LocalFireDepartmentRound} from "@vicons/material";
-import {AppsList20Regular, BoxSearch20Regular, CommentNote20Filled} from "@vicons/fluent";
-import {FireFilled, MoneyCollectOutlined, NotificationFilled, StockOutlined} from "@vicons/antd";
+import { BoxSearch20Regular} from "@vicons/fluent";
+import { MoneyCollectOutlined, NotificationFilled, StockOutlined} from "@vicons/antd";
 
 
 
@@ -70,7 +66,7 @@ function sendBrowserNotification(title, body) {
         body: body || '',
         icon: '/favicon.ico',
       })
-    } catch (e) {}
+    } catch (_e) {}
   } else if (Notification.permission === 'default') {
     Notification.requestPermission().then(permission => {
       if (permission === 'granted') {
@@ -79,7 +75,7 @@ function sendBrowserNotification(title, body) {
             body: body || '',
             icon: '/favicon.ico',
           })
-        } catch (e) {}
+        } catch (_e) {}
       }
     }).catch(() => {})
   }
@@ -93,7 +89,7 @@ onErrorCaptured((err, instance, info) => {
   console.error('[ErrorBoundary] 捕获到子组件未处理渲染异常:', err, 'Info:', info)
   try {
     globalMessage.warning('检测到局部组件渲染波动，系统已自动隔离，核心投研功能正常运行', { duration: 4000 })
-  } catch (e) {}
+  } catch (_e) {}
   // 返回 false 阻止异常向顶层扩散导致整个 DOM 树白屏崩溃
   return false
 })
@@ -1091,7 +1087,7 @@ function renderIcon(icon) {
   return () => h(NIcon, null, {default: () => h(icon)})
 }
 
-function toggleFullscreen(e) {
+function toggleFullscreen(_e) {
   activeKey.value = 'full'
   //console.log(e)
   if (isFullscreen.value) {

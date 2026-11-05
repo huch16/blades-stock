@@ -1,5 +1,5 @@
 <script setup>
-import {h, ref, computed, reactive, onMounted, watch, defineAsyncComponent} from "vue";
+import {h, ref, computed, reactive, watch, defineAsyncComponent} from "vue";
 import {NButton, NText, NFlex, NTag, NDataTable, useMessage} from "naive-ui";
 import {
   FollowFund,
@@ -40,7 +40,7 @@ const holdingsLoading = ref(false)
 const klineModalShow = ref(false)
 const klineStockCode = ref('')
 const klineStockName = ref('')
-let klineAutoCloseTimer = null
+const klineAutoCloseTimer = null
 
 const paginationReactive = reactive({
   page: 1,

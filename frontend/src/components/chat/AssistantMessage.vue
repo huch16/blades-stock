@@ -135,7 +135,6 @@
 import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
 import { NAvatar, NButton, useMessage } from 'naive-ui'
 import CollapsibleSection from './CollapsibleSection.vue'
-import StreamingSkeleton from './StreamingSkeleton.vue'
 import ToolTimeline from './ToolTimeline.vue'
 import ChatMarkdown from './ChatMarkdown.vue'
 import { copyToClipboard } from '@/utils/clipboard'
@@ -143,10 +142,9 @@ import { dispatchAgentAction, type AgentAction } from '@/utils/agentControlBus'
 import { stripAllAgentActionBlocks } from '@/utils/cleanText'
 import {
   formatDuration,
-  getToolCallStatusText,
-  type ChatMessage,
-  type ToolCall
+  type ChatMessage
 } from './types'
+import type { RegisterMessageElement, UnregisterMessageElement } from './useMessageAnchor'
 
 const props = defineProps<{
   message: ChatMessage
@@ -155,7 +153,8 @@ const props = defineProps<{
   isStreaming?: boolean
 }>()
 
-const emit = defineEmits<{
+// 事件全部通过模板中的 $emit 触发，无需在脚本中持有 emit 引用
+defineEmits<{
   copy: [content: string]
   retry: []
   reference: []
@@ -164,8 +163,8 @@ const emit = defineEmits<{
 }>()
 
 // 注入锚点注册函数
-const registerElement = inject<Function>('registerMessageElement')
-const unregisterElement = inject<Function>('unregisterMessageElement')
+const registerElement = inject<RegisterMessageElement>('registerMessageElement')
+const unregisterElement = inject<UnregisterMessageElement>('unregisterMessageElement')
 
 // 检测内容是否具有买方立论潜在特征
 const hasStockThesisPotential = computed(() => {
@@ -180,7 +179,6 @@ const hasStockThesisPotential = computed(() => {
 const content = computed(() => stripAllAgentActionBlocks(props.message.content || ''))
 const reasoning = computed(() => props.message.reasoning || '')
 const rawReasoning = computed(() => props.message.rawReasoning || '')
-const rawContent = computed(() => props.message.rawContent || '')
 const jsonMarkdown = computed(() => props.message.jsonMarkdown || '')
 const steps = computed(() => props.message.steps || [])
 const toolCalls = computed(() => props.message.toolCalls || [])
@@ -254,14 +252,6 @@ onUnmounted(() => {
   unregisterElement?.(anchorId.value)
 })
 
-// 预估行数（用于骨架屏）
-const estimatedLines = computed(() => {
-  const text = rawContent.value
-  if (!text) return 4
-  const charsPerLine = 40
-  return Math.min(12, Math.max(3, Math.ceil(text.length / charsPerLine)))
-})
-
 function formatTime(dt: string): string {
   if (!dt) return ''
   const date = new Date(dt)
@@ -275,29 +265,31 @@ function getStepDotClass(step: string): string {
   return ''
 }
 
-const message = useMessage()
-
-function onSkeletonComplete() {
-  // 骨架屏完成，实际内容会由父组件替换
-}
+// 修复（vue/no-dupe-keys 捕获）：此前该变量命名为 `message`，与 props 的
+// `message: ChatMessage` **同名**。在 <script setup> 中 setup 绑定优先级高于 props，
+// 模板里的 `message` 会被编译为这个 naive-ui 消息 API（而非消息实体），导致：
+//   1) 模板 `{{ message.statusText }}` 永远取到 undefined → 流式占位文案恒为默认值；
+//   2) `$emit('saveThesis', message)` / `$emit('exportImage', message)` 传给父组件的
+//      是消息 API 对象而非 ChatMessage → 「存入买方认知账本」「导出图片」实际失效。
+const msgApi = useMessage()
 
 async function handleCopyToolArgs(args: string) {
   const ok = await copyToClipboard(args)
-  if (ok) message.success('参数已复制')
-  else message.error('复制失败，请手动选取文本')
+  if (ok) msgApi.success('参数已复制')
+  else msgApi.error('复制失败，请手动选取文本')
 }
 
 async function handleCopyToolResult(result: string) {
   const ok = await copyToClipboard(result)
-  if (ok) message.success('结果已复制')
-  else message.error('复制失败，请手动选取文本')
+  if (ok) msgApi.success('结果已复制')
+  else msgApi.error('复制失败，请手动选取文本')
 }
 
 async function copyAnchorLink() {
   const url = `${window.location.origin}${window.location.pathname}#/agent?msg=${props.message.id}`
   const ok = await copyToClipboard(url)
-  if (ok) message.success('消息链接已复制到剪贴板')
-  else message.error('复制失败，请手动复制浏览器地址')
+  if (ok) msgApi.success('消息链接已复制到剪贴板')
+  else msgApi.error('复制失败，请手动复制浏览器地址')
 }
 </script>
 

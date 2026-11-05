@@ -125,6 +125,72 @@ Highlights / 核心亮点（全栈七大维度）
 
 ---
 
+## 补丁 3 (Patch 3) — 静态质量门禁可用化、首屏减重 136 KB 与存量缺陷清算
+
+发布日期: 2026-11-05
+
+### P1 · `npm run lint` 从「形同虚设」到「真门禁」
+
+**问题**：`frontend/eslint.config.js` 未为 `.vue` 配置 `parserOptions.parser = tseslint.parser`，
+导致所有 `<script setup lang="ts">` 的组件报 `Parsing error: Unexpected token :/{/?`，
+**50+ 个文件被静默跳过、lint 无任何门禁效力**（`stock.vue` / `settings.vue` 等未改动文件同样报错）。
+
+- 修复 `.vue` 的 TS 解析链路。
+- 配置从 `vue/flat/recommended` 换为 `vue/flat/essential`：前者开 400+ 条纯格式规则，
+  实测单文件 600+ warning，彻底淹没真实问题；本仓库无 Prettier，格式规则只制造噪声。
+- 新增 `eslint-plugin-unused-imports`（支持 `--fix`）与 `lint:fix` 脚本。
+- **固化两条历史事故规则**：
+  - `vue/no-undef-components`：模板中未 import 且不在 `components.d.ts` 自动注册清单中的组件（白名单由
+    `components.d.ts` 自动生成，含 kebab-case，并放行 `n-*`）。事故原型：`<NSpace>` 未导入。
+  - `vue/no-undef-properties`：模板引用未声明变量。Vue 会将其编译为 `_ctx.xxx`，渲染期静默为
+    undefined，构建与首屏均不报错。
+
+### P0 · lint 挖出的 3 个真实生产缺陷
+
+| # | 位置 | 缺陷 | 影响 |
+|---|---|---|---|
+| 1 | `stockChangesMonitor.vue` | `klineCode` / `klineName` / `showKlineModal` / `diagnosisStockCode` / `diagnosisStockName` / `showDiagnosisDrawer` / `darkTheme` **共 7 个状态从未声明**，却在模板与点击处理函数中被引用 | 模板静默得 undefined；**用户点击「📈 K线」或「📊 诊断」立即抛 ReferenceError 被 ErrorBoundary 熔断**（与 NSpace 同类）。已补全声明 |
+| 2 | `stock.vue` | `openCenteredWindow()` 在非 windows 分支调用 `OpenURL()`，但**从未导入** | 走 default 分支即抛 `ReferenceError: OpenURL is not defined`。已补充导入 |
+| 3 | `StockLightweightKlineChart.vue` | `formatEastMoneyEndFromOldest()` 调用的 `formatYmdCompactShanghai` / `formatYmdHmsCompactShanghai` **从未定义或导入** | 东财 K 线 `end` 参数分支必抛 ReferenceError，分时/分钟线拉取中断。已在 `kline/time.ts` 实现（Asia/Shanghai 口径）并接入 |
+| 4 | `chat/AssistantMessage.vue` | `const message = useMessage()` 与 props 的 `message: ChatMessage` **同名遮蔽**（`vue/no-dupe-keys` 捕获） | 模板 `{{ message.statusText }}` 恒取 undefined；`$emit('saveThesis', message)` / `$emit('exportImage', message)` 传给父组件的是消息 API 对象而非消息实体 → **「存入买方认知账本」「导出图片」实际失效**。已重命名为 `msgApi` |
+
+其余清算：`cron-task-manager.vue` 计算属性缺省分支返回 undefined（已补）；`HotTopics.vue` / `stock.vue`
+`v-for` 缺 `key`；`SelectStock.vue` / `InvestCalendarTimeLine.vue` 松散相等；`bridge.ts` 7 处 `Function`
+类型与缺失 `cause` 的包装异常；`stock.vue` 5 处 `case` 内词法声明；`agent-chat.vue` 正则字符类外错误转义风险点；
+`researchReport.vue` / `aiRecommendStocksList.vue` 声明却从未使用的 `order` 参数（此前请求体硬编码 `"desc"`，
+调用方传参被静默忽略，现按契约透传）。
+
+**一次性清理的量**：53 个文件，494 插入 / 524 删除，其中 189 处死导入、48 处未使用形参/捕获变量、
+若干死函数与死数据块（`stock.vue` 78 行、`agent-chat.vue` 54 行）。
+
+### P1 · 首屏入口 chunk 减重 136 KB
+
+**根因**：`unplugin-vue-components` 会把 `stock.vue` 模板里的 `<stock-lightweight-kline-chart>` 解析为
+**静态 import**，使 `StockLightweightKlineChart.vue`（lightweight-charts + 全量技术指标计算 + 筹码分布，
+134 KB raw / 38 KB br）被直接打进首屏入口 chunk —— 而它只在用户点开「多周期K线」弹层时才需要。
+
+- `stock.vue` 改为 `defineAsyncComponent(() => import('./StockLightweightKlineChart.vue'))`，
+  与 `market.vue` / `allStockList.vue` / `FundRanking.vue` 的全站既有写法保持一致。
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| 首屏入口 chunk (`index-*.js`) | 328.69 KB raw / 101.80 KB br | **192.30 KB raw / 63.43 KB br** |
+| 轻量K线 chunk | 无（已并入入口） | 134.94 KB raw / 38.09 KB br（懒加载） |
+
+实测验证：首屏 canvas 数 = 0（chunk 未加载）→ 点击「多周期K线」→ 弹层正常渲染 7 个画布、零 ErrorBoundary。
+
+### 验证
+
+- `npm run lint`：**0 errors / 150 warnings**（警告均为存量 `no-explicit-any` 类型债，集中在 ECharts option
+  与 RPC 负载，共 17 个文件）。
+- `npm run build`：prebuild（`check_vue_imports.js` 83 文件 0 未导入标识符 + `check_ui_purity.js`）与
+  postbuild（产物无 TDesign chunk）全部通过。
+- Ego-Browser 自动化：11 条路由 + 研究中心 6 个 Tab 零 ErrorBoundary；助手消息 Markdown 保真渲染
+  （h2/strong/table/pre/blockquote/br/公式）；原报障深链 `#/research?name=AI研报与认知账本` 正常。
+- 回归基线对比：与 HEAD 构建产物逐 chunk 比对，确认无 chunk 归属异常。
+
+---
+
 # Release v1.8.0
 
 发布日期: 2026-10-30

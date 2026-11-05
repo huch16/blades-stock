@@ -270,7 +270,6 @@ import {
   GetMCPServerList,
   EnableMCPServer,
   TestMCPServer,
-  GetMCPToolsByServerID,
   GetAllMCPTools,
   EnableMCPTool
 } from '../../wailsjs/go/main/App'
@@ -325,14 +324,6 @@ const getStatusLabel = (status) => {
       return '不可用'
     default:
       return status
-  }
-}
-
-const formatJSON = (str) => {
-  try {
-    return JSON.stringify(JSON.parse(str), null, 2)
-  } catch {
-    return str
   }
 }
 

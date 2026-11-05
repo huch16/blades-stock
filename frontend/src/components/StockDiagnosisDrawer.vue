@@ -21,7 +21,7 @@ import {
   useMessage
 } from 'naive-ui'
 import { DiagnoseStock, GetStockThesis, GetStockThesisHistory } from '../../wailsjs/go/main/App'
-import { EventsEmit, EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { setCurrentStock } from '../utils/stockContextBus'
 import { consultAgent } from '../utils/agentControlBus'
 

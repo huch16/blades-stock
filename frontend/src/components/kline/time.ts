@@ -155,3 +155,50 @@ export function barSecondsForMinuteKlt(klt) {
   if (Number.isFinite(n) && n > 0) return n * 60
   return 60
 }
+
+// ── 东财接口参数格式化（北京时间）─────────────────────────────────────────────
+// 修复：StockLightweightKlineChart.formatEastMoneyEndFromOldest() 一直调用下面两个
+// 函数，但它们**从未被定义或导入**，一旦走到该分支即抛
+// `ReferenceError: formatYmdCompactShanghai is not defined`。
+// 现统一收敛到 time.ts，与 CN_TZ / formatTickTime 保持同一时区口径。
+
+/** 把毫秒时间戳格式化为北京时间 `YYYYMMDD`（东财 end 参数日线口径） */
+export function formatYmdCompactShanghai(ms) {
+  const t = Number(ms)
+  if (!Number.isFinite(t)) return ''
+  const parts = ymdPartsInShanghai(new Date(t))
+  if (!parts) return ''
+  const [y, m, d] = parts
+  return `${y}${m}${d}`
+}
+
+/** 把毫秒时间戳格式化为北京时间 `YYYYMMDDHHMMSS`（东财 end 参数分钟线口径） */
+export function formatYmdHmsCompactShanghai(ms) {
+  const t = Number(ms)
+  if (!Number.isFinite(t)) return ''
+  const d = new Date(t)
+  const parts = ymdPartsInShanghai(d)
+  if (!parts) return ''
+  const [y, m, day] = parts
+  const hms = new Intl.DateTimeFormat('en-GB', {
+    timeZone: CN_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(d)
+  return `${y}${m}${day}${hms.replace(/:/g, '')}`
+}
+
+function ymdPartsInShanghai(d) {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null
+  const [y, m, day] = new Intl.DateTimeFormat('en-GB', {
+    timeZone: CN_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+    .format(d)
+    .split('/')
+  return [y, m, day]
+}

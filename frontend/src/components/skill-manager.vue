@@ -239,10 +239,10 @@ import {
   NButton, NSpace, NInput, NDataTable, NModal, NForm, NFormItem,
   NFormItemGi, NGrid, NTag, NSwitch, NIcon, NSelect, NInputNumber, NPopconfirm, NScrollbar, useMessage
 } from 'naive-ui'
-import { SearchOutline, AddOutline, TrashOutline, CreateOutline, FlashOutline } from '@vicons/ionicons5'
+import { SearchOutline, AddOutline, TrashOutline, CreateOutline } from '@vicons/ionicons5'
 import { MdEditor } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
-import { CreateSkill, UpdateSkill, DeleteSkill, GetSkillList, EnableSkill, GetSkillByID, GetAllSkills, GetMCPServerList, GetConfig } from '../../wailsjs/go/main/App.js'
+import { CreateSkill, UpdateSkill, DeleteSkill, GetSkillList, EnableSkill, GetSkillByID, GetMCPServerList, GetConfig } from '../../wailsjs/go/main/App.js'
 
 const message = useMessage()
 const loading = ref(false)

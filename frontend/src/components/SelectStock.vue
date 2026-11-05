@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import {h, onBeforeMount, onMounted, onUnmounted, ref, reactive, computed, defineAsyncComponent} from 'vue'
-import {SearchStock, OpenURL, Follow, GetFollowList, GetAllCustomStrategies, SaveCustomStrategy, DeleteCustomStrategy, GetConfig, GetGroupList, AddStockGroup, AddGroup} from "../../wailsjs/go/main/App";
+import {SearchStock, OpenURL, Follow, GetAllCustomStrategies, SaveCustomStrategy, DeleteCustomStrategy, GetConfig, GetGroupList, AddStockGroup, AddGroup} from "../../wailsjs/go/main/App";
 import {useMessage, NText, NTag, NButton, NPopconfirm, NDropdown, NIcon} from 'naive-ui'
-import {Environment, EventsEmit} from "../../wailsjs/runtime"
+import {Environment} from "../../wailsjs/runtime"
 import {BookmarkOutline, TrashOutline, CreateOutline, AddOutline, FolderOpenOutline} from "@vicons/ionicons5";
 import { consultAgent } from "../utils/agentControlBus";
 
@@ -28,7 +28,7 @@ const darkTheme = ref(false)
 const klineModalShow = ref(false)
 const klineStockCode = ref('')
 const klineStockName = ref('')
-let klineAutoCloseTimer = null
+const klineAutoCloseTimer = null
 
 // 移动端视口检测
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
@@ -159,7 +159,7 @@ function handleFollowSelect(key, row) {
 }
 
 function doFollow(row, groupId) {
-  let code = row.MARKET_SHORT_NAME.toLowerCase() + row.SECURITY_CODE
+  const code = row.MARKET_SHORT_NAME.toLowerCase() + row.SECURITY_CODE
   Follow(code).then(result => {
     if (result === '关注成功') {
       message.success(groupId > 0 ? `已关注，并加入分组「${groupNameById(groupId)}」` : '关注成功')
@@ -243,9 +243,11 @@ function Search() {
   const loading = message.loading("正在获取选股数据...", {duration: 0});
   SearchStock(search.value).then(res => {
     loading.destroy()
-    if (res.code == 100) {
+    // 修复（eqeqeq）：code 由 Go map[string]any 经 JSON 序列化而来，运行时必为 number，
+    // 且响应路径已保证 res 存在；改用严格相等避免隐式类型转换掩盖协议变更。
+    if (res.code === 100) {
       traceInfo.value = res.data.traceInfo.showText
-      columns.value = res.data.result.columns.filter(item => !item.hiddenNeed && (item.title != "市场码" && item.title != "市场简称")).map(item => {
+      columns.value = res.data.result.columns.filter(item => !item.hiddenNeed && (item.title !== "市场码" && item.title !== "市场简称")).map(item => {
         if (item.children) {
           return {
             title: item.title + (item.unit ? '[' + item.unit + ']' : ''),

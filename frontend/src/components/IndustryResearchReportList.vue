@@ -1,7 +1,7 @@
 <script setup>
 import {onBeforeMount, ref} from 'vue'
-import {GetStockList, IndustryResearchReport,EMDictCode} from "../../wailsjs/go/main/App";
-import {ArrowDownOutline, CaretDown, CaretUp, PulseOutline, Refresh, RefreshCircleSharp,} from "@vicons/ionicons5";
+import { IndustryResearchReport,EMDictCode} from "../../wailsjs/go/main/App";
+import { RefreshCircleSharp,} from "@vicons/ionicons5";
 
 import {useMessage} from "naive-ui";
 import {BrowserOpenURL} from "../../wailsjs/runtime";
@@ -44,7 +44,7 @@ function openWin(code) {
 function EMDictCodeList(keyVal){
   if (keyVal){
     EMDictCode('016').then(result => {
-        options.value=result.filter((value,index,array) => value.bkName.includes(keyVal)||value.firstLetter.includes(keyVal)||value.bkCode.includes(keyVal)).map(item => {
+        options.value=result.filter((value,_index,_array) => value.bkName.includes(keyVal)||value.firstLetter.includes(keyVal)||value.bkCode.includes(keyVal)).map(item => {
           return {
             label: item.bkName+" - "+item.bkCode,
             value: item.bkCode

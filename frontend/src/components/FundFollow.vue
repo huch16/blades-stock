@@ -1,7 +1,7 @@
 <script setup>
 import {h, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, computed} from "vue";
 import {Add, RefreshOutline} from "@vicons/ionicons5";
-import {NButton, NEllipsis, NText, useMessage, NTag, NModal, NDataTable, NPopover, NIcon} from "naive-ui";
+import {NButton, NText, useMessage, NTag, NModal, NDataTable, NPopover, NIcon} from "naive-ui";
 import {
   FollowFund,
   GetConfig,
@@ -158,9 +158,6 @@ function manualRefresh() {
   refreshAllFunds()
 }
 
-function preloadHoldings() {
-  loadCurrentPageHoldings()
-}
 
 async function AddFund() {
   let code = data.code
@@ -177,7 +174,7 @@ async function AddFund() {
         if (res && res.length > 0) {
           code = res[0].code
         }
-      } catch (e) {}
+      } catch (_e) {}
     }
   }
   if (!code) {

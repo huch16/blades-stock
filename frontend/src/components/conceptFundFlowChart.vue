@@ -438,7 +438,6 @@ function renderPlayFrame() {
 
   if (!chart) return
 
-  const textColor = props.darkTheme ? '#aaa' : '#666'
   const bgColor = props.darkTheme ? '#1a1a2e' : '#fff'
 
   chart.setOption({

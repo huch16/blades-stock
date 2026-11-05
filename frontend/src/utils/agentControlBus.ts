@@ -1,4 +1,4 @@
-import { EventsOn, EventsEmit } from '../../wailsjs/runtime'
+import { EventsOn } from '../../wailsjs/runtime'
 
 export interface AgentAction {
   type:

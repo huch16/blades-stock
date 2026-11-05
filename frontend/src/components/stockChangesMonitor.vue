@@ -1,10 +1,9 @@
 <script setup>
-import {computed, h, onBeforeMount, onBeforeUnmount, onMounted, onUnmounted, ref, reactive} from 'vue'
+import { h, onBeforeMount, onBeforeUnmount, onMounted, ref, reactive} from 'vue'
 import {GetStockChanges, GetConfig, GetStockChangeHistory, SaveStockChangesToHistory, GetAllStockChangesWithPaging} from "../../wailsjs/go/main/App";
-import {NButton, NSpace, NTag, NText, useMessage, useNotification} from "naive-ui";
+import {NButton, NSpace, NTag, NText, useMessage} from "naive-ui";
 import { consultAgent } from "../utils/agentControlBus";
 
-const notify = useNotification()
 const message = useMessage()
 const loadingRef = ref(true)
 const dataRef = ref([])
@@ -16,6 +15,22 @@ const countdown = ref(10)
 const viewMode = ref('realtime')
 const isTrading = ref(false)
 const marketStatus = ref('')
+
+// ── 弹层与主题状态 ────────────────────────────────────────────────────────────
+// 事故背景：以下 7 个状态此前**完全没有声明**，却在模板 (v-model:show / :dark-theme /
+// :code) 与点击处理函数 (openKlineModal / openDiagnosisDrawer) 中被引用。
+// 由于 Vue 模板把未声明标识符编译为 `_ctx.xxx`（渲染期静默得到 undefined），
+// 构建与首屏渲染都不会报错；但用户一点击「📈 K线」或「📊 诊断」，
+// `klineCode.value = em` 立即抛出 `ReferenceError: klineCode is not defined`，
+// 被 ErrorBoundary 熔断 —— 与 NSpace 属同一类「静默未定义标识符」缺陷。
+// 已由新增门禁 `vue/no-undef-properties` 全程拦截（见 eslint.config.js）。
+const showKlineModal = ref(false)
+const klineCode = ref('')
+const klineName = ref('')
+const showDiagnosisDrawer = ref(false)
+const diagnosisStockCode = ref('')
+const diagnosisStockName = ref('')
+const darkTheme = ref(false)
 
 const paginationReactive = reactive({
   page: 1,

@@ -27,9 +27,7 @@ const { code,stockName,darkTheme,kDays ,chartHeight} = defineProps({
   }
 })
 const upColor = '#ec0000';
-const upBorderColor = '';
 const downColor = '#00da3c';
-const downBorderColor = '';
 const kLineChartRef = ref(null);
 
 let resizeHandler = null
@@ -78,7 +76,7 @@ function handleKLine(code,stockName){
     const values = [];
     const volumns=[];
     for (let i = 0; i < result.length; i++) {
-      let resultElement=result[i]
+      const resultElement=result[i]
       categoryData.push(resultElement.day)
       let flag=Number(resultElement.close)>Number(resultElement.open)?1:-1
       if(i>0){
@@ -95,7 +93,7 @@ function handleKLine(code,stockName){
     const lastClose = Number(values[values.length-1][1])
     const prevClose = Number(values[values.length-2][1])
     const changeRate = prevClose > 0 ? (((lastClose - prevClose) / prevClose) * 100).toFixed(2) : '0.00'
-    let option = {
+    const option = {
       title: {
         text: `${stockName || code} ${categoryData[values.length-1]}  ${lastClose} (${changeRate}%)`,
         left: '0px',
@@ -135,12 +133,12 @@ function handleKLine(code,stockName){
         },
         formatter: function (params) {//修改鼠标划过显示为中文
           //console.log("params",params)
-          let currentItemData =  _.filter(params,  (param) => param.seriesIndex === 0)[0].data;
-          let ma5=_.filter(params,  (param) => param.seriesIndex === 1)[0].data;//ma5的值
-          let ma10=_.filter(params,  (param) => param.seriesIndex === 2)[0].data;//ma10的值
-          let ma20=_.filter(params,  (param) => param.seriesIndex === 3)[0].data;//ma20的值
-          let ma30=_.filter(params,  (param) => param.seriesIndex === 4)[0].data;//ma30的值
-          let volum=_.filter(params,  (param) => param.seriesIndex === 5)[0].data;
+          const currentItemData =  _.filter(params,  (param) => param.seriesIndex === 0)[0].data;
+          const ma5=_.filter(params,  (param) => param.seriesIndex === 1)[0].data;//ma5的值
+          const ma10=_.filter(params,  (param) => param.seriesIndex === 2)[0].data;//ma10的值
+          const ma20=_.filter(params,  (param) => param.seriesIndex === 3)[0].data;//ma20的值
+          const ma30=_.filter(params,  (param) => param.seriesIndex === 4)[0].data;//ma30的值
+          const volum=_.filter(params,  (param) => param.seriesIndex === 5)[0].data;
           return _.filter(params,  (param) => param.seriesIndex === 0)[0].name + '<br>' +
               '开盘:' + currentItemData[1] + '<br>' +
               '收盘:' + currentItemData[2] + '<br>' +
@@ -412,14 +410,14 @@ function handleKLine(code,stockName){
   })
 }
 function calculateMA(dayCount,values) {
-  var result = [];
-  for (var i = 0, len = values.length; i < len; i++) {
+  const result = [];
+  for (let i = 0, len = values.length; i < len; i++) {
     if (i < dayCount) {
       result.push('-');
       continue;
     }
-    var sum = 0;
-    for (var j = 0; j < dayCount; j++) {
+    let sum = 0;
+    for (let j = 0; j < dayCount; j++) {
       sum += +values[i - j][1];
     }
     result.push((sum / dayCount).toFixed(2));

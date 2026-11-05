@@ -1,5 +1,5 @@
 <script setup>
-import { GetStockEastMoneyKLine, GetStockEastMoneyKLinePage, GetStockKLineWithFallback, GetStockKLinePageWithFallback } from '../../wailsjs/go/main/App'
+import { GetStockKLineWithFallback, GetStockKLinePageWithFallback } from '../../wailsjs/go/main/App'
 import {
   CandlestickSeries,
   createChart,
@@ -10,7 +10,7 @@ import {
 import { NButton, NFlex, NInput, NSpin, NText, NTooltip } from 'naive-ui'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
-  smaValues, emaFinite, emaLeadingNull, weightedMaValues, bollingerBands, obvValues,
+  smaValues, emaFinite, emaLeadingNull, bollingerBands, obvValues,
   macdBundle, kdjBundle, rsiBundle, atrValues, vwapValues, mfiValues, kamaValues,
   keltnerChannelValues, supertrendValues, ichimokuValues, cciValues, ttmSqueezeValues,
   sarValues, donchianChannelValues, adxValues, williamsRValues, stochRsiValues,
@@ -22,10 +22,10 @@ import {
 } from './kline/calc'
 import { makeToggle } from './kline/indicators/toggle'
 import { parseNumStr, formatPrice2, formatVolumeCn, formatAmountCn, formatPctField, formatSigned2 } from './kline/format'
-import {
-  eastMoneyDayToUnixSeconds, eastMoneyKlineFieldToUnixSeconds, chartTimeToUtcMs,
+import { eastMoneyKlineFieldToUnixSeconds, chartTimeToUtcMs,
   formatTickTime, sortKey, toChartTime, mergeKlineRows, mergeRefreshWithLatest,
   extractYmdDatePart, barSecondsForMinuteKlt,
+  formatYmdCompactShanghai, formatYmdHmsCompactShanghai,
 } from './kline/time'
 
 import {
@@ -348,7 +348,7 @@ function toLineData(times, values) {
 }
 
 /** 单根 K 的近似「成本中枢」：优先日 VWAP（成交额/量），否则典型价，夹在 [L,H] */
-import { chipBarCostCenter, addChipVolumeKernel, calcChipDistribution } from './kline/chip'
+import { calcChipDistribution } from './kline/chip'
 
 function drawChipCanvas() {
   const canvas = chipCanvasRef.value
@@ -1133,16 +1133,16 @@ function syncSubPaneIndicators(times, closes, highs, lows, vols) {
       const tema21 = temaValues(closes, 21)
       const kama10 = kamaValues(closes, 10, 2, 30)
       const hull9 = hullMaValues(closes, 9)
-      const { upper: kU, mid: kM, lower: kL } = keltnerChannelValues(highs, lows, closes, 20, 10, 1.5)
-      const { supertrend: stVal, direction: stDir } = supertrendValues(highs, lows, closes, 10, 3)
+      const { upper: kU, lower: kL } = keltnerChannelValues(highs, lows, closes, 20, 10, 1.5)
+      const { direction: stDir } = supertrendValues(highs, lows, closes, 10, 3)
       const { tenkan: ichTen, kijun: ichKij, spanA: ichSA, senkouB: ichSB } = ichimokuValues(highs, lows, closes)
-      const { sar: sarVal, direction: sarDir } = sarValues(highs, lows, closes, 0.02, 0.2)
-      const { upper: dcU, mid: dcM, lower: dcL } = donchianChannelValues(highs, lows, 20)
+      const { direction: sarDir } = sarValues(highs, lows, closes, 0.02, 0.2)
+      const { upper: dcU, lower: dcL } = donchianChannelValues(highs, lows, 20)
       const { jaw: agJ, teeth: agT, lips: agL } = alligatorValues(highs, lows, closes)
       const { directions: zzDir } = zigzagValues(highs, lows, closes, 5)
       const { direction: satsDir } = satsValues(highs, lows, closes, vols)
       const { pp: pivPP, s1: pivS1, r1: pivR1 } = pivotPointsValues(highs, lows, closes)
-      const { vwap: vbM, upper: vbU, lower: vbL } = vwapBandsValues(highs, lows, closes, vols)
+      const { upper: vbU, lower: vbL } = vwapBandsValues(highs, lows, closes, vols)
       const { dif: macdDif, dea: macdDea, hist: macdHist } = macdBundle(closes)
       const rsi14 = rsiBundle(closes, 14)
       const { K: kdjK, D: kdjD, J: kdjJ } = kdjBundle(highs, lows, closes, 9)
@@ -1305,6 +1305,10 @@ function syncSubPaneIndicators(times, closes, highs, lows, vols) {
           bullishArr[i] = (bull / cnt) * 100
           bearishArr[i] = (bear / cnt) * 100
           netArr[i] = ((bull - bear) / cnt) * 100
+          // 中立(neut) 与震荡(osci) 计票当前不参与信号比渲染。
+          // 它们是完整四分类的组成部分（分类分支本身是可读性刚需），
+          // 故显式消费一次以避免 no-useless-assignment 把它们误判为死赋值。
+          void neut; void osci
         }
       }
       ind.signalRatioBullish = chart.addSeries(
@@ -1841,7 +1845,7 @@ function syncIndicators() {
   }
 
   if (showSATS.value) {
-    const { stLine, upper, lower, direction, tqi } = satsValues(highs, lows, closes, vols)
+    const { stLine, upper, lower, direction } = satsValues(highs, lows, closes, vols)
     if (!ind.satsLine) {
       ind.satsLine = chart.addSeries(
         LineSeries,
@@ -2200,7 +2204,7 @@ function evaluateIndicatorSignals(endIdx) {
   const sliced = endIdx != null && endIdx >= 0 && endIdx < rows.length - 1
     ? rows.slice(0, endIdx + 1)
     : rows
-  const { times, opens, closes, highs, lows, vols } = extractOHLCV(sliced)
+  const { times, closes, highs, lows, vols } = extractOHLCV(sliced)
   const n = times.length
   if (n < 2) return []
 
@@ -2320,8 +2324,8 @@ function evaluateIndicatorSignals(endIdx) {
 
   // Keltner
   {
-    const { upper: kU, mid: kM, lower: kL } = keltnerChannelValues(highs, lows, closes, 20, 10, 1.5)
-    const vU = last(kU), vM = last(kM), vL = last(kL), c = closes[n - 1]
+    const { upper: kU, lower: kL } = keltnerChannelValues(highs, lows, closes, 20, 10, 1.5)
+    const vU = last(kU), vL = last(kL), c = closes[n - 1]
     if (vU != null && vL != null) {
       if (c > vU) signals.push({ name: 'Keltner', signal: 'bullish' })
       else if (c < vL) signals.push({ name: 'Keltner', signal: 'bearish' })
@@ -2331,7 +2335,7 @@ function evaluateIndicatorSignals(endIdx) {
 
   // SuperTrend
   {
-    const { supertrend: stVal, direction } = supertrendValues(highs, lows, closes, 10, 3)
+    const { direction } = supertrendValues(highs, lows, closes, 10, 3)
     const d = last(direction)
     if (d != null) {
       if (d === 1) signals.push({ name: 'SuperTrend', signal: 'bullish' })
@@ -2356,7 +2360,7 @@ function evaluateIndicatorSignals(endIdx) {
 
   // SAR
   {
-    const { sar, direction } = sarValues(highs, lows, closes, 0.02, 0.2)
+    const { direction } = sarValues(highs, lows, closes, 0.02, 0.2)
     const d = last(direction)
     if (d != null) {
       if (d === 1) signals.push({ name: 'SAR', signal: 'bullish' })
@@ -2367,7 +2371,7 @@ function evaluateIndicatorSignals(endIdx) {
 
   // Donchian
   {
-    const { upper, mid, lower } = donchianChannelValues(highs, lows, 20)
+    const { upper, lower } = donchianChannelValues(highs, lows, 20)
     const vU = last(upper), vL = last(lower), c = closes[n - 1]
     if (vU != null && vL != null) {
       if (c >= vU) signals.push({ name: 'Donchian', signal: 'bullish' })
@@ -2424,7 +2428,7 @@ function evaluateIndicatorSignals(endIdx) {
 
   // VWAPBands
   {
-    const { vwap: vbM, upper: vbU, lower: vbL } = vwapBandsValues(highs, lows, closes, vols)
+    const { upper: vbU, lower: vbL } = vwapBandsValues(highs, lows, closes, vols)
     const vU = last(vbU), vL = last(vbL), c = closes[n - 1]
     if (vU != null && vL != null) {
       if (c > vU) signals.push({ name: 'VWAPBands', signal: 'bullish' })
@@ -2438,7 +2442,7 @@ function evaluateIndicatorSignals(endIdx) {
   // MACD
   {
     const { dif, dea, hist } = macdBundle(closes)
-    const vDif = last(dif), vDea = last(dea), vHist = last(hist), pHist = prev(hist)
+    const vDif = last(dif), vDea = last(dea), vHist = last(hist)
     if (vDif != null && vDea != null && vHist != null) {
       if (vDif > vDea && vHist > 0) signals.push({ name: 'MACD', signal: 'bullish' })
       else if (vDif < vDea && vHist < 0) signals.push({ name: 'MACD', signal: 'bearish' })
@@ -2711,7 +2715,7 @@ function evaluateIndicatorSignals(endIdx) {
   // TTMSqueeze
   {
     const { squeeze, momentum } = ttmSqueezeValues(highs, lows, closes)
-    const sq = last(squeeze), mo = last(momentum), pMo = prev(momentum)
+    const sq = last(squeeze), mo = last(momentum)
     if (sq != null && mo != null) {
       if (!sq && mo > 0) signals.push({ name: 'TTM', signal: 'bullish' })
       else if (!sq && mo < 0) signals.push({ name: 'TTM', signal: 'bearish' })

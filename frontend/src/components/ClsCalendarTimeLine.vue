@@ -1,10 +1,7 @@
 <script setup lang="ts">
-import {nextTick, onBeforeMount, onMounted, onUnmounted, ref} from 'vue'
+import {nextTick, onBeforeMount, ref} from 'vue'
 import {ClsCalendar} from "../../wailsjs/go/main/App";
-import { addMonths, format ,parse} from 'date-fns';
-import { zhCN } from 'date-fns/locale';
 
-import {useMessage} from 'naive-ui'
 import {Star48Filled} from "@vicons/fluent";
 const today = new Date();
 const year = today.getFullYear();
@@ -13,9 +10,7 @@ const day = String(today.getDate()).padStart(2, '0');
 
 // 常见格式：YYYY-MM-DD
 const formattedDate = `${year}-${month}-${day}`;
-const formattedYM = `${year}-${month}`;
 const list  = ref([])
-const message=useMessage()
 
 function goBackToday() {
   setTimeout(() => {
@@ -40,10 +35,6 @@ onBeforeMount(() => {
   })
 })
 
-function getweekday(date){
-  let day=parse(date, 'yyyy-MM-dd', new Date())
-  return format(day, 'EEEE', {locale: zhCN})
-}
 </script>
 
 <template>
@@ -63,7 +54,7 @@ function getweekday(date){
   >
     <n-scrollbar style="max-height: calc(100vh - 230px);">
       <n-list-item
-        v-for="(item, index) in list"
+        v-for="item in list"
         :id="item.calendar_day"
         :key="item.calendar_day"
       >

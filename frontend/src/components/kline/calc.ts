@@ -334,8 +334,8 @@ export function supertrendValues(highs, lows, closes, atrPeriod = 10, multiplier
   const atr = atrValues(highs, lows, closes, atrPeriod)
   const supertrend = new Array(len).fill(null)
   const direction = new Array(len).fill(0)
-  let upperBand = null
-  let lowerBand = null
+  // 说明（no-useless-assignment）：upperBand/lowerBand 只是 rawUpper/rawLower 的别名，
+  // 初值 null 从未被读取，故直接使用 rawUpper/rawLower，删除中间变量。
   let prevUpper = null
   let prevLower = null
   let prevDir = 0
@@ -358,12 +358,10 @@ export function supertrendValues(highs, lows, closes, atrPeriod = 10, multiplier
     } else {
       dir = closes[i] > rawUpper ? 1 : -1
     }
-    upperBand = rawUpper
-    lowerBand = rawLower
-    supertrend[i] = dir === 1 ? lowerBand : upperBand
+    supertrend[i] = dir === 1 ? rawLower : rawUpper
     direction[i] = dir
-    prevUpper = upperBand
-    prevLower = lowerBand
+    prevUpper = rawUpper
+    prevLower = rawLower
     prevDir = dir
   }
   return { supertrend, direction }
@@ -810,7 +808,8 @@ export function satsValues(highs, lows, closes, vols, {
     }
     const effAtr = useEffAtr ? atrVal * (0.5 + 0.5 * erValue) : atrVal
     const tqiEr = Math.max(0, Math.min(1, erValue))
-    let tqiVol = 0.5
+    // if/else 两分支都必定赋值，故不设初值（no-useless-assignment）
+    let tqiVol: number
     if (vols[i] > 0 && i >= volLen) {
       let vMean = 0
       for (let j = 0; j < volLen; j++) vMean += vols[i - j]

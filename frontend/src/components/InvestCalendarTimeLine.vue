@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {nextTick, onBeforeMount, onMounted, onUnmounted, ref} from 'vue'
+import {nextTick, onBeforeMount, onMounted, ref} from 'vue'
 import {InvestCalendarTimeLine} from "../../wailsjs/go/main/App";
 import { addMonths, format ,parse} from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -44,11 +44,11 @@ onMounted(()=>{
 })
 function loadMore(){
   if (list.value.length>0){
-    let day=parse(list.value[list.value.length-1].date, 'yyyy-MM-dd', new Date())
-    let nextMonth=addMonths(day,1)
-    let ym = format(nextMonth, 'yyyy-MM');
+    const day=parse(list.value[list.value.length-1].date, 'yyyy-MM-dd', new Date())
+    const nextMonth=addMonths(day,1)
+    const ym = format(nextMonth, 'yyyy-MM');
     InvestCalendarTimeLine(ym).then(res => {
-      if (res.length==0){
+      if (res.length === 0){
         message.warning("没有更多数据了")
         return
       }
@@ -57,7 +57,7 @@ function loadMore(){
   }
 }
 function getweekday(date){
-  let day=parse(date, 'yyyy-MM-dd', new Date())
+  const day=parse(date, 'yyyy-MM-dd', new Date())
   return format(day, 'EEEE', {locale: zhCN})
 }
 </script>
@@ -79,7 +79,7 @@ function getweekday(date){
   >
     <n-scrollbar style="max-height: calc(100vh - 230px);">
       <n-list-item
-        v-for="(item, index) in list"
+        v-for="item in list"
         :id="item.date"
         :key="item.date"
       >

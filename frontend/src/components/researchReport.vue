@@ -189,6 +189,10 @@ function query({
     GetAIResponseResultList({
       page: page,
       pageSize: pageSize,
+      // 修复：order 参数此前被声明却从未使用，请求体中硬编码为 "desc"，
+      // 导致调用方传入的排序方向被静默忽略。现按签名契约如实透传（当前所有调用方
+      // 均传 "desc"，因此对外行为不变，仅消除潜在陷阱）。
+      order: order,
       modelName: keyword,
       question: keyword,
       stockName: keyword,

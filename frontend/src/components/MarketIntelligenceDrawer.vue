@@ -1,15 +1,10 @@
 <script setup>
-import { computed, defineAsyncComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NModal,
-  NDrawer,
-  NDrawerContent,
   NSpin,
-  NCard,
-  NFlex,
   NTag,
-  NDivider,
   NButton,
   NSpace,
   NEmpty,
@@ -82,7 +77,7 @@ async function loadTheme() {
   try {
     const config = await GetConfig()
     darkConfig.value = !!config?.darkTheme
-  } catch (e) {
+  } catch (_e) {
     darkConfig.value = false
   }
 }
@@ -208,7 +203,7 @@ const extractedThesis = computed(() => {
       counterarguments: parsed.counterarguments || '',
       trackingChecklist: parsed.trackingChecklist || ''
     }
-  } catch (e) {
+  } catch (_e) {
     return null
   }
 })
@@ -635,9 +630,6 @@ const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : 
 function handleDrawerResize() {
   isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
 }
-const drawerWidth = computed(() => {
-  return isMobile.value ? '100%' : 860
-})
 
 // 沉浸式全屏与工作站窗口尺寸计算（彻底告别狭窄局促的右侧侧边抽屉）
 const isFullscreen = ref(false)

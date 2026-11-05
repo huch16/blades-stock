@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onBeforeUnmount, onMounted, ref, computed, reactive, watch } from "vue";
+import { onBeforeUnmount, onMounted, ref, computed, reactive, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   NCard, NTabs, NTabPane, NGrid, NGi, NForm, NFormItem,
@@ -8,7 +8,7 @@ import {
   NAlert, useMessage, useDialog
 } from "naive-ui";
 import { ArrowBackOutline } from "@vicons/ionicons5";
-import { isWails, getAuthToken, openAuthModal, logoutWebAuth } from "../api/bridge";
+import { isWails, openAuthModal, logoutWebAuth } from "../api/bridge";
 import {
   ExportConfig,
   GetConfig,
@@ -55,7 +55,7 @@ async function checkServerPing() {
     } else {
       pingLatency.value = -1;
     }
-  } catch (e) {
+  } catch (_e) {
     pingLatency.value = -1;
   } finally {
     checkingPing.value = false;
@@ -418,7 +418,7 @@ async function openModelTemplateWizard() {
     } else {
       throw new Error('empty templates');
     }
-  } catch (e) {
+  } catch (_e) {
     wizardTemplates.value = [
       {
         label: 'DeepSeek 官方直连',

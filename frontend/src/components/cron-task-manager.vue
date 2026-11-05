@@ -849,7 +849,7 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed, h, watch } from 'vue'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
-import { NButton, NIcon, NTag, NSpace, NPopconfirm, useMessage, NText, NCard, NRadioGroup, NRadio, NInputNumber, NSelect, NAlert, NCode, NSwitch } from 'naive-ui'
+import { NButton, NIcon, NTag, NSpace, NPopconfirm, useMessage, NText, NCard, NRadioGroup, NRadio, NInputNumber, NSelect, NAlert, NSwitch } from 'naive-ui'
 import {
   SearchOutline,
   AddOutline,
@@ -875,9 +875,7 @@ import {
   ExecuteCronTaskNow,
   GetCronTaskTypes,
   ValidateCronExpr,
-  SearchCronTasks,
   GetAiConfigs,
-  CalculateNextRunTime,
   CalculateNextRunTimes,
   GetPromptTemplates
 } from '../../wailsjs/go/main/App'
@@ -898,8 +896,6 @@ const filterStatus = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
 const total = ref(0)
-const runningCount = ref(0)
-const pausedCount = ref(0)
 
 // 表单数据
 const formData = reactive({
@@ -953,6 +949,9 @@ const generatedParamsJson = computed(() => {
     }, null, 2)
   }
 
+  // 修复（vue/return-in-computed-property 捕获）：此前所有分支均不命中时
+  // 计算属性隐式返回 undefined，模板 JSON 预览区会渲染成空白/报错。
+  return JSON.stringify({}, null, 2)
 })
 
 // 生成 Cron 表达式
@@ -1142,7 +1141,7 @@ const copyCronExpr = async () => {
   try {
     await navigator.clipboard.writeText(generatedCronExpr.value)
     message.success('已复制到剪贴板')
-  } catch (err) {
+  } catch (_err) {
     message.error('复制失败')
   }
 }

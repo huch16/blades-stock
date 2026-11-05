@@ -58,7 +58,8 @@ export const safeStorage = {
    * @returns 写入是否成功
    */
   setItem<T>(key: string, value: T): boolean {
-    let serialized = ''
+    // 说明（no-useless-assignment）：初值 '' 从未被读取，序列化失败即直接 return false
+    let serialized: string
     try {
       serialized = JSON.stringify(value)
     } catch (err) {

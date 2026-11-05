@@ -225,6 +225,33 @@ docker compose up -d --build
 docker compose logs -f blades-stock
 ```
 
+### 前端静态质量门禁（`npm run lint`）
+
+本仓库的 ESLint 配置（`frontend/eslint.config.js`）遵循三条原则，请勿改回 `vue/flat/recommended`：
+
+1. **只门禁「正确性」，不门禁「排版」。** `flat/recommended` 会打开 400+ 条 `vue/max-attributes-per-line`、
+   `vue/singleline-html-element-content-newline` 之类纯格式规则，实测单文件即可产生 600+ warning，
+   使 lint 完全失去效力。本仓库未引入 Prettier，故统一使用 `flat/essential`。
+2. **错误阻断、警告不阻断。** `npm run lint` 只对 error 返回非零，当前基线：
+   **0 errors / 150 warnings**（警告全部为 `@typescript-eslint/no-explicit-any`，属存量类型债，集中在
+   ECharts option 构建与 RPC 负载处）。
+3. **把历史踩过的坑固化成规则**（这是本门禁的核心价值）：
+
+| 规则 | 拦截的事故 |
+|---|---|
+| `vue/no-undef-components` | 模板中使用了未 import、也不在 `components.d.ts` 自动注册清单里的组件。白名单自动从 `components.d.ts` 生成（含 kebab-case），并放行 `n-*` Naive 全局组件。**事故原型：`<NSpace>` 未导入导致整视图被 ErrorBoundary 熔断。** |
+| `vue/no-undef-properties` | 模板引用了未声明的变量。Vue 会把它编译为 `_ctx.xxx`，**渲染期静默得到 undefined、构建与首屏均不报错**，但事件处理里一赋值就抛 ReferenceError。**实测在 `stockChangesMonitor.vue` 命中 7 处（`klineCode` / `showKlineModal` / `darkTheme` 等），用户点击「📈 K线」「📊 诊断」即熔断。** |
+| `unused-imports/no-unused-imports` | 死导入，支持 `--fix` 自动清理。 |
+| `tseslint.parser`（`.vue` 的 `parserOptions.parser`） | **没有它就等于没有 lint**：`<script setup lang="ts">` 里的类型语法会全线报 `Parsing error`，导致 50+ 个文件被静默跳过。 |
+
+配套的构建期门禁（`prebuild` / `postbuild`）见 `frontend/scripts/`：
+`check_vue_imports.js`（`h()` 调用中的未导入标识符）+ `check_ui_purity.js`（禁止 TDesign 回潮）。
+
+```bash
+npm run lint       # 只读检查（CI 口径，0 errors 才放行）
+npm run lint:fix   # 自动修复未使用导入 / prefer-const / no-var
+```
+
 ### 常用运维指令
 - **查看容器日志**：`docker compose logs -f blades-stock`
 - **重启服务**：`docker compose restart`

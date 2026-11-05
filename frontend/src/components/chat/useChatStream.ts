@@ -1,5 +1,5 @@
-import { ref, computed, onUnmounted } from 'vue'
-import type { ChatMessage, StreamChunk, ToolCall } from './types'
+import { ref, onUnmounted } from 'vue'
+import type { ChatMessage, StreamChunk } from './types'
 
 /**
  * 流式会话状态机

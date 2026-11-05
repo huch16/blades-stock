@@ -3,6 +3,15 @@ import type { ChatMessage } from './types'
 
 export type MaybeRefOrGetter<T> = T | Ref<T> | ComputedRef<T> | (() => T)
 
+/**
+ * 消息元素锚点注册/注销签名（供 provide/inject 跨组件传递）。
+ *
+ * 修复（@typescript-eslint/no-unsafe-function-type）：注入点此前写作内置 `Function`，
+ * 导致子组件调用 registerElement(...) 时参数完全不校验。
+ */
+export type RegisterMessageElement = (id: string, el: HTMLElement) => void
+export type UnregisterMessageElement = (id: string) => void
+
 function toValue<T>(source: MaybeRefOrGetter<T>): T {
   return typeof source === 'function' ? (source as () => T)() : unref(source)
 }
@@ -39,11 +48,6 @@ export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>
   // 注销消息元素
   function unregisterElement(id: string) {
     messageElements.delete(id)
-  }
-
-  // 获取消息元素
-  function getElement(id: string): HTMLElement | undefined {
-    return messageElements.get(id)
   }
 
   // 滚动到指定消息

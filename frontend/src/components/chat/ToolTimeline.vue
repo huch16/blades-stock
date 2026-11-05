@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { NButton } from 'naive-ui'
 import CollapsibleSection from './CollapsibleSection.vue'
 import {

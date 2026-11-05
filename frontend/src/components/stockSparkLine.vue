@@ -1,8 +1,9 @@
 <script setup>
-import {onMounted, onBeforeMount, onUnmounted, ref, watchEffect} from "vue";
+import {onMounted, onUnmounted, ref, watchEffect} from "vue";
 import * as echarts from '../utils/echarts';
 import {GetStockMinutePriceLineData} from "../../wailsjs/go/main/App"; // 如果您使用多个组件，请将此样式导入放在您的主文件中
-const {idSuffix,stockCode,stockName,lastPrice,openPrice,darkTheme} = defineProps({
+// darkTheme 虽在 props 中保留（供父组件继续传参），但本组件并未消费，故不解构
+const {idSuffix,stockCode,stockName,lastPrice,openPrice} = defineProps({
   idSuffix: {
     type: String,
     default: ""
@@ -29,15 +30,14 @@ const {idSuffix,stockCode,stockName,lastPrice,openPrice,darkTheme} = defineProps
   },
 })
 
-const chartRef=ref();
 
 function setChartData(chart) {
   //console.log("setChartData")
   GetStockMinutePriceLineData(stockCode, stockName).then(result => {
     //console.log("GetStockMinutePriceLineData",result)
     const priceData = result.priceData
-    let category = []
-    let price = []
+    const category = []
+    const price = []
     let min = 0
     let max = 0
     for (let i = 0; i < priceData.length; i++) {
@@ -50,7 +50,7 @@ function setChartData(chart) {
         max = priceData[i].price
       }
     }
-    let option = {
+    const option = {
       padding: [0, 0, 0, 0],
       grid: {
         top: 0,

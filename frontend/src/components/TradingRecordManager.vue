@@ -11,7 +11,6 @@ import {
   GetStockRealTimePrice,
   GetConfig
 } from '../../wailsjs/go/main/App'
-import { EventsEmit } from '../../wailsjs/runtime/runtime'
 import { consultAgent } from '../utils/agentControlBus'
 import {
   NButton,
@@ -34,7 +33,6 @@ import {
   useMessage,
   useNotification
 } from 'naive-ui'
-import sparkLine from "./stockSparkLine.vue";
 // 异步按需加载 K 线图表模块
 const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
 const message = useMessage()
@@ -182,7 +180,6 @@ function fetchStockPrice(stockCode, market) {
 
 /** 当前自然月 [月初 0 点, 月末当日]（供日期区间选择与 formatDate 查询） */
 function currentMonthDateRange() {
-  const now = new Date()
   // return [
   //   new Date(now.getFullYear(), now.getMonth(), 1),
   //   new Date(now.getFullYear(), now.getMonth() + 1, 0)

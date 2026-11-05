@@ -1,22 +1,19 @@
 <script setup>
-import {computed, defineAsyncComponent, h, onBeforeMount, onMounted, reactive, ref, watch} from 'vue'
+import {computed, defineAsyncComponent, h, onBeforeMount, onMounted, reactive, ref} from 'vue'
 import {
   GetAllStockInfoList,
   GetAllStocks,
    GetConfig, Follow, GetGroupList, AddStockGroup, AddGroup
 } from "../../wailsjs/go/main/App";
-import {NButton, NInput, NTag, NText, useMessage, useNotification, NDataTable, NSpace, NPagination, NDropdown, NIcon} from "naive-ui";
+import {NButton, NInput, NTag, NText, useMessage, NDataTable, NSpace, NDropdown, NIcon} from "naive-ui";
 import sparkLine from "./stockSparkLine.vue"
 import KLineChart from "./KLineChart.vue";
 // 异步按需加载轻量 K 线与 3D 量化诊断抽屉
 const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
 const StockDiagnosisDrawer = defineAsyncComponent(() => import("./StockDiagnosisDrawer.vue"));
-import {EventsEmit} from "../../wailsjs/runtime";
 import { consultAgent } from "../utils/agentControlBus";
 import {FolderOpenOutline, AddOutline} from "@vicons/ionicons5";
-import {format} from "date-fns";
 
-const notify = useNotification()
 const message = useMessage()
 
 const editorDataRef = reactive({
@@ -169,7 +166,7 @@ function handleFollowSelect(key, row) {
 }
 
 function doFollow(row, groupId) {
-  let code = getStockCode(row.SECUCODE)
+  const code = getStockCode(row.SECUCODE)
   Follow(code).then(result => {
     if (result === '关注成功') {
       message.success(groupId > 0 ? `已关注，并加入分组「${groupNameById(groupId)}」` : '关注成功')
@@ -388,7 +385,7 @@ const columnsRef = ref([
     title: '操作',
     width: 260,
     fixed: 'right',
-    render(row, index) {
+    render(row, _index) {
       return [h(
           NButton,
           {
@@ -496,16 +493,12 @@ function loadStocks(page, pageSize) {
     })
   }
 }
-function handleCheckedChange(checked) {
+function handleCheckedChange(_checked) {
 }
 function handlePageChange(currentPage) {
   loadStocks(currentPage, paginationReactive.pageSize)
 }
 
-function handlePageSizeChange(pageSize) {
-  paginationReactive.pageSize = pageSize
-  loadStocks(1, pageSize)
-}
 function handleSearch() {
   loadStocks(1, paginationReactive.pageSize)
 }

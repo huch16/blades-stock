@@ -40,16 +40,16 @@ const handleLine = (code, days) => {
     const netamount_values = [];
     const r0_net_values = [];
     const trades_values = [];
-    let volume = []
+    const volume = []
 
     let min = 0
     let max = 0
     for (let i = 0; i < result.length; i++) {
-      let resultElement = result[i]
+      const resultElement = result[i]
       categoryData.push(resultElement.opendate)
-      let netamount = (resultElement.netamount / 10000).toFixed(2);
+      const netamount = (resultElement.netamount / 10000).toFixed(2);
       netamount_values.push(netamount)
-      let price = Number(resultElement.trade);
+      const price = Number(resultElement.trade);
       trades_values.push(price)
       r0_net_values.push((resultElement.r0_net / 10000).toFixed(2))
 
@@ -61,7 +61,7 @@ const handleLine = (code, days) => {
       }
 
       if (i > 0) {
-        let b = Number(Number(result[i].netamount) + Number(result[i - 1].netamount)) / 10000
+        const b = Number(Number(result[i].netamount) + Number(result[i - 1].netamount)) / 10000
         volume.push(b.toFixed(2))
       } else {
         volume.push((Number(result[i].netamount) / 10000).toFixed(2))
@@ -69,9 +69,7 @@ const handleLine = (code, days) => {
 
     }
     //console.log("volume", volume)
-    const upColor = '#ec0000';
-    const downColor = '#00da3c';
-    let option = {
+    const option = {
       title: {
         text: name,
         left: '20px',

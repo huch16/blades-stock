@@ -1,6 +1,6 @@
 <script setup>
 import { GetStockList, GetConfig } from '../../wailsjs/go/main/App'
-import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import StockLightweightKlineChart from './StockLightweightKlineChart.vue'
 import StockDiagnosisDrawer from './StockDiagnosisDrawer.vue'
 import {
@@ -106,7 +106,9 @@ async function handleSearch(value) {
   const raw = String(value).trim()
   if (!raw) return
 
-  let targetCode = ''
+  // 说明（no-useless-assignment）：targetCode 仅作为「名称/拼音 → 代码」解析的中间量，
+  // 解析后的最终值统一落在 directEmCode 上。此前它在函数作用域声明并带初值 ''，
+  // 但初值从未被读取、else 分支的赋值也从未被使用，现下沉为块级局部变量。
   let targetName = ''
 
   // 1. 先尝试直接转东财代码（如果是纯数字代码如 600519，或标准格式如 600519.SH、AAPL.US）
@@ -139,12 +141,11 @@ async function handleSearch(value) {
     }
 
     if (matched) {
-      targetCode = matched.ts_code || matched.symbol
+      const matchedCode = matched.ts_code || matched.symbol
       targetName = matched.name || ''
-      directEmCode = toEastMoneyCode(targetCode)
+      directEmCode = toEastMoneyCode(matchedCode)
     }
   } else {
-    targetCode = directEmCode
     const found = stockList.value.find(item => item.ts_code === raw || toEastMoneyCode(item.ts_code) === directEmCode)
     if (found) {
       targetName = found.name

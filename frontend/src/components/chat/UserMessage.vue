@@ -46,6 +46,7 @@
 import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
 import { NAvatar } from 'naive-ui'
 import type { ChatMessage } from './types'
+import type { RegisterMessageElement, UnregisterMessageElement } from './useMessageAnchor'
 
 const props = defineProps<{
   message: ChatMessage
@@ -61,8 +62,8 @@ const emit = defineEmits<{
   reference: [msgId: string]
 }>()
 
-const registerElement = inject<Function>('registerMessageElement')
-const unregisterElement = inject<Function>('unregisterMessageElement')
+const registerElement = inject<RegisterMessageElement>('registerMessageElement')
+const unregisterElement = inject<UnregisterMessageElement>('unregisterMessageElement')
 
 const anchorId = computed(() => `msg-${props.message.id}`)
 

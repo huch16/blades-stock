@@ -781,7 +781,6 @@ import {
   NDrawer,
   NDrawerContent,
   NModal,
-  NTag,
   NSwitch,
   NInput,
   useMessage,
@@ -907,7 +906,6 @@ async function initStockDict() {
   try {
     const list = await GetStockList('')
     if (list && list.length > 0) {
-      const dict: Record<string, string> = {}
       for (const item of list) {
         const code = item.stockCode || item.code || item.ts_code
         const name = item.name || item.stockName
@@ -1066,17 +1064,6 @@ function onPipelineStockCodeEnter() {
   }
 }
 
-function onStep4StockInputChange(val: string) {
-  const trimmed = (val || '').trim()
-  pipelineContext.stockCode = trimmed
-  step4StockInput.value = trimmed
-  directDiagCode.value = trimmed
-  directRiskCode.value = trimmed
-  const found = hotStocks.find(s => s.code === trimmed)
-  if (found) {
-    pipelineContext.stockName = found.name
-  }
-}
 
 // 从助手回答中智能抽取选股/推荐标的代码与名称，自动贯通到下游体检与立论
 function extractStockFromAssistantText(text: string) {
@@ -1111,7 +1098,9 @@ function extractStockFromAssistantText(text: string) {
   }
 
   // 1. 优先匹配 Markdown 表格数据行：| 1 | 002371 | 北方华创 |
-  const tableMatch = text.match(/\|\s*\d+\s*\|\s*(\d{6})\s*\|\s*([^\|\r\n]+)\s*\|/)
+  // 注意：字符类 [^|\r\n] 内的 | 无需转义；但字符类之外的 \| 是「字面竖线」，
+  // 绝不能写成 |，否则会退化为正则的「或」运算符而彻底改变语义。
+  const tableMatch = text.match(/\|\s*\d+\s*\|\s*(\d{6})\s*\|\s*([^|\r\n]+)\s*\|/)
   if (tableMatch && tableMatch[1]) {
     const code = tableMatch[1].trim()
     const name = tableMatch[2].trim().replace(/\s+/g, '')
@@ -1377,60 +1366,6 @@ function getTrafficText(light?: string) {
   if (light === 'DANGER') return '强风控空仓'
   return '中性观望'
 }
-
-const agentModeOptions = [
-  { label: '🤖 智能自适应', value: 'auto' as const, description: '根据问题复杂度自动选择单步或多步执行策略' },
-  { label: '⚡ 极速诊断', value: 'react' as const, description: 'ReAct 即时单步调用，秒级响应，适合快速行情问答' },
-  { label: '🧠 深度规划', value: 'plan_execute' as const, description: 'Plan-and-Execute 深度多步拆解，适合全维度复杂分析' },
-  { label: '📑 买方直出', value: 'direct' as const, description: '原生直连生成机构深度研报，零外部工具开销' },
-]
-
-// ========== 投研场景库数据（按 BUIS 投研决策五阶天梯规范化） ==========
-const scenarioCards = [
-  {
-    icon: '🧭',
-    badge: 'L2 主线轮动',
-    title: 'ETF 加权动量轮动',
-    desc: '计算全市场核心宽基与行业 ETF 21日加权动量评分，捕捉进攻主线。',
-    example: '计算当前 ETF 动量排名',
-    prompt: '请调用系统内置 GetETFMomentumRanking 工具获取当前场内核心 ETF 21日加权动量排名，严禁使用 WebSearch。根据动量绝对值（>0进攻，<=0防守）全面分析最强进攻赛道与防御调仓建议。直接输出研报正文，严禁输出机械调用步骤。',
-  },
-  {
-    icon: '🎯',
-    badge: 'L3 量化选股',
-    title: '多因子策略选股',
-    desc: '基于均线多头排列、放量突破或高股息防守因子，全市场量化初筛。',
-    example: '筛选均线多头放量突破个股',
-    prompt: '请利用系统内置量化筛选工具（SearchStockByIndicators / FilterStocks / HotStrategyTable），筛选市场上呈现均线多头排列且成交量放量突破近期整理平台的强势标的，严禁使用 WebSearch。给出具体技术面评分与入选逻辑。直接输出研报正文。',
-  },
-  {
-    icon: '🔬',
-    badge: 'L4 全维诊断',
-    title: '个股全景深度体检',
-    desc: '四维穿透财务基本面、量价均线形态、大资金动向与估值弹性。',
-    example: '深度分析 600519 贵州茅台',
-    prompt: '请对 600519 贵州茅台 进行全维度深度诊断：优先调用系统内置 DiagnoseStock(600519) 获取 VectorBT 向量化回测置信胜率与量化评分，调用 GetEastMoneyKLineWithMA(600519, "day", 60) 查看量价均线，调用 GetStockFinancialInfo 穿透真实财务。严禁使用 WebSearch。直接输出专业量化研报并给出买方 5-Verdict 裁决与证伪底线。',
-  },
-  {
-    icon: '🛡️',
-    badge: 'L4 微观排雷',
-    title: '筹码与风控极限穿透',
-    desc: '深度穿透大股东质押率、解禁日程、股东户数集中度与财务真实性。',
-    example: '深度排雷 600519 贵州茅台',
-    prompt: '请对 600519 贵州茅台 进行深度排雷：调用 GetStockHolderTrend(600519) 穿透股东户数集中度，调用 GetStockMarginTrading 分析两融杠杆，核查控股股东质押比例、未来一年解禁日程及主力资金动向，严禁使用 WebSearch。给出综合风控评级。',
-  },
-]
-
-const quickKeywords = [
-  '计算 场内ETF动量排名',
-  '筛选 均线多头放量突破股',
-  '筛选 低估值高股息稳健股',
-  '深度分析 600519 贵州茅台',
-  '深度量化排雷 000001',
-  '财报真实体检 300750',
-  '宁德时代 vs 比亚迪',
-  '半导体算力产业链景气度',
-]
 
 const quickChips = [
   { icon: '🏛️', label: 'L1 大势择时', action: () => executeStep1(), tip: '评估大盘择时、估值水位与仓位上限' },
@@ -1962,7 +1897,8 @@ async function handleAgentConsult(payload: any) {
   }
 
   // 4. 组装输入框文本 (一手量化指标前置注入 + 深度分析推演任务)
-  let finalInput = ''
+  // 两个分支都必定赋值，故不设初值（no-useless-assignment）
+  let finalInput: string
   if (context) {
     finalInput = `【一手量化与买方参考数据】：\n${context}\n\n【分析推演任务】：\n${question || '请结合上述一手量化参考数据，给出全维度买方深度研报与买方立论。'}`
   } else {
@@ -2115,7 +2051,8 @@ function extractThesisFromText(text: string, defaultCode?: string, defaultName?:
   }
 
   // 4. 提取核心投资假说 (过滤 Markdown 符号)
-  let coreThesis = ''
+  // if/else 两分支都必定赋值，故不设初值（no-useless-assignment）
+  let coreThesis: string
   const thesisMatch = text.match(/(?:核心投资逻辑|核心假说|核心立论|投资逻辑|核心论点|买方论据)[：:\s]+([^\n]+(?:\n[^\n]+)?)/)
   if (thesisMatch) {
     coreThesis = thesisMatch[1].replace(/[#*`]/g, '').trim()
@@ -2260,7 +2197,7 @@ async function handleExportImage(msg: ChatMessage) {
         notifySuccess(`已导出为 PNG 图片：${result}`)
         return
       }
-    } catch (e) {
+    } catch (_e) {
       // fallback to browser file download
     }
 

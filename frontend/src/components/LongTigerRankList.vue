@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {onBeforeMount, ref} from 'vue'
 import {LongTigerRank} from "../../wailsjs/go/main/App";
-import {BrowserOpenURL} from "../../wailsjs/runtime";
 import {ArrowDownOutline} from "@vicons/ionicons5";
 import _ from "lodash";
 import KLineChart from "./KLineChart.vue";
@@ -28,34 +27,13 @@ const SearchForm=  ref({
 onBeforeMount(() => {
   longTiger(formattedDate);
 })
-function longTiger_old(date) {
-  if(date) {
-    SearchForm.value.dateValue = date
-  }
-  let loading1=message.loading("正在获取龙虎榜数据...",{
-    duration: 0,
-  })
-  LongTigerRank(date).then(res => {
-    lhbList.value = res
-    loading1.destroy()
-    if (res.length === 0) {
-      message.info("暂无数据,请切换日期")
-    }
-    EXPLANATIONs.value=_.uniqBy(_.map(lhbList.value,function (item){
-      return {
-        label: item['EXPLANATION'],
-        value: item['EXPLANATION'],
-      }
-    }),'label');
-  })
-}
 
 function longTiger(date) {
   if (date) {
     SearchForm.value.dateValue = date;
   }
 
-  let loading1 = message.loading("正在获取龙虎榜数据...", {
+  const loading1 = message.loading("正在获取龙虎榜数据...", {
     duration: 0,
   });
 
@@ -102,7 +80,7 @@ function longTiger(date) {
   fetchDate(date || formattedDate);
 }
 
-function handleEXPLANATION(value, option){
+function handleEXPLANATION(value, _option){
   SearchForm.value.EXPLANATION = value
   if(value){
     LongTigerRank(SearchForm.value.dateValue).then(res => {

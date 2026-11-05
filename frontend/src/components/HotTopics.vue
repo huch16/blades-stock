@@ -75,6 +75,7 @@ function showPage(htid) {
           <n-flex>
             <n-tag
               v-for="(v, i) in item.stock_list"
+              :key="v.code || v.name || i"
               type="info"
               :bordered="false"
               size="small"

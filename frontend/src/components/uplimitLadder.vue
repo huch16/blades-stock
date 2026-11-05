@@ -1,9 +1,8 @@
 <script setup>
 import {onBeforeMount, onBeforeUnmount, ref, computed, h, defineAsyncComponent} from 'vue'
 import {GetConfig, GetUplimitHot, IsTradingTime, IsTradingDay, GetLatestTradingDay} from "../../wailsjs/go/main/App";
-import {EventsEmit} from "../../wailsjs/runtime";
 import { consultAgent } from "../utils/agentControlBus";
-import {NButton, NText, NTag, NTooltip, NProgress, useMessage} from "naive-ui";
+import {NButton, NText, NTag, NProgress, useMessage} from "naive-ui";
 
 // 异步按需加载轻量 K 线与 43 指标模块
 const StockLightweightKlineChart = defineAsyncComponent(() => import("./StockLightweightKlineChart.vue"));
@@ -235,7 +234,7 @@ const explodedStocks = computed(() => {
   if (!rawData.value?.plate_stocks_zb) return []
   const result = []
   const seen = new Set()
-  for (const [plateCode, stocks] of Object.entries(rawData.value.plate_stocks_zb)) {
+  for (const stocks of Object.values(rawData.value.plate_stocks_zb)) {
     for (const s of stocks) {
       if (!seen.has(s.stock_code)) {
         seen.add(s.stock_code)

@@ -135,6 +135,8 @@ frontend/package.json.md5
 
 # Vite/Webpack cache
 frontend/node_modules/.vite/
+# Vite 预构建依赖缓存（dev server 产物，不入库）
+frontend/.vite/
 
 # Wails build artefacts (wails.json is TRACKED and required — do not ignore)
 /wails.old.json

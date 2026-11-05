@@ -439,7 +439,6 @@ function renderPlayFrame() {
 
   if (!chart) return
 
-  const textColor = props.darkTheme ? '#aaa' : '#666'
   const bgColor = props.darkTheme ? '#1a1a2e' : '#fff'
 
   chart.setOption({
@@ -516,7 +515,7 @@ function removeExtraSector(code: string) {
 function analyzeSector(item: FlowItem) {
   try {
     EventsEmit('show-market-intelligence-serenity', { name: item.name, code: item.code })
-  } catch (e) {}
+  } catch (_e) {}
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('show-market-intelligence-serenity', { detail: { name: item.name, code: item.code } }))
   }

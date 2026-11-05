@@ -28,7 +28,8 @@ export function cleanThinkBlocks(text: string): string {
     rest = rest.slice(idx)
     const end = rest.indexOf('>')
     if (end < 0) {
-      inThink = true
+      // 未闭合的 "<think"：已消费到结尾，直接退出循环。
+      // （此处曾写 inThink = true，但紧接着 break，赋值永远不会被读到）
       break
     }
     rest = rest.slice(end + 1)

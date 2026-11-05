@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import {h} from 'vue'
-import {NTag,NImage} from 'naive-ui'
 import EmbeddedUrl from "./EmbeddedUrl.vue";
 </script>
 
