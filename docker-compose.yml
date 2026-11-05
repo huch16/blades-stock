@@ -1,5 +1,5 @@
 # ==============================================================================
-# Blades Stock — 边缘计算私有量化投研工作站 (Edge-Native Private Quant Workstation v2.0.0)
+# Blades Stock — 边缘计算私有量化投研工作站 (Edge-Native Private Quant Workstation v3.0.0)
 # 架构说明 (Single-Node Architecture):
 #   - 定位：面向独立交易员与买方投研团队的单节点私有化量化中台，非多租户弹性横向扩容集群
 #   - 底层存储：纯嵌入式 SQLite WAL 权威库 (_txlock=immediate, busy_timeout=30s)

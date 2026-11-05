@@ -246,7 +246,7 @@ func (d *RPCDispatcher) GetOpenAPISpec() map[string]any {
 		"openapi": "3.0.0",
 		"info": map[string]any{
 			"title":       "Blades Stock RPC API",
-			"version":     "2.0.0",
+			"version":     "3.0.0",
 			"description": "Deterministic Multi-Agent Quantitative Research & Trading RPC Specification (250 Endpoints with strict schemas)",
 		},
 		"security": []map[string]any{

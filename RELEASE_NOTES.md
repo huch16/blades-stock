@@ -1,3 +1,90 @@
+# Release v3.0.0
+
+发布日期: 2026-11-05
+
+概览
+----
+v3.0.0 是一次**精简 · 清理 · 固化**版本。前置的 v2.x 系列已修复大量“知道错了而改”的缺陷，
+但缺乏“确认自己改对了”的机制；v3.0.0 的主线工作是把修复成果沉淀为**可被机器验证的约束**，
+并清掉为验证而临时引入的冗余与死数据。
+
+Highlights / 核心亮点
+--------------------
+
+### 一、代码仓库精减 75%（追踪字节 57.3 MB → 14.1 MB）
+
+| 项目 | 体积 | 判定依据 | 处置 |
+|---|---|---|---|
+| `backend/data/data/dict/{jp,zh,en}/**` | **38.5 MB** | 仅 `data/dict/base.txt` 经 `//go:embed` 使用；`seg.LoadDict("zh_s")` 早已注释；jp/zh 词典全仓 0 引用 | 删除 |
+| `vendor-blades/`（74 文件） | 979 KB | 疑似误执行 `go mod vendor` 的嵌套产物，无任何代码/脚本引用 | 删除（并加入 .gitignore） |
+| `backend/data/words.txt` | 664 KB | 由 `backend/data/utils_test.go` 测试写入的产物被误提交 | 删除（并加入 .gitignore） |
+| `backend/data/stock_basic.json` | 1.18 MB | 0 引用（真正在用的是 `build/stock_basic.json`） | 删除 |
+| 未使用的 `build/screenshot/*.png` | 1.4 MB | 仅 `alipay.jpg` / `wxpay.jpg` 被 `main.go` embed | 删除（19 个） |
+| `build/appicon.png.bk`、`build/hk.json` | 432 KB | 前者为备份文件，后者 0 引用 | 删除 |
+| `frontend/src/assets/images/logo-universal.png`、`naive-logo.svg` | 152 KB | 全仓（含 CSS）0 引用 | 删除 |
+| `utils.go`（根目录） | 567 B | `IsWindows()` 全仓 0 引用 | 删除 |
+| 根目录陈旧二进制 `*.exe` | 356 MB | 本地构建产物，已可重新生成 | 删除 |
+
+附加 .gitignore 规则：`vendor-blades/`、`backend/data/words.txt`、`.venv/`、`.graph/`、`.gotmp/`、`.tmp/`、`/*.exe`、`/*.bin`。
+
+> **保留但已确认的“合理大文件”**：`build/stock_base_info_us.json`（4.6 MB）与 `stock_base_info_hk.json`
+> （1.2 MB）确实被 `backend/services/migrate.go` 用作**首次启动的本地种子数据路徕**，属于功能而非冗余；
+> 删除会改变离线首启行为，故保留。
+
+### 二、`cmd/` 命令行工具精减（35 → 22 项）
+
+删除 13 个一次性开发期工具（共约 1300 行）：
+`check_tools`、`test_kline`、`test_trading_day`、`test_backup`、`test_desktop_save`、
+`probe_kline_etf`、`probe_tushare_whitelist`、`smoke_strategy_screen`、`diag_tushare_tools`、
+`insert_liuzhangwang_{beneficiary,deep,scarce}`、`run_evaluator`。
+
+保留原则：被 `docs/` / `scripts/` / `AGENTS.md` / `main.go` 的 `go:embed` 引用的、
+或具备可复用运维价值的一律保留（`server`、`blades_mcp_server`、`backtest`、`etf_backtest`、
+`index_embeddings`、`setup_mcp`、`insert_etf_skill`、`insert_serenity_skill` 等）。
+
+### 三、依赖精减
+
+- **前端移除 8 个未引用依赖**：`@lezer/highlight`、`@vavt/cm-extension`、`@vicons/carbon`、
+  `@vicons/ionicons4`、`unplugin-auto-import`（TDesign 拆除后已无 resolver）、`vfonts`、
+  `@typescript-eslint/eslint-plugin`、`@typescript-eslint/parser`（由 `typescript-eslint` 元包统一提供）。
+  经实测，移除后 `npm run lint`（0 errors）与 `npm run build`（三道门禁）均正常。
+- **Go 模块**：`go mod tidy` 无任何变更，模块图已处最精简状态。
+
+### 四、文档固化
+
+- **新建 `docs/README.md` 目录索引**，明确区分「现行文档」与「归档文档」，并约定
+  「新增设计文档用不带日期的语义化文件名」。
+- **8 份带日期的一次性开发报告归档至 `docs/archive/`**
+  （AKShare / Baostock 集成、若干回测改进与测试报告、VectorBT 引擎说明等）。
+- **修复内嵌使用手册的编码缺陷**：`docs/blades-stock使用手册.md` 原为 **20 字节的 GBK 乱码桩**
+  （经 `//go:embed` 打包后由 `GetUserManual()` 返回乱码）。已重写为完整的 UTF-8 使用手册。
+- **修复过时构建文档**：`BUILD_GUIDE.md` 曾引用已被移除的 `.github/workflows/ci.yml`；
+  `Makefile` 的 `lint` 目标曾调用未安装的 `golangci-lint`（导致 `make lint` 必然失败）。
+  两者均已按真实可用工具链重写，并新增 `help` / `build-web` / `frontend-lint` 目标。
+- 删除开源样板文件 `CODE_OF_CONDUCT.md`、`CONTRIBUTING.md`、`.github/ISSUE_TEMPLATE/*`、
+  `.github/pull_request_template.md` 与残留的 `INDUSTRIAL_CHECK_SUMMARY.txt`。
+
+### 五、版本号全面升级至 3.0.0
+
+共 17 个文件 / 27 处（`main.go`、`cmd/server`、`wails.json`、`frontend/package.json`、
+`frontend/index.html`、设置页与认证弹窗、`scripts/deploy-vps.sh`、`docker-compose.yml`、
+`backend/{data,quant,services}`、`build.ps1`、`README.md`）。
+
+替换采用**显式文件清单**而非全局替换，并断言以下不应被改动的字符串保持原样：
+- `backend/data/web_search_api.go` 的 `Chrome/122.0.0.0` User-Agent
+- `frontend/wailsjs/runtime/package.json` 中 Wails 运行时自身的版本号
+
+验证
+----
+- `go build ./...` 与 `go vet ./cmd/...` 通过（删除词典后 `//go:embed` 仍正常）。
+- `go test ./backend/data/` 通过：`TestAnalyzeSentiment`（依赖 embed 的 `base.txt`）与
+  `TestReplaceSensitiveWords` 均 PASS，证明词典清理未损伤情感分析链路。
+- `npm run lint`：0 errors / 150 warnings（基线不变）。
+- `npm run build`：prebuild 三道门禁（未导入标识符 / UI 纯净度 / CSP 一致性）+ postbuild 全通过。
+- `git ls-files` 追踪字节从 57,304,765 → 14,085,129（−75.4%）；追踪文件数 718 → 613。
+
+---
+
 # Release v2.0.0
 
 发布日期: 2026-11-01

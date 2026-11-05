@@ -532,7 +532,7 @@ onBeforeUnmount(() => {
           <!-- 数据可信度与确定性窗口元数据 -->
           <div v-if="diagnosisData.dataWindowDesc" style="margin-top: 10px; font-size: 11px; color: #888; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; padding: 4px 8px; background: rgba(0,0,0,0.02); border-radius: 4px;">
             <span>📅 {{ diagnosisData.dataWindowDesc }}</span>
-            <span>来源: {{ diagnosisData.dataSource || '前复权QFQ' }} ({{ diagnosisData.codeVersion || 'v2.0.0' }})</span>
+            <span>来源: {{ diagnosisData.dataSource || '前复权QFQ' }} ({{ diagnosisData.codeVersion || 'v3.0.0' }})</span>
           </div>
         </NCard>
 

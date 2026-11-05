@@ -523,7 +523,7 @@ async function testDingPush() {
   testingDing.value = true;
   try {
     const res = await SendDingDingMessageByType(
-      '【Blades Stock v2.0.0 测试推送】\n您的量化投研中台与钉钉消息推送链路已连通成功！',
+      '【Blades Stock v3.0.0 测试推送】\n您的量化投研中台与钉钉消息推送链路已连通成功！',
       '000001',
       0
     );
@@ -600,7 +600,7 @@ async function handleExportConfig() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `blades-stock-config-v2.0.0-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `blades-stock-config-v3.0.0-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
     message.success('已导出脱敏系统配置 (商业密钥已掩码)');
@@ -828,7 +828,7 @@ onBeforeUnmount(() => {
       <div class="header-right">
         <!-- 运行时遥测指标 -->
         <n-tag type="info" round size="small" class="status-tag">
-          版本 v2.0.0
+          版本 v3.0.0
         </n-tag>
         <n-tag :type="isWebMode ? 'warning' : 'success'" round size="small" class="status-tag">
           {{ isWebMode ? 'Web SaaS' : 'Desktop GUI' }}
@@ -863,7 +863,7 @@ onBeforeUnmount(() => {
               <n-gi>
                 <div class="stat-tile">
                   <div class="stat-label">系统核心版本</div>
-                  <div class="stat-value text-accent">v2.0.0 生产发布版</div>
+                  <div class="stat-value text-accent">v3.0.0 生产发布版</div>
                   <div class="stat-desc">Single Source of Truth 纯Go同构</div>
                 </div>
               </n-gi>

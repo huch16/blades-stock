@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Blades Stock — Ubuntu 24.04 (VPS) 工业级云原生 Docker 一键部署脚本 (v2.0.0)
+# Blades Stock — Ubuntu 24.04 (VPS) 工业级云原生 Docker 一键部署脚本 (v3.0.0)
 # 硬件环境自适应引擎：
 #   - 甲骨文云 (Oracle Cloud): 2核 CPU / 12G 内存
 #   - Instabox 云沙箱: 4核 CPU / 8G 内存
@@ -19,7 +19,7 @@ RED="\033[0;31m"
 NC="\033[0m"
 
 echo -e "${BLUE}==================================================================${NC}"
-echo -e "${GREEN}   Blades Stock v2.0.0 — 工业级智能量化投研中台 (Cloud-Native)   ${NC}"
+echo -e "${GREEN}   Blades Stock v3.0.0 — 工业级智能量化投研中台 (Cloud-Native)   ${NC}"
 echo -e "${BLUE}==================================================================${NC}"
 
 # 1. 检查基础环境与依赖命令
@@ -120,7 +120,7 @@ UNIFIED_DEFAULT_PWD="2266762"
 
 if [ ! -f ".env" ]; then
     cat <<EOF > .env
-# Blades Stock 云端运行环境变量 (v2.0.0 统一标准)
+# Blades Stock 云端运行环境变量 (v3.0.0 统一标准)
 BLADES_AUTH_TOKEN=${UNIFIED_DEFAULT_PWD}
 PORT=8000
 TZ=Asia/Shanghai
@@ -195,7 +195,7 @@ if [ "$HEALTHY" = true ]; then
     PUBLIC_IP=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me || echo "你的VPS公网IP")
 
     echo -e "\n${GREEN}==================================================================${NC}"
-    echo -e "${GREEN}🎉 Blades Stock v2.0.0 工业级云原生投研工作站已成功部署！${NC}"
+    echo -e "${GREEN}🎉 Blades Stock v3.0.0 工业级云原生投研工作站已成功部署！${NC}"
     echo -e "${GREEN}==================================================================${NC}"
     echo -e " 🌐 服务监听端口:       ${YELLOW}${APP_PORT}${NC}"
     echo -e " 🌐 网页直连访问:       ${YELLOW}http://${PUBLIC_IP}:${APP_PORT}${NC}"

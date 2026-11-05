@@ -256,7 +256,7 @@ func DiagnoseStock(rawCode string) (*StockDiagnosisResult, error) {
 		DataWindowDesc:     dataWindowDesc,
 		DataSource:         "EastMoney / Sina / Tushare (QFQ)",
 		Adjust:             "qfq",
-		CodeVersion:        "v2.0.0",
+		CodeVersion:        "v3.0.0",
 		ComputedAt:         time.Now().Format("2006-01-02 15:04:05"),
 		QuantDim:           quantRes,
 		MoneyDim:           moneyRes,

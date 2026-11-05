@@ -9,7 +9,7 @@
             <span class="brand-icon">⚔️</span>
             <span class="brand-title">Blades Stock</span>
             <n-tag size="small" type="success" :bordered="false" round style="margin-left: 8px">
-              Cloud-Native v2.0.0
+              Cloud-Native v3.0.0
             </n-tag>
           </div>
           <div class="card-subtitle">

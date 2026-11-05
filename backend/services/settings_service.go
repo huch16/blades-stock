@@ -34,7 +34,7 @@ type SettingsService struct {
 func NewSettingsService() *SettingsService {
 	return &SettingsService{
 		versionInfo: &models.VersionInfo{
-			Version:           "2.0.0",
+			Version:           "3.0.0",
 			Content:           "Institutional Buy-Side Quant Platform: High-Availability, Zero-Defect, Anti-Avalanche & Compliance Core",
 			OfficialStatement: "未经授权,禁止商业目的! 数据来源于网络,仅供参考;投资有风险,入市需谨慎",
 		},

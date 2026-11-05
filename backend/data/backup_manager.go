@@ -169,7 +169,7 @@ func (m *BackupManager) GetBackupOverview() (*BackupOverview, error) {
 	backups, err := m.ListBackups()
 	if err == nil && len(backups) == 0 {
 		// 系统尚无任何备份记录时，自动创建一份系统开箱即用的智能资产基线快照
-		_, _ = m.CreateIntelligentBackup("系统出厂基线快照 (v2.0.0 智能数据资产)")
+		_, _ = m.CreateIntelligentBackup("系统出厂基线快照 (v3.0.0 智能数据资产)")
 		backups, _ = m.ListBackups()
 	}
 	if err == nil {
@@ -193,7 +193,7 @@ func (m *BackupManager) GetBackupOverview() (*BackupOverview, error) {
 func (m *BackupManager) EnsureBaselineBackupIfEmpty() {
 	backups, err := m.ListBackups()
 	if err == nil && len(backups) == 0 {
-		_, _ = m.CreateIntelligentBackup("系统出厂基线快照 (v2.0.0 智能数据资产)")
+		_, _ = m.CreateIntelligentBackup("系统出厂基线快照 (v3.0.0 智能数据资产)")
 	}
 }
 
@@ -261,7 +261,7 @@ func (m *BackupManager) CreateIntelligentBackup(note string) (string, error) {
 	filePath := filepath.Join(dir, fileName)
 
 	bundle := IntelligentBundle{
-		Version:   "2.0.0",
+		Version:   "3.0.0",
 		Format:    "blades_stock_intelligent_bundle",
 		CreatedAt: time.Now(),
 		AppName:   "blades-stock",

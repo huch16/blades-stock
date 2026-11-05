@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Release](https://img.shields.io/badge/Release-v2.0.0-blue.svg?style=flat-square)](https://github.com/huch16/blades-stock/releases)
+[![Release](https://img.shields.io/badge/Release-v3.0.0-blue.svg?style=flat-square)](https://github.com/huch16/blades-stock/releases)
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8.svg?style=flat-square&logo=go)](https://golang.org/)
 [![Wails](https://img.shields.io/badge/Wails-v2.12.0-red.svg?style=flat-square)](https://wails.io/)
 [![Vue](https://img.shields.io/badge/Vue-3.5%2B-4FC08D.svg?style=flat-square&logo=vuedotjs)](https://vuejs.org/)
@@ -378,11 +378,18 @@ Blades Stock 采用标准 OpenAI 兼容协议，支持自由接入任意大模�
 | **LM Studio** | `http://localhost:1234/v1` | **留空即可** | 本地载入的模型标识 | 本地可视化加载开源大模型 |
 | **vLLM / 私有部署** | `http://your-server:8000/v1` | 视集群鉴权而定 | 对应部署服务名 | 企业私有化算力集群 |
 
-> **提示**：v2.0.0 版本完成了工业级全栈买方量化中台（Institutional Buy-Side Quant Platform）高可用、零缺陷、防雪崩与安全合规体系重塑：
-> - **统一安全凭据**：Web/SaaS 模式预设并统一登录口令为 `2266762`，开箱即用，支持多端便捷认证。
-> - **多规格 VPS 自适应**：深度优化甲骨文云（Oracle Cloud 2C/12G）、Instabox 云沙箱（4C/8G）及通用 Linux 服务器，自动按硬件配置算力限额与内存软限制（GOMEMLIMIT）。
-> - **移动端原生体验**：手机端自适应触控底栏（5 大主键 TabBar）、100vw 全景投研抽屉、流式单列卡片与 PWA 全屏沉浸模式。
-> - **量化设置中枢**：支持多大模型厂商向导预设、脏检查实时高亮与快捷键全局保存，最大上下文放宽至 `256,000` Tokens。
+> **提示**：v3.0.0 是一次**精简 · 清理 · 固化**版本，把前几轮修复的成果沉淀成可被机器验证的约束。
+> 详细清单见 [RELEASE_NOTES.md](./RELEASE_NOTES.md) 的 v3.0.0 章节。
+>
+> - **仓库减重 75%**：追踪字节 57.3 MB → 14.1 MB（移除未被引用的 38 MB jieba 词典、误 `go mod vendor` 产物、一次性截图与陈旧二进制）。
+> - **首屏关键路径 −46%**：1305 KB → 699 KB gzip（隔离 Vite `__vitePreload` 助手的错误归属；移除全量 lodash）。
+> - **单一 UI 库**：TDesign 彻底移除（曾占 411 KB 仅为 4 个聊天组件），由构建期门禁四重拦截回潮。
+> - **`npm run lint` 从形同虚设变为真门禁**：0 errors / 150 warnings，并固化 `vue/no-undef-components`、`vue/no-undef-properties` 两条历史事故规则。
+> - **发布不再打断在线用户**：旧 chunk 服务端回退 + `vite:preloadError` 静默恢复 + 部署前产物快照。
+> - **部署后 27 项冒烟自检**：`scripts/smoke-after-deploy.sh`，失败即 `exit 1` 并提示「请勿宣布发布成功」。
+>
+> 统一安全凭据仍为 Web/SaaS 模式口令 `2266762`（可在 `.env` 的 `BLADES_AUTH_TOKEN` 覆盖）；
+> 多规格 VPS 自适应（Oracle 2C/12G、Instabox 4C/8G、通用 Linux）与移动端原生体验保持既有能力。
 
 ### 2. 联网搜索引擎配置
 系统内置 SearXNG 隐私聚合搜索路由：

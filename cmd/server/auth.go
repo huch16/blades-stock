@@ -254,7 +254,7 @@ func HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		"data": map[string]any{
 			"needInit":        serverToken == "",
 			"authRequired":    true,
-			"version":         "2.0.0",
+			"version":         "3.0.0",
 		},
 	})
 }

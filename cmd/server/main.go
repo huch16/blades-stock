@@ -25,8 +25,8 @@ import (
 )
 
 var (
-	// Version 编译注入版本号（默认 2.0.0）
-	Version       = "2.0.0"
+	// Version 编译注入版本号（默认 3.0.0）
+	Version       = "3.0.0"
 	VersionCommit = "release"
 
 	portFlag    = flag.String("port", "8000", "Web server listening port")
