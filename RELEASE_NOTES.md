@@ -11,18 +11,18 @@ v3.0.0 是一次**精简 · 清理 · 固化**版本。前置的 v2.x 系列已�
 Highlights / 核心亮点
 --------------------
 
-### 一、代码仓库精减 75%（追踪字节 57.3 MB → 14.1 MB）
+### 一、代码仓库精减 75.5%（追踪字节 57,304,765 → 14,035,226）
 
 | 项目 | 体积 | 判定依据 | 处置 |
 |---|---|---|---|
 | `backend/data/data/dict/{jp,zh,en}/**` | **38.5 MB** | 仅 `data/dict/base.txt` 经 `//go:embed` 使用；`seg.LoadDict("zh_s")` 早已注释；jp/zh 词典全仓 0 引用 | 删除 |
 | `vendor-blades/`（74 文件） | 979 KB | 疑似误执行 `go mod vendor` 的嵌套产物，无任何代码/脚本引用 | 删除（并加入 .gitignore） |
-| `backend/data/words.txt` | 664 KB | 由 `backend/data/utils_test.go` 测试写入的产物被误提交 | 删除（并加入 .gitignore） |
+| `backend/data/words.txt` | 664 KB | 由 `backend/data/utils_test.go` 测试写入的产物被误提交。**注：第一轮仅删除了磁盘文件但未 `git rm --cached`，该文件当时仍在索引中；第二轮才真正移除**（详见第四轮复查） | 删除 |
 | `backend/data/stock_basic.json` | 1.18 MB | 0 引用（真正在用的是 `build/stock_basic.json`） | 删除 |
-| 未使用的 `build/screenshot/*.png` | 1.4 MB | 仅 `alipay.jpg` / `wxpay.jpg` 被 `main.go` embed | 删除（19 个） |
+| 未使用的 `build/screenshot/*.png` | 1.4 MB | 仅 `alipay.jpg` / `wxpay.jpg` 被 `main.go` embed | 删除（**18** 个） |
 | `build/appicon.png.bk`、`build/hk.json` | 432 KB | 前者为备份文件，后者 0 引用 | 删除 |
 | `frontend/src/assets/images/logo-universal.png`、`naive-logo.svg` | 152 KB | 全仓（含 CSS）0 引用 | 删除 |
-| `utils.go`（根目录） | 567 B | `IsWindows()` 全仓 0 引用 | 删除 |
+| `utils.go`（根目录） | 567 B | 曾判定为死代码，但复查发现其中的 `IsMacOS()` 被 `main.go:174` 引用，删除会直接导致编译失败 | **保留**（已回滚删除） |
 | 根目录陈旧二进制 `*.exe` | 356 MB | 本地构建产物，已可重新生成 | 删除 |
 
 附加 .gitignore 规则：`vendor-blades/`、`backend/data/words.txt`、`.venv/`、`.graph/`、`.gotmp/`、`.tmp/`、`/*.exe`、`/*.bin`。
@@ -30,6 +30,7 @@ Highlights / 核心亮点
 > **保留但已确认的“合理大文件”**：`build/stock_base_info_us.json`（4.6 MB）与 `stock_base_info_hk.json`
 > （1.2 MB）确实被 `backend/services/migrate.go` 用作**首次启动的本地种子数据路徕**，属于功能而非冗余；
 > 删除会改变离线首启行为，故保留。
+> `build/stock_basic.json`（1.23 MB）同为迁移种子数据，保留。
 
 ### 二、`cmd/` 命令行工具精减（35 → 22 项）
 
@@ -64,7 +65,61 @@ Highlights / 核心亮点
 - 删除开源样板文件 `CODE_OF_CONDUCT.md`、`CONTRIBUTING.md`、`.github/ISSUE_TEMPLATE/*`、
   `.github/pull_request_template.md` 与残留的 `INDUSTRIAL_CHECK_SUMMARY.txt`。
 
-### 五、版本号全面升级至 3.0.0
+### 五、第二轮复查：修复第一轮遗留的 4 类真实缺陷
+
+第一轮清理完成后对仓库做了二次审计，发现并修复以下问题：
+
+#### 5.1 `backend/data/utils.go` — 单行 747,684 字符的畸形源文件
+
+敏感词表被写成 `strings.Split("戊边、戍边、…", "、")` 的**单行字符串字面量**，
+使该 `.go` 文件达 751,023 字节。任何微小改动都会重写整行，严重破坏 git diff、
+编辑器性能与代码检索。已提取为 `backend/data/sensitive_words.txt`（41,769 条 / 747,639 字节）
+并改用 `//go:embed`：
+
+- 源文件 **751,023 → 3,770 字节**（`utils.go` 从 1 行怪物变为 132 行可读代码）
+- 经逐字符 round-trip 校验，重建的字符串与原字面量**完全一致**，运行时语义零变更
+
+#### 5.2 `backend/data/words.txt` — .gitignore 规则形同虚设
+
+该 664 KB 产物在第一轮被删除磁盘文件，但**仍是 git 已追踪文件**。
+`.gitignore` 中的 `backend/data/words.txt` 规则对已追踪文件完全无效，因此并未真正移除。
+
+- `git rm --cached` 真正移出索引（41,769 行），并验证 ignore 规则自此生效
+- 根因修复：`utils_test.go` 原以 `os.WriteFile("words.txt", …)` 写入**包目录**，
+  现改写进 `t.TempDir()`，测试结束自动清理，**永不再污染工作区**
+- 顺带为词表加载补上断言（`len(SensitiveWords) == 0` 即失败）
+
+#### 5.3 全仓 gofmt 合规性（181 个文件）
+
+首次引入 `gofmt` 门禁时发现 181 个 Go 文件不合规（`gofmt -l` 非空）。
+已机械化格式化（含 gofmt 对 import 块内的排序），并以**独立提交**保留可审查性：
+
+- 严格验证：`go build ./...` / `go vet ./...` / 五大核心测试套件全部通过
+- `Makefile` 的 `lint` 目标新增 gofmt 门禁（已双向验证：干净时通过、弄脏时拦截）
+
+#### 5.4 前端 `@types/*` 依赖归位
+
+- `@types/dompurify`：`dompurify` v3+ **自带类型**（`dist/purify.cjs.d.ts`），
+  该 DefinitelyTyped 包已废弃 → **移除**
+- `@types/file-saver`：`file-saver` 不自带类型，仍必需，但属**编译期**依赖，
+  不应进入生产 `dependencies` → **移入 `devDependencies`**
+- 回归验证：`tsc --noEmit` 错误数 **277 → 277**，错误集合逐条比对完全一致（零回归）
+
+#### 5.5 测试的非确定性脆弱点
+
+`backend/quant/holding_risk_scanner_test.go` 断言了 TCL科技 等标的的**绝对风险分级**，
+而分级依赖当日实时 MA 排列 —— 实测 2026-11-05 该标的已由 YELLOW 转为 GREEN，
+导致测试必然变红。已重构为只断言**与行情无关的结构性不变量**：
+
+- 分级合法性（∈ GREEN/YELLOW/RED）与分级前缀一致性
+- 防守位为正；均线排列与 MA 取值自洽（多头排列需满足 MA5≥MA10≥MA20）
+- 硬风控锁定必须落在 RED 档
+- **RED 档建议中严禁出现“进攻”话术**（逻辑自洽性）
+- 分级计数之和等于明细条数；报告 CJK 长度 ≤ 350
+
+行情相关的绝对分级改为 `t.Logf` 观测输出，仅供人工核对。
+
+### 六、版本号全面升级至 3.0.0
 
 共 17 个文件 / 27 处（`main.go`、`cmd/server`、`wails.json`、`frontend/package.json`、
 `frontend/index.html`、设置页与认证弹窗、`scripts/deploy-vps.sh`、`docker-compose.yml`、
@@ -76,12 +131,27 @@ Highlights / 核心亮点
 
 验证
 ----
-- `go build ./...` 与 `go vet ./cmd/...` 通过（删除词典后 `//go:embed` 仍正常）。
+- `go build ./...` 与 `go vet ./...` 通过（删除词典后 `//go:embed` 仍正常）。
 - `go test ./backend/data/` 通过：`TestAnalyzeSentiment`（依赖 embed 的 `base.txt`）与
-  `TestReplaceSensitiveWords` 均 PASS，证明词典清理未损伤情感分析链路。
+  `TestReplaceSensitiveWords`（敏感词表加载正常，共 41769 条）均 PASS，
+  证明词典清理与 `go:embed` 重构均未损伤链路。
+- 核心 Go 测试套件全绿：`backend/quant`、`backend/data`、`cmd/server`、`backend/agent`、
+  `backend/agent/tools`。
+- `gofmt -l .` 输出为空（181 个文件已全部合规）。
 - `npm run lint`：0 errors / 150 warnings（基线不变）。
 - `npm run build`：prebuild 三道门禁（未导入标识符 / UI 纯净度 / CSP 一致性）+ postbuild 全通过。
-- `git ls-files` 追踪字节从 57,304,765 → 14,085,129（−75.4%）；追踪文件数 718 → 613。
+- `tsc --noEmit`：错误集合与变更前逐条一致（277 条，均为存量），零回归。
+
+最终体积
+--------
+
+| 阶段 | 追踪字节 | 追踪文件数 |
+|---|---|---|
+| v2.0.0 基线 | 57,304,765 | 718 |
+| v3.0.0 第一轮 | 14,693,884 | 593 |
+| **v3.0.0 第二轮（终态）** | **14,035,226** | **593** |
+
+累计减重 **75.5%**（−43.27 MB）。
 
 ---
 

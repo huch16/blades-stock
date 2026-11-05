@@ -381,7 +381,9 @@ Blades Stock 采用标准 OpenAI 兼容协议，支持自由接入任意大模�
 > **提示**：v3.0.0 是一次**精简 · 清理 · 固化**版本，把前几轮修复的成果沉淀成可被机器验证的约束。
 > 详细清单见 [RELEASE_NOTES.md](./RELEASE_NOTES.md) 的 v3.0.0 章节。
 >
-> - **仓库减重 75%**：追踪字节 57.3 MB → 14.1 MB（移除未被引用的 38 MB jieba 词典、误 `go mod vendor` 产物、一次性截图与陈旧二进制）。
+> - **仓库减重 75.5%**：追踪字节 57.3 MB → 14.0 MB（移除未被引用的 38 MB jieba 词典、误 `go mod vendor` 产物、一次性截图与陈旧二进制）。
+> - **拆除畸形源文件**：`backend/data/utils.go` 原含单行 747 KB 的敏感词字面量（git diff / 编辑器 / 检索全部失效），已提取为 `//go:embed` 数据文件（751 KB → 3.8 KB，语义零变更）。
+> - **全仓 gofmt 合规**：181 个文件补齐格式规范，并新增 `make lint` 的 gofmt 门禁。
 > - **首屏关键路径 −46%**：1305 KB → 699 KB gzip（隔离 Vite `__vitePreload` 助手的错误归属；移除全量 lodash）。
 > - **单一 UI 库**：TDesign 彻底移除（曾占 411 KB 仅为 4 个聊天组件），由构建期门禁四重拦截回潮。
 > - **`npm run lint` 从形同虚设变为真门禁**：0 errors / 150 warnings，并固化 `vue/no-undef-components`、`vue/no-undef-properties` 两条历史事故规则。

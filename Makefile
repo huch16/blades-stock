@@ -18,10 +18,18 @@ help:
 	@echo "  make frontend-lint     前端静态检查（ESLint，0 errors 基线）"
 
 lint:
+	@echo "[1/3] gofmt 合规性检查（0 个文件应为未格式化）..."
+	@unformatted=$$(gofmt -l . 2>/dev/null | grep -v '^vendor/' || true); \
+	if [ -n "$$unformatted" ]; then \
+		echo "❌ 以下文件未通过 gofmt，请执行 'make fmt'："; echo "$$unformatted"; exit 1; \
+	fi; \
+	echo "    ✅ gofmt：全部合规"
+	@echo "[2/3] go vet..."
 	go vet ./...
+	@echo "[3/3] staticcheck（可选）..."
 	@command -v staticcheck >/dev/null 2>&1 \
 		&& staticcheck ./... \
-		|| echo "（跳过 staticcheck：未安装，可执行 'go install honnef.co/go/tools/cmd/staticcheck@latest'）"
+		|| echo "    （跳过 staticcheck：未安装，可执行 'go install honnef.co/go/tools/cmd/staticcheck@latest'）"
 
 fmt:
 	gofmt -w .

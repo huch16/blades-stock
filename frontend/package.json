@@ -14,8 +14,6 @@
     "lint:fix": "eslint --ext .js,.ts,.vue src/ --fix"
   },
   "dependencies": {
-    "@types/dompurify": "^3.0.5",
-    "@types/file-saver": "^2.0.7",
     "@vavt/v3-extension": "^3.0.0",
     "date-fns": "^4.1.0",
     "dompurify": "^3.4.17",
@@ -32,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/file-saver": "^2.0.7",
     "@types/markdown-it": "^14.0.1",
     "@vicons/antd": "^0.13.0",
     "@vicons/fa": "^0.13.0",
