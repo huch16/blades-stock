@@ -1,10 +1,10 @@
 package data
 
 import (
-	"encoding/json"
-	"fmt"
 	"blades-stock/backend/circuitbreaker"
 	"blades-stock/backend/logger"
+	"encoding/json"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -26,9 +26,9 @@ type klineFallbackCacheEntry struct {
 }
 
 const (
-	klineCacheTTL      = 5 * time.Minute
-	klineCacheFailTTL  = 60 * time.Second
-	klineCacheMaxSize  = 4096
+	klineCacheTTL     = 5 * time.Minute
+	klineCacheFailTTL = 60 * time.Second
+	klineCacheMaxSize = 4096
 )
 
 var (
@@ -435,9 +435,9 @@ type TencentStockKLinePayload struct {
 }
 
 type TencentKLineResponse struct {
-	Code int                                   `json:"code"`
-	Msg  string                                `json:"msg"`
-	Data map[string]TencentStockKLinePayload   `json:"-"`
+	Code int                                 `json:"code"`
+	Msg  string                              `json:"msg"`
+	Data map[string]TencentStockKLinePayload `json:"-"`
 }
 
 func (r *TencentKLineResponse) UnmarshalJSON(b []byte) error {

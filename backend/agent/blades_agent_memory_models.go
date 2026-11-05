@@ -8,12 +8,12 @@ import (
 )
 
 type AgentMemory struct {
-	ID        uint      `json:"id" gorm:"primarykey"`
-	SessionID string    `json:"sessionId" gorm:"index;size:64"`
-	Role      string    `json:"role" gorm:"size:16"`
-	Content   string    `json:"content" gorm:"type:text"`
-	Category  string    `json:"category" gorm:"index;size:32;default:''"`
-	Summary   string    `json:"summary" gorm:"type:text"`
+	ID        uint   `json:"id" gorm:"primarykey"`
+	SessionID string `json:"sessionId" gorm:"index;size:64"`
+	Role      string `json:"role" gorm:"size:16"`
+	Content   string `json:"content" gorm:"type:text"`
+	Category  string `json:"category" gorm:"index;size:32;default:''"`
+	Summary   string `json:"summary" gorm:"type:text"`
 	// Embedding vector stored as little-endian float32 BLOB
 	Embedding []byte    `json:"-" gorm:"column:embedding"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -42,7 +42,7 @@ func BytesToFloat32sLE(b []byte) []float32 {
 	n := len(b) / 4
 	out := make([]float32, n)
 	for i := 0; i < n; i++ {
-		out[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4:(i+1)*4]))
+		out[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4 : (i+1)*4]))
 	}
 	return out
 }
@@ -60,19 +60,19 @@ type AgentSession struct {
 func (AgentSession) TableName() string { return "agent_sessions" }
 
 type AgentTrace struct {
-	ID          uint      `json:"id" gorm:"primarykey"`
-	SessionID   string    `json:"sessionId" gorm:"index;size:64"`
-	Question    string    `json:"question" gorm:"type:text"`
-	Answer      string    `json:"answer" gorm:"type:text"`
-	ToolsUsed   string    `json:"toolsUsed" gorm:"type:text"`
-	Score       int       `json:"score" gorm:"default:0"`
-	Accuracy    int       `json:"accuracy" gorm:"default:0"`
-	Relevance   int       `json:"relevance" gorm:"default:0"`
-	ToolUse     int       `json:"toolUse" gorm:"default:0"`
-	Completeness int      `json:"completeness" gorm:"default:0"`
-	Feedback    string    `json:"feedback" gorm:"type:text"`
-	DurationMs  int64     `json:"durationMs" gorm:"default:0"`
-	CreatedAt   time.Time `json:"createdAt"`
+	ID           uint      `json:"id" gorm:"primarykey"`
+	SessionID    string    `json:"sessionId" gorm:"index;size:64"`
+	Question     string    `json:"question" gorm:"type:text"`
+	Answer       string    `json:"answer" gorm:"type:text"`
+	ToolsUsed    string    `json:"toolsUsed" gorm:"type:text"`
+	Score        int       `json:"score" gorm:"default:0"`
+	Accuracy     int       `json:"accuracy" gorm:"default:0"`
+	Relevance    int       `json:"relevance" gorm:"default:0"`
+	ToolUse      int       `json:"toolUse" gorm:"default:0"`
+	Completeness int       `json:"completeness" gorm:"default:0"`
+	Feedback     string    `json:"feedback" gorm:"type:text"`
+	DurationMs   int64     `json:"durationMs" gorm:"default:0"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 func (AgentTrace) TableName() string { return "agent_traces" }

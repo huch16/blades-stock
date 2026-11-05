@@ -72,4 +72,3 @@ func GetStockCode(dcCode string) string {
 	}
 	return dcCode
 }
-

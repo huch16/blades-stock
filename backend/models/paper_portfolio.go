@@ -93,8 +93,8 @@ func (PaperDailyNAV) TableName() string {
 
 // PaperPortfolioStats 模拟盘综合报表输出
 type PaperPortfolioStats struct {
-	Portfolio PaperPortfolio    `json:"portfolio"`
-	Positions []PaperPosition   `json:"positions"`
+	Portfolio    PaperPortfolio    `json:"portfolio"`
+	Positions    []PaperPosition   `json:"positions"`
 	RecentOrders []PaperTradeOrder `json:"recentOrders"`
-	NAVHistory []PaperDailyNAV  `json:"navHistory"`
+	NAVHistory   []PaperDailyNAV   `json:"navHistory"`
 }

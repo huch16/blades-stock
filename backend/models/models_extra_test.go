@@ -34,12 +34,12 @@ func TestMCPServerJSONRoundTrip(t *testing.T) {
 
 func TestMCPServerToolJSONRoundTrip(t *testing.T) {
 	orig := MCPServerTool{
-		ID:          3,
-		MCPServerID: 7,
-		ToolName:    "daily",
-		Description: "A股日线",
+		ID:           3,
+		MCPServerID:  7,
+		ToolName:     "daily",
+		Description:  "A股日线",
 		ParamsSchema: `{"type":"object"}`,
-		Enabled:     true,
+		Enabled:      true,
 	}
 	data, err := json.Marshal(orig)
 	if err != nil {

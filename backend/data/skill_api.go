@@ -253,11 +253,11 @@ func (s *SkillAPI) CreateSkillVersion(skillID uint) (*models.SkillVersion, error
 	// Deactivate any existing active version for this skill (optional, we'll keep IsActive false by default)
 	// Create version
 	ver := &models.SkillVersion{
-		SkillID:      skillID,
+		SkillID:       skillID,
 		VersionNumber: versionNumber,
-		Content:      string(skillBytes),
-		CreatedAt:    time.Now(),
-		IsActive:     false, // new versions are not active by default; activation via ActivateSkillVersion
+		Content:       string(skillBytes),
+		CreatedAt:     time.Now(),
+		IsActive:      false, // new versions are not active by default; activation via ActivateSkillVersion
 	}
 	err = s.dao.Create(ver).Error
 	if err != nil {

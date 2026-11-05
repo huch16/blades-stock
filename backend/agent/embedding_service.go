@@ -1,11 +1,11 @@
 package agent
 
 import (
+	"blades-stock/backend/logger"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"blades-stock/backend/logger"
 	"io"
 	"math"
 	"net/http"
@@ -172,7 +172,7 @@ func (s *EmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]
 	if s == nil || s.embeddingsURL == "" || s.modelName == "" {
 		return nil, fmt.Errorf("embedding service not configured")
 	}
-	
+
 	results := make([][]float32, len(texts))
 	for i, text := range texts {
 		vec, err := s.Embed(text)

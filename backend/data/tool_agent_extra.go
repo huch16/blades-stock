@@ -1,10 +1,10 @@
 package data
 
 import (
-	"encoding/json"
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/models"
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -63,7 +63,7 @@ func init() {
 
 func sendToolCallLog(ctx *ToolContext, toolName, args string) {
 	ctx.Ch <- map[string]any{
-		"code":             1,
+		"code":              1,
 		"question":          ctx.Question,
 		"chatId":            ctx.StreamResponseID,
 		"model":             ctx.Model,
@@ -676,9 +676,9 @@ func handleGetNextTradingDay(o *OpenAi, funcArguments string, ctx *ToolContext) 
 
 func restyForHoliday() *resty.Client {
 	return resty.New().
-		SetTimeout(10 * time.Second).
+		SetTimeout(10*time.Second).
 		SetRetryCount(1).
-		SetRetryWaitTime(500 * time.Millisecond).
+		SetRetryWaitTime(500*time.Millisecond).
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36").
 		SetHeader("Accept", "application/json, text/plain, */*")
 }

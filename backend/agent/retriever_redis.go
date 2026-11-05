@@ -10,8 +10,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"blades-stock/backend/logger"
+	"github.com/redis/go-redis/v9"
 )
 
 // RedisRetriever stores documents in Redis HASHes with a vector blob field.

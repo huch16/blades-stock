@@ -39,9 +39,9 @@ type SummaryResult struct {
 
 // SummaryPromptData 构建给 LLM 的 prompt 数据
 type SummaryPromptData struct {
-	SystemPrompt string       `json:"system_prompt"`
+	SystemPrompt string        `json:"system_prompt"`
 	Turns        []SummaryTurn `json:"turns"`
-	MaxTokens    int          `json:"max_tokens"`
+	MaxTokens    int           `json:"max_tokens"`
 }
 
 // defaultSummaryModel 默认摘要模型（可被 settings 覆盖）

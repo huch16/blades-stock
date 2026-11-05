@@ -41,10 +41,10 @@ type BackupOverview struct {
 // BackupFileItem 备份归档历史文件条目
 type BackupFileItem struct {
 	FileName   string    `json:"fileName"`
-	Type       string    `json:"type"`       // "intel_bundle" | "db_snapshot" | "csv"
-	TypeName   string    `json:"typeName"`   // "全量智能资产包" | "数据库快照" | "专项CSV"
-	Size       int64     `json:"size"`       // 字节大小
-	SizeStr    string    `json:"sizeStr"`    // 可读格式，如 "1.2 MB"
+	Type       string    `json:"type"`     // "intel_bundle" | "db_snapshot" | "csv"
+	TypeName   string    `json:"typeName"` // "全量智能资产包" | "数据库快照" | "专项CSV"
+	Size       int64     `json:"size"`     // 字节大小
+	SizeStr    string    `json:"sizeStr"`  // 可读格式，如 "1.2 MB"
 	CreatedAt  time.Time `json:"createdAt"`
 	TimeStr    string    `json:"timeStr"`    // "2026-10-17 11:30:00"
 	RecordDesc string    `json:"recordDesc"` // "包含 3项AI配置, 2个技能, 114条对话, 230篇研报, 18只自选"
@@ -63,25 +63,25 @@ type IntelligentBundle struct {
 
 // BundleData 详细数据载荷
 type BundleData struct {
-	Settings            *SettingConfig               `json:"settings,omitempty"`
-	AiConfigs           []AIConfig                   `json:"aiConfigs,omitempty"`
-	Skills              []models.Skill               `json:"skills,omitempty"`
-	SkillEmbeddings     []SkillEmbeddingBackup       `json:"skillEmbeddings,omitempty"`
-	McpServers          []models.MCPServer           `json:"mcpServers,omitempty"`
-	McpServerTools      []models.MCPServerTool       `json:"mcpServerTools,omitempty"`
-	AiAssistantSessions []models.AiAssistantSession  `json:"aiAssistantSessions,omitempty"`
-	ChatMemories        []db.ChatMemory              `json:"chatMemories,omitempty"`
-	ChatMemorySummaries []ChatMemorySummaryBackup    `json:"chatMemorySummaries,omitempty"`
-	AgentMemories       []AgentMemoryBackup          `json:"agentMemories,omitempty"`
-	AIReports           []models.AIResponseResult    `json:"aiReports,omitempty"`
-	AIRecommendStocks   []models.AiRecommendStocks   `json:"aiRecommendStocks,omitempty"`
-	FollowedStocks      []FollowedStock              `json:"followedStocks,omitempty"`
-	FollowedFunds       []FollowedFund               `json:"followedFunds,omitempty"`
-	StockGroups         []Group                      `json:"stockGroups,omitempty"`
-	GroupStockInfo      []GroupStock                 `json:"groupStockInfo,omitempty"`
-	Tags                []TagBackup                  `json:"tags,omitempty"`
-	BacktestResults     []models.BacktestResult      `json:"backtestResults,omitempty"`
-	CronTasks           []models.CronTask            `json:"cronTasks,omitempty"`
+	Settings            *SettingConfig              `json:"settings,omitempty"`
+	AiConfigs           []AIConfig                  `json:"aiConfigs,omitempty"`
+	Skills              []models.Skill              `json:"skills,omitempty"`
+	SkillEmbeddings     []SkillEmbeddingBackup      `json:"skillEmbeddings,omitempty"`
+	McpServers          []models.MCPServer          `json:"mcpServers,omitempty"`
+	McpServerTools      []models.MCPServerTool      `json:"mcpServerTools,omitempty"`
+	AiAssistantSessions []models.AiAssistantSession `json:"aiAssistantSessions,omitempty"`
+	ChatMemories        []db.ChatMemory             `json:"chatMemories,omitempty"`
+	ChatMemorySummaries []ChatMemorySummaryBackup   `json:"chatMemorySummaries,omitempty"`
+	AgentMemories       []AgentMemoryBackup         `json:"agentMemories,omitempty"`
+	AIReports           []models.AIResponseResult   `json:"aiReports,omitempty"`
+	AIRecommendStocks   []models.AiRecommendStocks  `json:"aiRecommendStocks,omitempty"`
+	FollowedStocks      []FollowedStock             `json:"followedStocks,omitempty"`
+	FollowedFunds       []FollowedFund              `json:"followedFunds,omitempty"`
+	StockGroups         []Group                     `json:"stockGroups,omitempty"`
+	GroupStockInfo      []GroupStock                `json:"groupStockInfo,omitempty"`
+	Tags                []TagBackup                 `json:"tags,omitempty"`
+	BacktestResults     []models.BacktestResult     `json:"backtestResults,omitempty"`
+	CronTasks           []models.CronTask           `json:"cronTasks,omitempty"`
 }
 
 type SkillEmbeddingBackup struct {

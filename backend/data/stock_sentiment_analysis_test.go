@@ -1,9 +1,9 @@
 package data
 
 import (
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"fmt"
 	"strings"
 	"testing"
 

@@ -13,21 +13,21 @@ import (
 )
 
 type flakyTool struct {
-	name       string
-	failTimes  int
-	failKind   ErrKind
-	attempts   int32
-	lastInput  string
+	name      string
+	failTimes int
+	failKind  ErrKind
+	attempts  int32
+	lastInput string
 }
 
 func newFlakyTool(name string) *flakyTool {
 	return &flakyTool{name: name}
 }
 
-func (t *flakyTool) Name() string       { return t.name }
-func (t *flakyTool) Description() string { return "flaky tool for testing" }
-func (t *flakyTool) InputSchema() *jsonschema.Schema    { return nil }
-func (t *flakyTool) OutputSchema() *jsonschema.Schema    { return nil }
+func (t *flakyTool) Name() string                     { return t.name }
+func (t *flakyTool) Description() string              { return "flaky tool for testing" }
+func (t *flakyTool) InputSchema() *jsonschema.Schema  { return nil }
+func (t *flakyTool) OutputSchema() *jsonschema.Schema { return nil }
 func (t *flakyTool) Handle(ctx context.Context, input string) (string, error) {
 	atomic.AddInt32(&t.attempts, 1)
 	t.lastInput = input

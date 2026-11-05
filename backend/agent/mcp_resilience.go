@@ -1,10 +1,10 @@
 // Package agent 的 MCP 工具调用韧性增强模块（P1.2）。
 //
 // 设计目标：在 wrapMCPToolHandler（已存在）基础上加入：
-//   1. 错误分类：把"瞬时网络错误"和"业务错误"区分开
-//   2. 智能重试：仅对可重试错误做指数退避重试，避免无谓浪费
-//   3. 熔断：连续失败达到阈值后快速失败，避免拖慢整个 agent
-//   4. 错误脱敏：避免把 token / bearer 等敏感信息回传给 LLM
+//  1. 错误分类：把"瞬时网络错误"和"业务错误"区分开
+//  2. 智能重试：仅对可重试错误做指数退避重试，避免无谓浪费
+//  3. 熔断：连续失败达到阈值后快速失败，避免拖慢整个 agent
+//  4. 错误脱敏：避免把 token / bearer 等敏感信息回传给 LLM
 //
 // 设计原则：
 //   - 与现有 wrapMCPToolHandler 并存：旧路径保留为 deprecated wrapper
@@ -237,11 +237,11 @@ func mcpErrorJSON(toolName, serverName, rawErrMsg string) string {
 // circuitOpenJSON 当断路器 Open 时立即返回，告知 LLM "数据源暂时挂掉，请换工具或稍后再试"。
 func circuitOpenJSON(toolName, serverName string) string {
 	resp := map[string]interface{}{
-		"error":          true,
-		"tool":           toolName,
-		"server":         serverName,
-		"message":        fmt.Sprintf("⚠️ MCP [%s] 暂时不可用（断路器开启），请尝试其它数据源或稍后重试", serverName),
-		"circuit_open":   true,
+		"error":        true,
+		"tool":         toolName,
+		"server":       serverName,
+		"message":      fmt.Sprintf("⚠️ MCP [%s] 暂时不可用（断路器开启），请尝试其它数据源或稍后重试", serverName),
+		"circuit_open": true,
 	}
 	b, _ := json.Marshal(resp)
 	return string(b)
@@ -258,6 +258,7 @@ func circuitOpenJSON(toolName, serverName string) string {
 //   - 失败路径：旧版本返回单条 JSON 错误；新版本也是单条 JSON 错误，但新增了 tool / server 字段便于 LLM 诊断
 //   - 单次执行总耗时上限：MaxRetryAttempts * (InitialBackoff * BackoffFactor^MaxRetryAttempts)
 //     默认：3 * 1.4s ≈ 4.2s（不含每次实际调用超时）— 与现有 5s 调用超时配合不会把外层 ctx.Done() 撞穿
+//
 // configuredBreakers 追踪哪些 serverName 已应用过默认配置，避免重复 Configure
 // 覆盖测试 / 启动期预调阈值的场景。
 var configuredBreakers sync.Map // map[string]struct{}

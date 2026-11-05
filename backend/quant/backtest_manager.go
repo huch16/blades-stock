@@ -226,12 +226,12 @@ func (m *BacktestManager) RunStrategyGridSearch(stockCode string, strategies []S
 
 // AccuracyStats 回测准确率统计
 type AccuracyStats struct {
-	TotalReports   int                  `json:"totalReports"`
-	VerifiedCount  int                  `json:"verifiedCount"`
-	AccurateCount  int                  `json:"accurateCount"`
-	AccuracyRate   float64              `json:"accuracyRate"`
-	AvgConfidence  float64              `json:"avgConfidence"`
-	DirectionStats map[string]DirStat   `json:"directionStats"`
+	TotalReports   int                `json:"totalReports"`
+	VerifiedCount  int                `json:"verifiedCount"`
+	AccurateCount  int                `json:"accurateCount"`
+	AccuracyRate   float64            `json:"accuracyRate"`
+	AvgConfidence  float64            `json:"avgConfidence"`
+	DirectionStats map[string]DirStat `json:"directionStats"`
 }
 
 // DirStat 方向统计
@@ -829,22 +829,22 @@ func (m *BacktestManager) RunSkillABTest(ctx context.Context, skillID1, skillID2
 		}
 	}
 	result := &SkillABTestResult{
-		SkillID1:   skill1.ID,
-		SkillID2:   skill2.ID,
-		Accuracy1:  acc1,
-		Accuracy2:  acc2,
+		SkillID1:    skill1.ID,
+		SkillID2:    skill2.ID,
+		Accuracy1:   acc1,
+		Accuracy2:   acc2,
 		TotalTested: total1 + total2,
-		Details:    map[uint]int{skill1.ID: total1, skill2.ID: total2},
+		Details:     map[uint]int{skill1.ID: total1, skill2.ID: total2},
 	}
 	return result, nil
 }
 
 // SkillABTestResult holds the result of an A/B test between two skills.
 type SkillABTestResult struct {
-	SkillID1     uint
-	SkillID2     uint
-	Accuracy1    float64
-	Accuracy2    float64
-	TotalTested  int
-	Details      map[uint]int // skillID -> number of reports tested
+	SkillID1    uint
+	SkillID2    uint
+	Accuracy1   float64
+	Accuracy2   float64
+	TotalTested int
+	Details     map[uint]int // skillID -> number of reports tested
 }

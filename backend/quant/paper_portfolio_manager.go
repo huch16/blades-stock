@@ -238,7 +238,7 @@ func (m *PaperPortfolioManager) ExecuteVirtualSell(stockCode string, price float
 	totalFee := commission + stampDuty
 	netCash := grossAmount - totalFee
 
-	realizedPnL := (filledPrice - pos.AvgCostPrice) * float64(shares) - totalFee
+	realizedPnL := (filledPrice-pos.AvgCostPrice)*float64(shares) - totalFee
 
 	// 更新现金
 	p.CashBalance += netCash

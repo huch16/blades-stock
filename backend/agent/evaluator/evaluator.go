@@ -26,18 +26,18 @@ type GoldenCase struct {
 
 // EvaluatorReport represents the evaluation report
 type EvaluatorReport struct {
-	ID              uint      `json:"id" gorm:"primarykey"`
-	CreatedAt       time.Time `json:"createdAt"`
-	RunAt           time.Time `json:"runAt" gorm:"index"`
-	PeriodStart     time.Time `json:"periodStart" gorm:"index"`
-	PeriodEnd       time.Time `json:"periodEnd" gorm:"index"`
-	TotalCases      int       `json:"totalCases"`
-	MatchedCases    int       `json:"matchedCases"`
-	ToolCorrect     int       `json:"toolCorrect"`
-	ToolAccuracy    float64   `json:"toolAccuracy"`
-	AvgLatencyMs    float64   `json:"avgLatencyMs"`
-	RetrieverHitRate float64  `json:"retrieverHitRate"`
-	DetailsJSON     string    `json:"detailsJson" gorm:"type:text"`
+	ID               uint      `json:"id" gorm:"primarykey"`
+	CreatedAt        time.Time `json:"createdAt"`
+	RunAt            time.Time `json:"runAt" gorm:"index"`
+	PeriodStart      time.Time `json:"periodStart" gorm:"index"`
+	PeriodEnd        time.Time `json:"periodEnd" gorm:"index"`
+	TotalCases       int       `json:"totalCases"`
+	MatchedCases     int       `json:"matchedCases"`
+	ToolCorrect      int       `json:"toolCorrect"`
+	ToolAccuracy     float64   `json:"toolAccuracy"`
+	AvgLatencyMs     float64   `json:"avgLatencyMs"`
+	RetrieverHitRate float64   `json:"retrieverHitRate"`
+	DetailsJSON      string    `json:"detailsJson" gorm:"type:text"`
 }
 
 func (EvaluatorReport) TableName() string {
@@ -83,7 +83,7 @@ func loadGoldenCases(path string) ([]GoldenCase, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var cases []GoldenCase
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
@@ -108,22 +108,22 @@ func (e *Evaluator) Run(ctx context.Context, periodStart, periodEnd time.Time) (
 	if err != nil {
 		return nil, nil, fmt.Errorf("load traces: %w", err)
 	}
-	
+
 	// Build plan map: plan_id -> list of traces
 	planTraces := make(map[string][]agent.PlanTrace)
 	for _, t := range traces {
 		planTraces[t.PlanID] = append(planTraces[t.PlanID], t)
 	}
-	
+
 	// Evaluate each golden case
 	results := make([]CaseResult, 0, len(e.goldenCases))
 	var totalLatency int64
 	var matchedCases, toolCorrect int
-	
+
 	for _, gc := range e.goldenCases {
 		result := e.evaluateCase(gc, planTraces)
 		results = append(results, result)
-		
+
 		if result.Found {
 			matchedCases++
 			totalLatency += result.LatencyMs
@@ -132,53 +132,53 @@ func (e *Evaluator) Run(ctx context.Context, periodStart, periodEnd time.Time) (
 			}
 		}
 	}
-	
+
 	var avgLatency float64
 	if matchedCases > 0 {
 		avgLatency = float64(totalLatency) / float64(matchedCases)
 	}
-	
+
 	toolAccuracy := 0.0
 	if len(e.goldenCases) > 0 {
 		toolAccuracy = float64(toolCorrect) / float64(len(e.goldenCases))
 	}
-	
+
 	// Calculate retriever hit rate (placeholder)
 	retrieverHitRate := e.calculateRetrieverHitRate(traces)
-	
+
 	// Build report
 	report := &EvaluatorReport{
-		RunAt:           time.Now(),
-		PeriodStart:     periodStart,
-		PeriodEnd:       periodEnd,
-		TotalCases:      len(e.goldenCases),
-		MatchedCases:    matchedCases,
-		ToolCorrect:     toolCorrect,
-		ToolAccuracy:    toolAccuracy,
-		AvgLatencyMs:    avgLatency,
+		RunAt:            time.Now(),
+		PeriodStart:      periodStart,
+		PeriodEnd:        periodEnd,
+		TotalCases:       len(e.goldenCases),
+		MatchedCases:     matchedCases,
+		ToolCorrect:      toolCorrect,
+		ToolAccuracy:     toolAccuracy,
+		AvgLatencyMs:     avgLatency,
 		RetrieverHitRate: retrieverHitRate,
 	}
-	
+
 	detailsJSON, _ := json.Marshal(results)
 	report.DetailsJSON = string(detailsJSON)
-	
+
 	// Save report to DB
 	if err := db.Dao.Create(report).Error; err != nil {
 		logger.SugaredLogger.Errorf("Failed to save evaluator report: %v", err)
 	} else {
 		logger.SugaredLogger.Infof("Evaluator report saved with ID: %d", report.ID)
 	}
-	
+
 	// Save CSV report
 	if err := e.saveCSVReport(report, results); err != nil {
 		logger.SugaredLogger.Errorf("Failed to save CSV report: %v", err)
 	}
-	
+
 	// Check threshold
 	if toolAccuracy < e.threshold && len(e.goldenCases) > 0 {
 		logger.SugaredLogger.Warnf("ALERT: Tool accuracy %.2f%% below threshold %.2f%%", toolAccuracy*100, e.threshold*100)
 	}
-	
+
 	return report, results, nil
 }
 
@@ -193,11 +193,11 @@ func (e *Evaluator) loadTraces(start, end time.Time) ([]agent.PlanTrace, error) 
 func (e *Evaluator) evaluateCase(gc GoldenCase, planTraces map[string][]agent.PlanTrace) CaseResult {
 	// For now, we match by checking if any plan contains the expected tools
 	// In a real implementation, you'd match by question similarity or plan_id reference
-	
+
 	var actualTools []string
 	var found bool
 	var latencyMs int64
-	
+
 	for _, traces := range planTraces {
 		for _, t := range traces {
 			actualTools = append(actualTools, t.ToolName)
@@ -205,7 +205,7 @@ func (e *Evaluator) evaluateCase(gc GoldenCase, planTraces map[string][]agent.Pl
 			latencyMs += t.DurationMs
 		}
 	}
-	
+
 	// Check if all expected tools were called
 	toolMatch := true
 	for _, expected := range gc.ExpectedTools {
@@ -221,7 +221,7 @@ func (e *Evaluator) evaluateCase(gc GoldenCase, planTraces map[string][]agent.Pl
 			break
 		}
 	}
-	
+
 	return CaseResult{
 		GoldenID:      gc.ID,
 		Found:         found,
@@ -244,23 +244,23 @@ func (e *Evaluator) saveCSVReport(report *EvaluatorReport, results []CaseResult)
 	if err := os.MkdirAll(reportDir, 0755); err != nil {
 		return err
 	}
-	
+
 	filename := filepath.Join(reportDir, fmt.Sprintf("evaluator_%s.csv", report.RunAt.Format("20060102")))
 	file, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	
+
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
-	
+
 	// Write header
 	header := []string{"golden_id", "plan_id", "found", "expected_tools", "actual_tools", "tool_match", "latency_ms", "error"}
 	if err := writer.Write(header); err != nil {
 		return err
 	}
-	
+
 	// Write results
 	for _, r := range results {
 		record := []string{
@@ -277,7 +277,7 @@ func (e *Evaluator) saveCSVReport(report *EvaluatorReport, results []CaseResult)
 			return err
 		}
 	}
-	
+
 	logger.SugaredLogger.Infof("CSV report saved to: %s", filename)
 	return nil
 }
@@ -291,15 +291,15 @@ func AutoRun(ctx context.Context, threshold float64) error {
 			return err
 		}
 	}
-	
+
 	e, err := NewEvaluator(goldenPath, threshold)
 	if err != nil {
 		return err
 	}
-	
+
 	end := time.Now()
 	start := end.Add(-24 * time.Hour)
-	
+
 	_, _, err = e.Run(ctx, start, end)
 	return err
 }
@@ -309,7 +309,7 @@ func createDefaultGolden(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	
+
 	defaultCases := []GoldenCase{
 		{
 			ID:              "g1",
@@ -333,20 +333,20 @@ func createDefaultGolden(path string) error {
 			Tags:            []string{"industry", "serenity", "auto"},
 		},
 	}
-	
+
 	file, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	
+
 	encoder := json.NewEncoder(file)
 	for _, gc := range defaultCases {
 		if err := encoder.Encode(gc); err != nil {
 			return err
 		}
 	}
-	
+
 	logger.SugaredLogger.Infof("Created default golden set at: %s", path)
 	return nil
 }

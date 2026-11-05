@@ -1,16 +1,16 @@
 package tools
 
 import (
+	"blades-stock/backend/agent/types"
+	"blades-stock/backend/logger"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
-	"blades-stock/backend/agent/types"
-	"blades-stock/backend/logger"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/go-resty/resty/v2"
 	bladesTools "github.com/go-kratos/blades/tools"
+	"github.com/go-resty/resty/v2"
 )
 
 func GetFetchWebPageTool() bladesTools.Tool {

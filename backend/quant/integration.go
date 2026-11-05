@@ -30,15 +30,15 @@ type aiReportTask struct {
 
 // aiReportResult AI报告回测结果
 type aiReportResult struct {
-	reportID     uint
-	isAccurate   bool
-	priceChange  float64
-	maxUpside    float64
-	maxDrawdown  float64
-	direction    string
-	summary      string
-	skipped      bool
-	skipReason   string
+	reportID    uint
+	isAccurate  bool
+	priceChange float64
+	maxUpside   float64
+	maxDrawdown float64
+	direction   string
+	summary     string
+	skipped     bool
+	skipReason  string
 }
 
 // stockPriceData 股票价格数据
@@ -59,9 +59,9 @@ type aiBacktestStats struct {
 }
 
 type DirStats3 struct {
-	Total   int
+	Total    int
 	Accurate int
-	Rate    float64
+	Rate     float64
 }
 
 // ============================================================================
@@ -245,15 +245,15 @@ func (s *AIReportBacktest) BacktestAIReports(ctx context.Context, limit int) (*A
 
 	if len(reports) == 0 {
 		return &AIReportBacktestResult{
-			Total:      0,
-			Processed:  0,
-			Skipped:    0,
-			Accurate:   0,
-			AccuracyRate: 0,
+			Total:          0,
+			Processed:      0,
+			Skipped:        0,
+			Accurate:       0,
+			AccuracyRate:   0,
 			DirectionStats: make(map[string]*DirStats3),
-			Duration:   time.Since(start),
-			ModelName:  "",
-			SkillUsed:  "",
+			Duration:       time.Since(start),
+			ModelName:      "",
+			SkillUsed:      "",
 		}, nil
 	}
 
@@ -387,11 +387,11 @@ func (s *AIReportBacktest) backtestSingleReport(r models.AIResponseResult, stock
 	isAccurate := checkPredictionAccuracy(pred.Direction, priceChange, 5.0)
 	return aiReportResult{
 		reportID:    r.ID,
-		isAccurate: isAccurate,
+		isAccurate:  isAccurate,
 		priceChange: mathRound2(priceChange*100) / 100,
-		direction:  pred.Direction,
-		summary:    fmt.Sprintf("预测:%s | 实际涨跌:%.2f%% | 准确:%v", pred.Direction, priceChange, isAccurate),
-		skipped:    false,
+		direction:   pred.Direction,
+		summary:     fmt.Sprintf("预测:%s | 实际涨跌:%.2f%% | 准确:%v", pred.Direction, priceChange, isAccurate),
+		skipped:     false,
 	}
 }
 
@@ -665,19 +665,19 @@ type BatchStockBacktestItem struct {
 
 // VectorBTMultiResponse 多标的/板块回测综合响应
 type VectorBTMultiResponse struct {
-	StrategyName      string                   `json:"strategy_name"`
-	Params            map[string]any           `json:"params"`
-	TotalStocks       int                      `json:"total_stocks"`
-	TestedStocks      int                      `json:"tested_stocks"`
-	AverageReturnPct  float64                  `json:"avg_return_pct"`
-	AverageWinRatePct float64                  `json:"avg_win_rate_pct"`
-	AverageSharpe     float64                  `json:"avg_sharpe"`
-	AverageMaxDrawdown float64                 `json:"avg_max_drawdown_pct"`
-	ProfitableRatio   float64                  `json:"profitable_ratio"` // 盈利标的比例
-	BestStock         BatchStockBacktestItem   `json:"best_stock"`
-	WorstStock        BatchStockBacktestItem   `json:"worst_stock"`
-	Items             []BatchStockBacktestItem `json:"items"`
-	SummaryReport     string                   `json:"summary_report"`
+	StrategyName       string                   `json:"strategy_name"`
+	Params             map[string]any           `json:"params"`
+	TotalStocks        int                      `json:"total_stocks"`
+	TestedStocks       int                      `json:"tested_stocks"`
+	AverageReturnPct   float64                  `json:"avg_return_pct"`
+	AverageWinRatePct  float64                  `json:"avg_win_rate_pct"`
+	AverageSharpe      float64                  `json:"avg_sharpe"`
+	AverageMaxDrawdown float64                  `json:"avg_max_drawdown_pct"`
+	ProfitableRatio    float64                  `json:"profitable_ratio"` // 盈利标的比例
+	BestStock          BatchStockBacktestItem   `json:"best_stock"`
+	WorstStock         BatchStockBacktestItem   `json:"worst_stock"`
+	Items              []BatchStockBacktestItem `json:"items"`
+	SummaryReport      string                   `json:"summary_report"`
 }
 
 // RunVectorizedBacktestMulti 多标的批量向量化回测

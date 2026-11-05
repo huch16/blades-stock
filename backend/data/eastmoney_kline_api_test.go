@@ -1,6 +1,5 @@
 //go:build integration
 
-
 package data
 
 import (
@@ -251,4 +250,3 @@ func TestGetKLineWithMA(t *testing.T) {
 	}
 	logger.SugaredLogger.Infof("GetKLineWithMA() = %v", util.MarkdownTableWithTitle("K 线数据", kLines))
 }
-

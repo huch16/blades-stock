@@ -22,15 +22,15 @@ import (
 // BacktestEngine 向量化回测引擎
 type BacktestEngine struct {
 	// 数据
-	Close   *Vector
-	High    *Vector
-	Low     *Vector
-	Open    *Vector
-	Volume  *Vector
-	Dates   []string
+	Close  *Vector
+	High   *Vector
+	Low    *Vector
+	Open   *Vector
+	Volume *Vector
+	Dates  []string
 
 	// 配置
-	Config   *BacktestConfig
+	Config          *BacktestConfig
 	PortfolioConfig *PortfolioConfig
 
 	// 上下文
@@ -40,31 +40,31 @@ type BacktestEngine struct {
 
 // BacktestConfig 回测配置
 type BacktestConfig struct {
-	Name           string   // 策略名称
-	InitCash       float64  // 初始资金
-	Fees           float64  // 手续费‰
-	Slippage       float64  // 滑点‰
-	StopLoss       float64  // 止损%
-	TakeProfit     float64  // 止盈%
-	TrailStop      float64  // 移动止损%
-	VerifyDays     int      // 验证窗口天数
+	Name              string  // 策略名称
+	InitCash          float64 // 初始资金
+	Fees              float64 // 手续费‰
+	Slippage          float64 // 滑点‰
+	StopLoss          float64 // 止损%
+	TakeProfit        float64 // 止盈%
+	TrailStop         float64 // 移动止损%
+	VerifyDays        int     // 验证窗口天数
 	AccuracyThreshold float64 // 准确率阈值%
-	ShortEnabled   bool     // 允许做空
+	ShortEnabled      bool    // 允许做空
 }
 
 // DefaultBacktestConfig 默认配置
 func DefaultBacktestConfig() *BacktestConfig {
 	return &BacktestConfig{
-		Name:             "default",
-		InitCash:         100000,
-		Fees:             1.5,
-		Slippage:         1.0,
-		StopLoss:         0.05,
-		TakeProfit:       0.10,
-		TrailStop:        0,
-		VerifyDays:       20,
+		Name:              "default",
+		InitCash:          100000,
+		Fees:              1.5,
+		Slippage:          1.0,
+		StopLoss:          0.05,
+		TakeProfit:        0.10,
+		TrailStop:         0,
+		VerifyDays:        20,
 		AccuracyThreshold: 5.0,
-		ShortEnabled:     false,
+		ShortEnabled:      false,
 	}
 }
 
@@ -274,9 +274,9 @@ func (s *MACDStrategy) GenerateSignals(close, high, low, open, volume *Vector) (
 
 // RSIStrategy RSI 策略
 type RSIStrategy struct {
-	Window    int
+	Window     int
 	Overbought float64
-	Oversold  float64
+	Oversold   float64
 }
 
 func (s *RSIStrategy) Name() string {
@@ -318,8 +318,8 @@ func (s *BollingerStrategy) GenerateSignals(close, high, low, open, volume *Vect
 
 // DualThrustStrategy Dual Thrust 策略
 type DualThrustStrategy struct {
-	K       float64
-	Period  int
+	K      float64
+	Period int
 }
 
 func (s *DualThrustStrategy) Name() string {
@@ -481,8 +481,8 @@ func (e *BacktestEngine) RunGridSearch(strategies []Strategy) *GridSearchResult 
 	return &GridSearchResult{
 		TotalCombinations: len(strategies),
 		Results:           results,
-		BestParams:       bestParams,
-		BestStats:        bestStats,
+		BestParams:        bestParams,
+		BestStats:         bestStats,
 		BestStrategyName:  bestStrategyName,
 		Duration:          time.Since(start),
 	}
@@ -536,15 +536,15 @@ func GenerateRSIStrategies(windows []int, overbought, oversold float64) []Strate
 
 // AnalyzeResults 分析回测结果
 type ResultAnalysis struct {
-	TotalStrategies  int
+	TotalStrategies   int
 	WinningStrategies int
-	BestStrategy     string
-	BestParams       map[string]any
-	BestReturn       float64
-	BestSharpe       float64
-	BestWinRate      float64
-	AvgReturn        float64
-	AvgSharpe        float64
+	BestStrategy      string
+	BestParams        map[string]any
+	BestReturn        float64
+	BestSharpe        float64
+	BestWinRate       float64
+	AvgReturn         float64
+	AvgSharpe         float64
 }
 
 // AnalyzeGridResults 分析网格扫描结果

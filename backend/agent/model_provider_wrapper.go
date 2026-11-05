@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"blades-stock/backend/data"
+	"github.com/go-kratos/blades"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"github.com/go-kratos/blades"
 	"golang.org/x/time/rate"
 )
 
@@ -19,12 +19,12 @@ var ErrRateLimited = errors.New("model provider rate limit or quota exceeded")
 // ModelProviderWrapper wraps a blades.ModelProvider with token bucket rate limiting and quota management.
 type ModelProviderWrapper struct {
 	blades.ModelProvider
-	limiter      *rate.Limiter // token bucket for rate limiting
-	quotaMu      sync.Mutex    // protects dailyQuota and lastResetDate
-	dailyQuota   int           // requests used today
-	dailyCostUSD float64       // cost used today
+	limiter       *rate.Limiter // token bucket for rate limiting
+	quotaMu       sync.Mutex    // protects dailyQuota and lastResetDate
+	dailyQuota    int           // requests used today
+	dailyCostUSD  float64       // cost used today
 	lastResetDate string        // date string (YYYY-MM-DD) of last reset
-	config       *data.AIConfig
+	config        *data.AIConfig
 }
 
 // NewModelProviderWrapper returns a new wrapper around the given provider.
@@ -125,7 +125,7 @@ func (w *ModelProviderWrapper) Generate(ctx context.Context, req *blades.ModelRe
 			}
 			// Estimate cost for this request (placeholder - in practice would use token usage)
 			estimatedCost := estimateLLMCost(w.config, req)
-			if w.dailyCostUSD + estimatedCost > w.config.DailyCostQuota {
+			if w.dailyCostUSD+estimatedCost > w.config.DailyCostQuota {
 				w.quotaMu.Unlock()
 				return nil, ErrRateLimited
 			}

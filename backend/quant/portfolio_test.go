@@ -280,7 +280,7 @@ func TestPortfolioReturns(t *testing.T) {
 	}
 	initCash := pf.config.InitCash
 	cumReturn := (pf.value[2] - initCash) / initCash
-	expected := (120.0 - 110.0) / 110.0  // entry at 110, exit at 120
+	expected := (120.0 - 110.0) / 110.0 // entry at 110, exit at 120
 	if math.Abs(cumReturn-expected) > 0.01 {
 		t.Fatalf("cumulative return should be ~%f, got %f", expected, cumReturn)
 	}

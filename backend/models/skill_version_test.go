@@ -9,12 +9,12 @@ import (
 func TestSkillVersionJSON(t *testing.T) {
 	// Prepare a sample struct
 	orig := SkillVersion{
-		ID:           1,
-		SkillID:      10,
+		ID:            1,
+		SkillID:       10,
 		VersionNumber: 1,
-		Content:      `{"name":"testSkill","description":"test"}`, // Simplified JSON
-		CreatedAt:    time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
-		IsActive:     true,
+		Content:       `{"name":"testSkill","description":"test"}`, // Simplified JSON
+		CreatedAt:     time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		IsActive:      true,
 	}
 	// Marshal to JSON
 	data, err := json.Marshal(orig)

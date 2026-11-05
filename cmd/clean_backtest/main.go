@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/models"
+	"fmt"
 	"log"
 	"strings"
 )
@@ -30,19 +30,19 @@ func main() {
 
 	for _, record := range records {
 		stockCode := strings.TrimSpace(record.StockCode)
-		
+
 		// Check if stock code is invalid
-		if stockCode == "" || 
-		   stockCode == "市场资讯" || 
-		   stockCode == "agent" ||
-		   !isValidStockCode(stockCode) {
-			
-			fmt.Printf("[INVALID] ID=%d, Stock=%s, Question=%s\n", 
+		if stockCode == "" ||
+			stockCode == "市场资讯" ||
+			stockCode == "agent" ||
+			!isValidStockCode(stockCode) {
+
+			fmt.Printf("[INVALID] ID=%d, Stock=%s, Question=%s\n",
 				record.ID, record.StockCode, record.Question[:min(50, len(record.Question))])
 			invalidCount++
-			
+
 			// Soft delete this record (set is_del = 1)
-			record.IsDel = 1  // Soft delete flag
+			record.IsDel = 1 // Soft delete flag
 			saveResult := db.Dao.Save(&record)
 			if saveResult.Error != nil {
 				log.Printf("Error soft-deleting record ID=%d: %v", record.ID, saveResult.Error)
@@ -68,19 +68,19 @@ func isValidStockCode(code string) bool {
 	if len(code) < 8 {
 		return false
 	}
-	
+
 	prefix := code[:2]
 	if prefix != "sh" && prefix != "sz" {
 		return false
 	}
-	
+
 	// Remaining should be digits
 	for _, c := range code[2:] {
 		if c < '0' || c > '9' {
 			return false
 		}
 	}
-	
+
 	return true
 }
 

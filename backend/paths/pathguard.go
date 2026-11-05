@@ -34,7 +34,7 @@ type FingerprintResult struct {
 	EqualToBuildBin bool
 
 	// RealExists / BuildBinExists 各自标记对应文件是否存在。
-	RealExists      bool
+	RealExists     bool
 	BuildBinExists bool
 }
 

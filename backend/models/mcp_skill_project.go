@@ -68,26 +68,26 @@ type Skill struct {
 	// should also trigger this skill. Distinct from TriggerKeywords (which is
 	// the canonical set): Synonyms covers cross-expressions like 深市↔深圳证券交易所,
 	// ETF轮动↔ETF调仓. Empty value = backward-compatible (only TriggerKeywords match).
-	Synonyms        string `json:"synonyms" gorm:"size:500"`
+	Synonyms string `json:"synonyms" gorm:"size:500"`
 	// ToolGroups is a comma-separated list of tool group names (see
 	// tools.ToolGroup) that must be force-enabled whenever this skill is
 	// matched, so a matched skill's directive can actually execute its tools
 	// even when keyword classification would not include them.
-	ToolGroups      string `json:"toolGroups" gorm:"size:500"`
-	MCPServerIDs    string `json:"mcpServerIds" gorm:"size:500"`
-	Enable          bool   `json:"enable" gorm:"default:true"`
-	SortOrder       int    `json:"sortOrder" gorm:"default:0"`
+	ToolGroups   string `json:"toolGroups" gorm:"size:500"`
+	MCPServerIDs string `json:"mcpServerIds" gorm:"size:500"`
+	Enable       bool   `json:"enable" gorm:"default:true"`
+	SortOrder    int    `json:"sortOrder" gorm:"default:0"`
 	// Sandbox mechanism: if true, skill is only active for a percentage of requests.
-	Sandbox         bool   `json:"sandbox" gorm:"default:false"`
-	SandboxPercentage int   `json:"sandbox_percentage" gorm:"default:0"` // 0-100, 0 means disabled
+	Sandbox           bool `json:"sandbox" gorm:"default:false"`
+	SandboxPercentage int  `json:"sandbox_percentage" gorm:"default:0"` // 0-100, 0 means disabled
 	// Version is the semantic version of the skill (e.g., "1.0.0").
-	Version         string `json:"version" gorm:"size:64;default:'1.0.0'"`
+	Version string `json:"version" gorm:"size:64;default:'1.0.0'"`
 	// Status indicates the lifecycle state: draft, active, archived.
-	Status          string `json:"status" gorm:"size:32;default:'draft'"`
+	Status string `json:"status" gorm:"size:32;default:'draft'"`
 	// InputSchema is the JSON Schema for skill input validation.
-	InputSchema     string `json:"inputSchema" gorm:"type:text"`
+	InputSchema string `json:"inputSchema" gorm:"type:text"`
 	// OutputSchema is the JSON Schema for skill output validation.
-	OutputSchema    string `json:"outputSchema" gorm:"type:text"`
+	OutputSchema string `json:"outputSchema" gorm:"type:text"`
 }
 
 func (Skill) TableName() string {

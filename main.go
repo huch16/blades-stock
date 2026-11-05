@@ -244,7 +244,6 @@ func main() {
 		defer shutdownMetrics(context.Background())
 	}
 
-
 	// Create application with options
 	err = wails.Run(&options.App{
 		Title: "Blades Stock：AI赋能股票分析✨ " + OFFICIAL_STATEMENT,
@@ -285,7 +284,7 @@ func main() {
 			WindowIsTranslucent:  false,
 			DisableWindowIcon:    false,
 			// DisableFramelessWindowDecorations: false,
-			WebviewUserDataPath: filepath.Join(paths.BaseDir(), "data", "webview2_data"),
+			WebviewUserDataPath:  filepath.Join(paths.BaseDir(), "data", "webview2_data"),
 			WebviewGpuIsDisabled: false,
 		},
 		// Mac platform specific options
@@ -408,9 +407,9 @@ func SeedDefaultSkills() {
 	}
 	skills := []models.Skill{
 		{
-			Name: "ETF轮动多Agent分析",
-			Description: "执行完整的多Agent ETF轮动分析流程：21日加权动量筛选→6路因子并发分析(fan-out)→投委会5视角加权融合→输出开盘前交易决策",
-			Category: "量化策略",
+			Name:         "ETF轮动多Agent分析",
+			Description:  "执行完整的多Agent ETF轮动分析流程：21日加权动量筛选→6路因子并发分析(fan-out)→投委会5视角加权融合→输出开盘前交易决策",
+			Category:     "量化策略",
 			SystemPrompt: defaultETFBackup,
 			Directive: `# ETF轮动多Agent分析 — 强制执行规则
 
@@ -434,18 +433,18 @@ func SeedDefaultSkills() {
 ## 输出格式
 必须包含：ETF池概览→动量排名→各维度分析摘要→投委会评分表→最终交易决策（买入/持有/卖出/观望+仓位建议）`,
 			TriggerKeywords: "ETF,轮动,动量,板块轮动,资金流向,北向资金,技术面,消息面,开盘前决策,集合竞价,ETF池,动量轮动,因子分析,投委会,持仓评审,海外联动,宏观,资金流,申赎,主力资金,溢价率,双动量,回撤冷却,盈亏比,仓位管理,集合竞价复核,投委会精选",
-			Examples: "用户：今天ETF开盘前有什么建议？我持有159915和512660\n助手：必须输出完整的ETF轮动分析报告结构，从动量筛选开始逐步分析到最终决策，包含持仓评审。",
-			Enable: true, SortOrder: 1,
-			ToolGroups: "money_flow,news_research,stock_analysis,market",
-			Version: "1.0.0",
-			Status: "active",
-			InputSchema: "{}",
+			Examples:        "用户：今天ETF开盘前有什么建议？我持有159915和512660\n助手：必须输出完整的ETF轮动分析报告结构，从动量筛选开始逐步分析到最终决策，包含持仓评审。",
+			Enable:          true, SortOrder: 1,
+			ToolGroups:   "money_flow,news_research,stock_analysis,market",
+			Version:      "1.0.0",
+			Status:       "active",
+			InputSchema:  "{}",
 			OutputSchema: "{}",
 		},
 		{
-			Name: "Serenity式产业分析",
-			Description: "强制使用Serenity产业分析框架：产业链拆解→稀缺层识别→优先级排序→证据验证→证伪条件",
-			Category: "资讯研究",
+			Name:         "Serenity式产业分析",
+			Description:  "强制使用Serenity产业分析框架：产业链拆解→稀缺层识别→优先级排序→证据验证→证伪条件",
+			Category:     "资讯研究",
 			SystemPrompt: defaultSerenityBackup,
 			Directive: `# Serenity式产业分析 — 强制执行规则
 
@@ -473,12 +472,12 @@ func SeedDefaultSkills() {
 ## 输出格式
 必须包含：产业链全景图→稀缺层识别→定性优先级排序 (P0~P3)→证据链溯源→研究缺口→证伪条件→结构化 Thesis`,
 			TriggerKeywords: "产业分析,产业链,稀缺性,瓶颈,行业研究,赛道分析,上下游,供需格局,渗透率,国产替代,市场份额,竞争格局,华阳集团,投资机会,细分龙头",
-			Examples: "用户：分析华阳集团在汽车电子产业链中的位置\n助手：必须输出Serenity报告结构：产业链全景图→稀缺层识别→定性优先级排序→证据链与研究缺口→证伪条件",
-			Enable: true, SortOrder: 2,
-			ToolGroups: "stock_analysis,market,news_research,screening",
-			Version: "1.0.0",
-			Status: "active",
-			InputSchema: "{}",
+			Examples:        "用户：分析华阳集团在汽车电子产业链中的位置\n助手：必须输出Serenity报告结构：产业链全景图→稀缺层识别→定性优先级排序→证据链与研究缺口→证伪条件",
+			Enable:          true, SortOrder: 2,
+			ToolGroups:   "stock_analysis,market,news_research,screening",
+			Version:      "1.0.0",
+			Status:       "active",
+			InputSchema:  "{}",
 			OutputSchema: "{}",
 		},
 	}

@@ -32,7 +32,7 @@ type embeddingCandidate struct {
 //  2. Global enabled but URL empty:
 //     a. any AI config explicitly configured for embedding (EmbeddingEnabled + model);
 //     b. provider-aware defaults for known embedding-capable providers
-//        (Ollama / DashScope / VolcArk / OpenAI / SiliconFlow);
+//     (Ollama / DashScope / VolcArk / OpenAI / SiliconFlow);
 //  3. Selected chat config's own embedding settings;
 //  4. Any AI config with embedding settings.
 //

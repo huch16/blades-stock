@@ -13,9 +13,12 @@ import (
 
 // 手动运行：go test -tags probe ./backend/data/ -run TestRerunReportVerify -count=1 -v
 // 作用：对已入库的三份六张网报告（id=37/39/41）重跑 verifyAndCorrectContent
-//       （价格/市值/代码存在性硬校验），并在内容头部追加人工核验结论备注，写回 DB。
+//
+//	（价格/市值/代码存在性硬校验），并在内容头部追加人工核验结论备注，写回 DB。
+//
 // 注意：自动化校验无法发现"名称错配"（英脉科技≠华融化学）与"已退市"（外运发展）
-//       两类业务硬伤，由人工备注补充记录。
+//
+//	两类业务硬伤，由人工备注补充记录。
 func TestRerunReportVerify(t *testing.T) {
 	db.Init("../../data/stock.db")
 	type job struct {

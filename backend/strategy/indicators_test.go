@@ -11,11 +11,11 @@ func makeBars(closes []float64, volumes []float64) []Bar {
 	bars := make([]Bar, len(closes))
 	for i, c := range closes {
 		bars[i] = Bar{
-			Date:  fmt.Sprintf("%04d", i+1),
-			Open:  c,
-			High:  c + 0.1,
-			Low:   c - 0.1,
-			Close: c,
+			Date:   fmt.Sprintf("%04d", i+1),
+			Open:   c,
+			High:   c + 0.1,
+			Low:    c - 0.1,
+			Close:  c,
 			Volume: 100,
 		}
 		if i < len(volumes) {

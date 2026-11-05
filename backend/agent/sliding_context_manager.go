@@ -30,9 +30,9 @@ type sessionSlidingManager struct {
 
 var (
 	scManager     *sessionSlidingManager
-	scManagerOnce  sync.Once
+	scManagerOnce sync.Once
 	scDefaultConf = SlidingContextConfig{
-		KeepFullN:       3,
+		KeepFullN:        3,
 		MaxSummaryTokens: 500,
 	}
 )

@@ -78,27 +78,27 @@ func (b *BaostockApi) get(path string, params map[string]string) ([]byte, error)
 // ---- 响应结构 ----
 
 type baostockResponse struct {
-	Code  int                    `json:"code"`
-	Msg   string                 `json:"msg"`
+	Code  int                      `json:"code"`
+	Msg   string                   `json:"msg"`
 	Data  []map[string]interface{} `json:"data"`
-	Count int                    `json:"count"`
+	Count int                      `json:"count"`
 }
 
 // ---- 交易日历 ----
 
 // TradeCalendarEntry 交易日历条目
 type TradeCalendarEntry struct {
-	CalendarDate  string `json:"calendar_date"`
-	IsTradingDay  string `json:"is_trading_day"` // "1" = 交易日, "0" = 非交易日
+	CalendarDate string `json:"calendar_date"`
+	IsTradingDay string `json:"is_trading_day"` // "1" = 交易日, "0" = 非交易日
 }
 
 // tradeCalendarYearResponse 整年交易日历响应
 type tradeCalendarYearResponse struct {
-	Code          int                  `json:"code"`
-	Msg           string               `json:"msg"`
-	Data          []TradeCalendarEntry `json:"data"`
-	TradingDays   []string             `json:"trading_days"`
-	TradingCount  int                  `json:"trading_count"`
+	Code         int                  `json:"code"`
+	Msg          string               `json:"msg"`
+	Data         []TradeCalendarEntry `json:"data"`
+	TradingDays  []string             `json:"trading_days"`
+	TradingCount int                  `json:"trading_count"`
 }
 
 // GetTradeCalendar 获取指定日期范围的交易日历
@@ -147,18 +147,18 @@ func (b *BaostockApi) GetTradeCalendarYear(year int) (*tradeCalendarYearResponse
 
 // FinancialData 季频财务数据（通用结构）
 type FinancialData struct {
-	Code       string  `json:"code"`
-	PubDate    string  `json:"pubDate"`
-	StatDate   string  `json:"statDate"`
-	RoeAvg     float64 `json:"roeAvg,omitempty"`     // 净资产收益率
-	NpMargin   float64 `json:"npMargin,omitempty"`   // 销售净利率
-	GpMargin   float64 `json:"gpMargin,omitempty"`   // 销售毛利率"
-	NetProfit  float64 `json:"netProfit,omitempty"`  // 净利润
+	Code            string  `json:"code"`
+	PubDate         string  `json:"pubDate"`
+	StatDate        string  `json:"statDate"`
+	RoeAvg          float64 `json:"roeAvg,omitempty"`          // 净资产收益率
+	NpMargin        float64 `json:"npMargin,omitempty"`        // 销售净利率
+	GpMargin        float64 `json:"gpMargin,omitempty"`        // 销售毛利率"
+	NetProfit       float64 `json:"netProfit,omitempty"`       // 净利润
 	NetProfitGrowth float64 `json:"netProfitGrowth,omitempty"` // 净利润增长率
-	YoYProfit  float64 `json:"yoyProfit,omitempty"`  // 同比利润
-	YoYRevenue float64 `json:"yoyRevenue,omitempty"` // 同比营收
-	Revenue    float64 `json:"revenue,omitempty"`    // 营业收入
-	RevenueGrowth float64 `json:"revenueGrowth,omitempty"` // 营收增长率
+	YoYProfit       float64 `json:"yoyProfit,omitempty"`       // 同比利润
+	YoYRevenue      float64 `json:"yoyRevenue,omitempty"`      // 同比营收
+	Revenue         float64 `json:"revenue,omitempty"`         // 营业收入
+	RevenueGrowth   float64 `json:"revenueGrowth,omitempty"`   // 营收增长率
 }
 
 // GetProfitData 获取季频盈利能力数据
@@ -271,9 +271,9 @@ func (b *BaostockApi) GetDupontData(code string, year, quarter int) ([]map[strin
 
 // StockIndustry 股票行业分类
 type StockIndustry struct {
-	Code          string `json:"code"`
-	CodeName      string `json:"code_name"`
-	Industry      string `json:"industry"`
+	Code                   string `json:"code"`
+	CodeName               string `json:"code_name"`
+	Industry               string `json:"industry"`
 	IndustryClassification string `json:"industryClassification"`
 }
 
@@ -297,9 +297,9 @@ func (b *BaostockApi) GetStockIndustry(code string) ([]StockIndustry, error) {
 	var result []StockIndustry
 	for _, m := range resp.Data {
 		result = append(result, StockIndustry{
-			Code:          fmt.Sprintf("%v", m["code"]),
-			CodeName:      fmt.Sprintf("%v", m["code_name"]),
-			Industry:      fmt.Sprintf("%v", m["industry"]),
+			Code:                   fmt.Sprintf("%v", m["code"]),
+			CodeName:               fmt.Sprintf("%v", m["code_name"]),
+			Industry:               fmt.Sprintf("%v", m["industry"]),
 			IndustryClassification: fmt.Sprintf("%v", m["industryClassification"]),
 		})
 	}
@@ -310,12 +310,12 @@ func (b *BaostockApi) GetStockIndustry(code string) ([]StockIndustry, error) {
 
 // BaostockStockBasic Baostock 证券基本信息
 type BaostockStockBasic struct {
-	Code        string `json:"code"`
-	CodeName    string `json:"code_name"`
-	IpoDate     string `json:"ipoDate"`
-	OutDate     string `json:"outDate"`
-	Type        string `json:"type"`         // 1=股票 2=指数 3=其他
-	Status      string `json:"status"`       // 1=正常 0=退市
+	Code     string `json:"code"`
+	CodeName string `json:"code_name"`
+	IpoDate  string `json:"ipoDate"`
+	OutDate  string `json:"outDate"`
+	Type     string `json:"type"`   // 1=股票 2=指数 3=其他
+	Status   string `json:"status"` // 1=正常 0=退市
 }
 
 // GetStockBasic 获取证券基本信息
@@ -353,24 +353,24 @@ func (b *BaostockApi) GetStockBasic(code string) ([]BaostockStockBasic, error) {
 
 // BaostockKLine Baostock K线数据（含复权、估值指标）
 type BaostockKLine struct {
-	Date       string  `json:"date"`
-	Code       string  `json:"code"`
-	Open       string  `json:"open"`
-	High       string  `json:"high"`
-	Low        string  `json:"low"`
-	Close      string  `json:"close"`
-	Preclose   string  `json:"preclose"`
-	Volume     string  `json:"volume"`
-	Amount     string  `json:"amount"`
-	Adjustflag string  `json:"adjustflag"`
-	Turn       string  `json:"turn"`       // 换手率
+	Date        string `json:"date"`
+	Code        string `json:"code"`
+	Open        string `json:"open"`
+	High        string `json:"high"`
+	Low         string `json:"low"`
+	Close       string `json:"close"`
+	Preclose    string `json:"preclose"`
+	Volume      string `json:"volume"`
+	Amount      string `json:"amount"`
+	Adjustflag  string `json:"adjustflag"`
+	Turn        string `json:"turn"`        // 换手率
 	Tradestatus string `json:"tradestatus"` // 1=正常 0=停牌
-	PctChg     string  `json:"pctChg"`     // 涨跌幅%
-	PETTM      string  `json:"peTTM"`      // 市盈率TTM
-	PBMRQ      string  `json:"pbMRQ"`      // 市净率MRQ
-	PSTTM      string  `json:"psTTM"`      // 市销率TTM
-	PCFNcfTTM  string  `json:"pcfNcfTTM"`  // 市现率TTM
-	IsST       string  `json:"isST"`       // 1=ST 0=正常
+	PctChg      string `json:"pctChg"`      // 涨跌幅%
+	PETTM       string `json:"peTTM"`       // 市盈率TTM
+	PBMRQ       string `json:"pbMRQ"`       // 市净率MRQ
+	PSTTM       string `json:"psTTM"`       // 市销率TTM
+	PCFNcfTTM   string `json:"pcfNcfTTM"`   // 市现率TTM
+	IsST        string `json:"isST"`        // 1=ST 0=正常
 }
 
 // GetKLine 获取历史K线（含复权、PE/PB等估值指标）

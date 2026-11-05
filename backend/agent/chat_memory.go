@@ -1,10 +1,10 @@
 package agent
 
 import (
-	"encoding/json"
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -16,10 +16,10 @@ type ChatMemoryService struct {
 	maxMemory        int
 	embeddingService *EmbeddingService
 
-	mu           sync.RWMutex
-	cache        []db.ChatMemory
-	cacheReady   bool
-	msgCount     int
+	mu         sync.RWMutex
+	cache      []db.ChatMemory
+	cacheReady bool
+	msgCount   int
 }
 
 func NewChatMemoryService(sessionID string, maxMemory int) *ChatMemoryService {
@@ -462,7 +462,7 @@ func (s *ChatMemoryService) summarizeHistoryAsync(sessionID string, pairs []stri
 
 	resp, err := llm(
 		"你是一个严谨的对话摘要助手，只输出中文摘要，不输出任何其他内容。",
-		"请把以下多轮对话压缩为一段精炼的中文摘要（保留关键事实、结论、股票/代码/具体数字、已明确的用户偏好与风险提示，丢弃寒暄与重复），控制在 300 字以内：\n\n" + raw,
+		"请把以下多轮对话压缩为一段精炼的中文摘要（保留关键事实、结论、股票/代码/具体数字、已明确的用户偏好与风险提示，丢弃寒暄与重复），控制在 300 字以内：\n\n"+raw,
 	)
 	if err != nil || strings.TrimSpace(resp) == "" {
 		return

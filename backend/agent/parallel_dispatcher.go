@@ -18,9 +18,9 @@ import (
 
 // PreFetchedData holds the result of one parallel sub-task.
 type PreFetchedData struct {
-	Group   string
-	Summary string
-	Fallback bool   // true when this sub-task timed out or errored
+	Group    string
+	Summary  string
+	Fallback bool // true when this sub-task timed out or errored
 }
 
 // shouldParallelize returns true when the question spans multiple independent
@@ -82,7 +82,7 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 	// Concurrency limit from config (default 2)
 	// concurrency := aiConfig.LLMConcurrencyLimit
 	// if concurrency <= 0 {
-		// concurrency = 2
+	// concurrency = 2
 	// }
 	// llmSem := semaphore.NewWeighted(int64(concurrency))
 
@@ -124,7 +124,7 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 			}()
 
 			// 1) skip self-limiter: semaphore acquire - always allow
-		// if err := llmSem.Acquire(ctx, 1); err != nil {
+			// if err := llmSem.Acquire(ctx, 1); err != nil {
 			// 	mu.Lock()
 			// 	results = append(results, PreFetchedData{
 			// 		Group:    string(group),
@@ -456,6 +456,3 @@ func truncateString(s string, maxLen int) string {
 	}
 	return string(runes[:maxLen]) + "\n\n...(数据过长，已截断)"
 }
-
-
-

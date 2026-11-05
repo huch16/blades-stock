@@ -7,7 +7,7 @@ import (
 // AutoAlphaProposal 记录夜间自动参数搜索与因子进化提案
 type AutoAlphaProposal struct {
 	ID                   uint      `gorm:"primaryKey" json:"id"`
-	StrategyName         string    `gorm:"size:64;index" json:"strategyName"`         // 策略名: ETF_MOMENTUM_ROTATION, DUAL_MA_TREND, VOLATILITY_BREAKOUT
+	StrategyName         string    `gorm:"size:64;index" json:"strategyName"`        // 策略名: ETF_MOMENTUM_ROTATION, DUAL_MA_TREND, VOLATILITY_BREAKOUT
 	TargetAsset          string    `gorm:"size:128" json:"targetAsset"`              // 优化目标资产池，如 "科技ETF核心池 (512480, 515050, 159915)"
 	OldParams            string    `gorm:"type:text" json:"oldParams"`               // 原始基准参数 (JSON)
 	OptimalParams        string    `gorm:"type:text" json:"optimalParams"`           // 经遗传/网格优化后的推荐参数 (JSON)

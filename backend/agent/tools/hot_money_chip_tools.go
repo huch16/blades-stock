@@ -1,11 +1,11 @@
 package tools
 
 import (
-	"fmt"
 	"blades-stock/backend/agent/types"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/util"
+	"fmt"
 	"strings"
 
 	bladesTools "github.com/go-kratos/blades/tools"
@@ -572,5 +572,3 @@ func maxInt(a, b int) int {
 	}
 	return b
 }
-
-

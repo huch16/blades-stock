@@ -13,40 +13,40 @@ import "math"
 
 // PortfolioConfig 组合配置
 type PortfolioConfig struct {
-	InitCash     float64 // 初始资金
-	Fees         float64 // 手续费率（‰）
-	Slippage     float64 // 滑点率（‰）
-	StopLoss     float64 // 止损率（%，0表示不禁用）
-	TakeProfit    float64 // 止盈率（%，0表示不禁用）
-	TrailStop    float64 // 移动止损率（%，0表示不使用）
-	ShortEnabled  bool    // 是否允许做空
-	Size         float64 // 每笔交易金额比例（0-1，1表示全仓）
-	SizeType     SizeType // 仓位计算方式
-	UseExitClose bool    // 退出时使用收盘价
-	AllowSizeScaling bool // 允许仓位缩放
+	InitCash         float64  // 初始资金
+	Fees             float64  // 手续费率（‰）
+	Slippage         float64  // 滑点率（‰）
+	StopLoss         float64  // 止损率（%，0表示不禁用）
+	TakeProfit       float64  // 止盈率（%，0表示不禁用）
+	TrailStop        float64  // 移动止损率（%，0表示不使用）
+	ShortEnabled     bool     // 是否允许做空
+	Size             float64  // 每笔交易金额比例（0-1，1表示全仓）
+	SizeType         SizeType // 仓位计算方式
+	UseExitClose     bool     // 退出时使用收盘价
+	AllowSizeScaling bool     // 允许仓位缩放
 }
 
 // SizeType 仓位计算方式
 type SizeType int
 
 const (
-	SizeTypeValue   SizeType = iota // 固定金额
-	SizeTypePercent                 // 资金比例
-	SizeTypePercentTotal            // 总资金比例
+	SizeTypeValue        SizeType = iota // 固定金额
+	SizeTypePercent                      // 资金比例
+	SizeTypePercentTotal                 // 总资金比例
 )
 
 // DefaultPortfolioConfig 默认配置（参考 VectorBT）
 func DefaultPortfolioConfig() *PortfolioConfig {
 	return &PortfolioConfig{
-		InitCash:    100000,       // 10万初始资金
-		Fees:        1.5,          // 1.5‰ 手续费（单边约0.15%）
-		Slippage:    1.0,          // 1‰ 滑点
-		StopLoss:    0.05,         // 5% 止损
-		TakeProfit:  0.10,         // 10% 止盈
-		TrailStop:   0,            // 不使用移动止损
-		ShortEnabled: false,       // 默认不做空
-		Size:        1.0,          // 全仓
-		SizeType:    SizeTypePercent,
+		InitCash:     100000, // 10万初始资金
+		Fees:         1.5,    // 1.5‰ 手续费（单边约0.15%）
+		Slippage:     1.0,    // 1‰ 滑点
+		StopLoss:     0.05,   // 5% 止损
+		TakeProfit:   0.10,   // 10% 止盈
+		TrailStop:    0,      // 不使用移动止损
+		ShortEnabled: false,  // 默认不做空
+		Size:         1.0,    // 全仓
+		SizeType:     SizeTypePercent,
 		UseExitClose: true,
 	}
 }
@@ -68,8 +68,8 @@ const (
 // Trade 交易记录
 type Trade struct {
 	ID         int
-	EntryIndex int    // 入场索引
-	ExitIndex  int    // 出场索引
+	EntryIndex int     // 入场索引
+	ExitIndex  int     // 出场索引
 	EntryPrice float64 // 入场价格
 	ExitPrice  float64 // 出场价格
 	EntryCash  float64 // 入场时现金
@@ -86,13 +86,13 @@ type Trade struct {
 
 // Position 持仓状态
 type Position struct {
-	EntryIndex  int     // 入场索引
-	EntryPrice  float64
-	Size        float64
-	TradeType   TradeType
-	EntryCash   float64
-	StopLoss    float64 // 止损价
-	TakeProfit  float64 // 止盈价
+	EntryIndex   int // 入场索引
+	EntryPrice   float64
+	Size         float64
+	TradeType    TradeType
+	EntryCash    float64
+	StopLoss     float64 // 止损价
+	TakeProfit   float64 // 止盈价
 	HighestPrice float64 // 跟踪最高价（用于移动止损）
 	LowestPrice  float64 // 跟踪最低价（用于做空）
 }
@@ -104,20 +104,20 @@ type Position struct {
 // Portfolio 向量化组合模拟器
 type Portfolio struct {
 	config  *PortfolioConfig
-	shares  []float64   // 每期持仓数量
-	cash    []float64   // 每期现金
-	equity  []float64   // 每期总权益
-	value   []float64   // 每期组合价值（权益+现金）
+	shares  []float64 // 每期持仓数量
+	cash    []float64 // 每期现金
+	equity  []float64 // 每期总权益
+	value   []float64 // 每期组合价值（权益+现金）
 	trades  []Trade
-	status  []int       // 每期状态: 0=空仓, 1=持仓
-	entries []bool      // 入场信号
-	exits   []bool      // 出场信号
-	close   *Vector     // 收盘价
+	status  []int   // 每期状态: 0=空仓, 1=持仓
+	entries []bool  // 入场信号
+	exits   []bool  // 出场信号
+	close   *Vector // 收盘价
 	tradeID int
 
 	// 向量化运算结果
-	returns     []float64 // 每日收益率
-	cumReturns  []float64 // 累计收益率
+	returns    []float64 // 每日收益率
+	cumReturns []float64 // 累计收益率
 	drawdowns  []float64 // 回撤序列
 }
 
@@ -292,11 +292,11 @@ func FromSignals(
 				pf.shares[i] = size
 				pf.status[i] = 1
 				pos = &Position{
-					EntryIndex:  i,
-					EntryPrice:  entryPrice,
-					Size:        size,
-					TradeType:   tradeType,
-					EntryCash:   entryValue,
+					EntryIndex:   i,
+					EntryPrice:   entryPrice,
+					Size:         size,
+					TradeType:    tradeType,
+					EntryCash:    entryValue,
 					HighestPrice: entryPrice,
 					LowestPrice:  entryPrice,
 				}
@@ -404,27 +404,27 @@ func (pf *Portfolio) computeDrawdowns() {
 
 // Stats 组合统计指标
 type Stats struct {
-	TotalReturn      float64 // 总收益率
-	AnnualReturn     float64 // 年化收益率
-	SharpeRatio      float64 // 夏普比率
-	MaxDrawdown      float64 // 最大回撤
-	MaxDrawdownPct   float64 // 最大回撤率（%）
-	WinRate          float64 // 胜率
-	ProfitFactor     float64 // 盈亏比
-	TotalTrades     int     // 总交易次数
-	WinTrades        int     // 盈利次数
-	LoseTrades       int     // 亏损次数
-	AvgWin           float64 // 平均盈利
-	AvgLose          float64 // 平均亏损
-	AvgHoldingDays   float64 // 平均持仓天数
-	MaxConsecutiveWin int    // 最大连续盈利
-	MaxConsecutiveLose int   // 最大连续亏损
-	CalmarRatio      float64 // 卡玛比率
-	SortinoRatio     float64 // 索提诺比率
-	Volatility       float64 // 波动率
-	FinalValue       float64 // 最终资金
-	InitCash         float64 // 初始资金
-	TotalDays        int     // 总天数
+	TotalReturn        float64 // 总收益率
+	AnnualReturn       float64 // 年化收益率
+	SharpeRatio        float64 // 夏普比率
+	MaxDrawdown        float64 // 最大回撤
+	MaxDrawdownPct     float64 // 最大回撤率（%）
+	WinRate            float64 // 胜率
+	ProfitFactor       float64 // 盈亏比
+	TotalTrades        int     // 总交易次数
+	WinTrades          int     // 盈利次数
+	LoseTrades         int     // 亏损次数
+	AvgWin             float64 // 平均盈利
+	AvgLose            float64 // 平均亏损
+	AvgHoldingDays     float64 // 平均持仓天数
+	MaxConsecutiveWin  int     // 最大连续盈利
+	MaxConsecutiveLose int     // 最大连续亏损
+	CalmarRatio        float64 // 卡玛比率
+	SortinoRatio       float64 // 索提诺比率
+	Volatility         float64 // 波动率
+	FinalValue         float64 // 最终资金
+	InitCash           float64 // 初始资金
+	TotalDays          int     // 总天数
 }
 
 // sanitizeFloat 确保数值非 NaN 且非 Inf，避免 JSON 序列化崩溃与前端渲染异常
@@ -557,27 +557,27 @@ func (pf *Portfolio) GetStats() *Stats {
 	}
 
 	return &Stats{
-		TotalReturn:       sanitizeFloat(totalReturn),
-		AnnualReturn:      sanitizeFloat(annualReturn),
-		SharpeRatio:       sanitizeFloat(sharpe),
-		MaxDrawdown:       sanitizeFloat(maxDD * initCash),
-		MaxDrawdownPct:    sanitizeFloat(maxDD * 100),
-		WinRate:           sanitizeFloat(winRate),
-		ProfitFactor:      sanitizeFloat(profitFactor),
-		TotalTrades:       len(pf.trades),
-		WinTrades:         winTrades,
-		LoseTrades:        loseTrades,
-		AvgWin:            sanitizeFloat(avgWin),
-		AvgLose:           sanitizeFloat(avgLose),
-		AvgHoldingDays:    sanitizeFloat(avgHoldingDays),
-		MaxConsecutiveWin: maxConsecutiveWin,
+		TotalReturn:        sanitizeFloat(totalReturn),
+		AnnualReturn:       sanitizeFloat(annualReturn),
+		SharpeRatio:        sanitizeFloat(sharpe),
+		MaxDrawdown:        sanitizeFloat(maxDD * initCash),
+		MaxDrawdownPct:     sanitizeFloat(maxDD * 100),
+		WinRate:            sanitizeFloat(winRate),
+		ProfitFactor:       sanitizeFloat(profitFactor),
+		TotalTrades:        len(pf.trades),
+		WinTrades:          winTrades,
+		LoseTrades:         loseTrades,
+		AvgWin:             sanitizeFloat(avgWin),
+		AvgLose:            sanitizeFloat(avgLose),
+		AvgHoldingDays:     sanitizeFloat(avgHoldingDays),
+		MaxConsecutiveWin:  maxConsecutiveWin,
 		MaxConsecutiveLose: maxConsecutiveLose,
-		CalmarRatio:       sanitizeFloat(calmar),
-		SortinoRatio:      sanitizeFloat(sortino),
-		Volatility:        sanitizeFloat(vol),
-		FinalValue:        sanitizeFloat(finalValue),
-		InitCash:          initCash,
-		TotalDays:         totalDays,
+		CalmarRatio:        sanitizeFloat(calmar),
+		SortinoRatio:       sanitizeFloat(sortino),
+		Volatility:         sanitizeFloat(vol),
+		FinalValue:         sanitizeFloat(finalValue),
+		InitCash:           initCash,
+		TotalDays:          totalDays,
 	}
 }
 
@@ -597,11 +597,11 @@ func FromHolding(closePrices []float64, initCash float64) *Portfolio {
 		equity[i] = shares * closePrices[i]
 	}
 	pf := &Portfolio{
-		config:  &PortfolioConfig{InitCash: initCash},
-		value:   equity,
-		equity:  equity,
-		cash:    make([]float64, n),
-		shares:  make([]float64, n),
+		config: &PortfolioConfig{InitCash: initCash},
+		value:  equity,
+		equity: equity,
+		cash:   make([]float64, n),
+		shares: make([]float64, n),
 	}
 	pf.computeReturns()
 	pf.computeDrawdowns()

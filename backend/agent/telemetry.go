@@ -23,19 +23,19 @@ var (
 	meterInitOnce sync.Once
 
 	// 指标定义 - LLM/Request metrics
-	llmRequestDuration       metric.Float64Histogram
-	llmFirstChunkDelay       metric.Float64Histogram
-	requestCounter           metric.Int64Counter
-	requestDuration          metric.Float64Histogram
-	retryCounter             metric.Int64Counter
+	llmRequestDuration metric.Float64Histogram
+	llmFirstChunkDelay metric.Float64Histogram
+	requestCounter     metric.Int64Counter
+	requestDuration    metric.Float64Histogram
+	retryCounter       metric.Int64Counter
 
 	// 工具调用指标
-	toolCallCounter          metric.Int64Counter
-	toolCallDuration         metric.Float64Histogram
-	toolErrorCounter         metric.Int64Counter
+	toolCallCounter  metric.Int64Counter
+	toolCallDuration metric.Float64Histogram
+	toolErrorCounter metric.Int64Counter
 
 	// MCP 指标
-	mcpConnectDuration       metric.Float64Histogram
+	mcpConnectDuration metric.Float64Histogram
 
 	// 配额与成本指标
 	toolQuotaLimitGauge      metric.Int64Gauge
@@ -45,15 +45,15 @@ var (
 	modelCostCounter         metric.Float64Counter
 
 	// 检索器指标
-	retrieverHitsCounter     metric.Int64Counter
-	retrieverMissesCounter   metric.Int64Counter
-	retrieverLatency         metric.Float64Histogram
+	retrieverHitsCounter   metric.Int64Counter
+	retrieverMissesCounter metric.Int64Counter
+	retrieverLatency       metric.Float64Histogram
 
 	// Token 使用指标
-	modelTokenUsageCounter   metric.Int64Counter
+	modelTokenUsageCounter metric.Int64Counter
 
 	// 回测准确率指标
-	backtestAccuracyGauge    metric.Float64Gauge
+	backtestAccuracyGauge metric.Float64Gauge
 
 	serverStartTime = time.Now()
 )
@@ -65,6 +65,7 @@ var (
 //   - /healthz: 运行健康检查 (状态、运行时间与时间戳)
 //   - /livez: 存活探测端点
 //   - /readyz: 就绪检查 (验证数据库连接等就绪态)
+//
 // 返回值：shutdownFunc, error。shutdownFunc 用于在应用退出时优雅关闭 HTTP server。
 func StartMetricsExporter(ctx context.Context) (func(context.Context) error, error) {
 	if ctx == nil {

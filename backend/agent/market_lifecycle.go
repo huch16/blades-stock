@@ -26,13 +26,13 @@ import (
 type MarketPhase string
 
 const (
-	PhasePreMarket        MarketPhase = "pre_market"         // 盘前前瞻 (08:30 - 09:15)
-	PhaseCallAuction      MarketPhase = "call_auction"       // 开盘集合竞价 (09:15 - 09:30)
-	PhaseMorningTrading   MarketPhase = "morning_trading"    // 盘中早盘 (09:30 - 11:30)
-	PhaseNoonBreak        MarketPhase = "noon_break"         // 午间休市 (11:30 - 13:00)
-	PhaseAfternoonTrading MarketPhase = "afternoon_trading"  // 盘中下午盘 (13:00 - 15:00)
-	PhasePostMarket       MarketPhase = "post_market"        // 盘后复盘 (15:00 - 18:00)
-	PhaseClosed           MarketPhase = "closed"             // 夜间/非交易日休市
+	PhasePreMarket        MarketPhase = "pre_market"        // 盘前前瞻 (08:30 - 09:15)
+	PhaseCallAuction      MarketPhase = "call_auction"      // 开盘集合竞价 (09:15 - 09:30)
+	PhaseMorningTrading   MarketPhase = "morning_trading"   // 盘中早盘 (09:30 - 11:30)
+	PhaseNoonBreak        MarketPhase = "noon_break"        // 午间休市 (11:30 - 13:00)
+	PhaseAfternoonTrading MarketPhase = "afternoon_trading" // 盘中下午盘 (13:00 - 15:00)
+	PhasePostMarket       MarketPhase = "post_market"       // 盘后复盘 (15:00 - 18:00)
+	PhaseClosed           MarketPhase = "closed"            // 夜间/非交易日休市
 )
 
 // MarketLifecycleStatus 市场生命周期状态信息
@@ -49,14 +49,14 @@ type MarketLifecycleStatus struct {
 
 // MarketIntelligenceReport 智能化全时段研报产出
 type MarketIntelligenceReport struct {
-	Type        string    `json:"type"`        // "pre_market_briefing" 或 "post_market_review"
-	Title       string    `json:"title"`       // 标题
-	Summary     string    `json:"summary"`     // 核心要点
-	Content     string              `json:"content"`     // 完整Markdown内容
+	Type        string              `json:"type"`              // "pre_market_briefing" 或 "post_market_review"
+	Title       string              `json:"title"`             // 标题
+	Summary     string              `json:"summary"`           // 核心要点
+	Content     string              `json:"content"`           // 完整Markdown内容
 	Actions     []types.AgentAction `json:"actions,omitempty"` // 报告伴随行动项指令
-	GeneratedAt time.Time           `json:"generatedAt"` // 生成时间
-	TradingDate string    `json:"tradingDate"` // 归属交易日
-	Source      string    `json:"source"`      // 模型来源
+	GeneratedAt time.Time           `json:"generatedAt"`       // 生成时间
+	TradingDate string              `json:"tradingDate"`       // 归属交易日
+	Source      string              `json:"source"`            // 模型来源
 }
 
 var (
@@ -1218,4 +1218,3 @@ func PurgeCorruptedReports() int {
 	logger.SugaredLogger.Infof("[MarketLifecycle] 已物理清洗 %d 条历史网络中断或网关超时产生的脏研报记录", count)
 	return count
 }
-

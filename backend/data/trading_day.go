@@ -117,7 +117,6 @@ func tryTradingCalendarSource(name string, fn func() (map[string]bool, error)) m
 	return cache
 }
 
-
 // IsTradingDay 判断指定日期是否为交易日
 // 优先查交易日历缓存，降级到周末判断
 func IsTradingDay(dateStr string) bool {

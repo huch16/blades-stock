@@ -27,12 +27,12 @@ type SkillEmbedding struct {
 func (SkillEmbedding) TableName() string { return "skill_embeddings" }
 
 type SkillEmbeddingService struct {
-	retr     Retriever // optional external retriever for RAG
-	es       *EmbeddingService
-	enabled  bool
-	mu       sync.RWMutex
+	retr    Retriever // optional external retriever for RAG
+	es      *EmbeddingService
+	enabled bool
+	mu      sync.RWMutex
 	// skillID → embedding vector
-	embeddings    map[uint][]float32
+	embeddings map[uint][]float32
 	// skillID → content hash
 	contentHashes map[uint]string
 }

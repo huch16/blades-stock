@@ -1,13 +1,13 @@
 package data
 
 import (
-	"encoding/csv"
-	"encoding/json"
-	"database/sql"
-	"errors"
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"database/sql"
+	"encoding/csv"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -20,36 +20,36 @@ import (
 
 type Settings struct {
 	gorm.Model
-	TushareToken           string `json:"tushareToken"`
-	LocalPushEnable        bool   `json:"localPushEnable"`
-	DingPushEnable         bool   `json:"dingPushEnable"`
-	DingRobot              string `json:"dingRobot"`
-	UpdateBasicInfoOnStart bool   `json:"updateBasicInfoOnStart"`
-	RefreshInterval        int64  `json:"refreshInterval"`
-	OpenAiEnable           bool   `json:"openAiEnable"`
-	AiConfigID             uint   `json:"aiConfigId" gorm:"column:ai_config_id;default:0"`
-	Prompt                 string `json:"prompt"`
-	CheckUpdate            bool   `json:"checkUpdate"`
-	UpdateChannel          string `json:"updateChannel"`
-	QuestionTemplate       string `json:"questionTemplate"`
-	CrawlTimeOut           int64  `json:"crawlTimeOut"`
-	KDays                  int64  `json:"kDays"`
-	BrowserPath            string `json:"browserPath"`
-	EnableNews             bool   `json:"enableNews"`
-	DarkTheme              bool   `json:"darkTheme"`
-	EnableFund             bool   `json:"enableFund"`
-	EnablePushNews         bool   `json:"enablePushNews"`
-	EnableOnlyPushRedNews  bool   `json:"enableOnlyPushRedNews"`
-	HttpProxy              string `json:"httpProxy"`
-	HttpProxyEnabled       bool   `json:"httpProxyEnabled"`
-	EnableAgent            bool   `json:"enableAgent"`
-	DisableBrowserSearch   bool   `json:"disableBrowserSearch" gorm:"column:disable_browser_search;default:false"`
-	QgqpBId                string `json:"qgqpBId" gorm:"column:qgqp_b_id"`
-	TickFlowAPIKey        string `json:"tickFlowAPIKey" gorm:"column:tickflow_api_key"`
-	EmApiKey               string `json:"emApiKey" gorm:"column:em_api_key"`
-	WindowWidth            int    `json:"windowWidth"`
-	WindowHeight           int    `json:"windowHeight"`
-	PromptPlazaApiBase     string  `json:"promptPlazaApiBase" gorm:"column:prompt_plaza_api_base"`
+	TushareToken              string  `json:"tushareToken"`
+	LocalPushEnable           bool    `json:"localPushEnable"`
+	DingPushEnable            bool    `json:"dingPushEnable"`
+	DingRobot                 string  `json:"dingRobot"`
+	UpdateBasicInfoOnStart    bool    `json:"updateBasicInfoOnStart"`
+	RefreshInterval           int64   `json:"refreshInterval"`
+	OpenAiEnable              bool    `json:"openAiEnable"`
+	AiConfigID                uint    `json:"aiConfigId" gorm:"column:ai_config_id;default:0"`
+	Prompt                    string  `json:"prompt"`
+	CheckUpdate               bool    `json:"checkUpdate"`
+	UpdateChannel             string  `json:"updateChannel"`
+	QuestionTemplate          string  `json:"questionTemplate"`
+	CrawlTimeOut              int64   `json:"crawlTimeOut"`
+	KDays                     int64   `json:"kDays"`
+	BrowserPath               string  `json:"browserPath"`
+	EnableNews                bool    `json:"enableNews"`
+	DarkTheme                 bool    `json:"darkTheme"`
+	EnableFund                bool    `json:"enableFund"`
+	EnablePushNews            bool    `json:"enablePushNews"`
+	EnableOnlyPushRedNews     bool    `json:"enableOnlyPushRedNews"`
+	HttpProxy                 string  `json:"httpProxy"`
+	HttpProxyEnabled          bool    `json:"httpProxyEnabled"`
+	EnableAgent               bool    `json:"enableAgent"`
+	DisableBrowserSearch      bool    `json:"disableBrowserSearch" gorm:"column:disable_browser_search;default:false"`
+	QgqpBId                   string  `json:"qgqpBId" gorm:"column:qgqp_b_id"`
+	TickFlowAPIKey            string  `json:"tickFlowAPIKey" gorm:"column:tickflow_api_key"`
+	EmApiKey                  string  `json:"emApiKey" gorm:"column:em_api_key"`
+	WindowWidth               int     `json:"windowWidth"`
+	WindowHeight              int     `json:"windowHeight"`
+	PromptPlazaApiBase        string  `json:"promptPlazaApiBase" gorm:"column:prompt_plaza_api_base"`
 	BacktestAccuracyThreshold float64 `json:"backtestAccuracyThreshold" gorm:"column:backtest_accuracy_threshold;default:5.0"`
 	BacktestVerifyDays        int64   `json:"backtestVerifyDays" gorm:"column:backtest_verify_days;default:2"`
 	BacktestEnabled           bool    `json:"backtestEnabled" gorm:"column:backtest_enabled;default:true"`
@@ -71,25 +71,25 @@ func (receiver Settings) TableName() string {
 }
 
 type AIConfig struct {
-	ID                 uint `gorm:"primarykey"`
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-	Name               string  `json:"name"`
-	BaseUrl            string  `json:"baseUrl"`
-	ApiKey             string  `json:"apiKey" `
-	ModelName          string  `json:"modelName"`
-	MaxTokens          int     `json:"maxTokens"`
-	Temperature        float64 `json:"temperature"`
-	TimeOut            int     `json:"timeOut"`
-	HttpProxy          string  `json:"httpProxy"`
-	HttpProxyEnabled   bool    `json:"httpProxyEnabled"`
-	SessionId          string  `json:"sessionId" gorm:"index;size:64"`
-	Thinking           bool    `json:"thinking"`
-	EmbeddingEnabled   bool    `json:"embeddingEnabled"`
-	EmbeddingModelName string  `json:"embeddingModelName"`
-	EmbeddingBaseUrl   string  `json:"embeddingBaseUrl"`
-	LLMConcurrencyLimit int    `json:"llmConcurrencyLimit"` // 并发限制，默认 2
-	SubAgentTimeout    int     `json:"subAgentTimeout"`    // 子Agent超时秒，默认 20
+	ID                  uint `gorm:"primarykey"`
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	Name                string  `json:"name"`
+	BaseUrl             string  `json:"baseUrl"`
+	ApiKey              string  `json:"apiKey" `
+	ModelName           string  `json:"modelName"`
+	MaxTokens           int     `json:"maxTokens"`
+	Temperature         float64 `json:"temperature"`
+	TimeOut             int     `json:"timeOut"`
+	HttpProxy           string  `json:"httpProxy"`
+	HttpProxyEnabled    bool    `json:"httpProxyEnabled"`
+	SessionId           string  `json:"sessionId" gorm:"index;size:64"`
+	Thinking            bool    `json:"thinking"`
+	EmbeddingEnabled    bool    `json:"embeddingEnabled"`
+	EmbeddingModelName  string  `json:"embeddingModelName"`
+	EmbeddingBaseUrl    string  `json:"embeddingBaseUrl"`
+	LLMConcurrencyLimit int     `json:"llmConcurrencyLimit"` // 并发限制，默认 2
+	SubAgentTimeout     int     `json:"subAgentTimeout"`     // 子Agent超时秒，默认 20
 	// Rate limiting and quota management
 	RateLimitPerSecond float64 `json:"rateLimitPerSecond"` // 每秒最大请求数，0 表示不限制
 	Burst              int     `json:"burst"`              // 令牌桶突发大小，0 表示使用默认值
@@ -220,13 +220,13 @@ const (
 	BackupStockChangeHistory = "stock_change_history"
 )
 const (
-	CleanupLogs       = "logs"
-	CleanupCache      = "cache"
-	CleanupChat       = "chat_sessions"
-	CleanupAIResults  = "ai_results"
-	CleanupTestImages = "test_images"
+	CleanupLogs        = "logs"
+	CleanupCache       = "cache"
+	CleanupChat        = "chat_sessions"
+	CleanupAIResults   = "ai_results"
+	CleanupTestImages  = "test_images"
 	CleanupBrowserTemp = "browser_temp"
-	CleanupAll        = "all"
+	CleanupAll         = "all"
 )
 
 // CleanupData 清理应用产生的中间/临时/历史数据
@@ -234,11 +234,11 @@ func (s *SettingsApi) CleanupData(cleanupType string) string {
 	logger.SugaredLogger.Infof("Cleaning up data type: %s", cleanupType)
 
 	cleanupFuncs := map[string]func() string{
-		CleanupLogs:       cleanupLogs,
-		CleanupCache:      cleanupCache,
-		CleanupChat:       cleanupChatSessions,
-		CleanupAIResults:  cleanupAIResults,
-		CleanupTestImages: cleanupTestImages,
+		CleanupLogs:        cleanupLogs,
+		CleanupCache:       cleanupCache,
+		CleanupChat:        cleanupChatSessions,
+		CleanupAIResults:   cleanupAIResults,
+		CleanupTestImages:  cleanupTestImages,
 		CleanupBrowserTemp: cleanupBrowserTemp,
 	}
 
@@ -813,13 +813,13 @@ func (s *SettingsApi) Export() string {
 // - BaseUrl/ModelName/ApiKeyRequired: 预填字段
 // - EnvVars: 需要用户配置的环境变量/密钥提示
 type AiConfigTemplate struct {
-	Type        string `json:"type"`
-	Label       string `json:"label"`
-	Description string `json:"description"`
-	BaseUrl     string `json:"baseUrl"`
-	ModelName   string `json:"modelName"`
-	ApiKeyRequired bool  `json:"apiKeyRequired"`
-	EnvHint     string `json:"envHint"`
+	Type           string `json:"type"`
+	Label          string `json:"label"`
+	Description    string `json:"description"`
+	BaseUrl        string `json:"baseUrl"`
+	ModelName      string `json:"modelName"`
+	ApiKeyRequired bool   `json:"apiKeyRequired"`
+	EnvHint        string `json:"envHint"`
 }
 
 // GetAiConfigTemplates 返回预设的 AI 配置模板，供前端向导使用
@@ -1207,17 +1207,17 @@ func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
 				}
 			}
 			e = tx.Model(&AIConfig{}).Where("id=?", item.ID).Updates(map[string]interface{}{
-				"name":                 item.Name,
-				"base_url":             item.BaseUrl,
-				"api_key":              item.ApiKey,
-				"model_name":           item.ModelName,
-				"max_tokens":           item.MaxTokens,
-				"temperature":          item.Temperature,
-				"time_out":             item.TimeOut,
-				"http_proxy":           item.HttpProxy,
-				"http_proxy_enabled":   item.HttpProxyEnabled,
-				"session_id":           item.SessionId,
-				"thinking":             item.Thinking,
+				"name":                  item.Name,
+				"base_url":              item.BaseUrl,
+				"api_key":               item.ApiKey,
+				"model_name":            item.ModelName,
+				"max_tokens":            item.MaxTokens,
+				"temperature":           item.Temperature,
+				"time_out":              item.TimeOut,
+				"http_proxy":            item.HttpProxy,
+				"http_proxy_enabled":    item.HttpProxyEnabled,
+				"session_id":            item.SessionId,
+				"thinking":              item.Thinking,
 				"llm_concurrency_limit": item.LLMConcurrencyLimit,
 				"sub_agent_timeout":     item.SubAgentTimeout,
 				"embedding_enabled":     item.EmbeddingEnabled,

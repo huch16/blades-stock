@@ -150,12 +150,12 @@ func SaveStockThesisTool() bladesTools.Tool {
 			}
 
 			resJSON, _ := json.MarshalIndent(map[string]any{
-				"status":      "success",
-				"stockCode":   stockCode,
-				"verdict":     verdictText,
-				"coreThesis":  coreThesis,
+				"status":       "success",
+				"stockCode":    stockCode,
+				"verdict":      verdictText,
+				"coreThesis":   coreThesis,
 				"keyCatalysts": keyCatalysts,
-				"riskFactors": riskFactors,
+				"riskFactors":  riskFactors,
 			}, "", "  ")
 
 			return fmt.Sprintf("✅ 标的 %s (%s) 买方认知档案已成功保存并沉淀到演化时间线：\n```json\n%s\n```",

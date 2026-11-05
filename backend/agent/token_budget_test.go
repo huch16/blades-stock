@@ -221,10 +221,10 @@ func TestJoinLinesAndOmitted_WithOmit(t *testing.T) {
 
 func TestItoa(t *testing.T) {
 	tests := map[int]string{
-		0:  "0",
-		1:  "1",
-		10: "10",
-		42: "42",
+		0:   "0",
+		1:   "1",
+		10:  "10",
+		42:  "42",
 		999: "999",
 	}
 	for n, want := range tests {

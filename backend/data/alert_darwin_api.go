@@ -4,8 +4,8 @@
 package data
 
 import (
-	"fmt"
 	"blades-stock/backend/logger"
+	"fmt"
 
 	"os/exec"
 )

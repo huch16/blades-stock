@@ -73,7 +73,7 @@ func TestToolCallSucceeded(t *testing.T) {
 
 func TestShouldRunLLMReflection(t *testing.T) {
 	long := strings.Repeat("分析结论：今日行情正常，数据完整。", 40) // >500 runes
-	mid := strings.Repeat("今日行情正常，数据完整。", 30)           // 150~500
+	mid := strings.Repeat("今日行情正常，数据完整。", 30)       // 150~500
 	short := "今天涨了"
 	if !shouldRunLLMReflection(long, 1) {
 		t.Error("long substantive answer should run LLM reflection")

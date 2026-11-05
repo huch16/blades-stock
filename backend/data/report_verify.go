@@ -21,10 +21,11 @@ type realQuote struct {
 }
 
 // verifyAndCorrectContent 对泛化报告（stock_code='agent'/'市场分析'等）做事后硬校验：
-// 1) 抽取 6 位数字代码，解析交易所前缀后调实时行情核验代码存在性与价格合理性；
-// 2) 对文中出现的"当前价/买入区间/止损/止盈 X~Y 元"及"市值 X 亿"等表述，与实时数据比对，
-//    偏差 >50% 时直接替换为实时值并加"[已校正:...]"标注；
-// 3) 代码在行情接口查不到时标注"[代码不存在]"。
+//  1. 抽取 6 位数字代码，解析交易所前缀后调实时行情核验代码存在性与价格合理性；
+//  2. 对文中出现的"当前价/买入区间/止损/止盈 X~Y 元"及"市值 X 亿"等表述，与实时数据比对，
+//     偏差 >50% 时直接替换为实时值并加"[已校正:...]"标注；
+//  3. 代码在行情接口查不到时标注"[代码不存在]"。
+//
 // 个股报告（IsStockReportCode）不在此处校验，由回测层做准确度追踪。
 func verifyAndCorrectContent(content, stockCode, question string) string {
 	if models.IsStockReportCode(stockCode) {

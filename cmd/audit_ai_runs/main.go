@@ -16,16 +16,16 @@ import (
 )
 
 type AuditResult struct {
-	Name        string
-	Pipeline    string
-	Mode        string
-	Duration    time.Duration
-	TTFT        time.Duration
-	Success     bool
-	TokenChars  int
-	ChunkCount  int
-	Detail      string
-	ErrorMsg    string
+	Name       string
+	Pipeline   string
+	Mode       string
+	Duration   time.Duration
+	TTFT       time.Duration
+	Success    bool
+	TokenChars int
+	ChunkCount int
+	Detail     string
+	ErrorMsg   string
 }
 
 func main() {

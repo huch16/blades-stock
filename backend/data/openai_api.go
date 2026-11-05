@@ -1,11 +1,11 @@
 package data
 
 import (
-    "context"
-    "fmt"
-    "strings"
+	"context"
+	"fmt"
+	"strings"
 
-    "github.com/samber/lo"
+	"github.com/samber/lo"
 )
 
 // @Author spark
@@ -15,21 +15,21 @@ import (
 
 // -----------------------------------------------------------------------------------
 type OpenAi struct {
-    ctx              context.Context
-    BaseUrl          string  `json:"base_url"`
-    ApiKey           string  `json:"api_key"`
-    Model            string  `json:"model"`
-    MaxTokens        int     `json:"max_tokens"`
-    Temperature      float64 `json:"temperature"`
-    Prompt           string  `json:"prompt"`
-    TimeOut          int     `json:"time_out"`
-    QuestionTemplate string  `json:"question_template"`
-    CrawlTimeOut     int64   `json:"crawl_time_out"`
-    KDays            int64   `json:"kDays"`
-    BrowserPath      string  `json:"browser_path"`
-    HttpProxy        string  `json:"httpProxy"`
-    HttpProxyEnabled bool    `json:"httpProxyEnabled"`
-    ChatSource       string  `json:"-"`
+	ctx              context.Context
+	BaseUrl          string  `json:"base_url"`
+	ApiKey           string  `json:"api_key"`
+	Model            string  `json:"model"`
+	MaxTokens        int     `json:"max_tokens"`
+	Temperature      float64 `json:"temperature"`
+	Prompt           string  `json:"prompt"`
+	TimeOut          int     `json:"time_out"`
+	QuestionTemplate string  `json:"question_template"`
+	CrawlTimeOut     int64   `json:"crawl_time_out"`
+	KDays            int64   `json:"kDays"`
+	BrowserPath      string  `json:"browser_path"`
+	HttpProxy        string  `json:"httpProxy"`
+	HttpProxyEnabled bool    `json:"httpProxyEnabled"`
+	ChatSource       string  `json:"-"`
 }
 
 func (o *OpenAi) Ctx() context.Context     { return o.ctx }
@@ -43,8 +43,8 @@ func (o *OpenAi) IsHttpProxyEnabled() bool { return o.HttpProxyEnabled }
 func (o *OpenAi) GetHttpProxy() string     { return o.HttpProxy }
 
 func (o OpenAi) String() string {
-    return fmt.Sprintf("OpenAi{BaseUrl: %s, Model: %s, MaxTokens: %d, Temperature: %.2f, Prompt: %s, TimeOut: %d, QuestionTemplate: %s, CrawlTimeOut: %d, KDays: %d, BrowserPath: %s, ApiKey: [MASKED]}",
-        o.BaseUrl, o.Model, o.MaxTokens, o.Temperature, o.Prompt, o.TimeOut, o.QuestionTemplate, o.CrawlTimeOut, o.KDays, o.BrowserPath)
+	return fmt.Sprintf("OpenAi{BaseUrl: %s, Model: %s, MaxTokens: %d, Temperature: %.2f, Prompt: %s, TimeOut: %d, QuestionTemplate: %s, CrawlTimeOut: %d, KDays: %d, BrowserPath: %s, ApiKey: [MASKED]}",
+		o.BaseUrl, o.Model, o.MaxTokens, o.Temperature, o.Prompt, o.TimeOut, o.QuestionTemplate, o.CrawlTimeOut, o.KDays, o.BrowserPath)
 }
 
 // DefaultResearchSystemPrompt 是机构级买方量化投研导师系统提示词，强化确定性数据底座、VectorBT量化诊断、买方认知假说、模拟盘净值问责与全天候自主闭环。
@@ -66,52 +66,52 @@ const DefaultStockAnalysisQuestionTemplate = `请对 {{stockName}}[{{stockCode}}
 
 // NewDeepSeekOpenAi creates an OpenAi client with a sensible default system prompt.
 func NewDeepSeekOpenAi(ctx context.Context, aiConfigId int) *OpenAi {
-    settingConfig := GetSettingConfig()
-    aiConfig, find := lo.Find(settingConfig.AiConfigs, func(item *AIConfig) bool {
-        return uint(aiConfigId) == item.ID
-    })
-    if !find {
-        aiConfig = &AIConfig{}
-    }
+	settingConfig := GetSettingConfig()
+	aiConfig, find := lo.Find(settingConfig.AiConfigs, func(item *AIConfig) bool {
+		return uint(aiConfigId) == item.ID
+	})
+	if !find {
+		aiConfig = &AIConfig{}
+	}
 
-    if settingConfig.OpenAiEnable {
-        if aiConfig.TimeOut <= 0 {
-            aiConfig.TimeOut = 60 * 5
-        }
-        if settingConfig.CrawlTimeOut <= 0 {
-            settingConfig.CrawlTimeOut = 60
-        }
-        if settingConfig.KDays < 30 {
-            settingConfig.KDays = 60
-        }
-    }
+	if settingConfig.OpenAiEnable {
+		if aiConfig.TimeOut <= 0 {
+			aiConfig.TimeOut = 60 * 5
+		}
+		if settingConfig.CrawlTimeOut <= 0 {
+			settingConfig.CrawlTimeOut = 60
+		}
+		if settingConfig.KDays < 30 {
+			settingConfig.KDays = 60
+		}
+	}
 
-    // Use professional research prompt if none configured.
-    prompt := strings.TrimSpace(settingConfig.Prompt)
-    if prompt == "" {
-        prompt = DefaultResearchSystemPrompt
-    }
+	// Use professional research prompt if none configured.
+	prompt := strings.TrimSpace(settingConfig.Prompt)
+	if prompt == "" {
+		prompt = DefaultResearchSystemPrompt
+	}
 
-    qTemplate := strings.TrimSpace(settingConfig.QuestionTemplate)
-    if qTemplate == "" {
-        qTemplate = DefaultStockAnalysisQuestionTemplate
-    }
+	qTemplate := strings.TrimSpace(settingConfig.QuestionTemplate)
+	if qTemplate == "" {
+		qTemplate = DefaultStockAnalysisQuestionTemplate
+	}
 
-    o := &OpenAi{
-        ctx:               ctx,
-        BaseUrl:           aiConfig.BaseUrl,
-        ApiKey:            aiConfig.ApiKey,
-        Model:             aiConfig.ModelName,
-        MaxTokens:         aiConfig.MaxTokens,
-        Temperature:       aiConfig.Temperature,
-        TimeOut:           aiConfig.TimeOut,
-        HttpProxy:         aiConfig.HttpProxy,
-        HttpProxyEnabled:  aiConfig.HttpProxyEnabled,
-        Prompt:            prompt,
-        QuestionTemplate: qTemplate,
-        CrawlTimeOut:      settingConfig.CrawlTimeOut,
-        KDays:             settingConfig.KDays,
-        BrowserPath:       settingConfig.BrowserPath,
-    }
-    return o
+	o := &OpenAi{
+		ctx:              ctx,
+		BaseUrl:          aiConfig.BaseUrl,
+		ApiKey:           aiConfig.ApiKey,
+		Model:            aiConfig.ModelName,
+		MaxTokens:        aiConfig.MaxTokens,
+		Temperature:      aiConfig.Temperature,
+		TimeOut:          aiConfig.TimeOut,
+		HttpProxy:        aiConfig.HttpProxy,
+		HttpProxyEnabled: aiConfig.HttpProxyEnabled,
+		Prompt:           prompt,
+		QuestionTemplate: qTemplate,
+		CrawlTimeOut:     settingConfig.CrawlTimeOut,
+		KDays:            settingConfig.KDays,
+		BrowserPath:      settingConfig.BrowserPath,
+	}
+	return o
 }

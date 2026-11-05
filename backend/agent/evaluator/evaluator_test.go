@@ -10,7 +10,7 @@ func TestNewEvaluator(t *testing.T) {
 	// Create a temporary golden file
 	tmpDir := t.TempDir()
 	goldenPath := filepath.Join(tmpDir, "golden.jsonl")
-	
+
 	// Write a simple golden case (JSONL format: one JSON object per line)
 	goldenContent := `{"id":"test1","question":"test question","expected_tools":["TestTool"],"expected_summary":"test summary"}
 `
@@ -34,7 +34,7 @@ func TestLoadGoldenCases(t *testing.T) {
 	// Create a temporary golden file
 	tmpDir := t.TempDir()
 	goldenPath := filepath.Join(tmpDir, "golden.jsonl")
-	
+
 	// Write golden cases (JSONL format: one JSON object per line)
 	goldenContent := `{"id":"test1","question":"test question 1","expected_tools":["Tool1"],"expected_summary":"summary 1"}
 {"id":"test2","question":"test question 2","expected_tools":["Tool2"],"expected_summary":"summary 2"}

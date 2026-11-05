@@ -1,19 +1,19 @@
 package agent
 
 import (
-	"context"
-	"fmt"
-	"encoding/json"
-	"math"
-	"math/rand"
-	"os"
+	"blades-stock/backend/agent/tools"
+	"blades-stock/backend/agent/types"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
-	"blades-stock/backend/agent/tools"
-	"blades-stock/backend/agent/types"
+	"context"
+	"encoding/json"
+	"fmt"
+	"math"
+	"math/rand"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -765,8 +765,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if len(actions) > 0 {
 				for _, action := range actions {
 					actionAuditEntry := models.AuditLog{
-						ToolName:    "AGENT_ACTION_" + string(action.Type),
-						Success:     true, // Actions are parsed from successful LLM responses
+						ToolName: "AGENT_ACTION_" + string(action.Type),
+						Success:  true, // Actions are parsed from successful LLM responses
 					}
 					// Serialize action details as JSON for the request/response fields
 					actionJSON, _ := json.Marshal(action)

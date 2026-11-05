@@ -1,10 +1,6 @@
 package main
 
 import (
-	"context"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"blades-stock/backend/agent"
 	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/data"
@@ -13,6 +9,10 @@ import (
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
 	"blades-stock/backend/services"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -3044,6 +3044,3 @@ func (a *App) QuerySupplyChainCascade(source, headline string) (*models.CascadeE
 	graph := quant.NewIndustryKnowledgeGraph()
 	return graph.CascadeEventReasoning(source, headline)
 }
-
-
-

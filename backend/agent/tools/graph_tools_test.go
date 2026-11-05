@@ -242,8 +242,8 @@ func TestGraphQuery_InvalidJSON(t *testing.T) {
 func TestCheckManifestStale_Fresh(t *testing.T) {
 	dir := t.TempDir()
 	manifest := map[string]interface{}{
-		"commit_sha":   "abc1234",
-		"stale_after":  time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+		"commit_sha":     "abc1234",
+		"stale_after":    time.Now().Add(24 * time.Hour).Format(time.RFC3339),
 		"max_stale_days": 7,
 	}
 	data, _ := json.Marshal(manifest)
@@ -256,8 +256,8 @@ func TestCheckManifestStale_Fresh(t *testing.T) {
 func TestCheckManifestStale_Expired(t *testing.T) {
 	dir := t.TempDir()
 	manifest := map[string]interface{}{
-		"commit_sha":   "old1234",
-		"stale_after":  time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+		"commit_sha":     "old1234",
+		"stale_after":    time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
 		"max_stale_days": 7,
 	}
 	data, _ := json.Marshal(manifest)

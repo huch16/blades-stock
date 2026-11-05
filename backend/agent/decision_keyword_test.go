@@ -4,12 +4,12 @@ import "testing"
 
 func TestContainsDecisionKeyword_Negative(t *testing.T) {
 	cases := []string{
-		"",                          // empty
-		"hello",                     // short non-chinese
-		"今天的行情怎么样",              // just a question
-		"查询一下茅台的代码",             // lookup
-		"以下是 159915 的 K 线数据",     // data report, no decision
-		"茅台股价 1800 元",            // quote
+		"",                   // empty
+		"hello",              // short non-chinese
+		"今天的行情怎么样",           // just a question
+		"查询一下茅台的代码",          // lookup
+		"以下是 159915 的 K 线数据", // data report, no decision
+		"茅台股价 1800 元",        // quote
 	}
 	for _, c := range cases {
 		if got := containsDecisionKeyword(c); got {

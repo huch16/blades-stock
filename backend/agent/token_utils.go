@@ -25,11 +25,11 @@ var knownModelContextWindows = []struct {
 	tokens   int
 }{
 	{[]string{"gpt-4.1", "gpt-4-1"}, 1047576}, // GPT-4.1 全系 1M
-	{[]string{"gemini-2.5"}, 1048576},          // Gemini 2.5 pro/flash 1M
-	{[]string{"gemini"}, 1048576},              // Gemini 2.x 1M
-	{[]string{"minimax-m3"}, 1048576},          // MiniMax-M3 1M ctx
-	{[]string{"minimax"}, 200000},              // M1/M2 200K，取保守值
-	{[]string{"gpt-4o"}, 128000},               // 含 gpt-4o-mini
+	{[]string{"gemini-2.5"}, 1048576},         // Gemini 2.5 pro/flash 1M
+	{[]string{"gemini"}, 1048576},             // Gemini 2.x 1M
+	{[]string{"minimax-m3"}, 1048576},         // MiniMax-M3 1M ctx
+	{[]string{"minimax"}, 200000},             // M1/M2 200K，取保守值
+	{[]string{"gpt-4o"}, 128000},              // 含 gpt-4o-mini
 	{[]string{"gpt-4-turbo"}, 128000},
 	{[]string{"o4"}, 200000},
 	{[]string{"o3"}, 200000},

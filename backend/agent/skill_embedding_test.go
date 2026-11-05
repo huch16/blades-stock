@@ -33,8 +33,8 @@ func TestSkillSynonyms_OnlySynonymsMatch(t *testing.T) {
 
 func TestSkillSynonyms_EmbeddingIncludesSynonyms(t *testing.T) {
 	sk := models.Skill{
-		Name:           "测试",
-		Description:    "描述",
+		Name:            "测试",
+		Description:     "描述",
 		TriggerKeywords: "ETF",
 		Synonyms:        "轮动,动量",
 	}

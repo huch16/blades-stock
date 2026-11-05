@@ -22,12 +22,12 @@ type MCPHealthPinger struct {
 }
 
 type MCPServerHealth struct {
-	ServerName            string
-	LastCheck             time.Time
-	LastSuccess           time.Time
-	ConsecutiveFailures   int
-	IsHealthy             bool
-	LastError             string
+	ServerName          string
+	LastCheck           time.Time
+	LastSuccess         time.Time
+	ConsecutiveFailures int
+	IsHealthy           bool
+	LastError           string
 }
 
 // NewMCPHealthPinger 创建健康检查器
@@ -88,8 +88,8 @@ func (p *MCPHealthPinger) run(ctx context.Context) {
 func (p *MCPHealthPinger) checkAllServers(ctx context.Context) {
 	api := data.NewMCPServerApi()
 	resp := api.List(&models.MCPServerQuery{
-		Enable:    boolPtr(true),
-		PageSize:  1000,
+		Enable:   boolPtr(true),
+		PageSize: 1000,
 	})
 	if resp == nil {
 		logger.SugaredLogger.Warnf("获取 MCP 服务器列表失败")

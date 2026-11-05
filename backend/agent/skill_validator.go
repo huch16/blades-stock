@@ -22,15 +22,15 @@ import (
 //
 // 重要：保持与 tools.ParseToolGroups 的可解析值一致。
 var validToolGroupNames = []string{
-	"base",            // tools.GroupBase
-	"stock_analysis",  // tools.GroupStockAnalysis
-	"market",          // tools.GroupMarket
-	"screening",       // tools.GroupScreening
-	"money_flow",      // tools.GroupMoneyFlow
-	"news_research",   // tools.GroupNewsResearch
-	"ai_analysis",     // tools.GroupAIAnalysis
-	"operations",      // tools.GroupOperations
-	"project",         // tools.GroupProject
+	"base",           // tools.GroupBase
+	"stock_analysis", // tools.GroupStockAnalysis
+	"market",         // tools.GroupMarket
+	"screening",      // tools.GroupScreening
+	"money_flow",     // tools.GroupMoneyFlow
+	"news_research",  // tools.GroupNewsResearch
+	"ai_analysis",    // tools.GroupAIAnalysis
+	"operations",     // tools.GroupOperations
+	"project",        // tools.GroupProject
 }
 
 // validToolGroupSet 是 Set 版本，O(1) 查找
@@ -130,7 +130,7 @@ func WarnMissingSkillDependencies(matched []models.Skill, availableGroups map[to
 		}
 		// 深拷贝避免修改原对象
 		copy := s
-		warning := fmt.Sprintf("\n⚠️ 警告：本 Skill 声明依赖 %v，但当前会话已注入的工具组中没有这些；" +
+		warning := fmt.Sprintf("\n⚠️ 警告：本 Skill 声明依赖 %v，但当前会话已注入的工具组中没有这些；"+
 			"部分指令可能无法执行。\n", missing)
 		// 仅追加一次（避免重复注入）
 		// dedup 条件：包含 "⚠️ 警告" 或 "⚠️" 后面跟着 " " 在前 80 字符内

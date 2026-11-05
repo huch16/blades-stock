@@ -30,9 +30,9 @@ type Indicators struct {
 	VolumeRatio5 float64
 
 	// MACD 指标（EMA12-EMA26 的 DIF、DEA、柱值）。
-	MACDDIF        float64
-	MACDDEA        float64
-	MACDHIST       float64
+	MACDDIF         float64
+	MACDDEA         float64
+	MACDHIST        float64
 	MACDGoldenCross bool
 	MACDDeathCross  bool
 	MACDAboveZero   bool
@@ -48,9 +48,9 @@ type Indicators struct {
 // ComputeIndicators 从日 K 线序列计算指标，序列按时间从旧到新排列。
 func ComputeIndicators(bars []Bar) *Indicators {
 	ind := &Indicators{
-		MA:      map[int]float64{},
-		MAPrev:  map[int]float64{},
-		MAValid: map[int]bool{},
+		MA:       map[int]float64{},
+		MAPrev:   map[int]float64{},
+		MAValid:  map[int]bool{},
 		PrevHigh: map[int]float64{},
 		PrevLow:  map[int]float64{},
 	}

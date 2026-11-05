@@ -12,9 +12,10 @@
 //   - IsDecision=true 的 turn 永不压缩
 //
 // 用法：
-//   sc := NewSlidingContext(nil)
-//   for _, turn := range turns { sc.Add(turn) }
-//   prompt := sc.Render()
+//
+//	sc := NewSlidingContext(nil)
+//	for _, turn := range turns { sc.Add(turn) }
+//	prompt := sc.Render()
 package agent
 
 import (

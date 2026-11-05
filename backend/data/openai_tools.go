@@ -1,10 +1,10 @@
 package data
 
 import (
+	"blades-stock/backend/db"
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"blades-stock/backend/db"
 	"io"
 	"net/http"
 	"net/url"

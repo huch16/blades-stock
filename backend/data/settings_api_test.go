@@ -1,8 +1,8 @@
 package data
 
 import (
-	"testing"
 	"blades-stock/backend/db"
+	"testing"
 )
 
 func TestUpdateConfigAndAIConfig(t *testing.T) {
@@ -26,7 +26,7 @@ func TestUpdateConfigAndAIConfig(t *testing.T) {
 		BaseUrl:   "http://localhost:11434",
 		ApiKey:    "", // 本地模型常为空
 		ModelName: "qwen2.5:7b",
-		TimeOut:   0,  // 为 0 时自动填充 300
+		TimeOut:   0, // 为 0 时自动填充 300
 	}
 
 	settingConfig.AiConfigs = append(settingConfig.AiConfigs, localAIConfig)
@@ -51,7 +51,7 @@ func TestUpdateConfigAndAIConfig(t *testing.T) {
 	// 测试 2: 修改配置并添加第二个配置
 	savedConfig := reloadConfig.AiConfigs[0]
 	savedConfig.Name = "Ollama Modified"
-	
+
 	newConfig2 := &AIConfig{
 		ID:        999, // 前端传来的临时ID
 		Name:      "DeepSeek API",

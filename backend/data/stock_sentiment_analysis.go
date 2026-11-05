@@ -1,11 +1,11 @@
 package data
 
 import (
-	_ "embed"
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
+	_ "embed"
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"

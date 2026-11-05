@@ -1,10 +1,10 @@
 package agent
 
 import (
-	"encoding/json"
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -26,11 +26,11 @@ type ReflectionResult struct {
 
 // ReflectionScore carries the four-dimensional quality evaluation of an answer.
 type ReflectionScore struct {
-	Score        int `json:"score"`         // -1 差 / 0 中性 / 1 好
-	Accuracy     int `json:"accuracy"`      // 0-10
-	Relevance    int `json:"relevance"`     // 0-10
-	ToolUse      int `json:"toolUse"`       // 0-10
-	Completeness int `json:"completeness"`  // 0-10
+	Score        int `json:"score"`        // -1 差 / 0 中性 / 1 好
+	Accuracy     int `json:"accuracy"`     // 0-10
+	Relevance    int `json:"relevance"`    // 0-10
+	ToolUse      int `json:"toolUse"`      // 0-10
+	Completeness int `json:"completeness"` // 0-10
 }
 
 var defaultEvaluator *Evaluator

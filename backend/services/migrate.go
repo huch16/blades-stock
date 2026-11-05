@@ -343,9 +343,9 @@ func SeedDefaultSkills() {
 
 	skills := []models.Skill{
 		{
-			Name:        "ETF轮动多Agent分析",
-			Description: "执行完整的多Agent ETF轮动分析流程：21日加权动量筛选→6路因子并发分析(fan-out)→投委会5视角加权融合→输出开盘前交易决策",
-			Category:    "量化策略",
+			Name:         "ETF轮动多Agent分析",
+			Description:  "执行完整的多Agent ETF轮动分析流程：21日加权动量筛选→6路因子并发分析(fan-out)→投委会5视角加权融合→输出开盘前交易决策",
+			Category:     "量化策略",
 			SystemPrompt: etfPrompt,
 			Directive: `# ETF轮动多Agent分析 — 强制执行规则
 
@@ -379,9 +379,9 @@ func SeedDefaultSkills() {
 			OutputSchema:    "{}",
 		},
 		{
-			Name:        "Serenity式产业分析",
-			Description: "强制使用Serenity产业分析框架：产业链拆解→稀缺层识别→优先级排序→证据验证→证伪条件",
-			Category:    "资讯研究",
+			Name:         "Serenity式产业分析",
+			Description:  "强制使用Serenity产业分析框架：产业链拆解→稀缺层识别→优先级排序→证据验证→证伪条件",
+			Category:     "资讯研究",
 			SystemPrompt: serenityPrompt,
 			Directive: `# Serenity式产业分析 — 强制执行规则
 

@@ -34,10 +34,10 @@ func (c *AkshareClient) SetBaseURL(url string) {
 }
 
 type akShareResponse struct {
-	Code int                    `json:"code"`
-	Msg  string                 `json:"msg"`
-	Data []map[string]any       `json:"data"`
-	Meta map[string]any         `json:"meta,omitempty"`
+	Code int              `json:"code"`
+	Msg  string           `json:"msg"`
+	Data []map[string]any `json:"data"`
+	Meta map[string]any   `json:"meta,omitempty"`
 }
 
 func (c *AkshareClient) get(path string) (*akShareResponse, error) {

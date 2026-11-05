@@ -13,9 +13,9 @@ import (
 
 // mockProvider is a simple blades.ModelProvider implementation for testing.
 type mockProvider struct {
-	name    string
-	resp    *blades.ModelResponse
-	err     error
+	name string
+	resp *blades.ModelResponse
+	err  error
 }
 
 func (m *mockProvider) Name() string {

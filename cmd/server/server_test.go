@@ -198,9 +198,9 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 	var resStatus struct {
 		Code int `json:"code"`
 		Data struct {
-			NeedInit     bool `json:"needInit"`
+			NeedInit     bool   `json:"needInit"`
 			Version      string `json:"version"`
-			AuthRequired bool `json:"authRequired"`
+			AuthRequired bool   `json:"authRequired"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(wStatus.Body).Decode(&resStatus); err != nil {
@@ -593,4 +593,3 @@ func TestMarketNewsAndStockSearch(t *testing.T) {
 		t.Fatalf("GetStockKLineWithFallback failed: status %d", wKLine.Code)
 	}
 }
-

@@ -1,13 +1,13 @@
 package agent
 
 import (
-	"encoding/json"
-	"fmt"
+	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
-	"blades-stock/backend/data"
-	"strings"
+	"encoding/json"
+	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -25,9 +25,9 @@ func DefaultMemoryManager() *MemoryManager {
 }
 
 type MemoryManager struct {
-	mu            sync.RWMutex
-	workingMem    []workingEntry
-	maxWorking    int
+	mu         sync.RWMutex
+	workingMem []workingEntry
+	maxWorking int
 
 	ch     chan workingDBEntry
 	stopCh chan struct{}
@@ -337,8 +337,8 @@ func (m *MemoryManager) SemanticSearchMemory(sessionID, query string, category s
 
 	// Score memories by cosine similarity
 	type scoredMemory struct {
-		mem    AgentMemory
-		score  float32
+		mem   AgentMemory
+		score float32
 	}
 	var scored []scoredMemory
 
@@ -456,7 +456,7 @@ func InitEmbeddingService() {
 		if memoryManager != nil && setting.EmbeddingEnabled &&
 			strings.TrimSpace(setting.EmbeddingModelName) != "" &&
 			strings.TrimSpace(setting.EmbeddingBaseUrl) != "" {
-			
+
 			embSvc := NewEmbeddingService(
 				setting.EmbeddingBaseUrl,
 				setting.EmbeddingApiKey,

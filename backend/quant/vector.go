@@ -625,9 +625,9 @@ func (a *BoolVector) All() bool {
 // ============================================================================
 
 type Matrix struct {
-	Rows    int
-	Cols    int
-	Values  []float64 // 行优先存储
+	Rows   int
+	Cols   int
+	Values []float64 // 行优先存储
 }
 
 func NewMatrix(rows, cols int) *Matrix {

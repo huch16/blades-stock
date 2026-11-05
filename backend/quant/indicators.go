@@ -60,8 +60,8 @@ func NewEMA(close *Vector, window int) *Vector {
 
 // MACDResult MACD 结果
 type MACDResult struct {
-	MACD    *Vector // DIF 线
-	Signal  *Vector // DEA 线
+	MACD      *Vector // DIF 线
+	Signal    *Vector // DEA 线
 	Histogram *Vector // 柱状图 = (MACD - Signal) * 2
 }
 

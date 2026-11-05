@@ -1,10 +1,10 @@
 package data
 
 import (
-	"encoding/json"
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"encoding/json"
+	"fmt"
 	"math"
 	"regexp"
 	"strconv"
@@ -511,10 +511,10 @@ func (f *FundApi) searchFundOnline(key string) {
 	}
 
 	type onlineFundItem struct {
-		Code      string `json:"CODE"`
-		CodeLower string `json:"Code"`
-		Name      string `json:"NAME"`
-		NameLower string `json:"Name"`
+		Code         string `json:"CODE"`
+		CodeLower    string `json:"Code"`
+		Name         string `json:"NAME"`
+		NameLower    string `json:"Name"`
 		FundBaseInfo struct {
 			FType string `json:"FTYPE"`
 			JJGS  string `json:"JJGS"`
@@ -1048,7 +1048,7 @@ func (f *FundApi) FollowFund(fundCode string) string {
 					listStr = "sz" + fundCode
 				}
 				reqURL := fmt.Sprintf("http://hq.sinajs.cn/rn=%d&list=%s", time.Now().UnixMilli(), listStr)
-				resp, errSina := f.client.SetTimeout(5 * time.Second).R().
+				resp, errSina := f.client.SetTimeout(5*time.Second).R().
 					SetHeader("Host", "hq.sinajs.cn").
 					SetHeader("Referer", "https://finance.sina.com.cn").
 					Get(reqURL)

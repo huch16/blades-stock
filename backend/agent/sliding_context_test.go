@@ -40,9 +40,9 @@ func TestSlidingContext_OverflowFoldsToSummary(t *testing.T) {
 	// 推 5 轮：keepFullN=2 → 应有 3 轮被 fold 进 summary
 	for i := 0; i < 5; i++ {
 		sc.Add(Turn{
-			Role:       "user",
-			Content:    "消息内容含中文以验证 token 计算准确性",
-			Timestamp:  time.Unix(int64(i), 0),
+			Role:      "user",
+			Content:   "消息内容含中文以验证 token 计算准确性",
+			Timestamp: time.Unix(int64(i), 0),
 		})
 	}
 	rendered := sc.Render()
@@ -183,9 +183,9 @@ func TestSlidingContext_Reset(t *testing.T) {
 func TestSlidingContext_StatsAccurate(t *testing.T) {
 	// 先推 normal turn 让它们被折叠，最后推 locked turn 验证锁定行为
 	sc := NewSlidingContext(&SlidingContextConfig{KeepFullN: 2})
-	sc.Add(Turn{Role: "user", Content: "a"})               // normal, idx 0
-	sc.Add(Turn{Role: "user", Content: "b"})               // normal, idx 1
-	sc.Add(Turn{Role: "user", Content: "c"})               // normal, idx 2 → 触发 fold a
+	sc.Add(Turn{Role: "user", Content: "a"})                // normal, idx 0
+	sc.Add(Turn{Role: "user", Content: "b"})                // normal, idx 1
+	sc.Add(Turn{Role: "user", Content: "c"})                // normal, idx 2 → 触发 fold a
 	sc.Add(Turn{Role: "user", Content: "d", Importance: 5}) // locked
 
 	full, _, locked, total, compressed := sc.Stats()

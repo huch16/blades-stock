@@ -23,7 +23,7 @@ func NewTickFlowClient() *TickFlowClient {
 	cfg := GetSettingConfig()
 	return &TickFlowClient{
 		apiKey: strings.TrimSpace(cfg.Settings.TickFlowAPIKey),
-		client:  SharedHTTPClient,
+		client: SharedHTTPClient,
 	}
 }
 

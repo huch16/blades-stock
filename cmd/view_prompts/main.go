@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"blades-stock/backend/db"
 	"blades-stock/backend/models"
+	"fmt"
 	"log"
 )
 

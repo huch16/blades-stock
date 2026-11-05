@@ -18,12 +18,12 @@ type ETFMomentumScoreResult struct {
 	Code         string  `json:"code"`
 	Name         string  `json:"name"`
 	Close        float64 `json:"close"`
-	Annualized   float64 `json:"annualized"`   // 年化收益率 (基于斜率)
-	R2           float64 `json:"r2"`           // 线性回归拟合优度 R^2
-	Score        float64 `json:"score"`        // 动量综合得分 = Annualized * R2
-	Pullback5D   float64 `json:"pullback_5d"`  // 近5日高点回撤百分比
-	AboveMA5     bool    `json:"above_ma5"`    // 现价是否收复 MA5
-	CooldownGate bool    `json:"cooldown_gate"`// 是否触发回撤冷却拦截 (近5日回撤 >= 5% 且未收复 MA5)
+	Annualized   float64 `json:"annualized"`    // 年化收益率 (基于斜率)
+	R2           float64 `json:"r2"`            // 线性回归拟合优度 R^2
+	Score        float64 `json:"score"`         // 动量综合得分 = Annualized * R2
+	Pullback5D   float64 `json:"pullback_5d"`   // 近5日高点回撤百分比
+	AboveMA5     bool    `json:"above_ma5"`     // 现价是否收复 MA5
+	CooldownGate bool    `json:"cooldown_gate"` // 是否触发回撤冷却拦截 (近5日回撤 >= 5% 且未收复 MA5)
 	Rank         int     `json:"rank"`
 }
 

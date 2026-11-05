@@ -1,11 +1,11 @@
 package data
 
 import (
+	"blades-stock/backend/logger"
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"blades-stock/backend/logger"
 	"io"
 	"math/rand"
 	"net/url"

@@ -81,8 +81,8 @@ func main() {
 					Index     int       `json:"index"`
 				} `json:"data"`
 				Usage struct {
-					PromptTokens     int `json:"prompt_tokens"`
-					TotalTokens      int `json:"total_tokens"`
+					PromptTokens int `json:"prompt_tokens"`
+					TotalTokens  int `json:"total_tokens"`
 				} `json:"usage"`
 			}{
 				Data: []struct {
@@ -92,8 +92,8 @@ func main() {
 					{Embedding: make([]float32, vectorDim), Index: 0},
 				},
 				Usage: struct {
-					PromptTokens     int `json:"prompt_tokens"`
-					TotalTokens      int `json:"total_tokens"`
+					PromptTokens int `json:"prompt_tokens"`
+					TotalTokens  int `json:"total_tokens"`
 				}{PromptTokens: 0, TotalTokens: 0},
 			}
 			// Fill the embedding with 0.1

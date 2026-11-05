@@ -8,14 +8,14 @@ import (
 
 // MockModelProvider 是一个用于测试的模型提供者，返回固定的响应，不依赖外部 API。
 type MockModelProvider struct {
-	name    string
+	name     string
 	response string
 }
 
 // NewMockModelProvider 创建一个新的 MockModelProvider。
 func NewMockModelProvider(name, response string) *MockModelProvider {
 	return &MockModelProvider{
-		name:    name,
+		name:     name,
 		response: response,
 	}
 }

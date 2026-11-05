@@ -17,7 +17,7 @@ func bytesToFloat32sLE(b []byte) []float32 {
 	n := len(b) / 4
 	out := make([]float32, n)
 	for i := 0; i < n; i++ {
-		out[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4:(i+1)*4]))
+		out[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[i*4 : (i+1)*4]))
 	}
 	return out
 }

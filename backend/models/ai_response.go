@@ -116,7 +116,8 @@ func IsStockReportCode(code string) bool {
 
 // StockReportCodeSQL 生成用于 gorm 的 SQL WHERE 条件片段（不含 WHERE 关键字），
 // 与 IsStockReportCode 语义一致，用于在数据库层面过滤出可回测的个股报告：
-//   db.Where(StockReportCodeSQL()).Find(&reports)
+//
+//	db.Where(StockReportCodeSQL()).Find(&reports)
 func StockReportCodeSQL() string {
 	return `(
 stock_code GLOB '[0-9][0-9][0-9][0-9][0-9][0-9]'

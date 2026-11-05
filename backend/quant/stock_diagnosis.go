@@ -13,31 +13,31 @@ import (
 
 // StockDiagnosisResult 股票结构化三维诊断结果
 type StockDiagnosisResult struct {
-	StockCode        string                  `json:"stockCode"`
-	StockName        string                  `json:"stockName"`
-	OverallScore     int                     `json:"overallScore"`     // 综合评分 0-100
-	Suggestion       string                  `json:"suggestion"`       // 强烈看多 / 逢低买入 / 震荡观望 / 逢高减持 / 止损离场
-	Confidence       float64                 `json:"confidence"`       // 置信度 / 历史胜率 (%)
-	CurrentPrice     float64                 `json:"currentPrice"`     // 当前现价
-	TargetPrice      float64                 `json:"targetPrice"`      // 建议第一目标价
-	TargetPriceNote  string                  `json:"targetPriceNote,omitempty"` // 目标价说明 (例如偏空建议防守时不设做多目标价)
-	StopLossPrice    float64                 `json:"stopLossPrice"`    // 建议止损价
-	RiskRewardRatio  float64                 `json:"riskRewardRatio"`  // 盈亏比
-	WindowBars       int                     `json:"windowBars"`       // 诊断使用的K线样本根数
-	StartDate        string                  `json:"startDate"`        // 样本起始日期
-	EndDate          string                  `json:"endDate"`          // 样本截止日期
-	DataWindowDesc   string                  `json:"dataWindowDesc"`   // 样本时间窗口说明
-	DataSource       string                  `json:"dataSource"`       // 原始数据来源
-	Adjust           string                  `json:"adjust"`           // 复权类型 (如 qfq)
-	CodeVersion      string                  `json:"codeVersion"`      // 计算逻辑版本
-	ComputedAt       string                  `json:"computedAt"`       // 确定性计算时间戳
-	QuantDim         QuantDimensionResult    `json:"quantDim"`         // 量化回测维度
-	MoneyDim         MoneyDimensionResult    `json:"moneyDim"`         // 资金筹码维度
-	TechnicalDim     TechnicalDimensionResult `json:"technicalDim"`    // 技术形态维度
-	Summary          string                  `json:"summary"`          // 核心论据与诊断摘要
-	Risks            []string                `json:"risks"`            // 关键风险提示
-	HistoryTrackRecord string                `json:"historyTrackRecord"` // AI历史在该股上的预测胜率复盘
-	LastUpdated      string                  `json:"lastUpdated"`      // 诊断时间
+	StockCode          string                   `json:"stockCode"`
+	StockName          string                   `json:"stockName"`
+	OverallScore       int                      `json:"overallScore"`              // 综合评分 0-100
+	Suggestion         string                   `json:"suggestion"`                // 强烈看多 / 逢低买入 / 震荡观望 / 逢高减持 / 止损离场
+	Confidence         float64                  `json:"confidence"`                // 置信度 / 历史胜率 (%)
+	CurrentPrice       float64                  `json:"currentPrice"`              // 当前现价
+	TargetPrice        float64                  `json:"targetPrice"`               // 建议第一目标价
+	TargetPriceNote    string                   `json:"targetPriceNote,omitempty"` // 目标价说明 (例如偏空建议防守时不设做多目标价)
+	StopLossPrice      float64                  `json:"stopLossPrice"`             // 建议止损价
+	RiskRewardRatio    float64                  `json:"riskRewardRatio"`           // 盈亏比
+	WindowBars         int                      `json:"windowBars"`                // 诊断使用的K线样本根数
+	StartDate          string                   `json:"startDate"`                 // 样本起始日期
+	EndDate            string                   `json:"endDate"`                   // 样本截止日期
+	DataWindowDesc     string                   `json:"dataWindowDesc"`            // 样本时间窗口说明
+	DataSource         string                   `json:"dataSource"`                // 原始数据来源
+	Adjust             string                   `json:"adjust"`                    // 复权类型 (如 qfq)
+	CodeVersion        string                   `json:"codeVersion"`               // 计算逻辑版本
+	ComputedAt         string                   `json:"computedAt"`                // 确定性计算时间戳
+	QuantDim           QuantDimensionResult     `json:"quantDim"`                  // 量化回测维度
+	MoneyDim           MoneyDimensionResult     `json:"moneyDim"`                  // 资金筹码维度
+	TechnicalDim       TechnicalDimensionResult `json:"technicalDim"`              // 技术形态维度
+	Summary            string                   `json:"summary"`                   // 核心论据与诊断摘要
+	Risks              []string                 `json:"risks"`                     // 关键风险提示
+	HistoryTrackRecord string                   `json:"historyTrackRecord"`        // AI历史在该股上的预测胜率复盘
+	LastUpdated        string                   `json:"lastUpdated"`               // 诊断时间
 }
 
 // QuantDimensionResult 量化回测维度
@@ -58,27 +58,27 @@ type QuantDimensionResult struct {
 
 // MoneyDimensionResult 资金筹码维度
 type MoneyDimensionResult struct {
-	HasData            bool    `json:"hasData"`            // 是否采集到真实有效的资金流向数据
-	Score              int     `json:"score"`              // 评分 0-100
-	MainNetInflow5D    float64 `json:"mainNetInflow5D"`    // 近5日主力净流入（万元）
-	SuperLargeNetPct   float64 `json:"superLargeNetPct"`   // 超大单净占比 %
-	LargeNetPct        float64 `json:"largeNetPct"`        // 大单净占比 %
-	RecentInflowTrend  string  `json:"recentInflowTrend"`  // 流入态势: 持续流入 / 净流出 / 分歧震荡
-	ChipConcentration  string  `json:"chipConcentration"`  // 筹码倾向
-	Evaluation         string  `json:"evaluation"`         // 资金评价
+	HasData           bool    `json:"hasData"`           // 是否采集到真实有效的资金流向数据
+	Score             int     `json:"score"`             // 评分 0-100
+	MainNetInflow5D   float64 `json:"mainNetInflow5D"`   // 近5日主力净流入（万元）
+	SuperLargeNetPct  float64 `json:"superLargeNetPct"`  // 超大单净占比 %
+	LargeNetPct       float64 `json:"largeNetPct"`       // 大单净占比 %
+	RecentInflowTrend string  `json:"recentInflowTrend"` // 流入态势: 持续流入 / 净流出 / 分歧震荡
+	ChipConcentration string  `json:"chipConcentration"` // 筹码倾向
+	Evaluation        string  `json:"evaluation"`        // 资金评价
 }
 
 // TechnicalDimensionResult 技术形态维度
 type TechnicalDimensionResult struct {
-	Score         int     `json:"score"`         // 评分 0-100
-	Trend         string  `json:"trend"`         // 趋势: 多头排列 / 空头排列 / 震荡整理
-	MA5           float64 `json:"ma5"`           // 5日均线
-	MA20          float64 `json:"ma20"`          // 20日均线
-	MA60          float64 `json:"ma60"`          // 60日均线
-	ATR           float64 `json:"atr"`           // 真实波幅 (14日)
-	VolumeRatio   float64 `json:"volumeRatio"`   // 量比
+	Score             int     `json:"score"`             // 评分 0-100
+	Trend             string  `json:"trend"`             // 趋势: 多头排列 / 空头排列 / 震荡整理
+	MA5               float64 `json:"ma5"`               // 5日均线
+	MA20              float64 `json:"ma20"`              // 20日均线
+	MA60              float64 `json:"ma60"`              // 60日均线
+	ATR               float64 `json:"atr"`               // 真实波幅 (14日)
+	VolumeRatio       float64 `json:"volumeRatio"`       // 量比
 	PriceDistanceMA20 float64 `json:"priceDistanceMA20"` // 距20日线乖离率 %
-	Evaluation    string  `json:"evaluation"`    // 技术评价
+	Evaluation        string  `json:"evaluation"`        // 技术评价
 }
 
 // DiagnoseStock 对单只股票执行全面的三维结构化量化诊断

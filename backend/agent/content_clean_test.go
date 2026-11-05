@@ -173,4 +173,3 @@ func TestCleanFinalContent_StripClosedAgentAction(t *testing.T) {
 		t.Fatalf("closed agent-action not stripped:\ngot  %q\nwant %q", got, want)
 	}
 }
-

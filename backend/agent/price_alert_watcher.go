@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"blades-stock/backend/agent/types"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
-	"blades-stock/backend/agent/types"
 	"github.com/go-kratos/blades"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )

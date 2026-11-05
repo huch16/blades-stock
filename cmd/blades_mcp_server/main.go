@@ -159,12 +159,12 @@ func callBladeTool(ctx context.Context, bt bladesTools.Tool, req mcp.CallToolReq
 		if err := json.Unmarshal([]byte(argsJSON), &data); err != nil {
 			// invalid JSON
 			entry := models.AuditLog{
-				ToolName:     bt.Name(),
-				ServerName:   "mcp",
-				RequestBody:  argsJSON,
-				Success:      false,
-				ErrorMsg:     fmt.Sprintf("invalid JSON: %v", err),
-				DurationMs:   0,
+				ToolName:    bt.Name(),
+				ServerName:  "mcp",
+				RequestBody: argsJSON,
+				Success:     false,
+				ErrorMsg:    fmt.Sprintf("invalid JSON: %v", err),
+				DurationMs:  0,
 			}
 			agent.RecordAuditLogSync(entry)
 			return &mcp.CallToolResult{
@@ -175,12 +175,12 @@ func callBladeTool(ctx context.Context, bt bladesTools.Tool, req mcp.CallToolReq
 		resolved, err := schema.Resolve(nil)
 		if err != nil {
 			entry := models.AuditLog{
-				ToolName:     bt.Name(),
-				ServerName:   "mcp",
-				RequestBody:  argsJSON,
-				Success:      false,
-				ErrorMsg:     err.Error(),
-				DurationMs:   0,
+				ToolName:    bt.Name(),
+				ServerName:  "mcp",
+				RequestBody: argsJSON,
+				Success:     false,
+				ErrorMsg:    err.Error(),
+				DurationMs:  0,
 			}
 			agent.RecordAuditLogSync(entry)
 			return &mcp.CallToolResult{
@@ -190,12 +190,12 @@ func callBladeTool(ctx context.Context, bt bladesTools.Tool, req mcp.CallToolReq
 		}
 		if err := resolved.Validate(data); err != nil {
 			entry := models.AuditLog{
-				ToolName:     bt.Name(),
-				ServerName:   "mcp",
-				RequestBody:  argsJSON,
-				Success:      false,
-				ErrorMsg:     err.Error(),
-				DurationMs:   0,
+				ToolName:    bt.Name(),
+				ServerName:  "mcp",
+				RequestBody: argsJSON,
+				Success:     false,
+				ErrorMsg:    err.Error(),
+				DurationMs:  0,
 			}
 			agent.RecordAuditLogSync(entry)
 			return &mcp.CallToolResult{
@@ -210,13 +210,18 @@ func callBladeTool(ctx context.Context, bt bladesTools.Tool, req mcp.CallToolReq
 
 	// Audit log for success or failure
 	entry := models.AuditLog{
-		ToolName:     bt.Name(),
-		ServerName:   "mcp",
-		RequestBody:  argsJSON,
-		Response:     out,
-		Success:      err == nil,
-		ErrorMsg:     func() string { if err != nil { return err.Error() }; return "" }(),
-		DurationMs:   duration,
+		ToolName:    bt.Name(),
+		ServerName:  "mcp",
+		RequestBody: argsJSON,
+		Response:    out,
+		Success:     err == nil,
+		ErrorMsg: func() string {
+			if err != nil {
+				return err.Error()
+			}
+			return ""
+		}(),
+		DurationMs: duration,
 	}
 	agent.RecordAuditLog(entry) // async
 

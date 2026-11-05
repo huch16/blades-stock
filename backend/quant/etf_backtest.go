@@ -271,14 +271,14 @@ type ETFHoldState struct {
 }
 
 type ETFTradeRecord struct {
-	Date      string
-	Action    string // "buy", "sell", "hold"
-	Symbol    string
-	Name      string
-	Price     float64
-	Shares    float64
-	Cash      float64
-	Pnl       float64
+	Date   string
+	Action string // "buy", "sell", "hold"
+	Symbol string
+	Name   string
+	Price  float64
+	Shares float64
+	Cash   float64
+	Pnl    float64
 }
 
 type ETFMomentumResult struct {

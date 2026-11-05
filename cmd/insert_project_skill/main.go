@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"blades-stock/backend/db"
 	"blades-stock/backend/models"
+	"fmt"
+	"os"
 )
 
 func main() {

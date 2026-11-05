@@ -17,14 +17,14 @@ import (
 
 // StrategyScreenResult 是策略评分选股的单个结果。
 type StrategyScreenResult struct {
-	Code        string  `json:"code"`
-	Name        string  `json:"name"`
-	Score       float64 `json:"score"`
-	Close       string  `json:"close"`
-	ChangePct   string  `json:"change_pct"`
-	VolumeRatio string  `json:"volume_ratio"`
+	Code        string   `json:"code"`
+	Name        string   `json:"name"`
+	Score       float64  `json:"score"`
+	Close       string   `json:"close"`
+	ChangePct   string   `json:"change_pct"`
+	VolumeRatio string   `json:"volume_ratio"`
 	Matched     []string `json:"matched"`
-	Reason      string  `json:"reason"`
+	Reason      string   `json:"reason"`
 }
 
 // StrategyScreenOutcome 是策略评分选股的整体结果。
@@ -352,4 +352,3 @@ func FallbackScreenByIndicators(words string) (string, bool) {
 
 	return "", false
 }
-

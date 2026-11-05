@@ -11,7 +11,7 @@ import (
 
 // 工具调用单次估算成本表 (USD)
 var defaultToolCosts = map[string]float64{
-	"WebSearch":              0.010,
+	"WebSearch":             0.010,
 	"FetchWebPage":          0.005,
 	"RunVectorizedBacktest": 0.008,
 	"VectorGridSearch":      0.015,
@@ -167,6 +167,7 @@ func WrapToolWithQuota(original bladesTools.Tool) bladesTools.Tool {
 		}),
 	)
 }
+
 // WrapToolsWithQuota 批量为工具列表注入配额与成本控制器
 func WrapToolsWithQuota(toolList []bladesTools.Tool) []bladesTools.Tool {
 	if len(toolList) == 0 {

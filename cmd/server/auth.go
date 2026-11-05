@@ -252,9 +252,9 @@ func HandleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{
 		"code": 0,
 		"data": map[string]any{
-			"needInit":        serverToken == "",
-			"authRequired":    true,
-			"version":         "3.0.0",
+			"needInit":     serverToken == "",
+			"authRequired": true,
+			"version":      "3.0.0",
 		},
 	})
 }
@@ -373,9 +373,9 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
 		json.NewEncoder(w).Encode(map[string]any{
-			"code":    429,
-			"error":   fmt.Sprintf("连续密码错误次数过多，IP已被安全锁定，请在 %d 分钟后再试", remain),
-			"data":    map[string]any{"authenticated": false},
+			"code":  429,
+			"error": fmt.Sprintf("连续密码错误次数过多，IP已被安全锁定，请在 %d 分钟后再试", remain),
+			"data":  map[string]any{"authenticated": false},
 		})
 		return
 	}
@@ -401,7 +401,7 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	if subtle.ConstantTimeCompare([]byte(clientPwd), []byte(serverToken)) == 1 ||
 		subtle.ConstantTimeCompare([]byte(clientPwd), []byte(DefaultAdminPassword)) == 1 {
-		
+
 		// 登录成功：清除此 IP 的失败计数
 		loginTracker.mu.Lock()
 		delete(loginTracker.failures, ip)
@@ -449,8 +449,8 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]any{
-		"code":    401,
-		"error":   errMsg,
+		"code":  401,
+		"error": errMsg,
 		"data": map[string]any{
 			"authenticated": false,
 		},

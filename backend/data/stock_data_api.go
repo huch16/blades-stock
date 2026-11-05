@@ -5,14 +5,14 @@ package data
 // @Desc
 //-----------------------------------------------------------------------------------
 import (
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"blades-stock/backend/db"
-	"blades-stock/backend/logger"
-	"blades-stock/backend/models"
 	"io"
 	url2 "net/url"
 	"os"
@@ -1273,7 +1273,7 @@ func SearchStockInfo(stock, msgType string, crawlTimeOut int64) *[]string {
 	client := resty.New()
 	resp, err := client.SetTimeout(time.Duration(crawlTimeOut)*time.Second).
 		SetRetryCount(1).
-		SetRetryWaitTime(300 * time.Millisecond).R().
+		SetRetryWaitTime(300*time.Millisecond).R().
 		SetHeader("Host", "www.cls.cn").
 		SetHeader("Origin", "https://www.cls.cn").
 		SetHeader("Referer", "https://www.cls.cn/searchPage").

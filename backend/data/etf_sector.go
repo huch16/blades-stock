@@ -7,9 +7,9 @@ import (
 )
 
 var (
-	etfSectorMap map[string]string
+	etfSectorMap  map[string]string
 	etfSectorOnce sync.Once
-	etfSectorErr error
+	etfSectorErr  error
 )
 
 // LoadETFSectorMap 读取并缓存 ETF -> 板块 映射表

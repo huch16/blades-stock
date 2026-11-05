@@ -11,7 +11,7 @@ import (
 
 // Document represents a document in the vector store.
 type Document struct {
-	Vector   []float32        `json:"-"`
+	Vector     []float32         `json:"-"`
 	ID         string            `json:"id"`
 	Source     string            `json:"source"` // skill, doc, news, memory
 	Text       string            `json:"text"`

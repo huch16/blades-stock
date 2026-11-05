@@ -18,17 +18,17 @@ type StockThesisLedger struct {
 	ID            uint      `gorm:"primaryKey" json:"id"`
 	StockCode     string    `gorm:"index;size:32;not null" json:"stockCode"` // 标准代码 (小写，如 sh600584 或 600584)
 	StockName     string    `gorm:"size:64" json:"stockName"`
-	Verdict       string    `gorm:"size:32;index" json:"verdict"`            // 枚举代码 (THESIS_STRENGTHENED 等)
-	VerdictText   string    `gorm:"size:32" json:"verdictText"`              // 界面展示文本 ("逻辑强化" 等)
+	Verdict       string    `gorm:"size:32;index" json:"verdict"`           // 枚举代码 (THESIS_STRENGTHENED 等)
+	VerdictText   string    `gorm:"size:32" json:"verdictText"`             // 界面展示文本 ("逻辑强化" 等)
 	CoreThesis    string    `gorm:"type:text" json:"coreThesis"`            // 核心投资假说/逻辑 (1-3句话)
 	KeyCatalysts  string    `gorm:"type:text" json:"keyCatalysts"`          // 重点跟踪催化剂与验证点
 	RiskFactors   string    `gorm:"type:text" json:"riskFactors"`           // 证伪条件与核心风险
 	ModelName     string    `gorm:"size:64" json:"modelName"`               // 给出判定的模型名称
-	EntryPrice    float64   `gorm:"type:real;default:0" json:"entryPrice"`   // 入场基准现价 (用于后续证伪与收益跟踪)
+	EntryPrice    float64   `gorm:"type:real;default:0" json:"entryPrice"`  // 入场基准现价 (用于后续证伪与收益跟踪)
 	EntryDate     string    `gorm:"size:32" json:"entryDate"`               // 假说建档日期 (YYYY-MM-DD)
 	Status        string    `gorm:"size:32;default:'ACTIVE'" json:"status"` // ACTIVE (跟踪中) / FALSIFIED (已证伪) / CLOSED (已平仓归档)
 	ReviewHistory string    `gorm:"type:text" json:"reviewHistory"`         // 历史复盘对账与证伪轨迹
-	LastReportID  uint      `gorm:"index" json:"lastReportId"`               // 关联的 AI 研报记录 ID
+	LastReportID  uint      `gorm:"index" json:"lastReportId"`              // 关联的 AI 研报记录 ID
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 }

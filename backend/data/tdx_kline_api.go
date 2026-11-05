@@ -1,12 +1,12 @@
 package data
 
 import (
-	"fmt"
-	"io"
-	"log"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
+	"fmt"
+	"io"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -1433,7 +1433,7 @@ func (t *TdxKLineApi) fetchExListWithRetry(start uint32, count uint16) ([]proto.
 	items, err := t.macExClient.ExList(start, count)
 	t.macExMu.Unlock()
 	if err != nil {
-			logger.SugaredLogger.Debugf("ExList start=%d error: %v, retry...", start, err)
+		logger.SugaredLogger.Debugf("ExList start=%d error: %v, retry...", start, err)
 		for attempt := 1; attempt <= 3; attempt++ {
 			if e := t.reconnectMACEx(); e != nil {
 				logger.SugaredLogger.Errorf("ExList reconnect error: %v", e)

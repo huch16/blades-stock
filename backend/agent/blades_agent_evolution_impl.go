@@ -1,12 +1,12 @@
 package agent
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/models"
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -15,23 +15,23 @@ import (
 )
 
 type ToolRank struct {
-	ToolName    string  `json:"toolName" gorm:"primaryKey;size:64"`
-	SuccessCount int    `json:"successCount" gorm:"default:0"`
-	FailCount    int    `json:"failCount" gorm:"default:0"`
-	AvgDurationMs float64 `json:"avgDurationMs" gorm:"default:0"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ToolName      string    `json:"toolName" gorm:"primaryKey;size:64"`
+	SuccessCount  int       `json:"successCount" gorm:"default:0"`
+	FailCount     int       `json:"failCount" gorm:"default:0"`
+	AvgDurationMs float64   `json:"avgDurationMs" gorm:"default:0"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 func (ToolRank) TableName() string { return "agent_tool_ranks" }
 
 type EvolutionPlan struct {
-	WeekStart       string   `json:"weekStart"`
-	WeekEnd         string   `json:"weekEnd"`
-	HighQualityCount int     `json:"highQualityCount"`
-	LowQualityCount  int     `json:"lowQualityCount"`
-	TopTools        []ToolRank `json:"topTools"`
-	Improvements    []string `json:"improvements"`
-	Suggestions     []string `json:"suggestions"`
+	WeekStart        string     `json:"weekStart"`
+	WeekEnd          string     `json:"weekEnd"`
+	HighQualityCount int        `json:"highQualityCount"`
+	LowQualityCount  int        `json:"lowQualityCount"`
+	TopTools         []ToolRank `json:"topTools"`
+	Improvements     []string   `json:"improvements"`
+	Suggestions      []string   `json:"suggestions"`
 }
 
 var defaultEvolver *Evolver
@@ -88,7 +88,7 @@ func (ev *Evolver) OptimizePrompt(trace *AgentTrace, llm LLMOptimizerFunc) (stri
 	}
 	raw = extractJSON(raw)
 	var result struct {
-		Analysis       string `json:"analysis"`
+		Analysis        string `json:"analysis"`
 		OptimizedPrompt string `json:"optimizedPrompt"`
 	}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
@@ -256,14 +256,14 @@ func (ev *Evolver) LearnFromProject(projectName, analysis string, llm LLMOptimiz
 	}
 
 	dbSkill := &models.Skill{
-		Name:            skill.Name,
-		Description:     skill.Description,
-		Category:        "learned",
-		SystemPrompt:    skill.SystemPrompt,
-		Examples:        skill.Examples,
-		TriggerKeywords: strings.Join(skill.TriggerKeywords, ","),
-		Enable:          true,
-		Sandbox:         true,
+		Name:              skill.Name,
+		Description:       skill.Description,
+		Category:          "learned",
+		SystemPrompt:      skill.SystemPrompt,
+		Examples:          skill.Examples,
+		TriggerKeywords:   strings.Join(skill.TriggerKeywords, ","),
+		Enable:            true,
+		Sandbox:           true,
 		SandboxPercentage: 10, // default 10% of requests
 	}
 	if err := data.NewSkillApi().Create(dbSkill); err != nil {

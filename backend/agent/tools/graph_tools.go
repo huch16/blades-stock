@@ -24,9 +24,9 @@ import (
 	"sync"
 	"time"
 
+	"blades-stock/backend/agent/types"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/paths"
-	"blades-stock/backend/agent/types"
 
 	bladesTools "github.com/go-kratos/blades/tools"
 )
