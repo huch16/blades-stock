@@ -47,6 +47,8 @@ var (
 	statStaleChunkFallbackHits atomic.Int64 // 旧 chunk 命中上一版本目录的次数
 	statStaleChunkMisses       atomic.Int64 // 旧 chunk 在当前与上一版本均不存在（真实发布断裂）的次数
 	statImmutableAssetHits     atomic.Int64 // 命中 1 年不可变缓存的 /assets/ 请求数
+	statDeniedPathHits         atomic.Int64 // 被敏感路径清单拦截（.git / Dockerfile 等探测）
+	statSPAFallbackHits        atomic.Int64 // 非根路径回落到 SPA 壳的次数（用于区分真实页面与 404 掩盖）
 
 	// 启动时解析并缓存「上一版本资源目录」是否已就绪（供 /health 零 syscall 读取）
 	resolvedPreviousDistDir atomic.Value // string
@@ -374,6 +376,8 @@ func main() {
 				"stale_chunk_fallback":     statStaleChunkFallbackHits.Load(),
 				"stale_chunk_miss":         statStaleChunkMisses.Load(),
 				"immutable_asset_requests": statImmutableAssetHits.Load(),
+				"denied_path_probes":       statDeniedPathHits.Load(),
+				"spa_fallback_hits":        statSPAFallbackHits.Load(),
 			},
 		})
 	})

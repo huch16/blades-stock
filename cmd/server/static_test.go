@@ -152,6 +152,81 @@ func TestResolvePreviousDistDir(t *testing.T) {
 	}
 }
 
+// TestShouldDenyStaticPath 锁定「敏感路径绝不能被 SPA 壳伪装成 200」——
+// 否则任何安全扫描器都会收到一份高危误报清单（.git 目录可访问 / Dockerfile 暴露），
+// 且这类探测永远产生不了真实 404，监控失效。
+func TestShouldDenyStaticPath(t *testing.T) {
+	denied := []string{
+		"/.git/config", "/.git/HEAD", "/.env", "/.env.production", "/.DS_Store",
+		"/Dockerfile", "/docker-compose.yml", "/Makefile", "/package.json",
+		"/package-lock.json", "/go.mod", "/vite.config.js", "/node_modules/x.js",
+		"/.ssh/id_rsa", "/.aws/credentials", "/backend/secret.go", "/data/stock.db",
+		"/logs/app.log", "/scripts/deploy-vps.sh", "/nginx.conf",
+	}
+	for _, p := range denied {
+		if !shouldDenyStaticPath(p) {
+			t.Errorf("%s 应被拒绝（SPA 兜底会把它变成 200）", p)
+		}
+	}
+
+	allowed := []string{
+		"/", "", "/research", "/agent", "/index.html", "/assets/index-abc.js",
+		"/.well-known/acme-challenge/token", "/favicon.ico", "/robots.txt",
+	}
+	for _, p := range allowed {
+		if shouldDenyStaticPath(p) {
+			t.Errorf("%s 不应被拒绝", p)
+		}
+	}
+}
+
+// TestStaticHandler_DeniesSensitivePaths 验证端到端行为：
+// 敏感路径必须返回 404，且响应体不能是 SPA 壳 HTML。
+func TestStaticHandler_DeniesSensitivePaths(t *testing.T) {
+	root := t.TempDir()
+	dist := buildDistFixture(t, root, map[string]string{
+		"index.html": "<html><body>app-shell</body></html>",
+	})
+	h := NewStaticHandler(dist, "")
+
+	for _, p := range []string{"/.git/config", "/Dockerfile", "/Makefile", "/package.json", "/.env"} {
+		rec := doGet(h, p)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s 应返回 404，实际 %d", p, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "app-shell") {
+			t.Errorf("%s 不得回落 index.html", p)
+		}
+	}
+}
+
+// TestStaticHandler_FlagsSPAFallback 验证非根路径的 SPA 兜底会打上 X-SPA-Fallback 标记，
+// 使运维能区分「真实页面」与「被兜底的正向 200」。
+func TestStaticHandler_FlagsSPAFallback(t *testing.T) {
+	root := t.TempDir()
+	dist := buildDistFixture(t, root, map[string]string{
+		"index.html": "<html><body>app-shell</body></html>",
+	})
+	h := NewStaticHandler(dist, "")
+
+	rec := doGet(h, "/research")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("SPA 路由应回落 index.html，实际 %d", rec.Code)
+	}
+	if rec.Header().Get("X-SPA-Fallback") != "1" {
+		t.Fatalf("非根路径的 SPA 兜底应标记 X-SPA-Fallback: 1，实际 %q", rec.Header().Get("X-SPA-Fallback"))
+	}
+
+	// 根路径是正常入口，不应被标记为兜底
+	rec = doGet(h, "/")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("根路径应 200，实际 %d", rec.Code)
+	}
+	if hdr := rec.Header().Get("X-SPA-Fallback"); hdr != "" {
+		t.Fatalf("根路径不应带 X-SPA-Fallback，实际 %q", hdr)
+	}
+}
+
 // TestStaticHandler_NoHTMLFallbackForMissingFiles 锁定 P0-2 行为：
 // 缺失的带扩展名文件与 /assets/ 文件绝不能回落 index.html（否则 SPA 会把 404 伪装成 200）。
 func TestStaticHandler_NoHTMLFallbackForMissingFiles(t *testing.T) {

@@ -3,7 +3,7 @@
 import {GetStockKLine} from "../../wailsjs/go/main/App";
 import * as echarts from "../utils/echarts";
 import {onMounted, onUnmounted, ref} from "vue";
-import _ from "lodash";
+
 const { code,stockName,darkTheme,kDays ,chartHeight} = defineProps({
   code: {
     type: String,
@@ -132,14 +132,15 @@ function handleKLine(code,stockName){
           color: darkTheme?'#ccc':'#456'
         },
         formatter: function (params) {//修改鼠标划过显示为中文
-          //console.log("params",params)
-          const currentItemData =  _.filter(params,  (param) => param.seriesIndex === 0)[0].data;
-          const ma5=_.filter(params,  (param) => param.seriesIndex === 1)[0].data;//ma5的值
-          const ma10=_.filter(params,  (param) => param.seriesIndex === 2)[0].data;//ma10的值
-          const ma20=_.filter(params,  (param) => param.seriesIndex === 3)[0].data;//ma20的值
-          const ma30=_.filter(params,  (param) => param.seriesIndex === 4)[0].data;//ma30的值
-          const volum=_.filter(params,  (param) => param.seriesIndex === 5)[0].data;
-          return _.filter(params,  (param) => param.seriesIndex === 0)[0].name + '<br>' +
+          // 原生 Array.prototype.filter 完全等价；改用原生以彻底移除 lodash（vendor-utils 减重）
+          const byIndex = (i) => params.filter((param) => param.seriesIndex === i)[0]
+          const currentItemData =  byIndex(0).data;
+          const ma5=byIndex(1).data;//ma5的值
+          const ma10=byIndex(2).data;//ma10的值
+          const ma20=byIndex(3).data;//ma20的值
+          const ma30=byIndex(4).data;//ma30的值
+          const volum=byIndex(5).data;
+          return byIndex(0).name + '<br>' +
               '开盘:' + currentItemData[1] + '<br>' +
               '收盘:' + currentItemData[2] + '<br>' +
               '最低:' + currentItemData[3] + '<br>' +

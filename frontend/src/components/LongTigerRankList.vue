@@ -2,7 +2,6 @@
 import {onBeforeMount, ref} from 'vue'
 import {LongTigerRank} from "../../wailsjs/go/main/App";
 import {ArrowDownOutline} from "@vicons/ionicons5";
-import _ from "lodash";
 import KLineChart from "./KLineChart.vue";
 import MoneyTrend from "./moneyTrend.vue";
 import {NButton, NText, useMessage} from "naive-ui";
@@ -63,12 +62,15 @@ function longTiger(date) {
       } else {
         lhbList.value = res;
         loading1.destroy();
-        EXPLANATIONs.value = _.uniqBy(_.map(lhbList.value, function (item) {
-          return {
-            label: item['EXPLANATION'],
-            value: item['EXPLANATION'],
-          };
-        }), 'label');
+        // 原生去重（按 label）等价于 _.uniqBy(_.map(...), 'label')，改用原生以移除 lodash
+        const seenLabels = new Set();
+        EXPLANATIONs.value = lhbList.value
+          .map((item) => ({ label: item['EXPLANATION'], value: item['EXPLANATION'] }))
+          .filter((opt) => {
+            if (seenLabels.has(opt.label)) return false;
+            seenLabels.add(opt.label);
+            return true;
+          });
       }
     }).catch(err => {
       loading1.destroy();
@@ -84,7 +86,7 @@ function handleEXPLANATION(value, _option){
   SearchForm.value.EXPLANATION = value
   if(value){
     LongTigerRank(SearchForm.value.dateValue).then(res => {
-      lhbList.value=_.filter(res, function(o) { return o['EXPLANATION']===value; });
+      lhbList.value = res.filter(function (o) { return o['EXPLANATION'] === value; });
       if (res.length === 0) {
         message.info("暂无数据,请切换日期")
       }

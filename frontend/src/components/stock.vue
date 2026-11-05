@@ -93,7 +93,6 @@ const ExportPDF = defineAsyncComponent(() => import('@vavt/v3-extension').then(m
 // 首屏入口 chunk 直接减约 134 KB (br ≈ 38 KB)。
 const StockLightweightKlineChart = defineAsyncComponent(() => import('./StockLightweightKlineChart.vue'))
 
-import {keys, padStart} from "lodash";
 import {useRoute, useRouter} from 'vue-router'
 import MoneyTrend from "./moneyTrend.vue";
 
@@ -249,7 +248,8 @@ const theme = computed(() => {
 const icon = ref('');
 
 const sortedResults = computed(() => {
-  const sortedKeys = keys(results.value).sort();
+  // 原生 Object.keys 等价于 lodash keys，改用原生以移除 lodash（vendor-utils 减重）
+  const sortedKeys = Object.keys(results.value).sort();
   const sortedObject = {};
   sortedKeys.forEach(key => {
     sortedObject[key] = results.value[key];
@@ -950,7 +950,8 @@ async function monitor() {
 
 
 function GetSortKey(sort, code) {
-  return padStart(sort, 8, '0') + "_" + code
+  // 原生 String.prototype.padStart（ES2017）等价于 lodash padStart，改用原生以移除 lodash
+  return String(sort).padStart(8, '0') + "_" + code
 }
 
 function onSelect(item) {
@@ -1316,13 +1317,16 @@ function showFenshi(code, name, changePercent) {
   data.code = code
   data.name = name
   data.changePercent = changePercent
-  data.fenshiURL = 'http://image.sinajs.cn/newchart/min/n/' + data.code + '.gif' + "?t=" + Date.now()
+  // 必须走 https：生产 CSP 为 `img-src 'self' data: blob: https:`，
+  // 任何 http:// 图片都会被浏览器直接阻断，导致分时图整张空白。
+  // 上游 image.sinajs.cn 同时支持 http/https（实测同码同体积），故无兼容风险。
+  data.fenshiURL = 'https://image.sinajs.cn/newchart/min/n/' + data.code + '.gif' + "?t=" + Date.now()
 
   if (code.startsWith('hk')) {
-    data.fenshiURL = 'http://image.sinajs.cn/newchart/hk_stock/min/' + data.code.replace("hk", "") + '.gif' + "?t=" + Date.now()
+    data.fenshiURL = 'https://image.sinajs.cn/newchart/hk_stock/min/' + data.code.replace("hk", "") + '.gif' + "?t=" + Date.now()
   }
   if (code.startsWith('gb_')) {
-    data.fenshiURL = 'http://image.sinajs.cn/newchart/usstock/min/' + data.code.replace("gb_", "") + '.gif' + "?t=" + Date.now()
+    data.fenshiURL = 'https://image.sinajs.cn/newchart/usstock/min/' + data.code.replace("gb_", "") + '.gif' + "?t=" + Date.now()
   }
 
   modalShow2.value = true
@@ -1838,12 +1842,13 @@ async function showLightweightKline(code, name) {
 function showK(code, name) {
   data.code = code
   data.name = name
-  data.kURL = 'http://image.sinajs.cn/newchart/daily/n/' + data.code + '.gif' + "?t=" + Date.now()
+  // 同 showFenshi：CSP `img-src ... https:` 会阻断 http:// 图片，必须使用 https
+  data.kURL = 'https://image.sinajs.cn/newchart/daily/n/' + data.code + '.gif' + "?t=" + Date.now()
   if (code.startsWith('hk')) {
-    data.kURL = 'http://image.sinajs.cn/newchart/hk_stock/daily/' + data.code.replace("hk", "") + '.gif' + "?t=" + Date.now()
+    data.kURL = 'https://image.sinajs.cn/newchart/hk_stock/daily/' + data.code.replace("hk", "") + '.gif' + "?t=" + Date.now()
   }
   if (code.startsWith('gb_')) {
-    data.kURL = 'http://image.sinajs.cn/newchart/usstock/daily/' + data.code.replace("gb_", "") + '.gif' + "?t=" + Date.now()
+    data.kURL = 'https://image.sinajs.cn/newchart/usstock/daily/' + data.code.replace("gb_", "") + '.gif' + "?t=" + Date.now()
   }
   modalShow3.value = true
   //https://image.sinajs.cn/newchart/usstock/daily/dji.gif
@@ -2662,11 +2667,15 @@ watch(modalShow6, (newVal) => {
   </n-modal>
   <n-modal v-model:show="modalShow2" :title="data.name+' '+ data.changePercent+'%'" style="width: 1000px;max-width: calc(100vw - 32px);"
            :preset="'card'" @after-enter="handleFeishi" @after-leave="clearFeishi">
+    <!-- 历史遗留：新浪 GIF 静态图方案已停用，分时图改由下方 ECharts（showFsChart）绘制。
+         data.fenshiURL 保留为可回退方案，且已统一改为 https —— 生产 CSP 为
+         `img-src 'self' data: blob: https:`，若将来取消注释启用此绑定，http:// 会被静默阻断。 -->
     <!--    <n-image :src="data.fenshiURL" />-->
     <div ref="kLineChartRef2" style="width: 100%; height: 500px;"></div>
   </n-modal>
   <n-modal v-model:show="modalShow3" :title="data.name" style="width: 1000px;max-width: calc(100vw - 32px);" :preset="'card'"
            @after-enter="handleKLine">
+    <!-- 同上：日K 静态图已停用，改由 handleKLine -> ECharts 绘制；data.kURL 为 https 回退方案 -->
     <!--    <n-image :src="data.kURL" />-->
     <div ref="kLineChartRef" style="width: 100%; height: 500px;"></div>
   </n-modal>

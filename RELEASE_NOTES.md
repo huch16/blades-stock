@@ -191,6 +191,110 @@ Highlights / 核心亮点（全栈七大维度）
 
 ---
 
+## 补丁 4 (Patch 4) — 首屏减重 606 KB、CSP 一致性门禁、敏感路径 404
+
+发布日期: 2026-11-05
+触发: 全面检验报告（11 组测试 / 34 资源 / 250 接口 / 21 懒加载 chunk）
+
+### P0 · 首屏关键路径 1305 KB → 699 KB gzip（−46%）
+
+**根因一（最大单项，−547 KB gzip）**：Vite 为动态 `import()` 注入的共享运行时助手 `__vitePreload`
+是一个**虚拟模块**（不属于 `node_modules`），因此不会命中 `manualChunks` 里任何 vendor 规则，
+由 Rollup 自行决定归属 —— 实测它被塞进了 `vendor-codemirror`。
+由于入口 chunk 必须静态引用 `__vitePreload`，`index.html` 的 modulepreload 就把整块
+**1611 KB raw / 547 KB gzip 的 CodeMirror 写进了首屏预加载列表**，
+而首屏没有任何一处用到 CodeMirror（它只服务于 `md-editor-v3` 编辑器路由）。
+- `vite.config.js`：把 `__vitePreload` / modulepreload polyfill 显式隔离为独立的
+  `vendor-preload` chunk（1.82 KB raw / 0.96 KB gzip）。首屏预加载从 547 KB 降到 1 KB。
+
+**根因二（−27 KB gzip）**：应用直接依赖完整 `lodash`（CJS 全量构建）。
+- 全量移除 `lodash` 与 `@types/lodash`：
+  `_.filter` / `_.map` → 原生 `Array.prototype.filter/map`（`KLineChart.vue` 改为 `byIndex(i)` 辅助函数）、
+  `_.uniqBy` → 原生 `Map`+`Set` 去重（`LongTigerRankList.vue`）、
+  `keys` → `Object.keys`、`padStart` → 原生 `String.prototype.padStart`（ES2017）。
+  `vendor-utils` 由 162.05 KB raw / 53.35 KB gzip → 88.58 KB raw / 25.89 KB gzip。
+
+**实测结果**
+
+| | 修复前 | 修复后 |
+|---|---|---|
+| 首屏关键路径（gzip -9） | 1305 KB | **699 KB** |
+| `dist/index.html` 预加载资源数 | 9 | **8** |
+| `vendor-codemirror` | 547 KB gzip（首屏） | 移出首屏（懒加载） |
+
+浏览器实测（Performance Resource Timing）：首屏拉取脚本数 = 8，**CodeMirror 拉取次数 = 0**。
+
+### P1 · CSP 与源码资源一致性（新门禁）
+
+**修正一条误报，但保留其工程价值**：报告称「6 处 `http://image.sinajs.cn` 被自建 CSP 阻断，
+导致分时图/日K图全部加载失败」。实测确认：
+- 6 处 `http://` 字符串确实存在，与 `img-src 'self' data: blob: https:` 确实冲突；
+- **但这 6 个 URL 从未被渲染** —— `<n-image :src="data.fenshiURL" />` 与 `<n-image :src="data.kURL" />`
+  两处模板绑定**早已被注释停用**，分时图/日K图实际由 ECharts 绘制
+  （`showFsChart` / `handleKLine`）。浏览器实测：分时弹层开启后内部 **canvas=1、img=0**。
+
+因此这不是「用户可见的功能失效」，而是一枚**霿置地雷**：一旦取消注释启用该绑定，图片会被 CSP 静默阻断。
+- 6 处全部改为 `https://`（上游 `image.sinajs.cn` http/https 实测同码同体积，零兼容风险）；
+- 在停用的模板绑定旁标注停用原因与 CSP 约束，避免后人误判。
+- **新增 `frontend/scripts/check_csp_compat.js`（prebuild 阻断）**：
+  从 `cmd/server` 读取唯一权威 CSP，扫描 `src/` 中所有绝对 URL 字面量，
+  若 scheme 不被对应指令放行则构建失败（放行 `localhost` 与 `www.w3.org` 命名空间）。
+  已完成反向验证：临时注入一处 `http://` 图片引用 → 构建如期失败。
+
+### P1 · 敏感路径不再被 SPA 兜底伪装成 200
+
+**问题**：`/.git/config`、`/Dockerfile`、`/Makefile`、`/package.json`、`/.env` 均返回 **200 + index.html**。
+不是泄露（返回的是 SPA 壳），但：① 任何安全扫描器都会得出「.git 目录可访问 / Dockerfile 暴露」
+等高危误报；② 这类探测永远产生不了真实 404，404 监控失效。
+
+- `cmd/server/static.go` 新增 `shouldDenyStaticPath()`：拒绝所有**以点开头的路径段**
+  （`.git`/`.env`/`.ssh`/`.DS_Store`…，`.well-known` 按 RFC 8615 放行）
+  与基础设施文件名/前缀（`Dockerfile`/`Makefile`/`docker-compose.*`/`go.mod`/`package.json`/
+  `node_modules`/`backend`/`data`/`logs`/`scripts` …）。
+- 非根路径的 SPA 兜底响应新增 `X-SPA-Fallback: 1` 标记，使运维能区分
+  「真实页面」与「被兜底的正向 200」。
+- `/health` 新增 `denied_path_probes` 与 `spa_fallback_hits` 指标，使扫描探测可观测。
+- 新增 `TestShouldDenyStaticPath` / `TestStaticHandler_DeniesSensitivePaths` /
+  `TestStaticHandler_FlagsSPAFallback` 三组回归测试（均含正反例）。
+
+### 已核实：SSE 实时推送是活的（报告中的待验证项）
+
+报告在未携带凭证的情况下探测，得到 `Set-Cookie: 0`，因此无法判定 SSE 是否可用。
+实测（本地直接连 Go 服务端）：
+
+```
+POST /api/auth/login            → 200 + Set-Cookie: blades_token=…; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax
+GET  /api/events/stream (无凭证) → 401
+GET  /api/events/stream (Bearer)  → 200  text/event-stream  X-Accel-Buffering: no
+GET  /api/events/stream (Cookie)  → 200
+```
+
+结论：HttpOnly Cookie 只在**登录成功后**下发（符合预期），SSE 三种鉴权路径全部正常。
+
+### 已核实：`Cache-Control: no-store` 不是服务端缺陷
+
+报告在共享隧道域名上测得 `/assets/*` 为 `no-store`。本地**直接连 Go 服务端**（绕过一切代理）实测：
+
+```
+/assets/index-<hash>.js  →  Cache-Control: public, max-age=31536000, immutable
+/                        →  Cache-Control: no-cache
+```
+
+即 `no-store` 由中间代理（instabox 隧道）重写注入，服务端行为正确。**请在真实 VPS 上复测确认。**
+
+### 验证
+
+- `npm run lint`：0 errors / 150 warnings。
+- `npm run build`：prebuild 三道门禁（未导入标识符 / UI 纯净度 / CSP 一致性）+ postbuild 全部通过。
+- `go test ./cmd/server/`：全部通过（含新增 3 组敏感路径与 SPA 标记测试）。
+- Ego-Browser 四组端到端：
+  ① 发布韧性 + Agent 路由（旧 chunk 回退 200 / staleChunkGuard 冷却与自动刷新）；
+  ② 助手消息 Markdown 保真渲染 + 研究中心 6 Tab + 原报障深链；
+  ③ 首屏未拉取 CodeMirror + 10 条懒加载路由零 ErrorBoundary + 敏感路径全 404；
+  ④ 分时/日K 弹层 ECharts 正常渲染（canvas=1 / img=0）+ 产物零 `http://` 外部资源。
+
+---
+
 # Release v1.8.0
 
 发布日期: 2026-10-30

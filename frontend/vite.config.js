@@ -31,6 +31,24 @@ export default defineConfig({
       },
       output: {
         manualChunks(id) {
+          // ── 关键：隔离 Vite 注入的共享运行时助手 ────────────────────────────
+          // `__vitePreload`（动态 import 的依赖预加载包装器）是一个**虚拟模块**，
+          // 不属于 node_modules，因此不会被下面的 vendor 规则命中。Rollup 会自行决定
+          // 它的归属 —— 实测它被塞进了 `vendor-codemirror`。
+          // 由于入口 chunk 必须静态引用 `__vitePreload`，index.html 的 modulepreload
+          // 就把整个 vendor-codemirror 写进了首屏预加载列表：
+          //   首屏被迫多下载 1612 KB raw / 559 KB brotli 的 CodeMirror，
+          //   而首屏没有任何一处用到 CodeMirror（它只服务于 md-editor-v3 编辑器路由）。
+          // 把它显式隔离成极小的独立 chunk，首屏只预加载这个 ~1 KB 的助手。
+          if (
+            id.includes('preload-helper') ||
+            id.includes('modulepreload-polyfill') ||
+            id.includes('vite/dist/client') ||
+            id.includes('\0vite/')
+          ) {
+            return 'vendor-preload'
+          }
+
           if (!id.includes('node_modules')) return
           // 1. 图表可视化类 (按需分离)
           if (id.includes('/echarts/') || id.includes('/zrender/')) return 'vendor-echarts'

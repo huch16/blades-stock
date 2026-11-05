@@ -11,6 +11,61 @@ import (
 	"blades-stock/backend/logger"
 )
 
+// ── 敏感 / 基础设施路径拒绝清单 ─────────────────────────────────────────────
+// 本应用使用 hash 路由（createWebHashHistory），浏览器只会在服务端请求真实文件与 `/`，
+// 因此服务端看到的路径绝无可能是「合法的 SPA 深链」。但 SPA 兜底会把任何未命中的路径
+// 都返回 200 + index.html，导致：
+//
+//	① 任何安全扫描器都会得到一份高危误报清单（`.git 目录可访问` / `Dockerfile 暴露` …）；
+//	② 非 API 路径的真实 404 永远被掩盖，404 监控彻底失效。
+//
+// 因此在这里显式拒绝「隐藏路径段」与常见基础设施文件，避免被 SPA 壳伪装成 200。
+var deniedPathPrefixes = []string{
+	"/.git", "/.svn", "/.hg", "/.bzr", "/.env", "/.aws", "/.ssh",
+	"/.npmrc", "/.netrc", "/.htpasswd", "/.idea", "/.vscode",
+	"/node_modules", "/frontend/", "/backend/", "/cmd/", "/scripts/",
+	"/data/", "/logs/", "/dist/", "/vendor/",
+}
+
+var deniedBaseNames = map[string]struct{}{
+	"dockerfile": {}, "docker-compose.yml": {}, "docker-compose.yaml": {},
+	"makefile": {}, "gnumakefile": {}, "procfile": {}, "jenkinsfile": {},
+	"package.json": {}, "package-lock.json": {}, "yarn.lock": {}, "pnpm-lock.yaml": {},
+	"go.mod": {}, "go.sum": {}, "tsconfig.json": {}, "vite.config.js": {}, "vite.config.ts": {},
+	"eslint.config.js": {}, "web.config": {}, "nginx.conf": {}, ".ds_store": {},
+	"id_rsa": {}, "id_ed25519": {}, "credentials": {}, "secrets.yml": {}, "secrets.yaml": {},
+}
+
+// shouldDenyStaticPath 报告该路径是否属于「绝不能由 SPA 兜底伪装成 200」的敏感路径。
+// 注意：`.well-known` 按 RFC 8615 属于必须可服务的标准路径，予以放行。
+func shouldDenyStaticPath(reqPath string) bool {
+	p := strings.ToLower(strings.TrimSuffix(reqPath, "/"))
+	if p == "" || p == "/" {
+		return false
+	}
+
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "" || seg == ".well-known" {
+			continue
+		}
+		// 任何以点开头的路径段（.git / .env / .DS_Store / .ssh …）都绝不属于 SPA 路由
+		if strings.HasPrefix(seg, ".") {
+			return true
+		}
+	}
+
+	for _, prefix := range deniedPathPrefixes {
+		if strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+
+	if _, ok := deniedBaseNames[filepath.Base(p)]; ok {
+		return true
+	}
+	return false
+}
+
 // NewStaticHandler 构造前端静态资源与 SPA 客户端路由托管处理器。
 //
 // 行为契约：
@@ -44,6 +99,14 @@ func NewStaticHandler(distDir, previousDistDir string) http.Handler {
 		targetPath := filepath.Join(distDir, relPath)
 		isAsset := strings.HasPrefix(reqPath, "/assets/")
 
+		// 1.5 敏感 / 基础设施路径一律 404，绝不回落到 index.html。
+		//     目的：消除安全扫描器误报，并让这类探测产生真实 404 可被监控。
+		if shouldDenyStaticPath(reqPath) {
+			statDeniedPathHits.Add(1)
+			http.NotFound(w, r)
+			return
+		}
+
 		// 2. 静态资源 / 协议文件 / 带扩展名文件缺失时严格 404（旧版 chunk 例外回退）
 		if isAsset || strings.Contains(filepath.Base(reqPath), ".") {
 			if fi, err := os.Stat(targetPath); err != nil || fi.IsDir() {
@@ -70,8 +133,14 @@ func NewStaticHandler(distDir, previousDistDir string) http.Handler {
 			return
 		}
 
-		// 4. 纯 SPA 客户端路由导航，回退 index.html
+		// 4. 纯 SPA 客户端路由导航，回退 index.html。
+		//    显式标记 X-SPA-Fallback，让运维/监控能区分「真实文件」与「SPA 壳兜底」，
+		//    否则非 API 路径永远 200，真实 404 无法被观测。
 		w.Header().Set("Cache-Control", "no-cache")
+		if reqPath != "/" {
+			statSPAFallbackHits.Add(1)
+			w.Header().Set("X-SPA-Fallback", "1")
+		}
 		http.ServeFile(w, r, indexPath)
 	})
 }

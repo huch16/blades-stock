@@ -245,7 +245,30 @@ docker compose logs -f blades-stock
 | `tseslint.parser`（`.vue` 的 `parserOptions.parser`） | **没有它就等于没有 lint**：`<script setup lang="ts">` 里的类型语法会全线报 `Parsing error`，导致 50+ 个文件被静默跳过。 |
 
 配套的构建期门禁（`prebuild` / `postbuild`）见 `frontend/scripts/`：
-`check_vue_imports.js`（`h()` 调用中的未导入标识符）+ `check_ui_purity.js`（禁止 TDesign 回潮）。
+`check_vue_imports.js`（`h()` 调用中的未导入标识符）+ `check_ui_purity.js`（禁止 TDesign 回潮）+
+`check_csp_compat.js`（源码资源引用与 CSP 一致性）。
+
+### 🧱 首屏体积基线（请勿回退）
+
+实测（`gzip -9`，与 `dist/index.html` 的 modulepreload 清单严格对齐）：
+
+| 阶段 | 首屏关键路径 |
+|---|---|
+| 修复前 | 1305 KB gzip |
+| **当前基线** | **699 KB gzip（`dist/index.html` 共 8 个资源）** |
+
+当前首屏仅包含：`index`（业务代码）、`vendor-naive`、`vendor-echarts`、`vendor-vue-core`、
+`vendor-utils`（naive-ui 的传递依赖 lodash-es/date-fns）、`vendor-icons`、`vendor-preload`（1 KB）、主 CSS。
+
+**以下三块必须保持「不在首屏预加载列表里」**：
+
+| chunk | gzip | 为何不该上首屏 | 保持方式 |
+|---|---|---|---|
+| `vendor-codemirror` | 547 KB | 仅服务于 md-editor-v3 编辑器路由 | `vite.config.js` 中把 Vite 的 `__vitePreload` 助手隔离到独立的 `vendor-preload` chunk。**否则 Rollup 会把该助手塞进 `vendor-codemirror`，导致入口静态引用它、`index.html` 把整个 CodeMirror 写进预加载列表。** |
+| `vendor-markdown` | 354 KB | 仅研报/技能编辑器懒加载路由 | 保持 `md-editor-v3` 只被懒加载组件引用 |
+| `StockLightweightKlineChart` | 37 KB | 仅「多周期K线」弹层需要 | `stock.vue` 中显式 `defineAsyncComponent` 覆盖。**否则 unplugin-vue-components 会把模板里的 `<stock-lightweight-kline-chart>` 解析为静态 import 打进入口。** |
+
+验证方法：`grep -o 'assets/[^"]*' frontend/dist/index.html | sort -u`，输出应只有 8 项且不含上述三个 chunk。
 
 ```bash
 npm run lint       # 只读检查（CI 口径，0 errors 才放行）
