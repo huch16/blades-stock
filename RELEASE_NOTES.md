@@ -58,6 +58,73 @@ Highlights / 核心亮点（全栈七大维度）
 
 ---
 
+## 补丁 2 (Patch 2) — 发布韧性、双 UI 库拆除与构建门禁硬化
+
+发布日期: 2026-11-05  
+触发: 生产巡查报告（Agent 页面巡检 + 两项更正）
+
+### P0 · 发布韧性：部署不再打断在线用户
+
+**根因**：Vite 按内容哈希生成懒加载 chunk。`docker compose up -d --build` 整体替换 `frontend/dist` 后，
+所有旧哈希 chunk 立即 404；而「已打开旧页面的在线用户」点击菜单时发生的失败是**动态 `import()` 拒绝**，
+发生在组件挂载**之前**，因此 `onErrorCaptured` / `ErrorBoundary` 无法捕获 —— 表现为点击无反应或整页白屏，
+且服务端日志完全干净、无任何告警（最危险的静默故障）。
+
+- **新增 `frontend/src/utils/staleChunkGuard.ts`**：监听 Vite 官方 `vite:preloadError` 事件 + `unhandledrejection` 兜底；
+  命中陈旧 chunk 时执行**一次性静默刷新**，并设置 15s 冷却窗口 + `sessionStorage` 标记，严格杜绝无限重载风暴；
+  冷却期内仍失败则降级为不依赖任何 UI 库的顶部提示条，明确告知用户手动刷新。
+- **新增 `cmd/server/static.go`（`NewStaticHandler` 抽取重构）**：`/assets/` 下缺失的旧哈希 chunk 现在会回退到
+  上一版本产物目录并返回 **200 + `X-Release-Fallback: previous`**，而不是 404。
+  同时抽取为可测试函数，新增 `cmd/server/static_test.go` 4 组回归测试。
+- **`docker-compose.yml`**：以只读方式挂载 `./frontend/dist-previous:/app/frontend/dist-previous:ro`。
+- **`scripts/deploy-vps.sh`**：新增 4.5 步，在每次构建前自动 `docker cp` 快照当前线上产物为「上一版本回退源」。
+- **`/health` 新增 `release_resilience` 可观测指标**：`previous_dist_armed` / `stale_chunk_fallback` /
+  `stale_chunk_miss` / `immutable_asset_requests` —— 让「部署打断用户」这一静默故障变成可监控、可告警的显式信号。
+- **`frontend/src/router/router.js`**：新增 `router.onError` 兜底，覆盖非 Vite 预加载路径的路由级 chunk 失效。
+- **静态资源不可变缓存回归测试**：`TestStaticHandler_AssetImmutableCache` 锁定 `/assets/*.hash.js` 必须返回
+  `Cache-Control: public, max-age=31536000, immutable`。
+
+### P1 · 拆除 TDesign 双 UI 库税（Agent 路由 -70% 载荷）
+
+**问题**：Agent 路由为 `t-chat-sender` / `t-chat-content` / `t-avatar` / `t-button` 共 4 个组件，
+加载了完整 `@tdesign-vue-next/chat` + `tdesign-vue-next`（node_modules 222MB，产物 **raw 1.17MB / br 355KB**）——
+全站投入产出比最差的一处；而 `n-avatar` / `n-button` 已在首屏付费。
+
+- `t-avatar` → `n-avatar`；`t-button` → `n-button`（`AssistantMessage.vue`、`UserMessage.vue`、`ToolTimeline.vue`）。
+- `t-chat-content` → **新增 `chat/ChatMarkdown.vue`**，基于 `markdown-it` 默认预置（`html:false` 从源头禁注入 +
+  `sanitizeMarkdownHtml` 二次消毒 + 外链 `noopener noreferrer`），并修复 `sanitize.ts` 缺失 `br`/`s` 白名单
+  导致软换行被消毒器吞掉的缺陷。
+- `t-chat-sender` → **新增 `chat/ChatSender.vue`**：零外部 UI 库依赖，原生 textarea + 自适应高度，
+  并补齐 TDesign 缺失的 **IME 组合输入保护**（中文候选词回车不再误发送）。
+- `tdesign-icons-vue-next` → `@vicons/ionicons5`（已在首屏 `vendor-icons` 中）。
+- `vite.config.js`：移除 `TDesignResolver`；新增 `vendor-md-core` 分包规则，避免轻量 markdown-it 被并入
+  `vendor-markdown`（404KB br）导致 Agent 路由被迫加载完整编辑器依赖树。
+- `package.json`：移除 `@tdesign-vue-next/chat`、`tdesign-icons-vue-next`、`@tdesign-vue-next/auto-import-resolver`；
+  显式声明 `markdown-it`。
+
+**实测收益（brotli）**
+
+| 指标 | 修复前 | 修复后 | 变化 |
+|---|---|---|---|
+| `vendor-tdesign` | 355 KB | **0（已彻底移除）** | −355 KB |
+| Agent 路由增量载荷 | ≈ 427 KB | **≈ 86 KB**（`vendor-md-core` 46.5 + `agent-chat` 29.5 + CSS 9.7） | **−80%** |
+| 首屏预加载列表 | 含 TDesign | 不含 TDesign | — |
+
+### P1/P2 · 构建门禁：把「静默带病产物」升级为构建失败
+
+- **`frontend/scripts/check_ui_purity.js`（新增，prebuild + postbuild 双重把关）**：四条规则硬阻断双 UI 库回潮 ——
+  源码禁止 tdesign import、模板禁止 `<t-*>` 自定义元素、package.json 禁止 tdesign 依赖、产物禁止 tdesign chunk。
+- **`frontend/vite.config.js` `onwarn`**：`is not defined` / `is not exported` / `unresolved import` 直接抛出
+  `[BUILD-BLOCKER]` 中断打包（此前仅测试环境阻断）。
+- **恢复 `unplugin-vue-components` 本地组件自动注册**：在拆除 TDesign resolver 的同时保证 `src/components` 下
+  本地组件的自动发现能力不被误删（该插件此前与 TDesign resolver 写在同一次注册中）。
+- **新增 `.dockerignore`**：裁剪构建上下文（`frontend/node_modules`、`frontend/dist*`、`data/`、`logs/`），
+  既加速镜像构建，又避免宿主平台原生二进制被带入 Linux 构建阶段。
+- **README 新增「发布工程规范」章节**：明确「必须使用 `scripts/deploy-vps.sh` 部署」「不得删除
+  `frontend/dist-previous/`」，并给出 `stale_chunk_miss` 告警口径与三条自检命令。
+
+---
+
 # Release v1.8.0
 
 发布日期: 2026-10-30

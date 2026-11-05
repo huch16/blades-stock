@@ -1,7 +1,7 @@
 <template>
   <div class="msg-wrapper assistant">
     <div class="msg-avatar">
-      <t-avatar :size="40" :src="avatar" shape="circle" />
+      <n-avatar :size="40" :src="avatar" round />
     </div>
     <div class="msg-content">
       <div class="msg-header">
@@ -18,7 +18,7 @@
         @toggle="expandedReasoning = !expandedReasoning"
         class="section-reasoning"
       >
-        <t-chat-content :content="reasoning || rawReasoning || ''" />
+        <ChatMarkdown :content="reasoning || rawReasoning || ''" />
       </CollapsibleSection>
 
       <!-- 2. 执行步骤（可折叠，默认折叠） -->
@@ -60,12 +60,12 @@
         @toggle="expandedReport = !expandedReport"
         class="section-report"
       >
-        <t-chat-content :content="jsonMarkdown" />
+        <ChatMarkdown :content="jsonMarkdown" />
       </CollapsibleSection>
 
       <!-- 5. 最终回答（主内容，始终展示） -->
       <div class="msg-main-content" :id="anchorId">
-        <t-chat-content v-if="content" :content="content" />
+        <ChatMarkdown v-if="content" :content="content" />
         <div v-else-if="isStreaming" class="streaming-placeholder">
           <!-- 采用与首行文本等高的紧凑打字占位符，彻底消除原 5 行骨架屏 (150px) 瞬间坍缩为首字 1 行 (24px) 的剧烈上下震荡 -->
           <div class="compact-typing-indicator">
@@ -111,21 +111,21 @@
 
       <!-- 7. 消息操作栏 (生成中隐藏，完成后渐入，杜绝操作条随流式文本逐行下移震荡) -->
       <div v-if="!isStreaming" class="msg-actions">
-        <t-button
+        <n-button
           v-if="hasStockThesisPotential"
-          size="small"
-          variant="text"
-          theme="primary"
+          size="tiny"
+          text
+          type="primary"
           title="将分析结论与买方假说沉淀入标的认知档案账本"
           @click="$emit('saveThesis', message)"
         >
           📥 存入买方认知账本
-        </t-button>
-        <t-button size="small" variant="text" theme="default" @click="$emit('copy', content)">📋 复制</t-button>
-        <t-button size="small" variant="text" theme="default" @click="$emit('retry')">🔄 重试</t-button>
-        <t-button size="small" variant="text" theme="default" @click="$emit('reference')">🔗 引用</t-button>
-        <t-button size="small" variant="text" theme="default" title="导出为高清研报图片" @click="$emit('exportImage', message)">🖼️ 导出图片</t-button>
-        <t-button size="small" variant="text" theme="default" @click="copyAnchorLink">📍 链接</t-button>
+        </n-button>
+        <n-button size="tiny" text @click="$emit('copy', content)">📋 复制</n-button>
+        <n-button size="tiny" text @click="$emit('retry')">🔄 重试</n-button>
+        <n-button size="tiny" text @click="$emit('reference')">🔗 引用</n-button>
+        <n-button size="tiny" text title="导出为高清研报图片" @click="$emit('exportImage', message)">🖼️ 导出图片</n-button>
+        <n-button size="tiny" text @click="copyAnchorLink">📍 链接</n-button>
       </div>
     </div>
   </div>
@@ -133,10 +133,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
-import { useMessage } from 'naive-ui'
+import { NAvatar, NButton, useMessage } from 'naive-ui'
 import CollapsibleSection from './CollapsibleSection.vue'
 import StreamingSkeleton from './StreamingSkeleton.vue'
 import ToolTimeline from './ToolTimeline.vue'
+import ChatMarkdown from './ChatMarkdown.vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import { dispatchAgentAction, type AgentAction } from '@/utils/agentControlBus'
 import { stripAllAgentActionBlocks } from '@/utils/cleanText'

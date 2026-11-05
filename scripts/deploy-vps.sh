@@ -205,6 +205,8 @@ if [ "$HEALTHY" = true ]; then
     echo -e " 📝 实时运行日志查看:   docker compose logs -f blades-stock"
     echo -e " 🛑 停止容器服务:       docker compose down"
     echo -e " 🔄 重启容器服务:       docker compose restart"
+    echo -e " 🛡️ 发布韧性自检:        curl -s http://127.0.0.1:${APP_PORT}/health"
+    echo -e "    （previous_dist_armed=true 表示旧 chunk 回退已生效，部署不再打断在线用户）"
     echo -e "${GREEN}==================================================================${NC}\n"
 else
     echo -e "${RED}[警告] 服务启动健康检查超时，请通过 'docker compose logs blades-stock' 查看详细容器启动日志。${NC}"

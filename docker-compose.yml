@@ -36,6 +36,14 @@ services:
       - ./data:/app/data
       # 挂载运行日志目录
       - ./logs:/app/logs
+      # 发布韧性 (P0)：上一版本前端产物只读挂载。
+      # 目的：部署新版本会整体替换 /app/frontend/dist，使所有旧哈希 chunk 立即消失。
+      # 此时「已打开旧页面的在线用户」点击懒加载路由会请求到 404 → 整页失去响应
+      # （该失败发生在 import 阶段，早于 ErrorBoundary 挂载，前端无法自行捕获）。
+      # 挂载上一版产物后，Go 静态处理器会把旧 chunk 回退为 200，前端 staleChunkGuard
+      # 随后静默刷新到最新版本，用户全程无感。
+      # 快照由 scripts/deploy-vps.sh 在每次部署前通过 docker cp 自动生成。
+      - ./frontend/dist-previous:/app/frontend/dist-previous:ro
     deploy:
       resources:
         limits:

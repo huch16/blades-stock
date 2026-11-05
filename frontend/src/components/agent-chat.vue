@@ -593,16 +593,13 @@
 
       <!-- 输入框主体 -->
       <div class="input-sender-box">
-        <t-chat-sender
+        <ChatSender
           ref="chatSenderRef"
           v-model="inputValue"
-          :textarea-props="{
-            placeholder: configOptions.length ? '输入个股代码/名称、ETF轮动需求或选股策略... (Enter发送，Shift+Enter换行)' : '⚠️ 请先选择或在设置中添加 AI 模型配置',
-            rows: 1,
-            autosize: { minRows: 1, maxRows: 6 },
-          }"
+          :placeholder="configOptions.length ? '输入个股代码/名称、ETF轮动需求或选股策略... (Enter发送，Shift+Enter换行)' : '⚠️ 请先选择或在设置中添加 AI 模型配置'"
           :loading="isStreaming"
-          :stop-disabled="false"
+          :min-rows="1"
+          :max-rows="6"
           @send="handleSend"
           @stop="handleStop"
         >
@@ -628,7 +625,7 @@
               </n-button>
             </div>
           </template>
-        </t-chat-sender>
+        </ChatSender>
       </div>
 
       <!-- 缺少配置引导 -->
@@ -791,14 +788,14 @@ import {
   useDialog
 } from 'naive-ui'
 import {
-  ArrowDownIcon,
-  DeleteIcon,
-  FullscreenIcon,
-  FullscreenExitIcon,
-  ChatIcon,
-  AddIcon,
-  ViewListIcon
-} from 'tdesign-icons-vue-next'
+  ArrowDownOutline as ArrowDownIcon,
+  TrashOutline as DeleteIcon,
+  ExpandOutline as FullscreenIcon,
+  ContractOutline as FullscreenExitIcon,
+  ChatbubbleEllipsesOutline as ChatIcon,
+  AddOutline as AddIcon,
+  ListOutline as ViewListIcon
+} from '@vicons/ionicons5'
 import { ChatWithAgent, GetConfig, GetVersionInfo, GetSystemStateSnapshot, SaveStockThesis, AbortChatWithAgent, SaveImage, GetStockList } from '../../wailsjs/go/main/App'
 import html2canvas from 'html2canvas'
 import { useAiConfigStore } from '@/stores/aiConfig'
@@ -815,8 +812,7 @@ import {
 import ChatMessageComp from './chat/ChatMessage.vue'
 import MessageAnchorNav from './chat/MessageAnchorNav.vue'
 
-// 仅在 Agent 对话路由按需加载 TDesign 组件库局部样式，彻底解放全局首屏样式体积
-import 'tdesign-vue-next/es/style/index.css'
+import ChatSender from './chat/ChatSender.vue'
 
 // ========== 数据接口与持久化类型 ==========
 interface ChatSession {
@@ -3383,23 +3379,6 @@ onBeforeUnmount(() => {
     max-width: 1240px;
     width: 100%;
     margin: 0 auto;
-
-    :deep(.t-chat-sender) {
-      .t-chat-sender__textarea {
-        border-radius: 10px !important;
-        border: 1px solid var(--td-border-level-2-color, #dcdcdc) !important;
-        background: var(--td-bg-color-container, #ffffff) !important;
-        font-size: 14px !important;
-        line-height: 1.6 !important;
-        padding: 8px 12px !important;
-        transition: border-color 0.2s;
-
-        &:focus {
-          border-color: var(--td-brand-color, #0052d9) !important;
-          box-shadow: 0 0 0 2px var(--td-brand-color-focus, rgba(0, 82, 217, 0.15)) !important;
-        }
-      }
-    }
 
     .sender-actions {
       display: flex;

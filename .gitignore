@@ -84,6 +84,10 @@ typings/
 .nuxt
 dist
 
+# 发布韧性：上一版前端产物快照（由 scripts/deploy-vps.sh 在每次部署前自动生成，
+# 供旧哈希 chunk 回退使用，不纳入版本控制）
+frontend/dist-previous
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and *not* Next.js

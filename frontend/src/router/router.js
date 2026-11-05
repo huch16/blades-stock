@@ -1,4 +1,5 @@
 import {createRouter, createWebHashHistory} from 'vue-router'
+import { handleStaleChunkFailure } from '../utils/staleChunkGuard'
 
 import stockView from '../components/stock.vue'
 
@@ -32,6 +33,20 @@ const router = createRouter({
     //history: createWebHistory(),
     history: createWebHashHistory(),
     routes,
+})
+
+// ── 发布韧性兜底：路由级懒加载 chunk 失效 ────────────────────────────────────
+// 部署新版本后旧哈希 chunk 会被整体删除，在线用户点击路由时会拿到 404。
+// `vite:preloadError` 已覆盖绝大多数场景，此处为「非 Vite 预加载路径 / 浏览器
+// 差异」再补一层保险：统一交给 staleChunkGuard 做一次性自动刷新或降级提示。
+router.onError((error, to) => {
+    const msg = (error && error.message) || String(error || '')
+    if (/dynamically imported module|Importing a module script failed|Unable to preload CSS|Load failed/i.test(msg)) {
+        console.warn('[Router] 路由懒加载模块失效，交由发布韧性守卫接管:', to && to.fullPath, msg)
+        handleStaleChunkFailure(error)
+        return
+    }
+    console.error('[Router] 路由切换发生异常:', to && to.fullPath, error)
 })
 
 export default router

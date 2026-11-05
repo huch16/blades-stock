@@ -6,14 +6,14 @@
   "main": "",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/check_vue_imports.js",
+    "prebuild": "node scripts/check_vue_imports.js && node scripts/check_ui_purity.js",
     "build": "vite build",
+    "postbuild": "node scripts/check_ui_purity.js --dist",
     "preview": "vite preview",
     "lint": "eslint --ext .js,.ts,.vue src/"
   },
   "dependencies": {
     "@lezer/highlight": "^1.2.1",
-    "@tdesign-vue-next/chat": "0.4.5",
     "@types/dompurify": "^3.0.5",
     "@types/file-saver": "^2.0.7",
     "@vavt/cm-extension": "^1.11.2",
@@ -25,16 +25,16 @@
     "html2canvas": "^1.4.1",
     "lightweight-charts": "^5.2.0",
     "lodash": "^4.18.1",
+    "markdown-it": "^14.1.0",
     "md-editor-v3": "^5.8.5",
     "naive-ui": "^2.44.1",
-    "tdesign-icons-vue-next": "^0.3.7",
     "vue": "^3.5.33",
     "vue-json-pretty": "^2.6.0",
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@tdesign-vue-next/auto-import-resolver": "^0.1.6",
+    "@types/markdown-it": "^14.0.1",
     "@typescript-eslint/eslint-plugin": "^8.71.1",
     "@typescript-eslint/parser": "^8.71.1",
     "@vicons/antd": "^0.13.0",

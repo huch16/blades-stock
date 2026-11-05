@@ -1,8 +1,6 @@
 import {defineConfig} from 'vite'
 import vue from '@vitejs/plugin-vue'
-import AutoImport from 'unplugin-auto-import/vite';
 import Components from 'unplugin-vue-components/vite';
-import { TDesignResolver } from '@tdesign-vue-next/auto-import-resolver';
 import path from 'path';
 
 // https://vitejs.dev/config/
@@ -14,15 +12,11 @@ export default defineConfig({
   },
   plugins: [
       vue(),
-      AutoImport({
-          resolvers: [TDesignResolver({
-              library: 'chat'
-          })],
-      }),
+      // 本地组件自动注册（src/components 目录扫描）。
+      // 注意：此处**不得**再挂载任何 UI 库 resolver —— TDesign 已按 UI 纯净度门禁
+      // (scripts/check_ui_purity.js) 彻底移除，全站统一使用 Naive UI (app.use(naive) 全局注册)。
       Components({
-          resolvers: [TDesignResolver({
-              library: 'chat'
-          })],
+          dts: 'components.d.ts',
       }),
   ],
   build: {
@@ -48,6 +42,19 @@ export default defineConfig({
           }
 
           // 3. Markdown 渲染与扩展库
+          // 3.1 轻量 Markdown 解析内核：Agent 对话流 (ChatMarkdown) 与 md-editor-v3 共用。
+          //     必须独立成 chunk —— 否则 Rollup 会把它并入 vendor-markdown (404KB br)，
+          //     导致只用轻量管线的 Agent 路由被迫加载完整编辑器依赖。
+          if (
+            id.includes('/markdown-it/') ||
+            id.includes('/linkify-it/') ||
+            id.includes('/mdurl/') ||
+            id.includes('/uc.micro/') ||
+            id.includes('/punycode/')
+          ) {
+            return 'vendor-md-core'
+          }
+          // 3.2 重量级编辑器及其扩展 (仅 md-editor-v3 路由需要)
           if (id.includes('md-editor-v3') || id.includes('@vavt')) {
             return 'vendor-markdown'
           }
@@ -57,10 +64,11 @@ export default defineConfig({
           
           // 5. 图标库 (独立分包，避免膨胀核心 UI)
           if (id.includes('@vicons') || id.includes('tdesign-icons')) return 'vendor-icons'
-          
-          // 6. 对话组件库
-          if (id.includes('tdesign')) return 'vendor-tdesign'
-          
+
+          // 6. [已移除] 曾用于隔离 vendor-tdesign 双 UI 库税。
+          //    @tdesign-vue-next/chat + tdesign-vue-next 已彻底从依赖树移除
+          //    (产物 raw 1.17MB / br 355KB)，此处不再需要分包规则。
+
           // 7. Naive UI 体系
           if (id.includes('/naive-ui/') || id.includes('seemly') || id.includes('vooks') || id.includes('evtd')) {
             return 'vendor-naive'

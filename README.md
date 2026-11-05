@@ -233,6 +233,56 @@ docker compose logs -f blades-stock
 
 ---
 
+### 🛡️ 发布工程规范：部署不得打断在线用户（P0 强制要求）
+
+**问题本质**：Vite 为每个懒加载路由生成**带内容哈希**的 chunk（如 `agent-chat-AmcV2WRK.js`）。
+一次 `docker compose up -d --build` 会整体替换容器内的 `frontend/dist`，**所有旧哈希 chunk 立即消失**。
+此时任何「已打开旧页面」的用户点击菜单，浏览器就会请求一个已不存在的 chunk → 404 → 动态 `import()` 被拒绝。
+
+这条失败链路发生在**组件挂载之前**，因此 Vue 的 `onErrorCaptured` / `ErrorBoundary` **完全无法捕获**，
+表现为：点击菜单无反应、或整页白屏。**服务器端一切正常、日志干净、无任何告警** —— 这是最危险的静默故障。
+
+**本仓库的四层防线（全部默认开启，请勿关闭）**
+
+| 层级 | 机制 | 位置 | 作用 |
+|---|---|---|---|
+| 1 | `vite:preloadError` + 一次性静默刷新 | `frontend/src/utils/staleChunkGuard.ts` | 旧页面自动跳到新版本，用户无感 |
+| 2 | 15s 冷却窗口 + `sessionStorage` 标记 | 同上 | 严格防止「刷新→又失败→再刷新」的无限重载风暴 |
+| 3 | 降级提示条（不依赖任何 UI 库） | 同上 | 冷却期内仍失败时，明确提示「请手动刷新」，而不是一片空白 |
+| 4 | **上一版本 chunk 服务端回退** | `cmd/server/static.go` + `docker-compose.yml` 挂载 | 旧 chunk 返回 200 而非 404，前端才有机刷完刷新 |
+
+**运维必须遵守的两条规则**
+
+1. **必须使用 `scripts/deploy-vps.sh` 部署**（或在手动部署时先执行「上一步产物快照」）：
+   ```bash
+   # 脚本在每次构建前自动执行下述快照，无需手工操作：
+   mkdir -p frontend/dist-previous && rm -rf frontend/dist-previous/*
+   docker cp blades-stock:/app/frontend/dist/. frontend/dist-previous/
+   ```
+   该目录已通过 `docker-compose.yml` 以**只读**方式挂载回容器 `/app/frontend/dist-previous`。
+
+2. **不要删除 `frontend/dist-previous/`，也不要移除该挂载**。移除后 `/health` 会显示
+   `previous_dist_armed=false`，部署将立即重新回到「打断所有在线用户」的状态。
+
+**如何验证回退已生效**
+
+```bash
+# 1) 查看发布韧性指标
+curl -s http://127.0.0.1:8000/health | grep -o 'release_resilience.*'
+# 期望：{"previous_dist_armed":true,"stale_chunk_fallback":N,"stale_chunk_miss":0,...}
+
+# 2) 直接请求一个已不存在的旧 chunk，应返回 200 且带 X-Release-Fallback: previous
+curl -sI http://127.0.0.1:8000/assets/index-B0pDqm7D.js | grep -i 'HTTP/\|x-release-fallback\|cache-control'
+
+# 3) 静态资源不可变缓存确认（应为一年 immutable）
+curl -sI http://127.0.0.1:8000/assets/index-<当前哈希>.js | grep -i cache-control
+```
+
+> `stale_chunk_miss` 是**唯一需要告警**的指标：它表示某个旧 chunk 在当前与上一版本中都不存在，
+> 用户此时必然白屏。正常情况下它应恒为 `0`。
+
+---
+
 ## ⚙️ 模型与数据配置
 
 启动应用后，点击右上角 **设置 (Settings)** 即可图形化配置或通过环境变量调优：

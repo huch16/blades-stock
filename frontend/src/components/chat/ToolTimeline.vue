@@ -51,9 +51,9 @@
             <details class="tool-details" v-if="showArgs[call.id || idx]" open>
               <summary class="details-summary">
                 <span>📥 参数</span>
-                <t-button size="tiny" variant="text" theme="default" @click.stop="handleCopyArgs(call)">
+                <n-button size="tiny" text @click.stop="handleCopyArgs(call)">
                   复制
-                </t-button>
+                </n-button>
               </summary>
               <pre class="tool-args">{{ formatArgs(call.function.arguments) }}</pre>
             </details>
@@ -62,9 +62,9 @@
             <details class="tool-details" v-if="call.result && showResult[call.id || idx]">
               <summary class="details-summary">
                 <span>📤 结果</span>
-                <t-button size="tiny" variant="text" theme="default" @click.stop="handleCopyResult(call)">
+                <n-button size="tiny" text @click.stop="handleCopyResult(call)">
                   复制
-                </t-button>
+                </n-button>
               </summary>
               <pre class="tool-result">{{ call.result }}</pre>
             </details>
@@ -88,6 +88,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { NButton } from 'naive-ui'
 import CollapsibleSection from './CollapsibleSection.vue'
 import {
   formatDuration,

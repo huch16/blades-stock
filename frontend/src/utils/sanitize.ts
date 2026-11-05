@@ -1,6 +1,37 @@
 import DOMPurify from 'dompurify'
 
 /**
+ * 外链安全化钩子（只注册一次）
+ *
+ * 为什么必须用 Hook 而不是 ALLOWED_ATTR：
+ * DOMPurify 出于防「reverse tabnabbing」考虑，会在消毒阶段**无条件丢弃** `target` 属性，
+ * 即使显式写进 ALLOWED_ATTR 也不生效（实测：`<a target="_blank">` → `<a>`）。
+ * 因此改在 `afterSanitizeAttributes` 阶段统一回填：仅对 http(s) 外链追加
+ * `target="_blank"` 与 `rel="noopener noreferrer nofollow"`，内部锚点则清除 target。
+ * 该钩子对全站所有 MdPreview / ChatMarkdown 渲染路径生效，一次修复全局受益。
+ */
+let externalLinkHookInstalled = false
+
+function installExternalLinkHook() {
+  if (externalLinkHookInstalled) return
+  externalLinkHookInstalled = true
+
+  DOMPurify.addHook('afterSanitizeAttributes', (node: Element) => {
+    if (!node || node.tagName !== 'A' || typeof node.getAttribute !== 'function') return
+    const href = node.getAttribute('href') || ''
+
+    // 兜底：确保任何链接都不带上游可能残留的事件句柄
+    node.setAttribute('rel', 'noopener noreferrer nofollow')
+
+    if (/^https?:\/\//i.test(href)) {
+      node.setAttribute('target', '_blank')
+    } else {
+      node.removeAttribute('target')
+    }
+  })
+}
+
+/**
  * 针对 Markdown 渲染结果的工业级 HTML 消毒器
  * 坚决剔除 <script>、<iframe、<object、<embed、javascript:伪协议以及 onerror/onload 等所有行内事件句柄，
  * 彻底切断提示词注入与存储型 XSS 偷取 localStorage 凭证的攻击链。
@@ -9,17 +40,20 @@ import DOMPurify from 'dompurify'
 export function sanitizeMarkdownHtml(html: string): string {
   if (!html) return ''
 
+  // 保证外链 target/rel 在消毒后仍存在（DOMPurify 会在消毒阶段丢弃 target）
+  installExternalLinkHook()
+
   // 防护：防止大模型输出的非 HTML 尖括号公式/变量（如 <R²>、<R^2>、< 0.85 等）被 DOMPurify 误当作未知标签剥离
   // 将非标准 HTML 标签开头的尖括号安全转义为实体 &lt; 和 &gt;
-  const preProcessed = html.replace(/<(?!\/?(p|h[1-6]|ul|ol|li|blockquote|hr|table|thead|tbody|tr|th|td|b|strong|i|em|del|code|pre|span|div|a|img|details|summary|sub|sup|mark|math|semantics|mrow|msup|msub|msubsup|mi|mn|mo|annotation|mtext|mspace|mover|munder|svg|path|line|text)\b)([^>]{0,60})>/gi, '&lt;$2&gt;')
+  const preProcessed = html.replace(/<(?!\/?(p|h[1-6]|ul|ol|li|blockquote|hr|br|table|thead|tbody|tr|th|td|b|strong|i|em|del|s|code|pre|span|div|a|img|details|summary|sub|sup|mark|math|semantics|mrow|msup|msub|msubsup|mi|mn|mo|annotation|mtext|mspace|mover|munder|svg|path|line|text)\b)([^>]{0,60})>/gi, '&lt;$2&gt;')
 
   return DOMPurify.sanitize(preProcessed, {
     USE_PROFILES: { html: true, mathMl: true, svg: true },
     ALLOWED_TAGS: [
       'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-      'ul', 'ol', 'li', 'blockquote', 'hr',
+      'ul', 'ol', 'li', 'blockquote', 'hr', 'br',
       'table', 'thead', 'tbody', 'tr', 'th', 'td',
-      'b', 'strong', 'i', 'em', 'del', 'code', 'pre',
+      'b', 'strong', 'i', 'em', 'del', 's', 'code', 'pre',
       'span', 'div', 'a', 'img', 'details', 'summary',
       'sub', 'sup', 'mark',
       // MathML & SVG 公式与图表支持

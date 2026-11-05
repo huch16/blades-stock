@@ -35,15 +35,16 @@
     </div>
 
     <div class="msg-avatar">
-      <t-avatar :size="36" :src="avatar" shape="circle">
+      <n-avatar :size="36" :src="avatar" round>
         {{ (name || '您').charAt(0) }}
-      </t-avatar>
+      </n-avatar>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, inject, onMounted, onUnmounted } from 'vue'
+import { NAvatar } from 'naive-ui'
 import type { ChatMessage } from './types'
 
 const props = defineProps<{

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -32,7 +33,91 @@ var (
 	hostFlag    = flag.String("host", "0.0.0.0", "Web server listening host")
 	dataDirFlag = flag.String("data-dir", "data", "Path to data directory containing stock.db")
 	distDirFlag = flag.String("dist-dir", "frontend/dist", "Path to frontend dist directory")
+
+	// 发布韧性 (Release Resilience): 上一版本前端资源目录。
+	// 每次 `docker compose up -d --build` 会整体替换 dist 目录，使所有旧哈希 chunk 立即 404。
+	// 若保留上一版 dist，则「已打开的旧页面」在点击懒加载路由时仍能拿到旧 chunk，
+	// 由前端 staleChunkGuard 在后台静默刷新，用户无感。
+	prevDistDirFlag = flag.String("previous-dist-dir", "", "Path to previous-release frontend dist directory (stale chunk fallback)")
 )
+
+// 发布韧性可观测指标：让「部署打断在线用户」这一静默故障在 /health 上可见，
+// 而不是只留给用户端的一片白屏。
+var (
+	statStaleChunkFallbackHits atomic.Int64 // 旧 chunk 命中上一版本目录的次数
+	statStaleChunkMisses       atomic.Int64 // 旧 chunk 在当前与上一版本均不存在（真实发布断裂）的次数
+	statImmutableAssetHits     atomic.Int64 // 命中 1 年不可变缓存的 /assets/ 请求数
+
+	// 启动时解析并缓存「上一版本资源目录」是否已就绪（供 /health 零 syscall 读取）
+	resolvedPreviousDistDir atomic.Value // string
+)
+
+// previousDistArmed 报告旧版 chunk 回退是否已武装（供健康探针读取）
+func previousDistArmed() bool {
+	v, _ := resolvedPreviousDistDir.Load().(string)
+	return v != ""
+}
+
+// resolvePreviousDistDir 解析上一版本资源目录，并校验其确实是可用目录。
+func resolvePreviousDistDir(currentDist, explicit string) string {
+	candidates := make([]string, 0, 3)
+	if explicit != "" {
+		candidates = append(candidates, explicit)
+	}
+	if env := strings.TrimSpace(os.Getenv("BLADES_PREVIOUS_DIST")); env != "" {
+		candidates = append(candidates, env)
+	}
+	candidates = append(candidates, currentDist+"-previous")
+
+	currentAbs, _ := filepath.Abs(currentDist)
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+		candidateAbs, _ := filepath.Abs(candidate)
+		if candidateAbs == currentAbs {
+			// 防御：上一版本目录不得等于当前目录，否则 404 会被误判为命中
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(candidate, "index.html")); err != nil {
+			continue
+		}
+		return candidateAbs
+	}
+	return ""
+}
+
+// servePreviousReleaseAsset 尝试从上一版本目录回退同名哈希资源。
+// 返回 true 表示已成功响应（调用方必须立即 return）。
+func servePreviousReleaseAsset(w http.ResponseWriter, r *http.Request, previousDistDir, relPath string) bool {
+	if previousDistDir == "" {
+		return false
+	}
+	// 防目录穿越：仅允许精确匹配当前请求的相对路径
+	cleanRel := filepath.Clean("/" + strings.TrimPrefix(relPath, "/"))
+	if strings.Contains(cleanRel, "..") {
+		return false
+	}
+	prevPath := filepath.Join(previousDistDir, strings.TrimPrefix(cleanRel, "/"))
+	info, err := os.Stat(prevPath)
+	if err != nil || info.IsDir() {
+		return false
+	}
+
+	hits := statStaleChunkFallbackHits.Add(1)
+	// 仅对前若干次与每 100 次记录日志，避免僵尸页面批量刷屏
+	if hits <= 20 || hits%100 == 0 {
+		logger.SugaredLogger.Warnf("[Release-Resilience] 旧版 chunk 命中回退 (累计 %d 次): %s -> %s | UA=%s",
+			hits, r.URL.Path, prevPath, r.UserAgent())
+	}
+
+	w.Header().Set("X-Release-Fallback", "previous")
+	// 旧 chunk 只做「搭桥」，不做长效缓存，确保下一个版本到来时能再次回退
+	w.Header().Set("Cache-Control", "public, max-age=600")
+	http.ServeFile(w, r, prevPath)
+	return true
+}
 
 // SecurityHeadersMiddleware 为所有 HTTP 响应注入标准安全响应头 (HSTS、点击劫持、MIME 混淆、Referrer 泄露及 XSS 防御)
 func SecurityHeadersMiddleware(next http.Handler) http.Handler {
@@ -282,6 +367,14 @@ func main() {
 			"service":   "blades-stock",
 			"version":   Version,
 			"timestamp": time.Now().Unix(),
+			// 发布韧性指标：非零的 stale_chunk_fallback 说明此刻仍有在线用户停留在旧版本页面；
+			// 非零的 stale_chunk_miss 说明回退未能兜住（需检查上一版目录是否被正确保留）。
+			"release_resilience": map[string]any{
+				"previous_dist_armed":      previousDistArmed(),
+				"stale_chunk_fallback":     statStaleChunkFallbackHits.Load(),
+				"stale_chunk_miss":         statStaleChunkMisses.Load(),
+				"immutable_asset_requests": statImmutableAssetHits.Load(),
+			},
 		})
 	})
 
@@ -330,66 +423,21 @@ func main() {
 		}
 	}
 
+	previousDistDir := resolvePreviousDistDir(distDir, *prevDistDirFlag)
+	resolvedPreviousDistDir.Store(previousDistDir)
+
 	if _, err := os.Stat(distDir); err == nil {
 		logger.SugaredLogger.Infof("[Static] Serving frontend assets from: %s", distDir)
-		fileServer := http.FileServer(http.Dir(distDir))
-		indexPath := filepath.Join(distDir, "index.html")
-
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			// 1. API 路由未匹配到时严格返回 404 JSON，杜绝返回 HTML (P0-2)
-			if strings.HasPrefix(r.URL.Path, "/api/") {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusNotFound)
-				json.NewEncoder(w).Encode(map[string]any{
-					"code":  404,
-					"error": "接口不存在",
-					"path":  r.URL.Path,
-				})
-				return
-			}
-
-			// 2. 静态资源、协议文件或带扩展名文件若缺失，严格返回 404，杜绝返回 index.html (P0-2)
-			reqPath := r.URL.Path
-			baseName := filepath.Base(reqPath)
-			if strings.HasPrefix(reqPath, "/assets/") || strings.Contains(baseName, ".") {
-				// 检查文件在磁盘上是否存在
-				relPath := strings.TrimPrefix(reqPath, "/")
-				targetPath := filepath.Join(distDir, relPath)
-				if fi, err := os.Stat(targetPath); err != nil || fi.IsDir() {
-					http.NotFound(w, r)
-					return
-				}
-			}
-
-			// 3. 检查请求的具体静态资源是否存在
-			relPath := strings.TrimPrefix(reqPath, "/")
-			targetPath := filepath.Join(distDir, relPath)
-			fi, err := os.Stat(targetPath)
-			if err == nil && !fi.IsDir() {
-				// 核心优化：为 /assets/ 内容哈希文件注入 1 年不可变长效缓存 (P1-5)
-				if strings.HasPrefix(reqPath, "/assets/") {
-					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-				}
-				fileServer.ServeHTTP(w, r)
-				return
-			}
-
-			// 4. 纯 SPA 客户端前端路由导航，回退到 index.html
-			w.Header().Set("Cache-Control", "no-cache")
-			http.ServeFile(w, r, indexPath)
-		})
+		if previousDistDir != "" {
+			logger.SugaredLogger.Infof("[Static] ✅ Previous-release asset fallback ARMED: %s (旧版 chunk 将回退上一版资源，而非 404)", previousDistDir)
+		} else {
+			logger.SugaredLogger.Warnf("[Static] ⚠️  Previous-release asset fallback DISABLED — 部署瞬间旧页面点击懒加载路由将直接 404。" +
+				" 请在 docker-compose.yml 挂载 ./frontend/dist-previous:/app/frontend/dist-previous:ro (参见 scripts/deploy-vps.sh)")
+		}
+		mux.Handle("/", NewStaticHandler(distDir, previousDistDir))
 	} else {
 		logger.SugaredLogger.Warnf("[Static] Frontend dist directory not found at '%s', running API-only mode.", distDir)
-		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.URL.Path, "/api/") {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusNotFound)
-				json.NewEncoder(w).Encode(map[string]any{"code": 404, "error": "接口不存在"})
-				return
-			}
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			fmt.Fprintf(w, "<h2>Blades Stock Web API Server is running.</h2><p>Frontend dist not found at %s. Please build frontend first.</p>", distDir)
-		})
+		mux.Handle("/", NewAPIMissingHandler(distDir))
 	}
 
 	// 8. 挂载中间件并启动服务器 (链路追踪 + 传输压缩 + 安全响应头 + 鉴权拦截)
