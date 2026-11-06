@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -326,32 +327,96 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 		client.SetProxy(strings.TrimSpace(cfg.HttpProxy))
 	}
 
-	payload := map[string]any{
-		"model":      modelName,
-		"max_tokens": 16,
-		"stream":     false,
-		"messages": []map[string]string{
-			{"role": "user", "content": "ping"},
+	// 输出预算：历史缺陷是固定 max_tokens=16。
+	// 对**推理模型**（MiniMax-M3 / deepseek-reasoner / GLM-Z 等）而言，
+	// 16 个 token 会在  thinking 阶段就被耗尽，服务端报「token 不够 / 输出被截断」，
+	// 用户会误以为是自己配置错了。这里改为一套「先保守、后兜底」的策略：
+	//   第 1 次：max_tokens=512（足够容纳 think 阶段）
+	//   第 2 次：完全不传 max_tokens，交给服务端默认值
+	//            （兼容各类对 max_tokens 取值有特殊限制的网关）
+	attempts := []map[string]any{
+		{
+			"model":      modelName,
+			"max_tokens": 512,
+			"stream":     false,
+			"messages": []map[string]string{
+				{"role": "user", "content": "ping"},
+			},
+		},
+		{
+			"model":  modelName,
+			"stream": false,
+			"messages": []map[string]string{
+				{"role": "user", "content": "ping"},
+			},
 		},
 	}
-	resp, err := client.R().
-		SetHeader("Authorization", "Bearer "+apiKey).
-		SetHeader("Content-Type", "application/json").
-		SetBody(payload).
-		Post("/chat/completions")
-	if err != nil {
-		logger.SugaredLogger.Errorf("TestAiConnection error: %v", err)
-		return "无法访问接口：" + err.Error()
-	}
-	if resp.IsError() {
-		msg := parseOpenAIErrorBody(resp.Body())
-		if msg == "" {
-			msg = "HTTP " + resp.Status()
+
+	var lastMsg string
+	for i, payload := range attempts {
+		resp, err := client.R().
+			SetHeader("Authorization", "Bearer "+apiKey).
+			SetHeader("Content-Type", "application/json").
+			SetBody(payload).
+			Post("/chat/completions")
+		if err != nil {
+			logger.SugaredLogger.Errorf("TestAiConnection error: %v", err)
+			return "无法访问接口：" + err.Error()
 		}
-		logger.SugaredLogger.Errorf("TestAiConnection http error: %s body: %s", resp.Status(), string(resp.Body()))
-		return msg
+		if !resp.IsError() {
+			return ""
+		}
+		raw := parseOpenAIErrorBody(resp.Body())
+		lastMsg = classifyAIError(resp.StatusCode(), raw, modelName)
+		logger.SugaredLogger.Errorf("TestAiConnection http error (attempt %d/%d): %s body: %s",
+			i+1, len(attempts), resp.Status(), string(resp.Body()))
+		// 仅在错误确实与输出预算相关时，才值得改用「不传 max_tokens」重试
+		if i == 0 && isTokenBudgetError(raw) {
+			continue
+		}
+		break
 	}
-	return ""
+	return lastMsg
+}
+
+// isTokenBudgetError 判断错误是否属于「输出预算不足」类问题
+func isTokenBudgetError(msg string) bool {
+	l := strings.ToLower(msg)
+	for _, k := range []string{"max_tokens", "max tokens", "max_output", "max completion", "token", "length limit", "budget", "exceed"} {
+		if strings.Contains(l, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// classifyAIError 把上游错误转成**可操作**的中文提示，避免用户只看到一串英文。
+func classifyAIError(status int, raw, modelName string) string {
+	l := strings.ToLower(raw)
+	suffix := ""
+	if strings.TrimSpace(raw) != "" {
+		suffix = " 原始信息: " + raw
+	}
+	switch {
+	case (strings.Contains(l, "model") &&
+		(strings.Contains(l, "not found") || strings.Contains(l, "not exist") ||
+			strings.Contains(l, "does not exist") || strings.Contains(l, "unknown") ||
+			strings.Contains(l, "no such") || strings.Contains(l, "invalid model"))) ||
+		(status == 404 && strings.Contains(l, "model")):
+		return fmt.Sprintf("当前接口地址下不存在模型「%s」。请点「拉取列表」从服务端返回的模型中选择，或核对模型标识拼写。%s", modelName, suffix)
+	case isTokenBudgetError(raw):
+		return fmt.Sprintf("输出预算不足（推理模型会在思考阶段消耗 token，已自动重试放宽预算）。%s", suffix)
+	case status == 401 || status == 403:
+		return "API Key 无效或权限不足（HTTP " + strconv.Itoa(status) + "）。" + suffix
+	case status == 404:
+		return fmt.Sprintf("接口路径不存在（404）：请确认 Base URL 指向 .../v1（不是 .../v1/chat/completions）。%s", suffix)
+	case status == 429:
+		return "请求过于频繁或账户配额不足（429）。" + suffix
+	}
+	if strings.TrimSpace(raw) != "" {
+		return raw
+	}
+	return "HTTP " + strconv.Itoa(status)
 }
 
 func parseOpenAIErrorBody(body []byte) string {

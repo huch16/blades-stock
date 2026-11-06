@@ -483,6 +483,10 @@ function setDefaultModel(cfg: CleanAIConfig, index: number) {
 }
 
 /** 当前模型标识是否在已拉取的列表里（用于提示“自定义标识将原样保存”） */
+function hasFetchedModels(idx: number): boolean {
+  return (aiConfigMeta[idx]?.modelOptions?.length || 0) > 0;
+}
+
 function isModelInFetchedList(idx: number, value: string): boolean {
   const opts = aiConfigMeta[idx]?.modelOptions || [];
   if (!opts.length) return true;
@@ -491,7 +495,23 @@ function isModelInFetchedList(idx: number, value: string): boolean {
 
 function modelSelectPlaceholder(idx: number): string {
   const n = aiConfigMeta[idx]?.modelOptions?.length || 0;
-  return n > 0 ? '请选择或搜索模型标识' : '点击「拉取列表」，或直接输入模型标识';
+  return n > 0 ? '点击可浏览全部模型，或输入关键字筛选' : '点击「拉取列表」，或直接输入模型标识';
+}
+
+/**
+ * 计算某张卡片当前应展示的候选列表。
+ *
+ * ⚠️ Naive UI 的 n-auto-complete **没有 filter 这个 prop**（传入会被当作普通属性忽略），
+ * 它要求调用方自己把 options 过滤好。因此这里根据当前输入值做大小写不敏感的子串过滤：
+ *   · 输入为空 → 返回全部候选（支持“点一下就看到全部模型”的浏览式选择）
+ *   · 有输入  → 只保留匹配项（例如输入 kimi 就能定位到 moonshotai/kimi-k2）
+ * 注意这里只影响**候选展示**，绝不修改用户输入的原始值（所见即所存）。
+ */
+function modelOptionsFor(idx: number, current: string): { label: string; value: string }[] {
+  const opts = aiConfigMeta[idx]?.modelOptions || [];
+  const p = String(current ?? '').trim().toLowerCase();
+  if (!p) return opts;
+  return opts.filter(o => String(o.value).toLowerCase().includes(p));
 }
 
 async function fetchAiModels(aiConfig: CleanAIConfig, index: number, opts: { silent?: boolean } = {}) {
@@ -516,8 +536,8 @@ async function fetchAiModels(aiConfig: CleanAIConfig, index: number, opts: { sil
       if (!opts.silent) {
         const preview = cleaned.slice(0, 3).join(' / ');
         message.success(
-          `成功拉取 ${cleaned.length} 个模型，已填入下拉框：${preview}${cleaned.length > 3 ? ' …' : ''}`,
-          { duration: 6000 }
+          `成功拉取 ${cleaned.length} 个模型：${preview}${cleaned.length > 3 ? ' …' : ''}\n点击模型标识输入框即可下拉选择`,
+          { duration: 8000 }
         );
       }
     } else {
@@ -894,6 +914,19 @@ function buildSavePayload(): any {
   };
 }
 
+/** 明确告知当前实际生效（全局默认）的模型卡片 */
+function announceEffectiveModel() {
+  const hasDefault = Number(defaultAiConfigId.value) > 0;
+  const target =
+    aiConfigs.value.find(c => c.ID === defaultAiConfigId.value) || aiConfigs.value[0];
+  if (!target) return;
+  message.info(
+    `当前生效模型：【${target.name}】 → ${target.modelName || '（未填写模型标识）'}` +
+      (hasDefault ? '' : '（未指定全局默认，系统按第 1 张卡片生效）'),
+    { duration: 10000 }
+  );
+}
+
 // 严格表单前置校验与保存
 async function saveSettings() {
   // 1. 刷新频率校验
@@ -957,6 +990,9 @@ async function saveSettings() {
     await loadSettings();
     // 保存后处理“设为默认”在未保存卡片上的待定意图
     await flushPendingDefaultModel();
+    // 明确告知“实际生效的模型是哪一张卡片”——避免用户以为自己的新配置已生效，
+    // 而运行时其实还在用第 1 张卡片（Agent/研报/推送均以全局默认卡为准）。
+    announceEffectiveModel();
   } catch (err: any) {
     message.error('保存设置异常: ' + (err?.message || err));
   } finally {
@@ -1215,6 +1251,20 @@ onBeforeUnmount(() => {
             遵循 stevia0829 零依赖架构原则，模型卡片仅保留 <strong>5项核心身份字段</strong>（名称、BaseURL、API Key、ModelName、Thinking）。其余调度参数由 Go 运行时确定性自动调优。
           </p>
 
+          <!-- 生效规则说明：这是「测试/对话用的不是我选的那个模型」最常见的误解源头 -->
+          <n-alert type="info" :show-icon="true" style="margin: 8px 0 12px;">
+            <strong>生效规则：</strong>Agent 对话、研报生成、推送等一律使用标有
+            <n-tag type="success" size="tiny" round style="margin: 0 2px;">🎯 全局默认</n-tag>
+            的那张卡片。
+            <template v-if="Number(defaultAiConfigId) > 0">
+              当前默认：<code>{{ (aiConfigs.find(c => c.ID === defaultAiConfigId) || {}).name || '—' }}</code>。
+            </template>
+            <template v-else>
+              <strong>当前尚未指定全局默认</strong>，系统会退回使用<strong>第 1 张卡片</strong>生效。
+            </template>
+            如需改用其它卡片，请先点该卡片的「设为默认」，再点右上角「💾 保存设置」。
+          </n-alert>
+
           <!-- 模型卡片列表 -->
           <div v-if="aiConfigs.length === 0" class="empty-configs-box">
             <p>暂无配置的大模型。请点击右上角「+ 新增模型配置」或「预设模板库快速载入」。</p>
@@ -1272,19 +1322,19 @@ onBeforeUnmount(() => {
                   <n-gi>
                     <n-form-item label="模型标识 (Model Identifier)" required>
                       <div class="model-name-group">
-                        <!-- 可搜索 + 可自定义输入的下拉选择：
-                             「拉取列表」成功后，模型会直接出现在这里供选择，
-                             而不是像以前那样只弹一个 toast、列表却无处可选。 -->
-                        <n-select
+                        <!-- 用 n-auto-complete 而非 n-select：
+                             n-select + tag 下，**手动输入的文字不按回车就不会写回 v-model**，
+                             用户看着框里是 A、实际上提交的是旧值 B（这正是
+                             「测试用的不是我选择的模型」的真正原因）。
+                             n-auto-complete 是「所见即所存」：输入即时生效，
+                             同时仍可从「拉取列表」的候选中单击选择。 -->
+                        <n-auto-complete
                           v-model:value="cfg.modelName"
-                          :options="aiConfigMeta[idx]?.modelOptions || []"
-                          :loading="aiConfigMeta[idx]?.loadingModels"
+                          :options="modelOptionsFor(idx, cfg.modelName)"
                           :placeholder="modelSelectPlaceholder(idx)"
-                          filterable
-                          tag
-                          clearable
+                          :clearable="true"
+                          :input-props="{ autocomplete: 'off', spellcheck: 'false' }"
                           style="flex: 1; min-width: 0;"
-                          @clear="cfg.modelName = ''"
                         />
                         <n-button
                           size="small"
@@ -1294,20 +1344,22 @@ onBeforeUnmount(() => {
                           拉取列表
                         </n-button>
                       </div>
-                      <div
-                        class="model-name-hint"
-                        :class="{ 'is-ok': (aiConfigMeta[idx]?.modelOptions?.length || 0) > 0 }"
-                      >
-                        <template v-if="(aiConfigMeta[idx]?.modelOptions?.length || 0) > 0">
-                          ✅ 已获取 {{ aiConfigMeta[idx].modelOptions.length }} 个模型，点击下拉框直接选择
+                      <div class="model-name-hint" :class="{ 'is-ok': hasFetchedModels(idx) }">
+                        <template v-if="hasFetchedModels(idx)">
+                          ✅ 已获取 {{ aiConfigMeta[idx].modelOptions.length }} 个模型，点击输入框可下拉选择
                           <span v-if="!isModelInFetchedList(idx, cfg.modelName)">
-                            （当前为自定义模型标识，将原样保存）
+                            （当前是自定义标识，会原样保存）
                           </span>
                         </template>
                         <template v-else>
                           点击「拉取列表」自动获取服务端可用模型；也可直接手动输入，
-                          例如 <code>minimaxai/minimax-m3.1-flash</code>、<code>deepseek-chat</code>
+                          例如 <code>minimaxai/minimax-m3.1-flash</code>
                         </template>
+                      </div>
+                      <!-- 所见即所存：无条件展示本次将被测试/保存的确切模型 -->
+                      <div class="model-effective-line">
+                        将测试 / 保存的模型标识：
+                        <code>{{ cfg.modelName || '（尚未选择）' }}</code>
                       </div>
                     </n-form-item>
                   </n-gi>
@@ -1760,6 +1812,27 @@ onBeforeUnmount(() => {
   border-radius: 3px;
   background: rgba(128, 128, 128, 0.16);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* 「将测试 / 保存的模型标识」——无条件展示实际生效值，消除「看的是 A、用的是 B」 */
+.model-effective-line {
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-left: 3px solid #2080f0;
+  border-radius: 3px;
+  background: rgba(32, 128, 240, 0.08);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #4a5568;
+  word-break: break-all;
+}
+
+.model-effective-line code {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(32, 128, 240, 0.14);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 600;
 }
 
 .thinking-switch-row {

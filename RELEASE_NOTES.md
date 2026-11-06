@@ -299,7 +299,103 @@ TestNewAiConfigGetsDefaults                  PASS  新增配置自动补齐调�
 
 回归：`npm run lint` 0 errors；`npm run build` 三道门禁全通过。
 
-### 九、版本号全面升级至 3.0.0
+### 九、P0 修复：模型连通性测试与「用的不是我选的模型」
+
+用户反馈：「模型联通测试，要么模型不存在，要么 token 不够，我观察测试列表第一个，
+不是我选择的模型，怎么样保存？」——共 4 个独立缺陷，本次一次性修复。
+
+#### 9.1 「token 不够」：连通性测试硬编码 max_tokens=16
+
+`TestAiConnection` 曾固定发 `max_tokens: 16`。对**推理模型**
+（MiniMax-M3 / deepseek-reasoner / GLM-Z 等），16 个 token 会在 ` thinking`
+阶段就被耗尽 → 服务端报 token 相关错误 → 用户误以为是自己配置错了。
+
+修复：改为「先保守、后兜底」两段式——
+1. 第 1 次：`max_tokens: 512`（足够容纳 think 阶段）
+2. 识别为预算类错误时，第 2 次**完全不传 `max_tokens`**，交给服务端默认值
+
+实测（mock 推理模型要求预算 ≥ 1024）：
+
+```
+POST /v1/chat/completions model=qwen/qwen3-max max_tokens=512   ← 被拒
+POST /v1/chat/completions model=qwen/qwen3-max max_tokens=(omitted) ← 自动重试成功
+```
+
+#### 9.2 「模型不存在」：错误提示不可操作
+
+新增 `classifyAIError()`，把上游英文错误翻译成**可操作**的中文：
+
+| 场景 | 修复前 | 修复后 |
+|---|---|---|
+| 模型不在该服务 | `invalid_request_error: The model ... does not exist` | 「当前接口地址下不存在模型「X」。请点「拉取列表」从服务端返回的模型中选择，或核对模型标识拼写」 |
+| 预算不足 | 一串英文 | 「输出预算不足（推理模型会在思考阶段消耗 token，已自动重试放宽预算）」 |
+| 401/403 | 原样透出 | 「API Key 无效或权限不足（HTTP 401）」 |
+| 404 | 原样透出 | 「接口路径不存在：请确认 Base URL 指向 .../v1（不是 .../v1/chat/completions）」 |
+| 429 | 原样透出 | 「请求过于频繁或账户配额不足（429）」 |
+
+#### 9.3 「用的不是我选的模型」：输入没提交 + 生效语义不明（两个根因）
+
+**根因 A（控件层面）**：上一版用 `n-select` + `filterable` + `tag`。该组合下
+**手动输入的文字不按回车就不会写回 `v-model`** —— 用户看着框里是自己的模型，
+实际提交的仍是旧值（往往就是拉取后自动填入的**第一个模型**）。
+
+修复：改用 `n-auto-complete`，做到「**所见即所存**」：输入即时生效，
+同时仍可从「拉取列表」的候选中单击选择。并新增常驻提示：
+
+```
+将测试 / 保存的模型标识：nvidia/llama-3.3-nemotron-super-49b-v1
+```
+
+实测（只输入、不按回车，直接点测试）：mock 收到的请求模型为
+`nvidia/llama-3.3-nemotron-super-49b-v1`，**不再是第一个模型**。
+
+**根因 B（运行时层面）**：`agent_api.go` 在 `aiConfigId <= 0`（未指定全局默认）时
+会**静默回退到列表第一个配置**。而设置页没有任何地方说明这一点。
+
+修复：设置页新增「生效规则」说明栏，明确告知：Agent 对话 / 研报 / 推送一律使用
+标有 `🎯 全局默认` 的卡片；未指定时退回**第 1 张卡片**；并实时显示当前默认是哪一张。
+
+#### 9.4 「怎么样保存」：保存后明确告知生效模型
+
+保存成功后除原有提示外，新增一条明确结论，例如：
+
+```
+当前生效模型：【所见即所存验证】 → nvidia/llama-3.3-nemotron-super-49b-v1
+```
+
+（未设默认时额外标注「未指定全局默认，系统按第 1 张卡片生效」）
+
+#### 9.5 验证
+
+**Go 单测**（新增 `backend/services/settings_test_connection_test.go`）
+
+```
+TestIsTokenBudgetError   PASS  （6 正例 / 4 反例）
+TestClassifyAIError      PASS  （6 个场景子用例全过）
+```
+
+**真实链路**（mock OpenAI 兼容服务 + 真实 cmd/server + ego-browser 驱动真实 UI）
+
+| 验证点 | 实测结果 |
+|---|---|
+| 拉取列表 | ✅ 提示「已获取 7 个模型」 |
+| 点击空输入框浏览 | ✅ 真实列出全部 7 个候选 |
+| 输入 `kimi` 过滤 | ✅ 只剩 `moonshotai/kimi-k2` |
+| 输入 `minimax` 过滤 | ✅ 只剩 2 个 |
+| 只输入不回车直接测试 | ✅ mock 收到的是**输入的模型**，非第一个 |
+| 推理模型 token 预算 | ✅ 512 被拒 → 自动重试不带 max_tokens → 成功 |
+| 不存在的模型 | ✅ 返回可操作的中文提示 |
+| 保存 | ✅ 「已成功保存」+「当前生效模型：【…】→ …」 |
+| 刷新后回显 | ✅ 各卡片模型标识正确 |
+
+回归：`npm run lint` 0 errors；`npm run build` 三道门禁全通过；
+`go build` / `go vet` / `gofmt -l` 均干净。
+
+> **附带发现**：Naive UI 的 `n-auto-complete` **没有 `filter` 这个 prop**
+> （传入会被当作普通属性静默忽略）；它要求调用方自己把 `options` 过滤好。
+> 已改为在模板中调用 `modelOptionsFor(idx, cfg.modelName)` 完成过滤。
+
+### 十、版本号全面升级至 3.0.0
 
 共 17 个文件 / 27 处（`main.go`、`cmd/server`、`wails.json`、`frontend/package.json`、
 `frontend/index.html`、设置页与认证弹窗、`scripts/deploy-vps.sh`、`docker-compose.yml`、
