@@ -114,6 +114,13 @@ frontend/dist-previous
 .qoder
 .idea/
 /data/*.db*
+
+# 测试不得把 SQLite 产物写进仓库：db.Init 的 "file:<name>?mode=memory" 形态在本项目驱动下
+# 会真的落盘。测试请统一使用 t.TempDir() + t.Cleanup 关闭连接（参见
+# backend/data/settings_roundtrip_test.go）。以下规则作为最后一道防线。
+*.db-shm
+*.db-wal
+/backend/data/*.db*
 *.exe
 /build/bin/*
 frontend/package.json.md5

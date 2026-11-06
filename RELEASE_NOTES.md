@@ -11,7 +11,7 @@ v3.0.0 是一次**精简 · 清理 · 固化**版本。前置的 v2.x 系列已�
 Highlights / 核心亮点
 --------------------
 
-### 一、代码仓库精减 75.5%（追踪字节 57,304,765 → 14,041,438）
+### 一、代码仓库精减 75.5%（追踪字节 57,304,765 → 14,075,868）
 
 | 项目 | 体积 | 判定依据 | 处置 |
 |---|---|---|---|
@@ -157,7 +157,99 @@ ERROR: failed to solve: process "/bin/sh -c npm run build" did not complete succ
 另已核对：`smoke-after-deploy.sh` 引用的是服务端 CSP 之外的产物特征，与本次改动无耦合；
 首屏预加载仍为 8 个资源且不含 codemirror / markdown / tdesign chunk，部署后 27 项冒烟自检预期全绿。
 
-### 七、版本号全面升级至 3.0.0
+### 七、P0 修复：控制中枢 · AI 模型注册表无法加载也无法保存
+
+**用户反馈**：「AI输入、配置、保存都成问题，还不如原来的配置」。经实测复现并定位为 `6a33fd1`
+（设置页重构）引入的**接口契约不匹配 + 字段静默清零**双重缺陷。
+
+#### 7.1 根因一：载荷形态错位，导致“加载不到、保存必败”
+
+后端 `SettingConfig` 是**匿名嵌入 `*Settings`** 的结构体，JSON 形态是**扁平**的：
+
+```json
+{ "ID":1, "prompt":"…", "aiConfigs":[ … ], "embeddingEnabled":true }
+```
+
+而重构后的前端改成了嵌套形态 `{ settings: { … }, aiConfigs: [ … ] }`，后果：
+
+| 环节 | 后果 |
+|---|---|
+| 加载 | `res.settings` 为 `undefined` → 基础设置表单**完全不回显**（提示词/开关/密钥全部停留在默认值） |
+| 保存 | Go 侧 `s.Settings == nil` → 直接返回 **「保存失败: 配置数据为空」**，任何修改都存不进去 |
+
+> 旁证：仓库内 **其他 6 个组件**（App.vue / agent-chat / market / allRecommend / allStockList / FundFollow）
+> 全部按 **扁平** 形态读取（`res.darkTheme`、`result.openAiEnable`），只有 `settings.vue` 是异类。
+
+#### 7.2 根因二：只提交 6 个字段，后端“写满每一列” ⇢ 静默清零
+
+重构把模型配置的提交字段从“完整回传”改成只提交 6 个核心身份字段，但后端
+`UpdateConfig` / `updateAiConfigsTx` 使用 GORM `Updates(map{…})` **显式写入每一列**，
+未提交的列全部以零值落库：
+
+| 被静默破坏的配置 | 实际后果 |
+|---|---|
+| `maxTokens`（前端曾硬编码 4096） | 推理模型 max_tokens 被降到 4096，` thinking` 阶段就耗尽预算 → **回答截断/空白** |
+| `temperature`（硬编码 0.7） | 用户调过的采样温度被重置 |
+| `httpProxy` / `httpProxyEnabled` | 代理配置被清空 |
+| `sessionId` | Agent 会话绑定丢失 |
+| `embedding*`（Settings 级） | **向量检索被静默关闭**，语义能力失效 |
+| `rateLimitPerSecond` / `burst` / `daily*Quota` | 配额与限流设置清零 |
+| `backtest*` / `mcpTimeout` / `toolRunBudget` / `toolDailyBudget` / `toolDailyCostUSD` | 回测与工具预算配置被抹掉 |
+
+#### 7.3 修复
+
+**前端（`settings.vue`）**
+1. 新增 `buildSavePayload()`：改为**扁平**载荷，并用 `...formValue.value` 展开**全部**字段;
+   每个模型配置也 `...c` **完整回传**（含界面不展示的调度字段）。
+2. 新增 `applySettingsSnapshot()`：统一加载入口，回填**所有** Settings 字段，
+   并兼容扁平（当前契约）与嵌套（旧导出）两种形态。
+3. `CleanAIConfig` 扩展为完整字段集 + `normalizeAiConfig()` 规范化函数，
+   **保留后端返回的所有原值**；仅对缺失项补默认值。
+4. 删除硬编码的 `temperature/maxTokens/timeOut/llmConcurrencyLimit/subAgentTimeout`。
+5. **新增加载完整性门禁**：`settingsLoaded` / `aiConfigsLoaded` 均为真才允许保存，
+   避免加载失败时把空/残缺列表写回，从而触发后端 `DELETE FROM ai_config` 误删全部模型。
+6. 修复 `aiConfigMeta` 下标错位（删除卡片后 loading/选项串卡）与
+   未保存卡片的“设为默认”（新增待定意图 `pendingDefaultModelIndex`，保存后自动生效）。
+7. 导入配置同步支持扁平形态。
+
+**后端（`settings_api.go`）—— 纵深防御**
+8. 在 `validateAIConfig` **之前**按数据库原值补齐未提交的调度/扩展字段
+   （`validateAIConfig` 会用 4096/300/2/20 填零值，从而掩盖“未提交”事实）。
+9. Settings 级 `Updates(map)` 对**无界面入口**的字段（embedding / backtest / mcp /
+   tool 预算 / updateChannel / promptPlazaApiBase / window）采用“零值即保留原值”语义。
+10. 新增配置落库前调用 `SetDefaults()`；空列表且库中本无配置时跳过 DELETE。
+
+#### 7.4 验证（三层，全部通过）
+
+**① Go 回归测试** `backend/data/settings_roundtrip_test.go`（5 个用例）
+
+```
+TestGetConfigPayloadIsFlatNotNested          PASS  固化扁平契约，防止回退成嵌套
+TestNestedPayloadIsRejected                  PASS  复现旧缺陷：嵌套必返回“保存失败: 配置数据为空”
+TestFlatRoundTripPreservesEverything         PASS  扁平完整回传：26 个字段零丢失 + 掩码还原
+TestPartialAiConfigPayloadDoesNotWipeFields  PASS  即使只传 6 字段，后 13 个字段也被保留
+TestNewAiConfigGetsDefaults                  PASS  新增配置自动补齐调度默认值
+```
+
+**② 真机 HTTP 端到端**（临时 DB + `cmd/server` 实跑，30+ 断言全绿）
+
+含：扁平契约、富配置写入后 26 个字段逐个复读比对、嵌套载荷必败复现、
+掩码回传不覆盖真实密钥、连续保存后 `maxTokens` 仍为 64000（**无静默降级**）。
+
+**③ 真实浏览器 UI**（ego-browser，实测 `http://127.0.0.1:18099/#/settings`）
+
+| 探针 | 修复前预期 | 实测结果 |
+|---|---|---|
+| 系统提示词回显 | 默认值（加载失效） | ✅ 回显已存值 `富配置提示词-E2E` |
+| AI 卡片回显 | — | ✅ 名称/模型/地址/掩码密钥均正确 |
+| 点击「保存设置」 | 「保存失败: 配置数据为空」 | ✅ toast **「系统设置已成功保存并立即生效！」** |
+| 刷新后持久化 | 不生效 | ✅ 改名后刷新仍为 `UI改名验证-第二次` |
+
+回归：`npm run lint` 0 errors；`npm run build` 三道门禁全过；
+`go build ./...` / `go vet` / `gofmt -l` 均干净；
+`backend/data`、`backend/quant`、`cmd/server` 测试全绿。
+
+### 八、版本号全面升级至 3.0.0
 
 共 17 个文件 / 27 处（`main.go`、`cmd/server`、`wails.json`、`frontend/package.json`、
 `frontend/index.html`、设置页与认证弹窗、`scripts/deploy-vps.sh`、`docker-compose.yml`、
@@ -187,7 +279,7 @@ ERROR: failed to solve: process "/bin/sh -c npm run build" did not complete succ
 |---|---|---|
 | v2.0.0 基线 | 57,304,765 | 718 |
 | v3.0.0 第一轮 | 14,693,884 | 593 |
-| **v3.0.0 第二轮（终态）** | **14,041,438** | **593** |
+| **v3.0.0 第二轮（终态）** | **14,075,868** | **593** |
 
 累计减重 **75.5%**（−43.27 MB）。
 

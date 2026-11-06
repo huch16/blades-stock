@@ -120,7 +120,31 @@ const formValue = ref({
   aDataServiceUrl: 'http://127.0.0.1:9100',
   defaultDataSource: 'eastmoney',
   crawlTimeOut: 60,
-  kDays: 90
+  kDays: 90,
+  // ────────────────────────────────────────────────────────────────────────────
+  // ↓ 透传字段（Pass-through）：界面不再暴露，但**必须完整往返**
+  //
+  // 后端 UpdateConfig 使用 GORM 的 Updates(map{...}) **显式写入每一个列**。
+  // 只要请求里没带上某个字段，Go 侧就会拿到零值并把数据库中的原值覆盖掉。
+  // 因此以下字段即使界面上不展示，也必须原样加载并原样回传，否则：
+  //   一次普通保存就会静默关闭向量检索(embedding)、清空代理、抹掉回测与工具预算配置。
+  // ────────────────────────────────────────────────────────────────────────────
+  checkUpdate: false,
+  updateChannel: '',
+  windowWidth: 0,
+  windowHeight: 0,
+  promptPlazaApiBase: '',
+  backtestAccuracyThreshold: 5.0,
+  backtestVerifyDays: 2,
+  backtestEnabled: true,
+  embeddingEnabled: false,
+  embeddingModelName: '',
+  embeddingBaseUrl: '',
+  embeddingApiKey: '',
+  mcpTimeout: 8,
+  toolRunBudget: 15,
+  toolDailyBudget: 200,
+  toolDailyCostUSD: 2.0
 });
 
 const openAiEnable = ref(true);
@@ -128,6 +152,8 @@ const defaultAiConfigId = ref<number | null>(null);
 const aiPrompt = ref('');
 const questionTemplate = ref('');
 
+// 界面上仅暴露并允许编辑前 6 项（5 项核心身份字段 + 默认标记）；
+// 其余为「透传调度字段」——不展示，但必须完整往返（原因同上方 formValue 的注释）。
 export interface CleanAIConfig {
   ID: number;
   name: string;
@@ -135,9 +161,89 @@ export interface CleanAIConfig {
   apiKey: string;
   modelName: string;
   thinking: boolean;
+  // ↓ 透传字段（界面上不展示，保存时必须原样回传，否则会被后端清零）
+  maxTokens: number;
+  temperature: number;
+  timeOut: number;
+  httpProxy: string;
+  httpProxyEnabled: boolean;
+  sessionId: string;
+  embeddingEnabled: boolean;
+  embeddingModelName: string;
+  embeddingBaseUrl: string;
+  llmConcurrencyLimit: number;
+  subAgentTimeout: number;
+  rateLimitPerSecond: number;
+  burst: number;
+  dailyRequestQuota: number;
+  dailyCostQuota: number;
+}
+
+/** 新建配置卡片时的确定性默认值（仅用于 ID<=0 的全新条目） */
+function newAiConfigDefaults(): Omit<CleanAIConfig, 'ID'> {
+  return {
+    name: '新建 AI 模型配置',
+    baseUrl: 'https://api.deepseek.com/v1',
+    apiKey: '',
+    modelName: 'deepseek-chat',
+    thinking: false,
+    maxTokens: 8192,
+    temperature: 0.7,
+    timeOut: 300,
+    httpProxy: '',
+    httpProxyEnabled: false,
+    sessionId: '',
+    embeddingEnabled: false,
+    embeddingModelName: '',
+    embeddingBaseUrl: '',
+    llmConcurrencyLimit: 2,
+    subAgentTimeout: 20,
+    rateLimitPerSecond: 0,
+    burst: 0,
+    dailyRequestQuota: 0,
+    dailyCostQuota: 0
+  };
+}
+
+/**
+ * 将后端返回的任意形态 AI 配置规范化为完整的 CleanAIConfig。
+ * 关键：**保留所有后端返回的字段原值**，只对缺失项补默认值。
+ * 若此处只挑 6 个字段，保存时其余列就会被后端 Updates(map) 清零。
+ */
+function normalizeAiConfig(c: any): CleanAIConfig {
+  const d = newAiConfigDefaults();
+  return {
+    ID: Number(c?.ID ?? c?.id ?? 0) || 0,
+    name: c?.name ?? d.name,
+    baseUrl: c?.baseUrl ?? d.baseUrl,
+    apiKey: c?.apiKey ?? '',
+    modelName: c?.modelName ?? d.modelName,
+    thinking: Boolean(c?.thinking),
+    maxTokens: Number(c?.maxTokens) > 0 ? Number(c.maxTokens) : d.maxTokens,
+    temperature: Number(c?.temperature) > 0 ? Number(c.temperature) : d.temperature,
+    timeOut: Number(c?.timeOut) > 0 ? Number(c.timeOut) : d.timeOut,
+    httpProxy: c?.httpProxy ?? '',
+    httpProxyEnabled: Boolean(c?.httpProxyEnabled),
+    sessionId: c?.sessionId ?? '',
+    embeddingEnabled: Boolean(c?.embeddingEnabled),
+    embeddingModelName: c?.embeddingModelName ?? '',
+    embeddingBaseUrl: c?.embeddingBaseUrl ?? '',
+    llmConcurrencyLimit: Number(c?.llmConcurrencyLimit) > 0 ? Number(c.llmConcurrencyLimit) : d.llmConcurrencyLimit,
+    subAgentTimeout: Number(c?.subAgentTimeout) > 0 ? Number(c.subAgentTimeout) : d.subAgentTimeout,
+    rateLimitPerSecond: Number(c?.rateLimitPerSecond) || 0,
+    burst: Number(c?.burst) || 0,
+    dailyRequestQuota: Number(c?.dailyRequestQuota) || 0,
+    dailyCostQuota: Number(c?.dailyCostQuota) || 0
+  };
 }
 
 const aiConfigs = ref<CleanAIConfig[]>([]);
+
+// 加载成功标记：仅当确实从后端拿到过配置时，才允许把（可能为空的）列表写回数据库。
+// 否则一旦加载失败而用户在其它页签点了保存，空列表会触发后端 "DELETE FROM ai_config"，
+// 导致全部模型配置被静默清空。
+const settingsLoaded = ref(false);
+const aiConfigsLoaded = ref(false);
 
 // 控制 API Key 的明文显示切换
 const showApiKeyMap = reactive<Record<number, boolean>>({});
@@ -272,14 +378,8 @@ function getFullFormSnapshot(): string {
     defaultAiConfigId: defaultAiConfigId.value,
     aiPrompt: aiPrompt.value,
     questionTemplate: questionTemplate.value,
-    aiConfigs: aiConfigs.value.map(c => ({
-      ID: c.ID,
-      name: c.name,
-      baseUrl: c.baseUrl,
-      apiKey: c.apiKey,
-      modelName: c.modelName,
-      thinking: c.thinking
-    }))
+    // 展开全部字段参与脏检查：透传调度字段若被后端变更也应被感知
+    aiConfigs: aiConfigs.value.map(c => ({ ...c }))
   });
 }
 
@@ -295,20 +395,42 @@ const isFormDirty = computed(() => {
 // ==============================================================================
 // 5. AI 模型矩阵管理 (Model Registry CRUD & Tests)
 // ==============================================================================
+/** aiConfigMeta 以数组下标为键，删除元素后必须整体重建，
+ *  否则“拉取列表/测试连通性”的 loading 与选项会被错位挂到另一张卡片上。 */
+function reindexConfigMeta() {
+  const snapshot: ConfigMeta[] = aiConfigs.value.map((_, i) => aiConfigMeta[i] ?? { loadingModels: false, testing: false, modelOptions: [] });
+  for (const k of Object.keys(aiConfigMeta)) delete aiConfigMeta[Number(k)];
+  snapshot.forEach((m, i) => { aiConfigMeta[i] = m; });
+  for (const k of Object.keys(showApiKeyMap)) delete showApiKeyMap[Number(k)];
+}
+
+// “设为默认”在未保存（ID<=0）卡片上的待定意图：
+// 新建卡片在保存前没有数据库 ID，无法直接写入 aiConfigId；
+// 这里记住下标，保存并重新加载后按位置解析出真实 ID 再落库。
+const pendingDefaultModelIndex = ref<number | null>(null);
+
+async function flushPendingDefaultModel() {
+  const idx = pendingDefaultModelIndex.value;
+  if (idx === null) return;
+  pendingDefaultModelIndex.value = null;
+  const target = aiConfigs.value[idx];
+  if (!target || !target.ID) return;
+  if (defaultAiConfigId.value === target.ID) return;
+  defaultAiConfigId.value = target.ID;
+  // 必须提交**完整**配置：绝不能发空 aiConfigs，
+  // 否则后端 updateAiConfigsTx 会执行 "DELETE FROM ai_config" 清空所有模型配置。
+  try {
+    await UpdateConfig(buildSavePayload());
+    await loadSettings();
+  } catch {
+    /* 失败不阻断，下次保存会再写一次 */
+  }
+}
+
 function addAiConfig() {
-  const newConfig: CleanAIConfig = {
-    ID: 0,
-    name: '新建 AI 模型配置',
-    baseUrl: 'https://api.deepseek.com/v1',
-    apiKey: '',
-    modelName: 'deepseek-chat',
-    thinking: false
-  };
+  const newConfig: CleanAIConfig = { ID: 0, ...newAiConfigDefaults() };
   aiConfigs.value.push(newConfig);
   ensureConfigMeta(aiConfigs.value.length - 1);
-  if (!defaultAiConfigId.value) {
-    defaultAiConfigId.value = 0;
-  }
   message.info('已新增模型配置卡片，请填入密钥并保存');
 }
 
@@ -319,9 +441,18 @@ function removeAiConfig(index: number) {
     positiveText: '确认删除',
     negativeText: '取消',
     onPositiveClick: () => {
+      const removed = aiConfigs.value[index];
       aiConfigs.value.splice(index, 1);
-      delete aiConfigMeta[index];
-      message.success('已移除该模型配置');
+      reindexConfigMeta();
+      // 如果删掉的正是当前默认模型，则清除默认标记（避免指向已不存在的 ID）
+      if (removed && defaultAiConfigId.value === removed.ID) {
+        defaultAiConfigId.value = null;
+      }
+      if (pendingDefaultModelIndex.value !== null) {
+        if (pendingDefaultModelIndex.value === index) pendingDefaultModelIndex.value = null;
+        else if (pendingDefaultModelIndex.value > index) pendingDefaultModelIndex.value -= 1;
+      }
+      message.success('已移除该模型配置，点击「保存设置」后生效');
     }
   });
 }
@@ -329,18 +460,25 @@ function removeAiConfig(index: number) {
 function copyAiConfig(index: number) {
   const source = aiConfigs.value[index];
   if (!source) return;
+  // 完整复制（含透传调度字段），仅重置 ID 与名称
   const copy: CleanAIConfig = {
-    ...JSON.parse(JSON.stringify(source)),
+    ...(JSON.parse(JSON.stringify(source)) as CleanAIConfig),
     ID: 0,
     name: `${source.name} (副本)`
   };
   aiConfigs.value.push(copy);
   ensureConfigMeta(aiConfigs.value.length - 1);
-  message.success('已复制配置卡片');
+  message.success('已复制配置卡片，点击「保存设置」后生效');
 }
 
-function setDefaultModel(cfg: CleanAIConfig) {
-  defaultAiConfigId.value = cfg.ID || 0;
+function setDefaultModel(cfg: CleanAIConfig, index: number) {
+  if (!cfg.ID || cfg.ID <= 0) {
+    // 未保存的新卡片：记下位置，保存后自动生效
+    pendingDefaultModelIndex.value = index;
+    message.info(`已标记 [${cfg.name}] 为默认模型，点击「保存设置」后生效`);
+    return;
+  }
+  defaultAiConfigId.value = cfg.ID;
   message.success(`已设置 [${cfg.name}] 为全局默认模型`);
 }
 
@@ -538,59 +676,103 @@ async function testDingPush() {
 // ==============================================================================
 // 7. 配置加载、导出、导入与保存 (Load, Export, Import, Save)
 // ==============================================================================
+/**
+ * 把后端下发的配置快照写入表单状态。
+ *
+ * ⚠️ 契约说明（v3.0.0 修复）：后端 `SettingConfig` 是**匿名嵌入 `*Settings`** 的结构体，
+ * 序列化后字段直接位于**顶层**（扁平），即：
+ *     { "ID":1, "prompt":"...", "aiConfigs":[...], "embeddingEnabled":true, ... }
+ * 而**不是** { "settings": { ... } }。
+ *
+ * 历史缺陷：前端误按嵌套形态读取 `res.settings` 并按其回写，导致：
+ *   1) 加载时 `res.settings` 为 undefined → 整个基础设置表单无法回显（全部停留在默认值）；
+ *   2) 保存时提交 { settings: {...} } → 后端 `s.Settings == nil` → 直接返回「保存失败: 配置数据为空」。
+ * 这里同时兼容扁平（当前契约）与嵌套（投诉前的旧版导出格式），避免再被形态问题打断。
+ */
+function applySettingsSnapshot(s: any) {
+  if (!s) return;
+  formValue.value.ID = s.ID || 1;
+  formValue.value.tushareToken = s.tushareToken ?? '';
+  formValue.value.emApiKey = s.emApiKey ?? '';
+  formValue.value.tickFlowAPIKey = s.tickFlowAPIKey ?? '';
+  formValue.value.qgqpBId = s.qgqpBId ?? '';
+  formValue.value.dingPush.enable = Boolean(s.dingPushEnable);
+  formValue.value.dingPush.dingRobot = s.dingRobot ?? '';
+  formValue.value.localPush.enable = Boolean(s.localPushEnable);
+  formValue.value.updateBasicInfoOnStart = Boolean(s.updateBasicInfoOnStart);
+  formValue.value.refreshInterval = Number(s.refreshInterval) > 0 ? Number(s.refreshInterval) : 3;
+  formValue.value.browserPath = s.browserPath ?? '';
+  formValue.value.enableNews = Boolean(s.enableNews);
+  formValue.value.darkTheme = s.darkTheme !== false;
+  formValue.value.enableFund = Boolean(s.enableFund);
+  formValue.value.enablePushNews = s.enablePushNews !== false;
+  formValue.value.enableOnlyPushRedNews = s.enableOnlyPushRedNews !== false;
+  formValue.value.httpProxy = s.httpProxy ?? '';
+  formValue.value.httpProxyEnabled = Boolean(s.httpProxyEnabled);
+  formValue.value.enableAgent = s.enableAgent !== false;
+  formValue.value.disableBrowserSearch = Boolean(s.disableBrowserSearch);
+  formValue.value.akshareServiceUrl = s.akshareServiceUrl || 'http://127.0.0.1:9000';
+  formValue.value.aDataServiceUrl = s.aDataServiceUrl || 'http://127.0.0.1:9100';
+  formValue.value.defaultDataSource = s.defaultDataSource || 'eastmoney';
+  formValue.value.crawlTimeOut = Number(s.crawlTimeOut) > 0 ? Number(s.crawlTimeOut) : 60;
+  formValue.value.kDays = Number(s.kDays) > 0 ? Number(s.kDays) : 90;
+
+  // ── 透传字段：必须原样接住，否则保存时会被后端 Updates(map) 清零 ──
+  formValue.value.checkUpdate = Boolean(s.checkUpdate);
+  formValue.value.updateChannel = s.updateChannel ?? '';
+  formValue.value.windowWidth = Number(s.windowWidth) || 0;
+  formValue.value.windowHeight = Number(s.windowHeight) || 0;
+  formValue.value.promptPlazaApiBase = s.promptPlazaApiBase ?? '';
+  formValue.value.backtestAccuracyThreshold =
+    Number(s.backtestAccuracyThreshold) > 0 ? Number(s.backtestAccuracyThreshold) : 5.0;
+  formValue.value.backtestVerifyDays = Number(s.backtestVerifyDays) > 0 ? Number(s.backtestVerifyDays) : 2;
+  formValue.value.backtestEnabled = s.backtestEnabled !== false;
+  formValue.value.embeddingEnabled = Boolean(s.embeddingEnabled);
+  formValue.value.embeddingModelName = s.embeddingModelName ?? '';
+  formValue.value.embeddingBaseUrl = s.embeddingBaseUrl ?? '';
+  formValue.value.embeddingApiKey = s.embeddingApiKey ?? '';
+  formValue.value.mcpTimeout = Number(s.mcpTimeout) > 0 ? Number(s.mcpTimeout) : 8;
+  formValue.value.toolRunBudget = Number(s.toolRunBudget) > 0 ? Number(s.toolRunBudget) : 15;
+  formValue.value.toolDailyBudget = Number(s.toolDailyBudget) > 0 ? Number(s.toolDailyBudget) : 200;
+  formValue.value.toolDailyCostUSD =
+    Number(s.toolDailyCostUSD) > 0 ? Number(s.toolDailyCostUSD) : 2.0;
+
+  openAiEnable.value = Boolean(s.openAiEnable);
+  defaultAiConfigId.value = Number(s.aiConfigId) > 0 ? Number(s.aiConfigId) : null;
+  aiPrompt.value = s.prompt || SYSTEM_PROMPT_PRESETS.quant_mentor;
+  questionTemplate.value = s.questionTemplate || QUESTION_TEMPLATE_PRESETS.comprehensive;
+}
+
 async function loadSettings() {
   try {
     const res: any = await GetConfig();
-    if (res && res.settings) {
-      const s = res.settings;
-      formValue.value.ID = s.ID || 1;
-      formValue.value.tushareToken = s.tushareToken || '';
-      formValue.value.emApiKey = s.emApiKey || '';
-      formValue.value.tickFlowAPIKey = s.tickFlowAPIKey || '';
-      formValue.value.qgqpBId = s.qgqpBId || '';
-      formValue.value.dingPush.enable = Boolean(s.dingPushEnable);
-      formValue.value.dingPush.dingRobot = s.dingRobot || '';
-      formValue.value.localPush.enable = Boolean(s.localPushEnable);
-      formValue.value.updateBasicInfoOnStart = Boolean(s.updateBasicInfoOnStart);
-      formValue.value.refreshInterval = s.refreshInterval || 3;
-      formValue.value.browserPath = s.browserPath || '';
-      formValue.value.enableNews = Boolean(s.enableNews);
-      formValue.value.darkTheme = s.darkTheme !== false;
-      formValue.value.enableFund = Boolean(s.enableFund);
-      formValue.value.enablePushNews = s.enablePushNews !== false;
-      formValue.value.enableOnlyPushRedNews = s.enableOnlyPushRedNews !== false;
-      formValue.value.httpProxy = s.httpProxy || '';
-      formValue.value.httpProxyEnabled = Boolean(s.httpProxyEnabled);
-      formValue.value.enableAgent = s.enableAgent !== false;
-      formValue.value.disableBrowserSearch = Boolean(s.disableBrowserSearch);
-      formValue.value.akshareServiceUrl = s.akshareServiceUrl || 'http://127.0.0.1:9000';
-      formValue.value.aDataServiceUrl = s.aDataServiceUrl || 'http://127.0.0.1:9100';
-      formValue.value.defaultDataSource = s.defaultDataSource || 'eastmoney';
-      formValue.value.crawlTimeOut = s.crawlTimeOut || 60;
-      formValue.value.kDays = s.kDays || 90;
-
-      openAiEnable.value = Boolean(s.openAiEnable);
-      defaultAiConfigId.value = s.aiConfigId || null;
-      aiPrompt.value = s.prompt || SYSTEM_PROMPT_PRESETS.quant_mentor;
-      questionTemplate.value = s.questionTemplate || QUESTION_TEMPLATE_PRESETS.comprehensive;
+    // 兼容扁平（当前契约）与嵌套（旧版导出）两种形态
+    const rawSettings = res?.settings ?? res;
+    if (rawSettings) {
+      applySettingsSnapshot(rawSettings);
+      settingsLoaded.value = true;
+    } else {
+      settingsLoaded.value = false;
     }
 
-    if (res && res.aiConfigs) {
-      aiConfigs.value = res.aiConfigs.map((c: any) => ({
-        ID: c.ID || 0,
-        name: c.name || '未命名配置',
-        baseUrl: c.baseUrl || '',
-        apiKey: c.apiKey || '',
-        modelName: c.modelName || '',
-        thinking: Boolean(c.thinking)
-      }));
+    if (Array.isArray(res?.aiConfigs)) {
+      aiConfigs.value = res.aiConfigs.map(normalizeAiConfig);
+      aiConfigsLoaded.value = true;
+    } else if (Array.isArray(rawSettings?.aiConfigs)) {
+      aiConfigs.value = rawSettings.aiConfigs.map(normalizeAiConfig);
+      aiConfigsLoaded.value = true;
+    } else {
+      aiConfigsLoaded.value = false;
     }
 
     markClean();
   } catch (err: any) {
+    settingsLoaded.value = false;
+    aiConfigsLoaded.value = false;
     message.error('加载系统配置失败: ' + (err?.message || err));
   }
 }
+
 
 // 导出脱敏配置文件 (完全杜绝明文密钥导出泄露)
 async function handleExportConfig() {
@@ -620,22 +802,21 @@ function handleImportConfig() {
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
-      if (parsed.settings) {
-        Object.assign(formValue.value, parsed.settings);
-        openAiEnable.value = Boolean(parsed.settings.openAiEnable);
-        defaultAiConfigId.value = parsed.settings.aiConfigId;
-        aiPrompt.value = parsed.settings.prompt || aiPrompt.value;
-        questionTemplate.value = parsed.settings.questionTemplate || questionTemplate.value;
+      // 与 GetConfig/ExportConfig 保持一致：优先扁平形态，兼容旧版嵌套形态
+      const importedSettings = parsed?.settings ?? parsed;
+      if (importedSettings && typeof importedSettings === 'object') {
+        applySettingsSnapshot(importedSettings);
+        settingsLoaded.value = true;
       }
-      if (Array.isArray(parsed.aiConfigs)) {
-        aiConfigs.value = parsed.aiConfigs.map((c: any) => ({
-          ID: c.ID || 0,
-          name: c.name || '导入模型',
-          baseUrl: c.baseUrl || '',
-          apiKey: c.apiKey || '',
-          modelName: c.modelName || '',
-          thinking: Boolean(c.thinking)
-        }));
+      const importedConfigs = Array.isArray(parsed?.aiConfigs)
+        ? parsed.aiConfigs
+        : Array.isArray(importedSettings?.aiConfigs)
+          ? importedSettings.aiConfigs
+          : null;
+      if (importedConfigs) {
+        aiConfigs.value = importedConfigs.map(normalizeAiConfig);
+        aiConfigsLoaded.value = true;
+        reindexConfigMeta();
       }
       message.success('导入配置预览就绪，点击「保存设置」生效');
     } catch (err: any) {
@@ -645,12 +826,68 @@ function handleImportConfig() {
   input.click();
 }
 
+/**
+ * 构建 UpdateConfig 的提交载荷。
+ *
+ * ── 形态契约（v3.0.0 修复的关键）────────────────────────────────────────────
+ * 后端 `SettingConfig` 是**匿名嵌入** `*Settings` 的结构体，其 JSON 形态是**扁平**的：
+ *     { "ID":1, "prompt":"...", "aiConfigs":[ ... ] }
+ * 而**不是** `{ settings: { ... }, aiConfigs: [...] }`。
+ * 提交嵌套形态会使后端 `s.Settings == nil`，直接返回「保存失败: 配置数据为空」。
+ *
+ * ── 字段完整性 ────────────────────────────────────────────────────────
+ * 后端 `UpdateConfig` / `updateAiConfigsTx` 均使用 GORM `Updates(map{...})`
+ * **显式写入每一列**。因此必须展开**全部**已加载字段（含界面上不展示的
+ * embedding / backtest / mcp / tool 预算 / update / window 等），
+ * 以及每个模型配置的**全部**字段（含 maxTokens / temperature / httpProxy /
+ * 配额等），否则缺失列会被静默清零。
+ */
+function buildSavePayload(): any {
+  return {
+    ...formValue.value,
+    // 展开后校正与表单结构不一致的字段（表内是嵌套对象，后端要扁平布尔）
+    localPushEnable: Boolean(formValue.value.localPush?.enable),
+    dingPushEnable: Boolean(formValue.value.dingPush?.enable),
+    dingRobot: formValue.value.dingPush?.dingRobot || '',
+    openAiEnable: openAiEnable.value,
+    aiConfigId: defaultAiConfigId.value || 0,
+    prompt: aiPrompt.value,
+    questionTemplate: questionTemplate.value,
+    // aiConfigs：完整回传每一个字段（包括界面不展示的调度字段）
+    aiConfigs: aiConfigs.value.map(c => ({
+      ...c,
+      ID: c.ID || 0,
+      name: (c.name || '').trim(),
+      baseUrl: (c.baseUrl || '').trim(),
+      apiKey: (c.apiKey || '').trim(),
+      modelName: (c.modelName || '').trim(),
+      thinking: Boolean(c.thinking),
+      httpProxyEnabled: Boolean(c.httpProxyEnabled),
+      embeddingEnabled: Boolean(c.embeddingEnabled)
+    }))
+  };
+}
+
 // 严格表单前置校验与保存
 async function saveSettings() {
   // 1. 刷新频率校验
   if (formValue.value.refreshInterval < 2) {
     message.error('行情刷新频率不得低于 2 秒，推荐 3~5 秒以防止查询拥堵');
     activeTab.value = 'system';
+    return;
+  }
+
+  // 1.5 加载完整性门禁（防止把空/残缺列表写回，从而误删全部模型配置）
+  //     后端 updateAiConfigsTx 对空列表执行 "DELETE FROM ai_config"，
+  //     对残缺列表执行 "DELETE ... WHERE id NOT IN (...)"。
+  //     若本次会话从未成功加载到配置，则绝不允许提交。
+  if (!aiConfigsLoaded.value) {
+    message.error('尚未成功加载模型配置，为避免误删已保存的配置，本次保存已被阻止，请先刷新页面或重试加载。');
+    activeTab.value = 'ai';
+    return;
+  }
+  if (!settingsLoaded.value) {
+    message.error('尚未成功加载系统配置，为避免用默认值覆盖现有配置，本次保存已被阻止，请先刷新页面或重试加载。');
     return;
   }
 
@@ -683,61 +920,17 @@ async function saveSettings() {
 
   isSaving.value = true;
   try {
-    const payload: any = {
-      settings: {
-        ID: formValue.value.ID,
-        tushareToken: formValue.value.tushareToken,
-        emApiKey: formValue.value.emApiKey,
-        tickFlowAPIKey: formValue.value.tickFlowAPIKey,
-        qgqpBId: formValue.value.qgqpBId,
-        dingPushEnable: formValue.value.dingPush.enable,
-        dingRobot: formValue.value.dingPush.dingRobot,
-        localPushEnable: formValue.value.localPush.enable,
-        updateBasicInfoOnStart: formValue.value.updateBasicInfoOnStart,
-        refreshInterval: formValue.value.refreshInterval,
-        openAiEnable: openAiEnable.value,
-        aiConfigId: defaultAiConfigId.value || 0,
-        prompt: aiPrompt.value,
-        questionTemplate: questionTemplate.value,
-        browserPath: formValue.value.browserPath,
-        enableNews: formValue.value.enableNews,
-        darkTheme: formValue.value.darkTheme,
-        enableFund: formValue.value.enableFund,
-        enablePushNews: formValue.value.enablePushNews,
-        enableOnlyPushRedNews: formValue.value.enableOnlyPushRedNews,
-        httpProxy: formValue.value.httpProxy,
-        httpProxyEnabled: formValue.value.httpProxyEnabled,
-        enableAgent: formValue.value.enableAgent,
-        disableBrowserSearch: formValue.value.disableBrowserSearch,
-        akshareServiceUrl: formValue.value.akshareServiceUrl,
-        adataServiceUrl: formValue.value.aDataServiceUrl,
-        defaultDataSource: formValue.value.defaultDataSource,
-        crawlTimeOut: formValue.value.crawlTimeOut,
-        kDays: formValue.value.kDays
-      },
-      aiConfigs: aiConfigs.value.map(c => ({
-        ID: c.ID,
-        name: c.name.trim(),
-        baseUrl: c.baseUrl.trim(),
-        apiKey: c.apiKey.trim(),
-        modelName: c.modelName.trim(),
-        thinking: c.thinking,
-        temperature: 0.7,
-        maxTokens: 4096,
-        timeOut: 300,
-        llmConcurrencyLimit: 2,
-        subAgentTimeout: 20
-      }))
-    };
-
-    const res = await UpdateConfig(payload);
-    if (res && res.includes('失败')) {
+    const res = await UpdateConfig(buildSavePayload());
+    // 后端成功时返回「保存成功！」，失败时返回以「保存失败」开头的字符串
+    if (typeof res === 'string' && res.includes('失败')) {
       message.error(res);
-    } else {
-      message.success('系统设置已成功保存并立即生效！');
-      markClean();
-      await loadSettings();
+      return;
     }
+    message.success('系统设置已成功保存并立即生效！');
+    markClean();
+    await loadSettings();
+    // 保存后处理“设为默认”在未保存卡片上的待定意图
+    await flushPendingDefaultModel();
   } catch (err: any) {
     message.error('保存设置异常: ' + (err?.message || err));
   } finally {
@@ -1030,7 +1223,7 @@ onBeforeUnmount(() => {
                     quaternary
                     size="tiny"
                     type="primary"
-                    @click="setDefaultModel(cfg)"
+                    @click="setDefaultModel(cfg, idx)"
                   >
                     设为默认
                   </n-button>

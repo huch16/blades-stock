@@ -1036,6 +1036,74 @@ func UpdateConfig(s *SettingConfig) string {
 		}
 	}
 
+	// ── 防御性保护（v3.0.0）— 必须在 validateAIConfig **之前**执行 ───────────────
+	//
+	// `updateAiConfigsTx` 使用 GORM Updates(map) **显式写入每一列**，因此调用方未提交的
+	// 字段会以零值落库。而 `validateAIConfig` 本身会用默认值（4096 / 300 / 2 / 20）
+	// 把零值填掉，从而掩盖“该字段根本没被提交”这一事实。所以必须先按数据库原值补齐，
+	// 再交给 validateAIConfig 校验（此时值已合法，不会再被默认值覆盖）。
+	//
+	// 补齐范围：仅限**界面上没有输入入口**的调度/扩展字段（新增或清零本无意义），
+	// 以及布尔类中无界面入口的 httpProxyEnabled / embeddingEnabled。
+	// 明确**不**补齐：name / baseUrl / apiKey / modelName / thinking —— 这五项由界面管理，
+	// 必须允许显式改空或置 false。
+	if db.Dao != nil {
+		for _, cfg := range s.AiConfigs {
+			if cfg == nil || cfg.ID == 0 {
+				continue
+			}
+			var old AIConfig
+			if err := db.Dao.Where("id = ?", cfg.ID).First(&old).Error; err != nil {
+				continue // 不存在的 ID 会在 upsert 中按新增处理
+			}
+			if cfg.MaxTokens <= 0 {
+				cfg.MaxTokens = old.MaxTokens
+			}
+			if cfg.Temperature <= 0 {
+				cfg.Temperature = old.Temperature
+			}
+			if cfg.TimeOut <= 0 {
+				cfg.TimeOut = old.TimeOut
+			}
+			if cfg.LLMConcurrencyLimit <= 0 {
+				cfg.LLMConcurrencyLimit = old.LLMConcurrencyLimit
+			}
+			if cfg.SubAgentTimeout <= 0 {
+				cfg.SubAgentTimeout = old.SubAgentTimeout
+			}
+			if !cfg.HttpProxyEnabled {
+				cfg.HttpProxyEnabled = old.HttpProxyEnabled
+			}
+			if !cfg.EmbeddingEnabled {
+				cfg.EmbeddingEnabled = old.EmbeddingEnabled
+			}
+			if strings.TrimSpace(cfg.HttpProxy) == "" {
+				cfg.HttpProxy = old.HttpProxy
+			}
+			if strings.TrimSpace(cfg.SessionId) == "" {
+				cfg.SessionId = old.SessionId
+			}
+			if strings.TrimSpace(cfg.EmbeddingModelName) == "" {
+				cfg.EmbeddingModelName = old.EmbeddingModelName
+			}
+			if strings.TrimSpace(cfg.EmbeddingBaseUrl) == "" {
+				cfg.EmbeddingBaseUrl = old.EmbeddingBaseUrl
+			}
+			if cfg.RateLimitPerSecond <= 0 {
+				cfg.RateLimitPerSecond = old.RateLimitPerSecond
+			}
+			if cfg.Burst <= 0 {
+				cfg.Burst = old.Burst
+			}
+			if cfg.DailyRequestQuota <= 0 {
+				cfg.DailyRequestQuota = old.DailyRequestQuota
+			}
+			if cfg.DailyCostQuota <= 0 {
+				cfg.DailyCostQuota = old.DailyCostQuota
+			}
+		}
+	}
+
 	for i, cfg := range s.AiConfigs {
 		if cfg == nil {
 			continue
@@ -1069,51 +1137,86 @@ func UpdateConfig(s *SettingConfig) string {
 				} else {
 					query = tx.Model(&Settings{}).Where("1 = 1")
 				}
+				// 防御性保护（v3.0.0）：
+				// 以下字段经审计确认**当前没有任何前端界面入口**（仅由环境/后端流程维护）。
+				// 由于本函数使用 Updates(map) 显式写入每一列，任何漏传这些字段的调用方都会把
+				// 用户既有配置静默清零（实例：保存一次设置就关闭了向量检索、抹掉了回测与工具预算）。
+				// 因此对它们采用「零值即保留原值」语义。
+				// 注意：布尔类字段（embedding_enabled / backtest_enabled）**不做**保留，
+				// 因为 false 是合法且有意义的显式取值，保留会导致前端无法关闭该能力。
+				keepStr := func(newV, oldV string) string {
+					if strings.TrimSpace(newV) == "" {
+						return oldV
+					}
+					return newV
+				}
+				keepInt := func(newV, oldV int64) int64 {
+					if newV <= 0 {
+						return oldV
+					}
+					return newV
+				}
+				keepFloat := func(newV, oldV float64) float64 {
+					if newV <= 0 {
+						return oldV
+					}
+					return newV
+				}
+				// 无界面入口的能力开关：false 无法与“未提交”区分，一律保留原值，
+				// 避免一次普通保存就静默关闭向量检索或回测。
+				keepCapability := func(newV, oldV bool) bool {
+					if !newV {
+						return oldV
+					}
+					return newV
+				}
+
 				result := query.Updates(map[string]any{
-					"local_push_enable":           s.LocalPushEnable,
-					"ding_push_enable":            s.DingPushEnable,
-					"ding_robot":                  s.DingRobot,
-					"update_basic_info_on_start":  s.UpdateBasicInfoOnStart,
-					"refresh_interval":            s.RefreshInterval,
-					"open_ai_enable":              s.OpenAiEnable,
-					"ai_config_id":                s.AiConfigID,
-					"tushare_token":               s.TushareToken,
-					"prompt":                      s.Prompt,
-					"check_update":                s.CheckUpdate,
-					"update_channel":              s.UpdateChannel,
-					"question_template":           s.QuestionTemplate,
-					"crawl_time_out":              s.CrawlTimeOut,
-					"k_days":                      s.KDays,
-					"browser_path":                s.BrowserPath,
-					"enable_news":                 s.EnableNews,
-					"dark_theme":                  s.DarkTheme,
-					"enable_fund":                 s.EnableFund,
-					"enable_push_news":            s.EnablePushNews,
-					"enable_only_push_red_news":   s.EnableOnlyPushRedNews,
-					"http_proxy":                  s.HttpProxy,
-					"http_proxy_enabled":          s.HttpProxyEnabled,
-					"enable_agent":                s.EnableAgent,
-					"disable_browser_search":      s.DisableBrowserSearch,
-					"qgqp_b_id":                   s.QgqpBId,
-					"em_api_key":                  s.EmApiKey,
-					"tickflow_api_key":            s.TickFlowAPIKey,
-					"akshare_service_url":         s.AkshareServiceUrl,
-					"adata_service_url":           s.ADataServiceUrl,
-					"default_data_source":         s.DefaultDataSource,
-					"window_width":                s.WindowWidth,
-					"window_height":               s.WindowHeight,
-					"prompt_plaza_api_base":       s.PromptPlazaApiBase,
-					"embedding_enabled":           s.EmbeddingEnabled,
-					"embedding_model_name":        s.EmbeddingModelName,
-					"embedding_base_url":          s.EmbeddingBaseUrl,
+					"local_push_enable":          s.LocalPushEnable,
+					"ding_push_enable":           s.DingPushEnable,
+					"ding_robot":                 s.DingRobot,
+					"update_basic_info_on_start": s.UpdateBasicInfoOnStart,
+					"refresh_interval":           s.RefreshInterval,
+					"open_ai_enable":             s.OpenAiEnable,
+					"ai_config_id":               s.AiConfigID,
+					"tushare_token":              s.TushareToken,
+					"prompt":                     s.Prompt,
+					"check_update":               s.CheckUpdate,
+					"update_channel":             keepStr(s.UpdateChannel, exist.UpdateChannel),
+					"question_template":          s.QuestionTemplate,
+					"crawl_time_out":             s.CrawlTimeOut,
+					"k_days":                     s.KDays,
+					"browser_path":               s.BrowserPath,
+					"enable_news":                s.EnableNews,
+					"dark_theme":                 s.DarkTheme,
+					"enable_fund":                s.EnableFund,
+					"enable_push_news":           s.EnablePushNews,
+					"enable_only_push_red_news":  s.EnableOnlyPushRedNews,
+					"http_proxy":                 s.HttpProxy,
+					"http_proxy_enabled":         s.HttpProxyEnabled,
+					"enable_agent":               s.EnableAgent,
+					"disable_browser_search":     s.DisableBrowserSearch,
+					"qgqp_b_id":                  s.QgqpBId,
+					"em_api_key":                 s.EmApiKey,
+					"tickflow_api_key":           s.TickFlowAPIKey,
+					"akshare_service_url":        s.AkshareServiceUrl,
+					"adata_service_url":          s.ADataServiceUrl,
+					"default_data_source":        s.DefaultDataSource,
+					// 窗口尺寸由桌面端 beforeClose 显式写入，保留零值以免 headless 场景误清
+					"window_width":                int(keepInt(int64(s.WindowWidth), int64(exist.WindowWidth))),
+					"window_height":               int(keepInt(int64(s.WindowHeight), int64(exist.WindowHeight))),
+					"prompt_plaza_api_base":       keepStr(s.PromptPlazaApiBase, exist.PromptPlazaApiBase),
+					"embedding_enabled":           keepCapability(s.EmbeddingEnabled, exist.EmbeddingEnabled),
+					"embedding_model_name":        keepStr(s.EmbeddingModelName, exist.EmbeddingModelName),
+					"embedding_base_url":          keepStr(s.EmbeddingBaseUrl, exist.EmbeddingBaseUrl),
 					"embedding_api_key":           s.EmbeddingApiKey,
-					"backtest_accuracy_threshold": s.BacktestAccuracyThreshold,
-					"backtest_verify_days":        s.BacktestVerifyDays,
-					"backtest_enabled":            s.BacktestEnabled,
-					"mcp_timeout":                 s.McpTimeout,
-					"tool_run_budget":             s.ToolRunBudget,
-					"tool_daily_budget":           s.ToolDailyBudget,
-					"tool_daily_cost_usd":         s.ToolDailyCostUSD,
+					"backtest_accuracy_threshold": keepFloat(s.BacktestAccuracyThreshold, exist.BacktestAccuracyThreshold),
+					"backtest_verify_days":        keepInt(s.BacktestVerifyDays, exist.BacktestVerifyDays),
+					"backtest_enabled":            keepCapability(s.BacktestEnabled, exist.BacktestEnabled),
+					"mcp_timeout":                 keepInt(s.McpTimeout, exist.McpTimeout),
+					"tool_run_budget":             keepInt(s.ToolRunBudget, exist.ToolRunBudget),
+					"tool_daily_budget":           keepInt(s.ToolDailyBudget, exist.ToolDailyBudget),
+					"tool_daily_cost_usd":         keepFloat(s.ToolDailyCostUSD, exist.ToolDailyCostUSD),
 				})
 				if result.Error != nil {
 					return result.Error
@@ -1162,7 +1265,17 @@ func UpdateConfig(s *SettingConfig) string {
 }
 
 func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
+	// 防御性保护（v3.0.0）：
+	// 空列表会删除**全部**模型配置。只有当数据库中确实存在配置时，才需要真正执行删除；
+	// 若库中本来就为空，直接返回即可，避免无谓的 DELETE 与 sqlite_sequence 重排。
 	if len(aiConfigs) == 0 {
+		var existing int64
+		if err := tx.Model(&AIConfig{}).Count(&existing).Error; err != nil {
+			return err
+		}
+		if existing == 0 {
+			return nil
+		}
 		err := tx.Exec("DELETE FROM ai_config").Error
 		if err != nil {
 			return err
@@ -1196,6 +1309,10 @@ func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
 		// ID<=0 或数据库中不存在该 ID，一律视为新配置，走插入逻辑（清除临时ID由数据库自增主键）
 		if item.ID <= 0 || !idMap[item.ID] {
 			item.ID = 0
+			// 新增条目补齐调度默认值：前端界面只暴露 5 项核心身份字段，
+			// 其余调度参数可能以零值到达，必须在落库前确定性补齐，
+			// 否则会被写入 0（例如 max_tokens=0 会让推理模型直接被截断）。
+			item.SetDefaults()
 			addAiConfigs = append(addAiConfigs, item)
 		} else {
 			notDeleteIds = append(notDeleteIds, item.ID)
