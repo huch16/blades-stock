@@ -249,7 +249,57 @@ TestNewAiConfigGetsDefaults                  PASS  新增配置自动补齐调�
 `go build ./...` / `go vet` / `gofmt -l` 均干净；
 `backend/data`、`backend/quant`、`cmd/server` 测试全绿。
 
-### 八、版本号全面升级至 3.0.0
+### 八、P0 修复：「拉取列表」成功后模型标识无处可选
+
+**用户反馈**：「拉取列表 成功后，没有显示 模型标识 (Model Identifier)，如何体现模型？
+如 minimaxai/minimax-m3.1-flash；怎么样保存？最基本的功能都没有」。
+
+#### 根因：拉回来的列表从未渲染
+
+`fetchAiModels()` 成功后将模型写入 `aiConfigMeta[idx].modelOptions`，
+但**模板里用的是纯 `n-input`**，`modelOptions` 从未绑定到任何控件：
+
+```html
+<!-- 修复前：拉取结果存在 state 里，却无人渲染 -->
+<n-input v-model:value="cfg.modelName" placeholder="deepseek-chat / MiniMax-M3" />
+<!-- `modelOptions` 在整个模板中零引用 -->
+```
+
+后果：点击「拉取列表」只弹一个 toast，列表**用户看不到、也选不了**，
+只能盲打模型标识——最基本的能力缺失。
+
+#### 修复
+
+| 项 | 修复前 | 修复后 |
+|---|---|---|
+| 模型标识控件 | 纯文本输入框 | **可搜索下拉框** `n-select`（`filterable` + `tag` + `clearable`） |
+| 拉取结果 | 存进 state 但无处可选 | 写入下拉框 `options`，**点击即选** |
+| 自定义标识 | 只能手打 | 既可从列表选，也可自由输入（如 `minimaxai/minimax-m3.1-flash`） |
+| 反馈 | 仅 toast | 下方常驻提示：**✅ 已获取 N 个模型，点击下拉框直接选择** |
+| 未指定模型 | 仍为空 | 拉取成功后**自动回填第一个模型** |
+| 值不在列表中 | 无提示 | 明确提示「当前为自定义模型标识，将原样保存」 |
+| 拉取失败 | 笼统报错 | 提示检查 Base URL / API Key，或直接手输 |
+
+仍保留手动输入能力（`tag` 允许任意文本），不削能力、只补可见性。
+「保存设置」位于顶部操作栏常驻可见，并绑定 `Ctrl+S` / `Cmd+S`。
+
+#### 验证（真实链路，非模拟）
+
+用本机 mock 一个 OpenAI 兼容服务（`GET /v1/models` 返回 7 个模型，含
+`minimaxai/minimax-m3.1-flash`），启动真实 `cmd/server`，用 ego-browser 驱动真实 UI：
+
+| 步骤 | 实测结果 |
+|---|---|
+| 填写 Base URL 指向 mock → 点「拉取列表」 | ✅ 提示「已获取 7 个模型」 |
+| 展开下拉框 | ✅ 真实渲染 **7 个可选项**（含 `minimaxai/minimax-m3.1-flash`） |
+| 选中该模型 | ✅ 下拉框正确显示所选值 |
+| 点「保存设置」 | ✅ toast「系统设置已成功保存并立即生效！」 |
+| **直接读数据库校验** | ✅ `modelName="minimaxai/minimax-m3.1-flash"` 已入库 |
+| 刷新后回显 | ✅ 4 张卡片的模型标识均正确显示 |
+
+回归：`npm run lint` 0 errors；`npm run build` 三道门禁全通过。
+
+### 九、版本号全面升级至 3.0.0
 
 共 17 个文件 / 27 处（`main.go`、`cmd/server`、`wails.json`、`frontend/package.json`、
 `frontend/index.html`、设置页与认证弹窗、`scripts/deploy-vps.sh`、`docker-compose.yml`、

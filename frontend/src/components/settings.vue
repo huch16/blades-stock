@@ -482,6 +482,18 @@ function setDefaultModel(cfg: CleanAIConfig, index: number) {
   message.success(`已设置 [${cfg.name}] 为全局默认模型`);
 }
 
+/** 当前模型标识是否在已拉取的列表里（用于提示“自定义标识将原样保存”） */
+function isModelInFetchedList(idx: number, value: string): boolean {
+  const opts = aiConfigMeta[idx]?.modelOptions || [];
+  if (!opts.length) return true;
+  return opts.some(o => o.value === value);
+}
+
+function modelSelectPlaceholder(idx: number): string {
+  const n = aiConfigMeta[idx]?.modelOptions?.length || 0;
+  return n > 0 ? '请选择或搜索模型标识' : '点击「拉取列表」，或直接输入模型标识';
+}
+
 async function fetchAiModels(aiConfig: CleanAIConfig, index: number, opts: { silent?: boolean } = {}) {
   const meta = ensureConfigMeta(index);
   const baseUrl = (aiConfig.baseUrl || '').trim();
@@ -493,17 +505,31 @@ async function fetchAiModels(aiConfig: CleanAIConfig, index: number, opts: { sil
   meta.loadingModels = true;
   try {
     const list: string[] = await FetchAiModels(baseUrl, apiKey);
-    if (list && list.length > 0) {
-      meta.modelOptions = list.map(m => ({ label: m, value: m }));
-      if (!opts.silent) message.success(`成功拉取 ${list.length} 个可用模型标识`);
-      if (!aiConfig.modelName && list[0]) {
-        aiConfig.modelName = list[0];
+    const cleaned = Array.isArray(list) ? list.filter(m => typeof m === 'string' && m.trim()) : [];
+    if (cleaned.length > 0) {
+      // 关键修复：拉取到的模型必须落到下拉框的 options 上，否则用户看不到、选不了
+      meta.modelOptions = cleaned.map(m => ({ label: m, value: m }));
+      // 若尚未指定模型，自动选中第一个，避免“拉到了但仍是空的”
+      if (!aiConfig.modelName || !String(aiConfig.modelName).trim()) {
+        aiConfig.modelName = cleaned[0];
+      }
+      if (!opts.silent) {
+        const preview = cleaned.slice(0, 3).join(' / ');
+        message.success(
+          `成功拉取 ${cleaned.length} 个模型，已填入下拉框：${preview}${cleaned.length > 3 ? ' …' : ''}`,
+          { duration: 6000 }
+        );
       }
     } else {
-      if (!opts.silent) message.warning('未获取到模型列表，可手动输入模型名称');
+      meta.modelOptions = [];
+      if (!opts.silent) {
+        message.warning('未获取到模型列表，请检查 Base URL / API Key，或直接手动输入模型标识', {
+          duration: 6000
+        });
+      }
     }
   } catch (err: any) {
-    if (!opts.silent) message.error('获取模型失败: ' + (err?.message || err));
+    if (!opts.silent) message.error('获取模型失败: ' + (err?.message || err), { duration: 6000 });
   } finally {
     meta.loadingModels = false;
   }
@@ -1246,7 +1272,20 @@ onBeforeUnmount(() => {
                   <n-gi>
                     <n-form-item label="模型标识 (Model Identifier)" required>
                       <div class="model-name-group">
-                        <n-input v-model:value="cfg.modelName" placeholder="deepseek-chat / MiniMax-M3" style="flex: 1;" />
+                        <!-- 可搜索 + 可自定义输入的下拉选择：
+                             「拉取列表」成功后，模型会直接出现在这里供选择，
+                             而不是像以前那样只弹一个 toast、列表却无处可选。 -->
+                        <n-select
+                          v-model:value="cfg.modelName"
+                          :options="aiConfigMeta[idx]?.modelOptions || []"
+                          :loading="aiConfigMeta[idx]?.loadingModels"
+                          :placeholder="modelSelectPlaceholder(idx)"
+                          filterable
+                          tag
+                          clearable
+                          style="flex: 1; min-width: 0;"
+                          @clear="cfg.modelName = ''"
+                        />
                         <n-button
                           size="small"
                           :loading="aiConfigMeta[idx]?.loadingModels"
@@ -1254,6 +1293,21 @@ onBeforeUnmount(() => {
                         >
                           拉取列表
                         </n-button>
+                      </div>
+                      <div
+                        class="model-name-hint"
+                        :class="{ 'is-ok': (aiConfigMeta[idx]?.modelOptions?.length || 0) > 0 }"
+                      >
+                        <template v-if="(aiConfigMeta[idx]?.modelOptions?.length || 0) > 0">
+                          ✅ 已获取 {{ aiConfigMeta[idx].modelOptions.length }} 个模型，点击下拉框直接选择
+                          <span v-if="!isModelInFetchedList(idx, cfg.modelName)">
+                            （当前为自定义模型标识，将原样保存）
+                          </span>
+                        </template>
+                        <template v-else>
+                          点击「拉取列表」自动获取服务端可用模型；也可直接手动输入，
+                          例如 <code>minimaxai/minimax-m3.1-flash</code>、<code>deepseek-chat</code>
+                        </template>
                       </div>
                     </n-form-item>
                   </n-gi>
@@ -1687,6 +1741,25 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   width: 100%;
+}
+
+/* 「模型标识」下方的即时反馈，明确告知“已拉到多少个模型、当前值是否在列表中” */
+.model-name-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #8a8f99;
+}
+
+.model-name-hint.is-ok {
+  color: #18a058;
+}
+
+.model-name-hint code {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(128, 128, 128, 0.16);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .thinking-switch-row {
