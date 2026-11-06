@@ -161,9 +161,89 @@ AUTH_TOKEN=$(grep '^BLADES_AUTH_TOKEN=' .env | cut -d '=' -f2- | tr -d ' "')
 APP_PORT=$(grep '^PORT=' .env | cut -d '=' -f2- | tr -d ' "')
 APP_PORT=${APP_PORT:-8000}
 
-# 5. 构建与启动 Docker 容器
-echo -e "${BLUE}[5/6] 构建并启动 Docker 服务集群 (应用 ${HW_PROFILE} 优化参数)...${NC}"
-docker compose up -d --build
+# ──────────────────────────────────────────────────────────────────────────────
+# 4.6 发布韧性 (P0)：快照「正在运行的上一版前端产物」
+#
+# 背景：部署瞬间，仍停留在旧页面的用户会去懒加载**旧哈希** chunk。若服务端拿不到
+#       上一版资源，这些请求就是 404 → 用户白屏。服务端 (--previous-dist-dir)
+#       会从 dist-previous 回退同名资源，所以**必须在替换容器之前**完成快照。
+#       注意：服务端在启动时解析并缓存该目录，因此快照必须在 docker compose up 之前就位。
+# ──────────────────────────────────────────────────────────────────────────────
+PREV_DIR="$(pwd)/frontend/dist-previous"
+
+# 原子替换目录：先把新内容放到临时位置，再整体切换，避免中途失败丢掉已有快照。
+# 硬约束：**残缺的源目录绝不允许替换掉已有的完好快照**（否则回退链反而被弄断）。
+install_prev_dir() {
+    local src="$1"
+    local old="${PREV_DIR}.old"
+
+    # 入参校验：必须有 index.html，否则直接拒绝，不碰现有快照
+    if [ ! -f "$src/index.html" ]; then
+        return 1
+    fi
+
+    rm -rf "$old"
+    [ -d "$PREV_DIR" ] && mv "$PREV_DIR" "$old"
+    if mv "$src" "$PREV_DIR" 2>/dev/null && [ -f "$PREV_DIR/index.html" ]; then
+        rm -rf "$old"
+        return 0
+    fi
+    # 切换失败则回滚，保证原有快照不丢
+    rm -rf "$PREV_DIR"
+    [ -d "$old" ] && mv "$old" "$PREV_DIR"
+    return 1
+}
+
+count_prev_chunks() {
+    find "$PREV_DIR/assets" -type f -name '*.js' 2>/dev/null | wc -l | tr -d ' '
+}
+
+echo -e "${BLUE}[4.6/6] 构建镜像并快照旧版前端产物（发布韧性）...${NC}"
+mkdir -p "$PREV_DIR"
+
+# 先构建镜像（不启动），以便在替换容器前完成快照
+docker compose build
+
+if docker inspect -f '{{.State.Running}}' blades-stock 2>/dev/null | grep -q true; then
+    TMP_PREV="$(mktemp -d)"
+    if docker cp blades-stock:/app/frontend/dist/. "$TMP_PREV/" >/dev/null 2>&1 && [ -f "$TMP_PREV/index.html" ]; then
+        if install_prev_dir "$TMP_PREV"; then
+            echo -e "${GREEN}--> 已快照在线版本资源到 frontend/dist-previous/（$(count_prev_chunks) 个 JS chunk）${NC}"
+        else
+            echo -e "${YELLOW}[提示] 快照目录切换失败，已回滚至原有 dist-previous/${NC}"
+        fi
+    else
+        rm -rf "$TMP_PREV"
+        echo -e "${YELLOW}[提示] 未能从运行中容器抓取旧版产物，保留既有 dist-previous/${NC}"
+    fi
+else
+    echo -e "${YELLOW}--> 未检测到运行中的容器（首次部署），无旧版可快照${NC}"
+fi
+
+# 首次部署播种：dist-previous 仍为空时，从刚构建好的镜像提取产物，
+# 使「下一次」升级立即具备旧 chunk 回退能力。
+if [ ! -f "$PREV_DIR/index.html" ]; then
+    TMP_SEED="$(mktemp -d)"
+    if docker create --name blades-prev-seed blades-stock:latest >/dev/null 2>&1; then
+        if docker cp blades-prev-seed:/app/frontend/dist/. "$TMP_SEED/" >/dev/null 2>&1 && [ -f "$TMP_SEED/index.html" ]; then
+            if install_prev_dir "$TMP_SEED"; then
+                echo -e "${GREEN}--> 已用当前版本播种 frontend/dist-previous/，下次升级即受旧 chunk 回退保护${NC}"
+            else
+                echo -e "${YELLOW}[提示] 播种 dist-previous/ 失败，下次部署前请重跑本脚本${NC}"
+            fi
+        else
+            rm -rf "$TMP_SEED"
+        fi
+        docker rm -f blades-prev-seed >/dev/null 2>&1
+    else
+        rm -rf "$TMP_SEED"
+        echo -e "${YELLOW}[提示] 无法创建临时容器用于播种 dist-previous/${NC}"
+    fi
+fi
+
+# 5. 启动 Docker 容器
+echo -e "${BLUE}[5/6] 启动 Docker 服务集群 (应用 ${HW_PROFILE} 优化参数)...${NC}"
+docker compose up -d
 
 # 6. 等待服务就绪并健康探活
 echo -e "${BLUE}[6/6] 正在进行系统健康自检与端口探活...${NC}"

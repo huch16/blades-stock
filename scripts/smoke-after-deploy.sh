@@ -72,7 +72,12 @@ if has "$HEALTH_JSON" '"previous_dist_armed":true'; then
     ok "previous_dist_armed = true（旧 chunk 可回退）"
 else
     bad "previous_dist_armed 非 true —— 部署仍会打断已打开页面的用户"
-    warn "请确认 frontend/dist-previous/ 存在且 docker-compose 已挂载该目录"
+    warn "排查步骤："
+    warn "  1) 宿主机目录必须存在且非空:  frontend/dist-previous/index.html"
+    warn "  2) compose 必须挂载该目录:    ./frontend/dist-previous:/app/frontend/dist-previous:ro"
+    warn "  3) 目录是容器启动时解析并缓存的 —— 补齐后需重启容器: docker compose restart blades-stock"
+    warn "  4) deploy-vps.sh 步骤 4.6 会在替换容器前自动快照旧版产物；"
+    warn "     若仍为空，直接重跑: bash scripts/deploy-vps.sh"
 fi
 MISS="$(echo "$HEALTH_JSON" | grep -o '"stale_chunk_miss":[0-9]*' | grep -o '[0-9]*$')"
 if [ -z "$MISS" ]; then warn "未取到 stale_chunk_miss 指标"
