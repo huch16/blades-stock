@@ -501,17 +501,28 @@ function modelSelectPlaceholder(idx: number): string {
 /**
  * 计算某张卡片当前应展示的候选列表。
  *
- * ⚠️ Naive UI 的 n-auto-complete **没有 filter 这个 prop**（传入会被当作普通属性忽略），
- * 它要求调用方自己把 options 过滤好。因此这里根据当前输入值做大小写不敏感的子串过滤：
- *   · 输入为空 → 返回全部候选（支持“点一下就看到全部模型”的浏览式选择）
- *   · 有输入  → 只保留匹配项（例如输入 kimi 就能定位到 moonshotai/kimi-k2）
- * 注意这里只影响**候选展示**，绝不修改用户输入的原始值（所见即所存）。
+ * 两个关键事实（都已用 naive-ui 源码验证）：
+ *   ① n-auto-complete **没有 filter 这个 prop**（传入会被静默忽略），
+ *      必须由调用方自己把 options 过滤好；
+ *   ② 其菜单显示条件是「输入值非空（或 showEmpty 为真）且候选非空」——
+ *      输入框为空时菜单【永远不出现】。这正是「点击输入框没有下拉」的根因。
+ *
+ * 因此这里的语义是「点击即浏览全部，输入才筛选」：
+ *   · 输入为空            → 全部候选（配合 :show-empty 让菜单在空输入时也能弹出）
+ *   · 输入无任何匹配      → 全部候选（自定义标识不被清掉，且仍可点选替换）
+ *   · 输入恰好是完整选中项 → 全部候选（再次点击时可浏览/切换其它模型）
+ *   · 输入是部分前缀      → 收窄为匹配项（如输入 kimi → 只剩 moonshotai/kimi-k2）
+ * 注意：只影响候选展示，绝不修改用户输入的原始值（所见即所存）。
  */
 function modelOptionsFor(idx: number, current: string): { label: string; value: string }[] {
   const opts = aiConfigMeta[idx]?.modelOptions || [];
   const p = String(current ?? '').trim().toLowerCase();
   if (!p) return opts;
-  return opts.filter(o => String(o.value).toLowerCase().includes(p));
+  const hits = opts.filter(o => String(o.value).toLowerCase().includes(p));
+  if (hits.length === 0) return opts;
+  const isExact = hits.some(o => String(o.value).toLowerCase() === p);
+  if (isExact) return opts;
+  return hits;
 }
 
 async function fetchAiModels(aiConfig: CleanAIConfig, index: number, opts: { silent?: boolean } = {}) {
@@ -536,7 +547,7 @@ async function fetchAiModels(aiConfig: CleanAIConfig, index: number, opts: { sil
       if (!opts.silent) {
         const preview = cleaned.slice(0, 3).join(' / ');
         message.success(
-          `成功拉取 ${cleaned.length} 个模型：${preview}${cleaned.length > 3 ? ' …' : ''}\n点击模型标识输入框即可下拉选择`,
+          `成功拉取 ${cleaned.length} 个模型：${preview}${cleaned.length > 3 ? ' …' : ''}\n点击输入框即可浏览全部并选择`,
           { duration: 8000 }
         );
       }
@@ -1333,6 +1344,8 @@ onBeforeUnmount(() => {
                           :options="modelOptionsFor(idx, cfg.modelName)"
                           :placeholder="modelSelectPlaceholder(idx)"
                           :clearable="true"
+                          :show-empty="hasFetchedModels(idx)"
+                          :get-show="() => true"
                           :input-props="{ autocomplete: 'off', spellcheck: 'false' }"
                           style="flex: 1; min-width: 0;"
                         />
@@ -1346,7 +1359,7 @@ onBeforeUnmount(() => {
                       </div>
                       <div class="model-name-hint" :class="{ 'is-ok': hasFetchedModels(idx) }">
                         <template v-if="hasFetchedModels(idx)">
-                          ✅ 已获取 {{ aiConfigMeta[idx].modelOptions.length }} 个模型，点击输入框可下拉选择
+                          ✅ 已获取 {{ aiConfigMeta[idx].modelOptions.length }} 个模型：点击输入框即可浏览全部并选择（输入可筛选）
                           <span v-if="!isModelInFetchedList(idx, cfg.modelName)">
                             （当前是自定义标识，会原样保存）
                           </span>
