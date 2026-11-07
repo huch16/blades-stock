@@ -366,8 +366,10 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 		if !resp.IsError() {
 			return ""
 		}
+		fmt.Printf("TESTAI DEBUG: status=%d isError=%v body=%q\n", resp.StatusCode(), resp.IsError(), string(resp.Body()))
 		raw := parseOpenAIErrorBody(resp.Body())
 		lastMsg = classifyAIError(resp.StatusCode(), raw, modelName)
+		fmt.Printf("TESTAI DEBUG: classified msg=%q\n", lastMsg)
 		logger.SugaredLogger.Errorf("TestAiConnection http error (attempt %d/%d): %s body: %s",
 			i+1, len(attempts), resp.Status(), string(resp.Body()))
 		// 仅在错误确实与输出预算相关时，才值得改用「不传 max_tokens」重试
