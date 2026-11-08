@@ -243,6 +243,7 @@ function normalizeAiConfig(c: any): CleanAIConfig {
 
 const aiConfigs = ref<CleanAIConfig[]>([]);
 const deletingCards = ref(false);
+const isSavingAiOnly = ref(false);
 
 // 让 Agent 对话页 / 市场页的模型选择器立即感知配置变更（删除/新增/改默认）。
 // 否则那些页面会用内存里缓存的旧列表，继续拿一个**已被删除**的模型发请求，
@@ -1011,6 +1012,31 @@ function buildSavePayload(): any {
   };
 }
 
+/**
+ * AI 专用保存载荷：只包含模型注册表相关字段。
+ * 后端 UpdateConfig 用 GORM `Updates(map)` 逐列写入，但会按
+ * `SettingConfig.submittedFields` 判断某列**是否被本次请求提交**：
+ * 未提交的列保留数据库原值。因此这里可以安全地只发 AI 字段，
+ * 不必把整张设置表单都带上（那也正是过去多个分区互相连坐的根源）。
+ */
+function buildAiOnlyPayload(): any {
+  return {
+    aiConfigId: defaultAiConfigId.value || 0,
+    openAiEnable: openAiEnable.value,
+    aiConfigs: aiConfigs.value.map(c => ({
+      ...c,
+      ID: c.ID || 0,
+      name: (c.name || '').trim(),
+      baseUrl: (c.baseUrl || '').trim(),
+      apiKey: (c.apiKey || '').trim(),
+      modelName: (c.modelName || '').trim(),
+      thinking: Boolean(c.thinking),
+      httpProxyEnabled: Boolean(c.httpProxyEnabled),
+      embeddingEnabled: Boolean(c.embeddingEnabled)
+    }))
+  };
+}
+
 /** 明确告知当前实际生效（全局默认）的模型卡片 */
 function announceEffectiveModel() {
   const hasDefault = Number(defaultAiConfigId.value) > 0;
@@ -1025,12 +1051,25 @@ function announceEffectiveModel() {
 }
 
 // 严格表单前置校验与保存
-async function saveSettings() {
-  // 1. 刷新频率校验
-  if (formValue.value.refreshInterval < 2) {
-    message.error('行情刷新频率不得低于 2 秒，推荐 3~5 秒以防止查询拥堵');
-    activeTab.value = 'system';
-    return;
+//
+// opts.aiOnly=true 时只提交 AI 模型注册表（供 AI 标签页里的「保存 AI 模型配置」使用）。
+// 目的：一个分区的参数问题**绝不应当**让整次保存失败，更不应当让另一个分区的
+// 修改被静默丢弃 —— 此前正是这条看似无害的硬拦截造成了「AI 输入/配置/保存都成问题」。
+async function saveSettings(opts: { aiOnly?: boolean } = {}) {
+  const aiOnly = Boolean(opts.aiOnly);
+
+  // 1. 刷新频率：**绝不因此取消整次保存**
+  //    这是一个纯建议性参数，后端 app.go 的行情调度器本身就会兜到最小 3s，
+  //    根本不需要前端拦截。旧实现在此处 `return`（并强制切走标签页），
+  //    导致：只要库里存的 refreshInterval < 2（例如 1），
+  //    用户每点一次保存，AI 页的所有修改（含删除卡片）都会被静默丢弃。
+  //    这就是「AI 输入、配置、保存都成问题 / 主模型反复删不掉」的真正元凶。
+  if (!aiOnly && !(Number(formValue.value.refreshInterval) >= 2)) {
+    formValue.value.refreshInterval = 3;
+    message.warning(
+      '行情刷新频率原值过小（可能引发数据源限流），已自动调整为 3 秒；其余设置将正常保存。',
+      { duration: 6000 }
+    );
   }
 
   // 1.5 加载完整性门禁（防止把空/残缺列表写回，从而误删全部模型配置）
@@ -1042,7 +1081,7 @@ async function saveSettings() {
     activeTab.value = 'ai';
     return;
   }
-  if (!settingsLoaded.value) {
+  if (!aiOnly && !settingsLoaded.value) {
     message.error('尚未成功加载系统配置，为避免用默认值覆盖现有配置，本次保存已被阻止，请先刷新页面或重试加载。');
     return;
   }
@@ -1074,16 +1113,24 @@ async function saveSettings() {
     }
   }
 
-  isSaving.value = true;
+  if (aiOnly) isSavingAiOnly.value = true;
+  else isSaving.value = true;
   try {
-    const res = await UpdateConfig(buildSavePayload());
+    // aiOnly 载荷只包含 AI 相关字段；后端已按「字段是否被提交」区分
+    // 保留旧值 / 尊重提交值，因此其余分区会保持数据库原值，不会被清零。
+    const payload = aiOnly ? buildAiOnlyPayload() : buildSavePayload();
+    const res = await UpdateConfig(payload);
     // 后端成功时返回「保存成功！」，失败时返回以「保存失败」开头的字符串
     if (typeof res === 'string' && res.includes('失败')) {
       message.error(res);
       return;
     }
-    message.success('系统设置已成功保存并立即生效！');
-    markClean();
+    if (aiOnly) {
+      message.success('AI 模型配置已保存并生效（其它分区的未保存改动需另行保存）。');
+    } else {
+      message.success('系统设置已成功保存并立即生效！');
+      markClean();
+    }
     await loadSettings();
     // 让其他页面的模型选择器立即同步（避免继续使用已删除/已改名的卡片）
     notifyAiConfigsChanged();
@@ -1096,7 +1143,17 @@ async function saveSettings() {
     message.error('保存设置异常: ' + (err?.message || err));
   } finally {
     isSaving.value = false;
+    isSavingAiOnly.value = false;
   }
+}
+
+/**
+ * 只保存 AI 模型注册表。
+ * 用户明确提出「这里单独设置保存」：AI 页面的修改不应该被行情刷新频率、
+ * Prompt 长度等其它分区的校验连坐，也不应该必须切换到其它标签页才能保存。
+ */
+async function saveAiConfigsOnly() {
+  await saveSettings({ aiOnly: true });
 }
 
 function handleDiscardChanges() {
@@ -1342,6 +1399,16 @@ onBeforeUnmount(() => {
               </n-button>
               <n-button type="primary" size="small" @click="addAiConfig">
                 + 新增模型配置
+              </n-button>
+              <!-- AI 分区独立保存：不必切到其它标签页，也不会被其它分区的
+                   校验（行情刷新频率 / Prompt 长度 等）连坐取消。 -->
+              <n-button
+                type="primary"
+                size="small"
+                :loading="isSavingAiOnly"
+                @click="saveAiConfigsOnly"
+              >
+                💾 保存 AI 模型配置
               </n-button>
             </div>
           </div>

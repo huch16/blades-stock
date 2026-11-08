@@ -246,22 +246,54 @@ echo -e "${BLUE}[5/6] 启动 Docker 服务集群 (应用 ${HW_PROFILE} 优化参
 docker compose up -d
 
 # 6. 等待服务就绪并健康探活
+#
+# 为什么不再固定 20×2s：首次冷启动需要完成数据库迁移、全市场标的字典种子导入
+# 与分词词典加载，在 2C/4G 规格上经常明显超过 40s。旧实现会在服务其实**正常启动**
+# 的情况下误报「健康检查超时」并 exit 1（紧接着的冒烟自检又全绿），
+# 既让部署在自动化里假失败，也把用户训练成忽略警告。
+# 现在：等待预算可通过 BLADES_HEALTH_MAX_WAIT 调整；容器已退出则提前止损；
+# 真失败时直接打印容器日志，而不是让用户自己去翻。
 echo -e "${BLUE}[6/6] 正在进行系统健康自检与端口探活...${NC}"
-MAX_RETRIES=20
-COUNT=0
+HEALTH_MAX_WAIT="${BLADES_HEALTH_MAX_WAIT:-180}"
 HEALTHY=false
+WAITED=0
+LAST_CODE="000"
+CONTAINER_DOWN=0
 
-while [ $COUNT -lt $MAX_RETRIES ]; do
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${APP_PORT}/health || true)
-    if [ "$HTTP_CODE" = "200" ]; then
+while [ "$WAITED" -lt "$HEALTH_MAX_WAIT" ]; do
+    # 容器若已退出，再等下去毫无意义 —— 立刻止损。
+    # 注意：只有 `docker compose ps` 本身成功执行时才据此判断，
+    # 否则命令报错会得到一个空字符串，从而误判为“容器已退出”。
+    RUNNING_SVCS=""
+    if RUNNING_SVCS=$(docker compose ps --status running --services 2>/dev/null); then
+        case "$RUNNING_SVCS" in
+            *blades-stock*) : ;;            # 仍在运行，继续等待
+            *) CONTAINER_DOWN=1 ;;          # 确实没在跑
+        esac
+    fi
+    if [ "$CONTAINER_DOWN" = "1" ]; then
+        echo -e "\n${RED}容器 blades-stock 未处于运行状态，已提前终止等待。${NC}"
+        break
+    fi
+
+    LAST_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${APP_PORT}/health" || true)
+    if [ "$LAST_CODE" = "200" ]; then
         HEALTHY=true
         break
     fi
     sleep 2
-    COUNT=$((COUNT + 1))
-    echo -n "."
+    WAITED=$((WAITED + 2))
+    # 每 10 秒打印一次已等待秒数与当前状态码，便于区分“还没起来”和“起来了但在报错”
+    if [ $((WAITED % 10)) -eq 0 ]; then
+        echo -n "[${WAITED}s:${LAST_CODE}]"
+    else
+        echo -n "."
+    fi
 done
 echo ""
+if [ "$HEALTHY" = "true" ]; then
+    echo -e "${GREEN}  ✅ 服务已就绪（耗时 ${WAITED}s，/health = 200）${NC}"
+fi
 
 if [ "$HEALTHY" = true ]; then
     # 6.5 部署后冒烟自检（防止“改 A 坏 B”：把关键不变量逐条验一遍）
@@ -306,6 +338,11 @@ if [ "$HEALTHY" = true ]; then
         exit 1
     fi
 else
-    echo -e "${RED}[警告] 服务启动健康检查超时，请通过 'docker compose logs blades-stock' 查看详细容器启动日志。${NC}"
+    echo -e "${RED}[失败] 服务在 ${HEALTH_MAX_WAIT}s 内未通过健康检查（最后一次 /health 返回 ${LAST_CODE}）。${NC}"
+    echo -e "${YELLOW}-------- 最近 60 行容器日志（真正的失败原因通常就在这里）--------${NC}"
+    docker compose logs --tail=60 blades-stock || true
+    echo -e "${YELLOW}--------------------------------------------------------------${NC}"
+    echo -e "${YELLOW}若确认是冷启动较慢（种子导入/词典加载），可跳过等待或延长预算：${NC}"
+    echo -e "${YELLOW}  BLADES_HEALTH_MAX_WAIT=420 bash scripts/deploy-vps.sh${NC}"
     exit 1
 fi
