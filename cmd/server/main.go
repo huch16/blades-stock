@@ -362,7 +362,7 @@ func main() {
 	})
 
 	// 综合健康检查端点 (收敛脱敏：保留自动化测试所需的 version 字段，移除 commit/cores 等主机敏感指纹)
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":    "healthy",
@@ -380,7 +380,13 @@ func main() {
 				"spa_fallback_hits":        statSPAFallbackHits.Load(),
 			},
 		})
-	})
+	}
+	mux.HandleFunc("GET /health", healthHandler)
+	// /api/health 是历史前端（v3.0.0 之前的设置页）调用过的路径。
+	// 发布韧性会把上一版 chunk 继续提供给已打开的在线会话，
+	// 因此旧会话仍会请求 /api/health；若服务端不提供别名，它们会得到 404，
+	// 从而把“服务器延迟”误显示为 -1（不可达）。这里提供同源别名，保障灰度期间双版本共存。
+	mux.HandleFunc("GET /api/health", healthHandler)
 
 	// 7.2 标准协议与机器可读契约端点 (P0-2, P1-7)
 	mux.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {

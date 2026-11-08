@@ -154,9 +154,11 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		path := r.URL.Path
 
 		// 静态资源、协议文件与免鉴权端点放行 (含标准容器探针 /live, /ready, /health, /robots.txt, /sitemap.xml, /openapi.json)
+		// /api/health 是 /health 的历史别名（供旧版缓存分块使用），同样免鉴权。
 		if path == "/live" ||
 			path == "/ready" ||
 			path == "/health" ||
+			path == "/api/health" ||
 			path == "/robots.txt" ||
 			path == "/sitemap.xml" ||
 			path == "/openapi.json" ||
