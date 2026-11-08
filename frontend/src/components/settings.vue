@@ -49,7 +49,10 @@ async function checkServerPing() {
   checkingPing.value = true;
   const t0 = performance.now();
   try {
-    const res = await fetch('/api/health?t=' + Date.now(), { cache: 'no-store' });
+    // 注意：服务端只注册了 `GET /health`（cmd/server/main.go），
+    // `/api/health` 从未存在过，且 `/api/*` 路径需要鉴权预检 → 必然 404。
+    // 旧代码调用 `/api/health`，导致 Web 模式下延迟探测永远显示 -1（服务器不可达）。
+    const res = await fetch('/health?t=' + Date.now(), { cache: 'no-store' });
     if (res.ok) {
       pingLatency.value = Math.round(performance.now() - t0);
     } else {
@@ -554,9 +557,12 @@ async function fetchAiModels(aiConfig: CleanAIConfig, index: number, opts: { sil
     } else {
       meta.modelOptions = [];
       if (!opts.silent) {
-        message.warning('未获取到模型列表，请检查 Base URL / API Key，或直接手动输入模型标识', {
-          duration: 6000
-        });
+        message.warning(
+          '未获取到模型列表。常见原因：Base URL 不正确（需指向 .../v1）、API Key 无效、' +
+            '或当前网络必须走代理（请在「基础与运行环境」里开启全局代理并先保存）。' +
+            '你也可以直接手动输入模型标识，或点「⚡ 测试连通性」查看具体错误原因。',
+          { duration: 9000 }
+        );
       }
     }
   } catch (err: any) {
@@ -1418,6 +1424,11 @@ onBeforeUnmount(() => {
                         ⚡ 测试连通性
                       </n-button>
                     </div>
+                    <div class="thinking-hint">
+                      本开关决定该卡片作为推理模型使用时的推理参数（reasoning_effort / thinking.type）。
+                      注意：<b>【Agent 对话】页顶部的「深度思考」开关在实际发起对话时会覆盖本卡片设置</b>；
+                      市场资讯 / 研报流水线不读取本开关。
+                    </div>
                   </n-gi>
                 </n-grid>
               </n-form>
@@ -1855,6 +1866,18 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   padding-top: 6px;
   border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.thinking-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #8b949e;
+}
+
+.thinking-hint b {
+  color: #d29922;
+  font-weight: 600;
 }
 
 .empty-configs-box {
