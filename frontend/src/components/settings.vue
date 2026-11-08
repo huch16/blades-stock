@@ -9,6 +9,7 @@ import {
 } from "naive-ui";
 import { ArrowBackOutline } from "@vicons/ionicons5";
 import { isWails, openAuthModal, logoutWebAuth } from "../api/bridge";
+import { useAiConfigStore } from "../stores/aiConfig";
 import {
   ExportConfig,
   GetConfig,
@@ -241,6 +242,17 @@ function normalizeAiConfig(c: any): CleanAIConfig {
 }
 
 const aiConfigs = ref<CleanAIConfig[]>([]);
+const deletingCards = ref(false);
+
+// 让 Agent 对话页 / 市场页的模型选择器立即感知配置变更（删除/新增/改默认）。
+// 否则那些页面会用内存里缓存的旧列表，继续拿一个**已被删除**的模型发请求，
+// 表现为“删了还在用 / 怎么删都删不掉”。
+const aiConfigStore = useAiConfigStore();
+function notifyAiConfigsChanged() {
+  aiConfigStore.refreshConfigs().catch(() => {
+    /* 非关键路径，失败不影响设置页自身的回读校验 */
+  });
+}
 
 // 加载成功标记：仅当确实从后端拿到过配置时，才允许把（可能为空的）列表写回数据库。
 // 否则一旦加载失败而用户在其它页签点了保存，空列表会触发后端 "DELETE FROM ai_config"，
@@ -437,27 +449,95 @@ function addAiConfig() {
   message.info('已新增模型配置卡片，请填入密钥并保存');
 }
 
+/**
+ * 删除模型卡片——**确认即落库**，并用数据库回读结果作为唯一成功依据。
+ *
+ * 历史缺陷（用户反馈「主模型反复删除不了」）：
+ *   旧流程只改本地数组，必须**再手动点一次「保存设置」**才会落库。
+ *   一旦用户忘记保存、或保存被前置门禁拦下（仅弹一个 3 秒即逝的 toast），
+ *   刷新页面后卡片就“复活”了 —— 在用户看来就是“怎么删都删不掉”。
+ *   更糟的是删除失败时 UI 依旧显示成功提示，完全没有可验证的成功依据。
+ *
+ * 现在：①确认后立即提交并保存；②提交后从数据库回读校验；
+ *       ③失败则**回滚本地状态**并明确报错；④成功才刷新全局模型选择器。
+ */
 function removeAiConfig(index: number) {
+  const target = aiConfigs.value[index];
+  if (!target) return;
   dialog.warning({
     title: '确认删除配置',
-    content: `确定要删除「${aiConfigs.value[index]?.name || '未命名配置'}」吗？`,
+    content: `确定要删除「${target.name || '未命名配置'}」吗？删除将立即保存并生效。`,
     positiveText: '确认删除',
     negativeText: '取消',
-    onPositiveClick: () => {
-      const removed = aiConfigs.value[index];
-      aiConfigs.value.splice(index, 1);
-      reindexConfigMeta();
-      // 如果删掉的正是当前默认模型，则清除默认标记（避免指向已不存在的 ID）
-      if (removed && defaultAiConfigId.value === removed.ID) {
-        defaultAiConfigId.value = null;
-      }
-      if (pendingDefaultModelIndex.value !== null) {
-        if (pendingDefaultModelIndex.value === index) pendingDefaultModelIndex.value = null;
-        else if (pendingDefaultModelIndex.value > index) pendingDefaultModelIndex.value -= 1;
-      }
-      message.success('已移除该模型配置，点击「保存设置」后生效');
+    onPositiveClick: async () => {
+      await persistDeletion(index);
     }
   });
+}
+
+async function persistDeletion(index: number) {
+  // 加载完整性门禁：本次会话未成功加载到配置时，绝不允许提交，
+  // 否则后端 updateAiConfigsTx 会对空/残缺列表执行 DELETE，误删全部配置。
+  if (!aiConfigsLoaded.value || !settingsLoaded.value) {
+    message.error(
+      '尚未成功加载配置，为避免误删已保存的模型，本次删除已被阻止。请刷新页面后重试。'
+    );
+    return;
+  }
+
+  // 快照，便于失败时精确回滚
+  const backupConfigs = aiConfigs.value.map(c => ({ ...c }));
+  const backupDefault = defaultAiConfigId.value;
+  const backupPending = pendingDefaultModelIndex.value;
+  const removedId = aiConfigs.value[index]?.ID;
+  const expectedCount = aiConfigs.value.length - 1;
+
+  aiConfigs.value.splice(index, 1);
+  reindexConfigMeta();
+  // 删掉的正是当前默认模型 → 清除默认标记（避免指向已不存在的 ID）
+  if (removedId && defaultAiConfigId.value === removedId) {
+    defaultAiConfigId.value = null;
+  }
+  if (pendingDefaultModelIndex.value !== null) {
+    if (pendingDefaultModelIndex.value === index) pendingDefaultModelIndex.value = null;
+    else if (pendingDefaultModelIndex.value > index) pendingDefaultModelIndex.value -= 1;
+  }
+
+  const rollback = (why: string) => {
+    aiConfigs.value = backupConfigs;
+    defaultAiConfigId.value = backupDefault;
+    pendingDefaultModelIndex.value = backupPending;
+    reindexConfigMeta();
+    message.error(why);
+  };
+
+  deletingCards.value = true;
+  try {
+    const res = await UpdateConfig(buildSavePayload());
+    if (typeof res === 'string' && res.includes('失败')) {
+      rollback('删除失败，已回滚，配置未被修改：' + res);
+      return;
+    }
+
+    // 唯一成功依据：从数据库回读，确认该卡片确实已不存在
+    await loadSettings();
+    const stillThere = removedId
+      ? aiConfigs.value.some(c => c.ID === removedId)
+      : aiConfigs.value.length !== expectedCount;
+    if (stillThere) {
+      message.error(
+        '删除未生效：数据库回读后该配置仍然存在。请重试；若持续失败，请查看服务端日志（可能是数据库锁定）。'
+      );
+      return;
+    }
+
+    notifyAiConfigsChanged();
+    message.success('已删除该模型配置，并已保存生效。');
+  } catch (err: any) {
+    rollback('删除异常，已回滚：' + (err?.message || err));
+  } finally {
+    deletingCards.value = false;
+  }
 }
 
 function copyAiConfig(index: number) {
@@ -1005,6 +1085,8 @@ async function saveSettings() {
     message.success('系统设置已成功保存并立即生效！');
     markClean();
     await loadSettings();
+    // 让其他页面的模型选择器立即同步（避免继续使用已删除/已改名的卡片）
+    notifyAiConfigsChanged();
     // 保存后处理“设为默认”在未保存卡片上的待定意图
     await flushPendingDefaultModel();
     // 明确告知“实际生效的模型是哪一张卡片”——避免用户以为自己的新配置已生效，
@@ -1264,22 +1346,17 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <p class="section-desc" style="margin-top: 4px;">
-            遵循 stevia0829 零依赖架构原则，模型卡片仅保留 <strong>5项核心身份字段</strong>（名称、BaseURL、API Key、ModelName、Thinking）。其余调度参数由 Go 运行时确定性自动调优。
-          </p>
-
-          <!-- 生效规则说明：这是「测试/对话用的不是我选的那个模型」最常见的误解源头 -->
+          <!-- 生效规则：只讲用户真正需要知道的一件事（哪张卡片在生效），
+               不再在设置界面上宣讲架构原则——那是文档该说的事。 -->
           <n-alert type="info" :show-icon="true" style="margin: 8px 0 12px;">
-            <strong>生效规则：</strong>Agent 对话、研报生成、推送等一律使用标有
-            <n-tag type="success" size="tiny" round style="margin: 0 2px;">🎯 全局默认</n-tag>
-            的那张卡片。
+            <strong>生效模型：</strong>
             <template v-if="Number(defaultAiConfigId) > 0">
-              当前默认：<code>{{ (aiConfigs.find(c => c.ID === defaultAiConfigId) || {}).name || '—' }}</code>。
+              🎯 <code>{{ (aiConfigs.find(c => c.ID === defaultAiConfigId) || {}).name || '—' }}</code>
             </template>
             <template v-else>
-              <strong>当前尚未指定全局默认</strong>，系统会退回使用<strong>第 1 张卡片</strong>生效。
+              未指定，当前按<strong>第 1 张卡片</strong>生效
             </template>
-            如需改用其它卡片，请先点该卡片的「设为默认」，再点右上角「💾 保存设置」。
+            。对话 / 研报 / 推送都使用这张卡片；换用其它卡片请点其「设为默认」。
           </n-alert>
 
           <!-- 模型卡片列表 -->
@@ -1321,7 +1398,15 @@ onBeforeUnmount(() => {
                     设为默认
                   </n-button>
                   <n-button quaternary size="tiny" @click="copyAiConfig(idx)">复制</n-button>
-                  <n-button quaternary size="tiny" type="error" @click="removeAiConfig(idx)">删除</n-button>
+                  <n-button
+                    quaternary
+                    size="tiny"
+                    type="error"
+                    :loading="deletingCards"
+                    @click="removeAiConfig(idx)"
+                  >
+                    删除
+                  </n-button>
                 </n-space>
               </template>
 
@@ -1431,6 +1516,76 @@ onBeforeUnmount(() => {
                     </div>
                   </n-gi>
                 </n-grid>
+
+                <!-- ⚙️ 高级调度参数：默认折叠，需要时才展开。
+                     这些字段**本来就随配置完整往返保存**，此前只是没有界面入口，
+                     导致想微调 Token 上限 / 温度 / 超时的用户无路可走。 -->
+                <details class="advanced-params">
+                  <summary>⚙️ 高级调度参数（可选，默认折叠；留空即为自动调优）</summary>
+                  <div class="advanced-body">
+                    <n-grid cols="1 m:3" :x-gap="12" :y-gap="4">
+                      <n-gi>
+                        <n-form-item label="最大输出 Tokens">
+                          <n-input-number v-model:value="cfg.maxTokens" :min="1" :max="256000" :step="1024" style="width: 100%;" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="温度 Temperature (0 ~ 2)">
+                          <n-input-number v-model:value="cfg.temperature" :min="0" :max="2" :step="0.1" style="width: 100%;" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="请求超时 (秒, ≥ 5)">
+                          <n-input-number v-model:value="cfg.timeOut" :min="5" :max="3600" :step="30" style="width: 100%;" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="并发上限">
+                          <n-input-number v-model:value="cfg.llmConcurrencyLimit" :min="1" :max="64" style="width: 100%;" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="子 Agent 超时 (秒)">
+                          <n-input-number v-model:value="cfg.subAgentTimeout" :min="1" :max="3600" :step="10" style="width: 100%;" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="会话 ID（留空自动生成）">
+                          <n-input v-model:value="cfg.sessionId" placeholder="留空则自动生成会话 ID" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi :span="2">
+                        <n-form-item label="本卡片专属代理（可选，留空则用全局代理设置）">
+                          <n-input v-model:value="cfg.httpProxy" placeholder="http://127.0.0.1:7890" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="启用本卡片代理">
+                          <n-switch v-model:value="cfg.httpProxyEnabled" size="small" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="每秒请求上限 (0 = 不限)">
+                          <n-input-number v-model:value="cfg.rateLimitPerSecond" :min="0" :step="0.5" style="width: 100%;" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="令牌桶突发值 (0 = 默认)">
+                          <n-input-number v-model:value="cfg.burst" :min="0" style="width: 100%;" />
+                        </n-form-item>
+                      </n-gi>
+                      <n-gi>
+                        <n-form-item label="每日请求配额 (0 = 不限)">
+                          <n-input-number v-model:value="cfg.dailyRequestQuota" :min="0" style="width: 100%;" />
+                        </n-form-item>
+                      </n-gi>
+                    </n-grid>
+                    <div class="advanced-hint">
+                      这些参数与主表单一起保存。取值为 0 表示“不限制”或“由运行时自动调优”。
+                      修改前请先确认服务商的限制，例如多数推理模型需要足够大的最大输出 Tokens。
+                    </div>
+                  </div>
+                </details>
               </n-form>
             </n-card>
           </div>
@@ -1878,6 +2033,38 @@ onBeforeUnmount(() => {
 .thinking-hint b {
   color: #d29922;
   font-weight: 600;
+}
+
+.advanced-params {
+  margin-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  padding-top: 6px;
+}
+
+.advanced-params > summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: #8b949e;
+  user-select: none;
+  outline: none;
+}
+
+.advanced-params > summary:hover {
+  color: #2080f0;
+}
+
+.advanced-body {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.advanced-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #8b949e;
 }
 
 .empty-configs-box {
