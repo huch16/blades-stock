@@ -135,6 +135,53 @@ func (c *AIConfig) SetDefaults() {
 type SettingConfig struct {
 	*Settings
 	AiConfigs []*AIConfig `json:"aiConfigs"`
+
+	// submittedFields 记录客户端 JSON 载荷中**实际出现**的顶层字段名。
+	// 仅用于区分「字段未提交」与「显式提交 false/零值」两种语义，
+	// 不参与序列化，也不会出现在 Wails 绑定 / TypeScript 模型中
+	//（生成器会跳过未导出字段，见 wails internal/binding、typescriptify）。
+	submittedFields map[string]bool
+}
+
+// UnmarshalJSON 自定义反序列化，同时兼顾两个职责：
+//
+//  1. 保持 v3.0.0 约定的**扁平** JSON 形态（匿名嵌入的 *Settings 字段被提升到顶层），
+//     并保持「载荷为嵌套 {settings:{...}} 时 Settings 保持 nil」的既有语义；
+//
+//  2. 记录载荷中**实际出现**的顶层字段名（submittedFields）。
+//
+// 为什么需要第 2 点：后端 UpdateConfig 使用 GORM `Updates(map)` **显式写入每一列**，
+// 若无法区分「字段未提交」与「显式提交 false」，则 embeddingEnabled / backtestEnabled
+// 这类「关闭值就是 false」的开关永远无法被关闭（实测 backtestEnabled=false 无法落库；
+// embeddingEnabled=false 侥幸通过，仅仅是因为数据库默认值恰好也是 false）。
+func (c *SettingConfig) UnmarshalJSON(data []byte) error {
+	// 使用别名类型，避免递归调用本方法
+	type settingConfigAlias SettingConfig
+	var aux settingConfigAlias
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	*c = SettingConfig(aux)
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	c.submittedFields = make(map[string]bool, len(raw))
+	for key := range raw {
+		c.submittedFields[key] = true
+	}
+	return nil
+}
+
+// fieldSubmitted 判断客户端是否显式提交了某个顶层字段。
+// 非 JSON 来源（例如桌面端 beforeClose 用 GetSettingConfig() 原样回写）没有
+// submittedFields 标记，此时按「全量提交」处理，保持既有行为不变。
+func (c *SettingConfig) fieldSubmitted(key string) bool {
+	if c == nil || c.submittedFields == nil {
+		return true
+	}
+	return c.submittedFields[key]
 }
 
 func (c *SettingConfig) GetAIConfigThinking(aiConfigId int) bool {
@@ -1124,99 +1171,115 @@ func UpdateConfig(s *SettingConfig) string {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err = db.Dao.Transaction(func(tx *gorm.DB) error {
 			count := int64(0)
-			// 清理已废弃字段，避免旧数据污染
-			tx.Model(&Settings{}).Where("1=1").Updates(map[string]any{"iwencai_api_key": ""})
 			tx.Model(&Settings{}).Count(&count)
 			if count > 0 {
 				var exist Settings
 				var query *gorm.DB
+				var targetID uint
 				if err := tx.First(&exist).Error; err == nil && exist.ID > 0 {
+					targetID = exist.ID
 					query = tx.Model(&Settings{}).Where("id = ?", exist.ID)
 				} else if s.ID > 0 {
+					targetID = s.ID
 					query = tx.Model(&Settings{}).Where("id = ?", s.ID)
 				} else {
 					query = tx.Model(&Settings{}).Where("1 = 1")
 				}
-				// 防御性保护（v3.0.0）：
-				// 以下字段经审计确认**当前没有任何前端界面入口**（仅由环境/后端流程维护）。
-				// 由于本函数使用 Updates(map) 显式写入每一列，任何漏传这些字段的调用方都会把
-				// 用户既有配置静默清零（实例：保存一次设置就关闭了向量检索、抹掉了回测与工具预算）。
-				// 因此对它们采用「零值即保留原值」语义。
-				// 注意：布尔类字段（embedding_enabled / backtest_enabled）**不做**保留，
-				// 因为 false 是合法且有意义的显式取值，保留会导致前端无法关闭该能力。
-				keepStr := func(newV, oldV string) string {
-					if strings.TrimSpace(newV) == "" {
+				// ── 字段提交语义（v3.0.0 P0 修复）───────────────────────────────
+				//
+				// 本函数使用 Updates(map) **显式写入每一列**，因此后端必须能区分两种情况：
+				//   A. 客户端**未提交**该字段 → 保留数据库原值（兼容部分载荷 / 老版本缓存分块）
+				//   B. 客户端**显式提交**零值/false → 尊重客户端意图（false 是合法取值）
+				//
+				// 旧实现用「零值即保留」近似处理，这对 embedding_enabled / backtest_enabled
+				// 是**错误**的：这两个能力开关的关闭值就是 false，导致用户永远无法关闭它们。
+				// submittedFields 由 SettingConfig.UnmarshalJSON 记录；非 JSON 来源
+				// （桌面端 beforeClose 原样回写 GetSettingConfig()）没有该标记，按全量提交处理。
+				keepStr := func(key, newV, oldV string) string {
+					if !s.fieldSubmitted(key) {
 						return oldV
 					}
 					return newV
 				}
-				keepInt := func(newV, oldV int64) int64 {
+				// keepStrNonEmpty：显式提交且非空才覆盖（空串对这些字段永不是有意义的取值，
+				// 例如 prompt / browserPath 都有后端兜底默认）。
+				keepStrNonEmpty := func(key, newV, oldV string) string {
+					if !s.fieldSubmitted(key) || strings.TrimSpace(newV) == "" {
+						return oldV
+					}
+					return newV
+				}
+				keepInt := func(key string, newV, oldV int64) int64 {
+					if !s.fieldSubmitted(key) {
+						return oldV
+					}
+					return newV
+				}
+				keepFloat := func(key string, newV, oldV float64) float64 {
+					if !s.fieldSubmitted(key) {
+						return oldV
+					}
+					return newV
+				}
+				keepBool := func(key string, newV, oldV bool) bool {
+					if !s.fieldSubmitted(key) {
+						return oldV
+					}
+					return newV
+				}
+				// 窗口尺寸由桌面端 beforeClose 显式写入，保留零值以免 headless 场景误清
+				keepPositiveInt := func(newV, oldV int64) int64 {
 					if newV <= 0 {
-						return oldV
-					}
-					return newV
-				}
-				keepFloat := func(newV, oldV float64) float64 {
-					if newV <= 0 {
-						return oldV
-					}
-					return newV
-				}
-				// 无界面入口的能力开关：false 无法与“未提交”区分，一律保留原值，
-				// 避免一次普通保存就静默关闭向量检索或回测。
-				keepCapability := func(newV, oldV bool) bool {
-					if !newV {
 						return oldV
 					}
 					return newV
 				}
 
 				result := query.Updates(map[string]any{
-					"local_push_enable":          s.LocalPushEnable,
-					"ding_push_enable":           s.DingPushEnable,
-					"ding_robot":                 s.DingRobot,
-					"update_basic_info_on_start": s.UpdateBasicInfoOnStart,
-					"refresh_interval":           s.RefreshInterval,
-					"open_ai_enable":             s.OpenAiEnable,
-					"ai_config_id":               s.AiConfigID,
-					"tushare_token":              s.TushareToken,
-					"prompt":                     s.Prompt,
-					"check_update":               s.CheckUpdate,
-					"update_channel":             keepStr(s.UpdateChannel, exist.UpdateChannel),
-					"question_template":          s.QuestionTemplate,
-					"crawl_time_out":             s.CrawlTimeOut,
-					"k_days":                     s.KDays,
-					"browser_path":               s.BrowserPath,
-					"enable_news":                s.EnableNews,
-					"dark_theme":                 s.DarkTheme,
-					"enable_fund":                s.EnableFund,
-					"enable_push_news":           s.EnablePushNews,
-					"enable_only_push_red_news":  s.EnableOnlyPushRedNews,
-					"http_proxy":                 s.HttpProxy,
-					"http_proxy_enabled":         s.HttpProxyEnabled,
-					"enable_agent":               s.EnableAgent,
-					"disable_browser_search":     s.DisableBrowserSearch,
-					"qgqp_b_id":                  s.QgqpBId,
-					"em_api_key":                 s.EmApiKey,
-					"tickflow_api_key":           s.TickFlowAPIKey,
-					"akshare_service_url":        s.AkshareServiceUrl,
-					"adata_service_url":          s.ADataServiceUrl,
-					"default_data_source":        s.DefaultDataSource,
-					// 窗口尺寸由桌面端 beforeClose 显式写入，保留零值以免 headless 场景误清
-					"window_width":                int(keepInt(int64(s.WindowWidth), int64(exist.WindowWidth))),
-					"window_height":               int(keepInt(int64(s.WindowHeight), int64(exist.WindowHeight))),
-					"prompt_plaza_api_base":       keepStr(s.PromptPlazaApiBase, exist.PromptPlazaApiBase),
-					"embedding_enabled":           keepCapability(s.EmbeddingEnabled, exist.EmbeddingEnabled),
-					"embedding_model_name":        keepStr(s.EmbeddingModelName, exist.EmbeddingModelName),
-					"embedding_base_url":          keepStr(s.EmbeddingBaseUrl, exist.EmbeddingBaseUrl),
-					"embedding_api_key":           s.EmbeddingApiKey,
-					"backtest_accuracy_threshold": keepFloat(s.BacktestAccuracyThreshold, exist.BacktestAccuracyThreshold),
-					"backtest_verify_days":        keepInt(s.BacktestVerifyDays, exist.BacktestVerifyDays),
-					"backtest_enabled":            keepCapability(s.BacktestEnabled, exist.BacktestEnabled),
-					"mcp_timeout":                 keepInt(s.McpTimeout, exist.McpTimeout),
-					"tool_run_budget":             keepInt(s.ToolRunBudget, exist.ToolRunBudget),
-					"tool_daily_budget":           keepInt(s.ToolDailyBudget, exist.ToolDailyBudget),
-					"tool_daily_cost_usd":         keepFloat(s.ToolDailyCostUSD, exist.ToolDailyCostUSD),
+					"local_push_enable":           keepBool("localPushEnable", s.LocalPushEnable, exist.LocalPushEnable),
+					"ding_push_enable":            keepBool("dingPushEnable", s.DingPushEnable, exist.DingPushEnable),
+					"ding_robot":                  keepStr("dingRobot", s.DingRobot, exist.DingRobot),
+					"update_basic_info_on_start":  keepBool("updateBasicInfoOnStart", s.UpdateBasicInfoOnStart, exist.UpdateBasicInfoOnStart),
+					"refresh_interval":            keepInt("refreshInterval", s.RefreshInterval, exist.RefreshInterval),
+					"open_ai_enable":              keepBool("openAiEnable", s.OpenAiEnable, exist.OpenAiEnable),
+					"ai_config_id":                s.AiConfigID,
+					"tushare_token":               keepStr("tushareToken", s.TushareToken, exist.TushareToken),
+					"prompt":                      keepStrNonEmpty("prompt", s.Prompt, exist.Prompt),
+					"check_update":                keepBool("checkUpdate", s.CheckUpdate, exist.CheckUpdate),
+					"update_channel":              keepStrNonEmpty("updateChannel", s.UpdateChannel, exist.UpdateChannel),
+					"question_template":           keepStrNonEmpty("questionTemplate", s.QuestionTemplate, exist.QuestionTemplate),
+					"crawl_time_out":              keepInt("crawlTimeOut", s.CrawlTimeOut, exist.CrawlTimeOut),
+					"k_days":                      keepInt("kDays", s.KDays, exist.KDays),
+					"browser_path":                keepStrNonEmpty("browserPath", s.BrowserPath, exist.BrowserPath),
+					"enable_news":                 keepBool("enableNews", s.EnableNews, exist.EnableNews),
+					"dark_theme":                  keepBool("darkTheme", s.DarkTheme, exist.DarkTheme),
+					"enable_fund":                 keepBool("enableFund", s.EnableFund, exist.EnableFund),
+					"enable_push_news":            keepBool("enablePushNews", s.EnablePushNews, exist.EnablePushNews),
+					"enable_only_push_red_news":   keepBool("enableOnlyPushRedNews", s.EnableOnlyPushRedNews, exist.EnableOnlyPushRedNews),
+					"http_proxy":                  keepStr("httpProxy", s.HttpProxy, exist.HttpProxy),
+					"http_proxy_enabled":          keepBool("httpProxyEnabled", s.HttpProxyEnabled, exist.HttpProxyEnabled),
+					"enable_agent":                keepBool("enableAgent", s.EnableAgent, exist.EnableAgent),
+					"disable_browser_search":      keepBool("disableBrowserSearch", s.DisableBrowserSearch, exist.DisableBrowserSearch),
+					"qgqp_b_id":                   keepStrNonEmpty("qgqpBId", s.QgqpBId, exist.QgqpBId),
+					"em_api_key":                  keepStr("emApiKey", s.EmApiKey, exist.EmApiKey),
+					"tickflow_api_key":            keepStr("tickFlowAPIKey", s.TickFlowAPIKey, exist.TickFlowAPIKey),
+					"akshare_service_url":         keepStrNonEmpty("akshareServiceUrl", s.AkshareServiceUrl, exist.AkshareServiceUrl),
+					"adata_service_url":           keepStrNonEmpty("aDataServiceUrl", s.ADataServiceUrl, exist.ADataServiceUrl),
+					"default_data_source":         keepStrNonEmpty("defaultDataSource", s.DefaultDataSource, exist.DefaultDataSource),
+					"window_width":                int(keepPositiveInt(int64(s.WindowWidth), int64(exist.WindowWidth))),
+					"window_height":               int(keepPositiveInt(int64(s.WindowHeight), int64(exist.WindowHeight))),
+					"prompt_plaza_api_base":       keepStrNonEmpty("promptPlazaApiBase", s.PromptPlazaApiBase, exist.PromptPlazaApiBase),
+					"embedding_enabled":           keepBool("embeddingEnabled", s.EmbeddingEnabled, exist.EmbeddingEnabled),
+					"embedding_model_name":        keepStrNonEmpty("embeddingModelName", s.EmbeddingModelName, exist.EmbeddingModelName),
+					"embedding_base_url":          keepStrNonEmpty("embeddingBaseUrl", s.EmbeddingBaseUrl, exist.EmbeddingBaseUrl),
+					"embedding_api_key":           keepStr("embeddingApiKey", s.EmbeddingApiKey, exist.EmbeddingApiKey),
+					"backtest_accuracy_threshold": keepFloat("backtestAccuracyThreshold", s.BacktestAccuracyThreshold, exist.BacktestAccuracyThreshold),
+					"backtest_verify_days":        keepInt("backtestVerifyDays", s.BacktestVerifyDays, exist.BacktestVerifyDays),
+					"backtest_enabled":            keepBool("backtestEnabled", s.BacktestEnabled, exist.BacktestEnabled),
+					"mcp_timeout":                 keepInt("mcpTimeout", s.McpTimeout, exist.McpTimeout),
+					"tool_run_budget":             keepInt("toolRunBudget", s.ToolRunBudget, exist.ToolRunBudget),
+					"tool_daily_budget":           keepInt("toolDailyBudget", s.ToolDailyBudget, exist.ToolDailyBudget),
+					"tool_daily_cost_usd":         keepFloat("toolDailyCostUSD", s.ToolDailyCostUSD, exist.ToolDailyCostUSD),
 				})
 				if result.Error != nil {
 					return result.Error
@@ -1224,9 +1287,23 @@ func UpdateConfig(s *SettingConfig) string {
 				if err := updateAiConfigsTx(tx, s.AiConfigs); err != nil {
 					return err
 				}
-				// 若未指定主模型ID，但存在有效配置，自动将第一项配置作为主模型并同步到 settings
-				if s.AiConfigID <= 0 && len(s.AiConfigs) > 0 && s.AiConfigs[0] != nil && s.AiConfigs[0].ID > 0 {
-					_ = tx.Model(&Settings{}).Where("1 = 1").Update("ai_config_id", s.AiConfigs[0].ID).Error
+				// 全局默认模型指针必须在**同一事务内**修复：
+				// 提交的 aiConfigId 可能指向一张已被删除（或从未存在）的卡片，
+				// 若不修复，settings.ai_config_id 就会悬空，Agent 解析时只能回落到
+				// 「第一张卡片」并在日志里持续刷「ai config %d not found」。
+				effectiveID, err := resolveDefaultAiConfigID(tx, s.AiConfigID)
+				if err != nil {
+					return err
+				}
+				if effectiveID != s.AiConfigID {
+					fix := tx.Model(&Settings{}).Where("1 = 1")
+					if targetID > 0 {
+						fix = tx.Model(&Settings{}).Where("id = ?", targetID)
+					}
+					if err := fix.Update("ai_config_id", effectiveID).Error; err != nil {
+						return err
+					}
+					s.AiConfigID = effectiveID
 				}
 				return nil
 			}
@@ -1237,8 +1314,15 @@ func UpdateConfig(s *SettingConfig) string {
 			if err := updateAiConfigsTx(tx, s.AiConfigs); err != nil {
 				return err
 			}
-			if s.AiConfigID <= 0 && len(s.AiConfigs) > 0 && s.AiConfigs[0] != nil && s.AiConfigs[0].ID > 0 {
-				_ = tx.Model(&Settings{}).Where("1 = 1").Update("ai_config_id", s.AiConfigs[0].ID).Error
+			effectiveID, err := resolveDefaultAiConfigID(tx, s.AiConfigID)
+			if err != nil {
+				return err
+			}
+			if effectiveID != s.AiConfigID {
+				if err := tx.Model(&Settings{}).Where("1 = 1").Update("ai_config_id", effectiveID).Error; err != nil {
+					return err
+				}
+				s.AiConfigID = effectiveID
 			}
 			return nil
 		})
@@ -1259,9 +1343,49 @@ func UpdateConfig(s *SettingConfig) string {
 		return "保存失败: " + err.Error()
 	}
 
-	ConfigureFromSettings(s)
+	// 用**数据库中的最终生效值**配置共享 HTTP 客户端（代理 / 超时），而不是用提交值：
+	// 部分载荷提交时，提交值并不等于最终落库值
+	//（实例：只提交 prompt 的载荷会把 httpProxy 置空，从而误关全局代理）。
+	if db.Dao != nil {
+		var final Settings
+		if err := db.Dao.First(&final).Error; err == nil {
+			ConfigureFromSettings(&SettingConfig{Settings: &final})
+		} else {
+			ConfigureFromSettings(s)
+		}
+	} else {
+		ConfigureFromSettings(s)
+	}
 
 	return "保存成功！"
+}
+
+// resolveDefaultAiConfigID 在模型配置 upsert 之后校验全局默认模型指针。
+//
+// 背景：settings.ai_config_id 指向 ai_config.id。客户端提交的 aiConfigId 可能：
+//   - 指向一张刚被删除的卡片（用户删掉了默认卡片，却仍提交旧的 ID）；
+//   - 指向一张从未存在过的卡片（陈旧前端 / 手改载荷）。
+//
+// 两种情况都会留下悬空指针，导致 Agent 每次请求都回落到“第一张卡片”并刷错误日志。
+//
+// 语义：提交的 ID 仍然有效 → 原样保留；否则回落到库里 ID 最小的存活卡片；
+// 一张都不剩 → 置 0（表示“未指定默认”）。
+func resolveDefaultAiConfigID(tx *gorm.DB, submittedID uint) (uint, error) {
+	var ids []uint
+	if err := tx.Model(&AIConfig{}).Order("id ASC").Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+	if submittedID > 0 {
+		for _, id := range ids {
+			if id == submittedID {
+				return submittedID, nil
+			}
+		}
+	}
+	if len(ids) > 0 {
+		return ids[0], nil
+	}
+	return 0, nil
 }
 
 func updateAiConfigsTx(tx *gorm.DB, aiConfigs []*AIConfig) error {
@@ -1386,7 +1510,8 @@ func GetSettingConfig() *SettingConfig {
 	db.Dao.Model(&Settings{}).First(settings)
 	// 始终加载 AI 配置列表，无论 OpenAiEnable 是否开启
 	// 这样前端配置选择器（如市场资讯总结）能始终展示已有配置
-	result := db.Dao.Model(&AIConfig{}).Find(&aiConfigs)
+	// 按 ID 升序返回，保证前端卡片顺序与“第一张卡片即默认回落项”的语义一致
+	result := db.Dao.Model(&AIConfig{}).Order("id ASC").Find(&aiConfigs)
 	if result.Error != nil {
 		logger.SugaredLogger.Error("查询AI配置失败:", result.Error)
 	} else if len(aiConfigs) > 0 {

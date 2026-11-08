@@ -310,6 +310,272 @@ func TestPartialAiConfigPayloadDoesNotWipeFields(t *testing.T) {
 	}
 }
 
+// 契约六（实测缺陷 T9）：backtestEnabled / embeddingEnabled 的“关闭值”就是 false。
+// 后端必须能区分「未提交」与「显式 false」，否则用户永远无法关闭这两个能力
+// （旧实现用“零值即保留”近似处理，结果 false 被库里的 true 覆盖）。
+func TestCapabilityFlagsCanBeExplicitlyDisabled(t *testing.T) {
+	newRoundTripEnv(t)
+
+	base := GetSettingConfig()
+	if !base.BacktestEnabled || !base.EmbeddingEnabled {
+		t.Fatalf("前置假设不成立: backtest=%v embedding=%v", base.BacktestEnabled, base.EmbeddingEnabled)
+	}
+
+	// 完整模拟前端：GetConfig → 显式关掉两个能力开关 → 原样回传
+	full := map[string]any{}
+	if err := json.Unmarshal(mustJSON(t, GetMaskedSettingConfig()), &full); err != nil {
+		t.Fatalf("unmarshal 失败: %v", err)
+	}
+	full["backtestEnabled"] = false
+	full["embeddingEnabled"] = false
+
+	var sc SettingConfig
+	if err := json.Unmarshal(mustJSON(t, full), &sc); err != nil {
+		t.Fatalf("unmarshal 失败: %v", err)
+	}
+	if res := UpdateConfig(&sc); res != "保存成功！" {
+		t.Fatalf("显式关闭能力开关应保存成功，实际: %q", res)
+	}
+
+	after := GetSettingConfig()
+	if after.BacktestEnabled {
+		t.Error("backtestEnabled=false 未能落库（仍为 true）")
+	}
+	if after.EmbeddingEnabled {
+		t.Error("embeddingEnabled=false 未能落库（仍为 true）")
+	}
+	// 关闭开关不应连带清空其他透传字段
+	if after.McpTimeout != 12 || after.ToolRunBudget != 33 || after.ToolDailyCostUSD != 3.5 {
+		t.Errorf("关闭能力开关时其他透传字段被清零: mcp=%d run=%d cost=%v",
+			after.McpTimeout, after.ToolRunBudget, after.ToolDailyCostUSD)
+	}
+}
+
+// 契约七（回归防线）：**未提交**的能力开关必须保留库中原值。
+// 这是“兼容老版本缓存分块 / 部分载荷”的底线：不能因为区分了显式 false，
+// 就把“字段没传”当成“用户要求关闭”。
+func TestUnsubmittedCapabilityFlagsArePreserved(t *testing.T) {
+	newRoundTripEnv(t)
+
+	partial := map[string]any{"prompt": "只改了提示词"}
+	var sc SettingConfig
+	if err := json.Unmarshal(mustJSON(t, partial), &sc); err != nil {
+		t.Fatalf("unmarshal 失败: %v", err)
+	}
+	if res := UpdateConfig(&sc); res != "保存成功！" {
+		t.Fatalf("部分载荷应保存成功，实际: %q", res)
+	}
+
+	after := GetSettingConfig()
+	if !after.BacktestEnabled {
+		t.Error("未提交的 backtestEnabled 被误判为 false 并关闭")
+	}
+	if !after.EmbeddingEnabled {
+		t.Error("未提交的 embeddingEnabled 被误判为 false 并关闭")
+	}
+	if after.McpTimeout != 12 || after.ToolDailyBudget != 400 {
+		t.Errorf("未提交的预算字段被清零: mcp=%d daily=%d", after.McpTimeout, after.ToolDailyBudget)
+	}
+}
+
+// 契约八（实测缺陷 T7）：删除“全局默认卡片”后，settings.ai_config_id 必须
+// 在**同一事务内**修复到一张存活卡片，否则会留下悬空指针，
+// Agent 每次请求都回落到“第一张卡片”并在日志里刷 “ai config %d not found”。
+func TestDeletingDefaultAiConfigRepairsDanglingPointer(t *testing.T) {
+	newRoundTripEnv(t)
+
+	var first AIConfig
+	if err := db.Dao.First(&first).Error; err != nil {
+		t.Fatalf("读取现有 ai_config 失败: %v", err)
+	}
+	second := AIConfig{
+		Name:      "第二张卡片",
+		BaseUrl:   "https://second.example.com/v1",
+		ApiKey:    "sk-second-secret-9876",
+		ModelName: "model-b",
+	}
+	if err := db.Dao.Create(&second).Error; err != nil {
+		t.Fatalf("创建第二张卡片失败: %v", err)
+	}
+	// 把全局默认指向第一张卡片
+	if err := db.Dao.Model(&Settings{}).Where("1 = 1").Update("ai_config_id", first.ID).Error; err != nil {
+		t.Fatalf("设置默认卡片失败: %v", err)
+	}
+
+	// 用户删除了第一张（默认）卡片，但客户端仍然提交了旧的默认 ID
+	payload := map[string]any{
+		"aiConfigId": first.ID,
+		"aiConfigs": []map[string]any{{
+			"ID":        second.ID,
+			"name":      second.Name,
+			"baseUrl":   second.BaseUrl,
+			"apiKey":    second.ApiKey,
+			"modelName": second.ModelName,
+			"thinking":  false,
+		}},
+	}
+	var sc SettingConfig
+	if err := json.Unmarshal(mustJSON(t, payload), &sc); err != nil {
+		t.Fatalf("unmarshal 失败: %v", err)
+	}
+	if res := UpdateConfig(&sc); res != "保存成功！" {
+		t.Fatalf("删除默认卡片应保存成功，实际: %q", res)
+	}
+
+	after := GetSettingConfig()
+	if len(after.AiConfigs) != 1 {
+		t.Fatalf("期望仅剩 1 张卡片，实际 %d", len(after.AiConfigs))
+	}
+	if after.AiConfigs[0].ID != second.ID {
+		t.Fatalf("存活卡片 ID 异常: got=%d want=%d", after.AiConfigs[0].ID, second.ID)
+	}
+	if after.AiConfigID != second.ID {
+		t.Errorf("悬空的 ai_config_id 未被修复: got=%d want=%d", after.AiConfigID, second.ID)
+	}
+	// 直接读库复核（不依赖应用层回显）
+	var raw Settings
+	if err := db.Dao.First(&raw).Error; err != nil {
+		t.Fatalf("直读 settings 失败: %v", err)
+	}
+	if raw.AiConfigID != second.ID {
+		t.Errorf("库中 ai_config_id 仍悬空: got=%d want=%d", raw.AiConfigID, second.ID)
+	}
+}
+
+// 契约九：提交 aiConfigId=0（未指定默认）时，应自动指向库里 ID 最小的存活卡片，
+// 而不是留下 0 指向空。
+func TestUnspecifiedDefaultResolvesToFirstSurvivingCard(t *testing.T) {
+	newRoundTripEnv(t)
+
+	var first AIConfig
+	if err := db.Dao.First(&first).Error; err != nil {
+		t.Fatalf("读取现有 ai_config 失败: %v", err)
+	}
+	second := AIConfig{
+		Name:      "第二张卡片",
+		BaseUrl:   "https://second.example.com/v1",
+		ApiKey:    "sk-second-secret-9876",
+		ModelName: "model-b",
+	}
+	if err := db.Dao.Create(&second).Error; err != nil {
+		t.Fatalf("创建第二张卡片失败: %v", err)
+	}
+
+	payload := map[string]any{
+		"aiConfigId": 0,
+		"aiConfigs": []map[string]any{
+			{
+				"ID":        first.ID,
+				"name":      first.Name,
+				"baseUrl":   first.BaseUrl,
+				"apiKey":    first.ApiKey,
+				"modelName": first.ModelName,
+				"thinking":  false,
+			},
+			{
+				"ID":        second.ID,
+				"name":      second.Name,
+				"baseUrl":   second.BaseUrl,
+				"apiKey":    second.ApiKey,
+				"modelName": second.ModelName,
+				"thinking":  false,
+			},
+		},
+	}
+	var sc SettingConfig
+	if err := json.Unmarshal(mustJSON(t, payload), &sc); err != nil {
+		t.Fatalf("unmarshal 失败: %v", err)
+	}
+	if res := UpdateConfig(&sc); res != "保存成功！" {
+		t.Fatalf("保存应成功，实际: %q", res)
+	}
+
+	after := GetSettingConfig()
+	if after.AiConfigID != first.ID {
+		t.Errorf("未指定默认时应回落到第一张存活卡片: got=%d want=%d", after.AiConfigID, first.ID)
+	}
+}
+
+// 契约十：删除全部卡片后，全局默认必须被清零（不能悬空指向已删除的卡片）。
+func TestDeletingAllCardsClearsDefaultPointer(t *testing.T) {
+	newRoundTripEnv(t)
+
+	var first AIConfig
+	if err := db.Dao.First(&first).Error; err != nil {
+		t.Fatalf("读取现有 ai_config 失败: %v", err)
+	}
+	if err := db.Dao.Model(&Settings{}).Where("1 = 1").Update("ai_config_id", first.ID).Error; err != nil {
+		t.Fatalf("设置默认卡片失败: %v", err)
+	}
+
+	payload := map[string]any{
+		"aiConfigId": first.ID,
+		"aiConfigs":  []map[string]any{},
+	}
+	var sc SettingConfig
+	if err := json.Unmarshal(mustJSON(t, payload), &sc); err != nil {
+		t.Fatalf("unmarshal 失败: %v", err)
+	}
+	if res := UpdateConfig(&sc); res != "保存成功！" {
+		t.Fatalf("删除全部卡片应保存成功，实际: %q", res)
+	}
+
+	var raw Settings
+	if err := db.Dao.First(&raw).Error; err != nil {
+		t.Fatalf("直读 settings 失败: %v", err)
+	}
+	if raw.AiConfigID != 0 {
+		t.Errorf("卡片全部删除后 ai_config_id 应为 0，实际: %d", raw.AiConfigID)
+	}
+}
+
+// 契约十一：Wails 桌面端与 Web RPC 都是把 JSON 反序列化到 **SettingConfig
+// （即 **T 形态，见 wails internal/binding/boundMethod.go 与 cmd/server/dispatcher.go）。
+// 必须确认自定义 UnmarshalJSON 在该形态下依然生效——否则桌面端会退化成
+// 「零值即保留」语义，backtestEnabled=false 又会失效。
+func TestCustomUnmarshalWorksThroughDoublePointer(t *testing.T) {
+	payload := []byte(`{"prompt":"x","backtestEnabled":false,"embeddingEnabled":false,"aiConfigs":[]}`)
+
+	pp := new(SettingConfig)
+	if err := json.Unmarshal(payload, &pp); err != nil {
+		t.Fatalf("unmarshal 失败: %v", err)
+	}
+	if pp == nil || pp.Settings == nil {
+		t.Fatal("**SettingConfig 形态未绑定 Settings")
+	}
+	if !pp.fieldSubmitted("backtestEnabled") {
+		t.Error("自定义 UnmarshalJSON 未生效：backtestEnabled 未被记录为已提交")
+	}
+	if !pp.fieldSubmitted("embeddingEnabled") {
+		t.Error("自定义 UnmarshalJSON 未生效：embeddingEnabled 未被记录为已提交")
+	}
+	if pp.fieldSubmitted("mcpTimeout") {
+		t.Error("未出现的字段不应被记录为已提交")
+	}
+	if pp.BacktestEnabled || pp.EmbeddingEnabled {
+		t.Errorf("显式 false 未被正确反序列化: backtest=%v embedding=%v", pp.BacktestEnabled, pp.EmbeddingEnabled)
+	}
+}
+
+// 契约十二：未导出的 submittedFields 不得影响序列化产物（否则会破坏前端契约）
+func TestUnmarshalDoesNotLeakInternalField(t *testing.T) {
+	var sc SettingConfig
+	if err := json.Unmarshal([]byte(`{"prompt":"p","backtestEnabled":false}`), &sc); err != nil {
+		t.Fatalf("unmarshal 失败: %v", err)
+	}
+	b := mustJSON(t, &sc)
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(b, &probe); err != nil {
+		t.Fatalf("re-unmarshal 失败: %v", err)
+	}
+	if _, leaked := probe["submittedFields"]; leaked {
+		t.Fatal("内部字段 submittedFields 泄漏到序列化产物")
+	}
+	if _, ok := probe["backtestEnabled"]; !ok {
+		t.Fatal("backtestEnabled 丢失")
+	}
+}
+
 // 契约五：新增配置（ID<=0）必须自动补齐调度默认值，不能落库为零值
 func TestNewAiConfigGetsDefaults(t *testing.T) {
 	newRoundTripEnv(t)
