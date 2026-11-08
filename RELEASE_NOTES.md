@@ -418,6 +418,100 @@ TestClassifyAIError      PASS  （6 个场景子用例全过）
 - `npm run build`：prebuild 三道门禁（未导入标识符 / UI 纯净度 / CSP 一致性）+ postbuild 全通过。
 - `tsc --noEmit`：错误集合与变更前逐条一致（277 条，均为存量），零回归。
 
+### 十一、AI 设置全面测试、检查与优化（第四轮）
+
+对「控制中枢 · AI 模型注册表」做了一轮**端到端审计**：前端表单 → bridge RPC → 后端
+`SettingConfig` 事务 → SQLite 落库 → 回显，并配套 12 条真实 RPC 用例矩阵（直打
+`/api/App/*`）、12 条 Go 回归测试与真实浏览器验证。
+
+#### P0-1：`backtestEnabled=false` 永远无法落库（能力开关关不掉）
+
+根因：`UpdateConfig` 用 GORM `Updates(map)` **显式写入每一列**，而旧代码用
+「零值即保留」近似区分「未提交」与「显式 false」。但 `embedding_enabled` /
+`backtest_enabled` 的**关闭值恰好就是 false**，于是用户点「关闭」→ 落库又被旧值
+覆盖。`embeddingEnabled` 此前看似正常，只是因为库里的默认值恰好也是 false（假阳性）。
+
+修复：`SettingConfig` 新增自定义 `UnmarshalJSON`，记录载荷中**实际出现**的顶层字段名
+（存于未导出的 `submittedFields`，不参与序列化，也不出现在 Wails 绑定与 TypeScript 模型中）。
+后端改为**按字段存在性**决定「保留旧值」还是「尊重提交值」：
+- 未提交 → 保留数据库原值（兼容部分载荷与旧版本缓存分块）；
+- 显式提交 `false` / `0` / `""` → 尊重客户端意图。
+
+对 `SettingConfig` 新增 `UnmarshalJSON` 已核对三条链路均安全：
+Wails 桌面端（`reflect.New(*SettingConfig)` → `**T` 形态）、Web RPC 派发器（同为 `**T`）、
+以及 `Export`（只序列化，不受影响）。并新增契约测试
+`TestCustomUnmarshalWorksThroughDoublePointer` 钉死 `**T` 形态下自定义反序列化确实生效。
+
+#### P0-2：删除「全局默认卡片」后 `ai_config_id` 悬空
+
+根因：客户端提交的 `aiConfigId` 可能指向一张**已被本次删除**的卡片，
+而旧代码只在 `aiConfigId <= 0` 时才回落到第一张卡片，于是留下悬空指针——
+Agent 每次请求都回落到「第一张卡片」并持续刷 `ai config %d not found`。
+
+修复：新增 `resolveDefaultAiConfigID()`，在**同一事务内**于模型 upsert 之后校验：
+提交的 ID 仍有效则原样保留；否则回落到库里 ID 最小的存活卡片；一张不剩则置 0。
+同时 `GetSettingConfig` 的模型列表增加 `ORDER BY id ASC`，保证「第一张卡片」是确定的。
+
+#### P0-3：Web 模式「服务器延迟」永远显示不可达
+
+根因：`frontend/src/components/settings.vue` 调用 `fetch('/api/health')`，
+而服务端**只注册了 `GET /health`**；`/api/*` 还需鉴权预检 → 必然 404。
+修复：前端改用 `/health`；同时服务端新增 `/api/health` 同源别名（免鉴权），
+以兼容发布韧性机制下仍在使用旧版 chunk 的在线会话（否则灰度期旧页面仍会误判不可达）。
+
+#### P0-4：上游 502 的整页 HTML 错误页被原样弹到用户界面
+
+根因：`frontend/src/api/bridge.ts` 的 `callWebApi` 在 `!response.ok` 时直接
+`throw new Error('HTTP ' + status + ': ' + errText)`，而反向代理 / Cloudflare
+在网关故障时返回的是**一整页 HTML**（实测含内网主机名），被原样渲染进通知弹窗。
+
+修复：`formatHttpError()` 统一净化：
+- 502 / 503 / 504 → 可行动的中文说明（保留 `HTTP <status>` 前缀，
+  以便「市场研报」抽屉的 502 轮询兜底逻辑继续生效）；
+- 其余 HTML 响应 → 「服务返回了非预期的 HTML 页面」+ 提示查服务端日志；
+- HTML 全文仅进 `console.error`，不再进入用户可见文案。
+
+#### P1：模型网关调用链的三处真实缺陷
+
+| 缺陷 | 影响 | 修复 |
+|---|---|---|
+| `FetchAiModels` 用 `resty.New()` 全新客户端（10s 超时、**无代理**） | 需要代理的网络里「拉取列表」必然失败，而同一张卡片的对话却正常（对话走共享客户端）——典型「能聊不能列」 | 改用 `data.CreateHTTPClientWithTimeout()`，继承全局代理 / UA / 连接池 |
+| `FetchAiModelInfo` 对全局单例 `data.SharedHTTPClient` 调用 `SetBaseURL` | 并发请求会串到别的供应商地址上（全局可变状态） | 改用独立 client（共享 transport），不再改动全局单例 |
+| `TestAiConnection` 里的 `client.SetProxy(...)` | resty v2 的 `SetProxy` 直接写 `transport.Proxy`；一旦传入共享 transport 就会污染全局所有并发请求 | 移除该调用，代理由 `ConfigureFromSettings` 统一同步到共享 transport |
+
+另：`ConfigureFromSettings` 改为使用**数据库中的最终生效值**而非提交值，
+避免「只提交 prompt 的部分载荷」把全局代理误清空。
+
+#### P1：清理与诚实化
+
+- 删除死写 `iwencai_api_key`（该列在库中根本不存在，`Updates(map)` 会静默忽略它；
+  已用探针证明其失败**不会污染事务**，删除无隐藏风险）。
+- 移除生产代码中的 `TESTAI DEBUG` `fmt.Printf`（会把上游响应体直接打进 stdout）。
+- 上游响应体写日志前统一截断到 500 字符。
+- 设置页「深度思考」开关补充**如实**说明：该开关决定卡片作为推理模型使用时的推理参数，
+  但 **【Agent 对话】页顶部的「深度思考」开关会在发起对话时覆盖本卡片设置**，
+  市场资讯 / 研报流水线不读取本开关（此前 UI 未作任何说明，易产生误解）。
+- 设置页「拉取列表」为空时的提示补充常见原因（Base URL 需指向 `.../v1`、
+  API Key 无效、需开启全局代理并先保存）与下一步动作（点「⚡ 测试连通性」看具体原因）。
+- 设置页延迟探测改用 `/health`（与 `WebAuthModal.vue`、部署脚本、冒烟脚本一致）。
+
+#### 验证
+
+- **真实 RPC 用例矩阵 12 组 / 37 项：37 项全绿**（直打 `http://127.0.0.1:18099/api/App/*`）。
+  其中「掩码 API Key 不被覆盖」一项按「读到的掩码必然等于提交的掩码」判定会误报，
+  已用**直读 SQLite** 复核：库中仍是明文 `sk-test-key-1`，未变成 `sk-t****ey-0`。
+- **Go 回归测试 12 条全绿**（`backend/data/settings_roundtrip_test.go`）：
+  扁平契约、嵌套拒绝、完整往返零丢失、部分载荷不清零、
+  显式关闭两个能力开关、未提交时保留原值、删除默认卡片后指针修复、
+  未指定默认时回落到第一张存活卡片、删除全部后清零、`**T` 形态反序列化、内部字段不泄漏。
+- **真实浏览器（ego-browser）验证**：
+  - 延迟探测显示真实值（143ms / 23ms），不再是 −1；
+  - 「拉取列表」后点击模型输入框 → 候选菜单真实弹出 7 个模型，点击即写回（所见即所存）；
+  - **删除全局默认卡片 → 确认 → 保存 → 真实 reload → 删除持久化且默认卡片指向存活卡片**
+    （直读 SQLite 复核 `ai_config_id=7` 指向存活卡片，无悬空）；
+  - 「⚡ 测试连通性」成功路径与失败路径均给出可行动中文提示；
+  - 注入 502 HTML 错误页后，界面只出现「HTTP 502: 网关错误 (Bad Gateway)…」，无 HTML、无内网主机名。
+
 最终体积
 --------
 
@@ -425,9 +519,10 @@ TestClassifyAIError      PASS  （6 个场景子用例全过）
 |---|---|---|
 | v2.0.0 基线 | 57,304,765 | 718 |
 | v3.0.0 第一轮 | 14,693,884 | 593 |
-| **v3.0.0 第二轮（终态）** | **14,075,868** | **593** |
+| v3.0.0 第二轮 | 14,075,868 | 593 |
+| **v3.0.0 第四轮（终态）** | **14,129,371** | **595** |
 
-累计减重 **75.5%**（−43.27 MB）。
+累计减重 **75.3%**（−43.18 MB）。
 
 ---
 
