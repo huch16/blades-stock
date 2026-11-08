@@ -489,6 +489,8 @@ async function generate() {
     // 但后端已通过解耦独立的 10 分钟 context 在后台继续推演，此时切入后台轮询等待
     if (
       errMsg.includes('502') ||
+      errMsg.includes('503') ||
+      errMsg.includes('504') ||
       errMsg.includes('timeout') ||
       errMsg.includes('Failed to fetch') ||
       errMsg.includes('NetworkError') ||

@@ -335,8 +335,7 @@ const MUTATION_INVALIDATION_MAP: Record<string, string[]> = {
 }
 
 // 变更操作自动作废关联缓存
-function invalidateQueryCacheOnMutation(method: string) {
-  const targets = MUTATION_INVALIDATION_MAP[method]
+function invalidateQueryCacheOnMutation(method: string) {  const targets = MUTATION_INVALIDATION_MAP[method]
   if (targets && targets.length > 0) {
     for (const target of targets) {
       for (const key of queryCache.keys()) {
@@ -346,6 +345,39 @@ function invalidateQueryCacheOnMutation(method: string) {
       }
     }
   }
+}
+
+/**
+ * 将非 2xx 的 HTTP 响应格式化为**简洁可读**的错误信息。
+ *
+ * 背景：反向代理 / Cloudflare 在上游超时或宕机时会返回一整页 HTML
+ *（典型如 “502 Bad Gateway”）。旧实现直接 `HTTP 502: <html>...</html>` 抛给上层，
+ * 最终会被原样渲染到用户界面与通知弹窗里：既泄露内部网关信息，
+ * 也让用户完全看不懂到底发生了什么（实测线上出现过整页 HTML 弹窗）。
+ *
+ * 现在：用户只看到简洁的中文诊断；HTML 全文仅进控制台日志供排查。
+ * 注意：错误文本中保留 “HTTP <status>” 前缀，上层按状态码分支的逻辑仍然有效。
+ */
+function formatHttpError(method: string, status: number, rawText: string): string {
+  const raw = (rawText || '').trim()
+  const looksLikeHtml = /^\s*<(!doctype|html|\?xml)/i.test(raw) || /<html[\s>]/i.test(raw.slice(0, 500))
+
+  const gatewayHints: Record<number, string> = {
+    502: '网关错误 (Bad Gateway)：上游服务（模型网关或反向代理）未正常响应，通常是上游超时/宕机或服务商限流，请稍后重试或改用其他模型。',
+    503: '服务暂不可用 (Service Unavailable)：上游服务过载或维护中，请稍后重试。',
+    504: '网关超时 (Gateway Timeout)：上游响应过慢已被反向代理中断，请稍后重试或改用响应更快的模型。',
+  }
+  const hint = gatewayHints[status]
+  if (hint) {
+    console.error(`[UniversalBridge] ${method} HTTP ${status} raw body:`, raw)
+    return `HTTP ${status}: ${hint}`
+  }
+  if (looksLikeHtml) {
+    console.error(`[UniversalBridge] ${method} HTTP ${status} HTML body:`, raw)
+    return `HTTP ${status}: 服务返回了非预期的 HTML 页面（通常是反向代理错误页），详细原因请查看服务端日志。`
+  }
+  const detail = raw.length > 300 ? raw.slice(0, 300) + '…' : raw
+  return `HTTP ${status}: ${detail || '请求失败'}`
 }
 
 // 4. Web 模式下的通用 HTTP RPC 发起器
@@ -412,8 +444,8 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
       }
 
       if (!response.ok) {
-        const errText = await response.text()
-        throw new Error(`HTTP ${response.status}: ${errText}`)
+        const errText = await response.text().catch(() => '')
+        throw new Error(formatHttpError(method, response.status, errText))
       }
 
       const contentType = response.headers.get('content-type') || ''
@@ -471,8 +503,7 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
 }
 
 // 5. 全局运行时桩注入（最早时刻执行）
-export function initUniversalBridge(): void {
-  if (typeof window === 'undefined') return
+export function initUniversalBridge(): void {  if (typeof window === 'undefined') return
 
   const win = window as any
   // 原生 Wails 桌面环境判断（支持原生 WailsInvoke、_wails 或原生 runtime.EventsOn）：
