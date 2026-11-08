@@ -16,7 +16,6 @@ import (
 	"blades-stock/backend/models"
 
 	"github.com/duke-git/lancet/v2/strutil"
-	"github.com/go-resty/resty/v2"
 )
 
 // AiModelInfo 模型元信息返回结构
@@ -24,6 +23,17 @@ type AiModelInfo struct {
 	ModelName string `json:"modelName"`
 	MaxTokens int    `json:"maxTokens"`
 	Source    string `json:"source"`
+}
+
+// truncateForLog 截断上游响应体，避免把完整 HTML / 超长 JSON 刷进服务日志。
+const maxLogBodyLen = 500
+
+func truncateForLog(body string) string {
+	body = strings.TrimSpace(body)
+	if len(body) <= maxLogBodyLen {
+		return body
+	}
+	return body[:maxLogBodyLen] + "...(truncated)"
 }
 
 // SettingsService 系统配置、交易风控、审计日志与设备管理服务
@@ -276,9 +286,11 @@ func (s *SettingsService) FetchAiModels(baseUrl, apiKey string) []string {
 		Data []modelItem `json:"data"`
 	}
 
-	client := resty.New()
+	// 使用**共享 transport**（继承用户配置的全局代理、UA 与连接池），而不是 resty.New()：
+	// 旧实现完全绕过了代理配置，导致需要代理的网络环境下“拉取列表”必然失败，
+	// 而同一张卡片的对话却能正常工作（对话走的是共享客户端）——这是典型的“能聊不能列”。
+	client := data.CreateHTTPClientWithTimeout(30 * time.Second)
 	client.SetBaseURL(baseUrl)
-	client.SetTimeout(10 * time.Second)
 
 	resp, err := client.R().
 		SetHeader("Authorization", "Bearer "+apiKey).
@@ -286,11 +298,12 @@ func (s *SettingsService) FetchAiModels(baseUrl, apiKey string) []string {
 		SetResult(&respData).
 		Get("/models")
 	if err != nil {
-		logger.SugaredLogger.Errorf("FetchAiModels error: %v", err)
+		logger.SugaredLogger.Errorf("FetchAiModels 请求失败 (baseUrl=%s): %v", baseUrl, err)
 		return []string{}
 	}
 	if resp.IsError() {
-		logger.SugaredLogger.Errorf("FetchAiModels http error: %s", resp.Status())
+		logger.SugaredLogger.Errorf("FetchAiModels HTTP 错误 (baseUrl=%s): %s body=%s",
+			baseUrl, resp.Status(), truncateForLog(string(resp.Body())))
 		return []string{}
 	}
 
@@ -318,14 +331,12 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 		apiKey = "none"
 	}
 
-	client := resty.New()
+	// 使用共享 transport（继承全局代理 / UA / 连接池）。
+	// 注意：**不要**在这里调用 resty 的 SetProxy——resty v2 的 SetProxy 会直接写
+	// transport.Proxy 字段，若传入的是共享 transport 就会污染全局所有并发请求。
+	// 全局代理已由 ConfigureFromSettings 在每次保存设置时同步到共享 transport。
+	client := data.CreateHTTPClientWithTimeout(30 * time.Second)
 	client.SetBaseURL(baseUrl)
-	client.SetTimeout(20 * time.Second)
-
-	// 若系统启用了全局 HTTP 代理，透传给测试客户端
-	if cfg := data.GetSettingConfig(); cfg != nil && cfg.HttpProxyEnabled && strings.TrimSpace(cfg.HttpProxy) != "" {
-		client.SetProxy(strings.TrimSpace(cfg.HttpProxy))
-	}
 
 	// 输出预算：历史缺陷是固定 max_tokens=16。
 	// 对**推理模型**（MiniMax-M3 / deepseek-reasoner / GLM-Z 等）而言，
@@ -366,12 +377,10 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 		if !resp.IsError() {
 			return ""
 		}
-		fmt.Printf("TESTAI DEBUG: status=%d isError=%v body=%q\n", resp.StatusCode(), resp.IsError(), string(resp.Body()))
 		raw := parseOpenAIErrorBody(resp.Body())
 		lastMsg = classifyAIError(resp.StatusCode(), raw, modelName)
-		fmt.Printf("TESTAI DEBUG: classified msg=%q\n", lastMsg)
 		logger.SugaredLogger.Errorf("TestAiConnection http error (attempt %d/%d): %s body: %s",
-			i+1, len(attempts), resp.Status(), string(resp.Body()))
+			i+1, len(attempts), resp.Status(), truncateForLog(string(resp.Body())))
 		// 仅在错误确实与输出预算相关时，才值得改用「不传 max_tokens」重试
 		if i == 0 && isTokenBudgetError(raw) {
 			continue
@@ -470,7 +479,9 @@ func (s *SettingsService) FetchAiModelInfo(baseUrl, apiKey, modelName string) *A
 		}
 		var detail modelDetail
 
-		client := data.SharedHTTPClient
+		// 使用独立 client（共享 transport）：绝不能对 data.SharedHTTPClient 调用
+		// SetBaseURL——那是全局单例，修改它会让并发请求串到别的供应商地址上。
+		client := data.CreateHTTPClientWithTimeout(20 * time.Second)
 		client.SetBaseURL(baseUrl)
 
 		resp, err := client.R().
