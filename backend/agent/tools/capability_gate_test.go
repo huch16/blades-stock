@@ -175,3 +175,101 @@ func indexByte(s string, b byte) int {
 	}
 	return len(s)
 }
+
+// ── pipeline 模式（用户 2026-11-10 选定方案 A）─────────────────────────
+//
+// 前端流水线入口显式传 pipeline，后端据此把「严禁调用 WebSearch」
+// 从提示词口头纪律升级为代码级闸门。
+
+// 契约八：pipeline 闸门必须且只能禁掉外网检索工具。
+func TestPipelineGateForbidsOnlyExternalSearch(t *testing.T) {
+	g := GateForMode(AgentModePipeline)
+	if g.IsZero() {
+		t.Fatal("pipeline 模式必须有闸门（否则流水线纪律仍只靠提示词）")
+	}
+	ft := g.forbidToolSet()
+	for _, must := range []string{"WebSearch", "FetchWebPage"} {
+		if !ft[must] {
+			t.Errorf("pipeline 闸门应禁用 %s", must)
+		}
+	}
+	// 不得禁用一手内置数据源（组内其他工具仍应可用）
+	for _, mustNot := range []string{
+		"QueryStockNewsTool", "GetNewsListData", "StockNotice", "GetStockNotice",
+		"GetStockInfo", "GetMarketData", "ScreenByStrategy",
+	} {
+		if ft[mustNot] {
+			t.Errorf("pipeline 闸门不应禁用一手内置工具 %s", mustNot)
+		}
+	}
+	// 不得整组禁用 news_research（那会连带砍掉一手新闻工具）
+	if g.forbidGroupSet()[GroupNewsResearch] {
+		t.Error("pipeline 闸门不应整组禁用 news_research —— 会误伤一手内置数据源")
+	}
+}
+
+// 契约九：pipeline 闸门默认**立即生效**（非 Deferred）。
+// 它是新建 mode，只影响流水线自身，不改变任何既有调用方。
+func TestPipelineGateIsNotDeferred(t *testing.T) {
+	g := GateForMode(AgentModePipeline)
+	if g.Deferred {
+		t.Error("pipeline 闸门不应标为 Deferred —— 那是给「迁移已有纪律」用的")
+	}
+	if !g.Active() {
+		t.Error("pipeline 闸门应默认生效（即使未设 BLADES_STOCK_GATE_ENFORCE）")
+	}
+	// 对比：direct 闸门标为 Deferred，默认只影子观察
+	d := GateForMode("direct")
+	if !d.Deferred {
+		t.Error("direct 闸门应标为 Deferred（其行为现状已满足约束，先看差异）")
+	}
+}
+
+// 契约十：pipeline 闸门确实把 WebSearch/FetchWebPage 移除，其余保留。
+func TestPipelineGateStripsExternalSearchOnly(t *testing.T) {
+	all := AssembleBuiltinTools()
+	kept, removed := ApplyGate(all, EffectiveGate(AgentModePipeline))
+
+	removedSet := map[string]bool{}
+	for _, r := range removed {
+		removedSet[r[:indexByte(r, '(')]] = true
+	}
+	if !removedSet["WebSearch"] || !removedSet["FetchWebPage"] {
+		t.Fatalf("应移除 WebSearch 与 FetchWebPage，实际 %v", removed)
+	}
+	if len(removed) != 2 {
+		t.Errorf("pipeline 闸门应只移除 2 个外网检索工具，实际 %d: %v", len(removed), removed)
+	}
+	// 一手新闻工具必须保留
+	var hasNewsTool, hasInfo bool
+	for _, tl := range kept {
+		switch tl.Name() {
+		case "QueryStockNewsTool", "GetNewsListData":
+			hasNewsTool = true
+		case "GetStockInfo":
+			hasInfo = true
+		}
+	}
+	if !hasNewsTool || !hasInfo {
+		t.Errorf("pipeline 闸门误伤了一手工具（newsTool=%v info=%v）", hasNewsTool, hasInfo)
+	}
+}
+
+// 契约十一：环境变量覆盖必须保持 Deferred（运维旋钮，先看差异再收紧）。
+func TestOverrideGateStaysDeferred(t *testing.T) {
+	t.Setenv("BLADES_STOCK_GATE_OVERRIDE", `{"forbidTools":["GetStockKLine"]}`)
+	g := EffectiveGate("react")
+	if !g.Deferred {
+		t.Error("环境变量覆盖的闸门应标为 Deferred")
+	}
+	if !g.forbidToolSet()["GetStockKLine"] {
+		t.Error("覆盖配置的 forbidTools 未合并")
+	}
+	if g.Active() {
+		t.Error("Deferred 闸门在未开启 ENFORCE 时不应生效")
+	}
+	t.Setenv("BLADES_STOCK_GATE_ENFORCE", "1")
+	if !EffectiveGate("react").Active() {
+		t.Error("显式开启 ENFORCE 后 Deferred 闸门应生效")
+	}
+}

@@ -13,6 +13,7 @@ const (
 	RunKindSummarize     = "summarize"      // 资讯/新闻摘要
 	RunKindCron          = "cron"           // 定时任务
 	RunKindHoldingScan   = "holding_scan"   // 盘前持仓风控扫描（纯 Go 路径）
+	RunKindPipeline      = "pipeline"       // 五阶流水线（BUIS L1→L5）
 )
 
 type runKindCtxKey struct{}

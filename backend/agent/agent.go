@@ -31,7 +31,11 @@ type AgentMode string
 const (
 	AgentModeReact       AgentMode = "react"
 	AgentModePlanExecute AgentMode = "plan_execute"
-	AgentModeDirect      AgentMode = "direct"
+	// AgentModePipeline 五阶流水线专用模式（前端流水线入口显式传入）。
+	// 与 React 同样挂载全量工具，但由能力闸门移除外网检索
+	// （WebSearch / FetchWebPage）——原先是提示词里的口头纪律。
+	AgentModePipeline AgentMode = "pipeline"
+	AgentModeDirect   AgentMode = "direct"
 )
 
 type AgentInstance struct {
@@ -180,7 +184,7 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 	// BLADES_STOCK_GATE_ENFORCE=1 后才真正裁剪，便于先对比真实差异再打开。
 	if gate := tools.EffectiveGate(string(mode)); !gate.IsZero() && len(allTools) > 0 {
 		kept, removed := tools.ApplyGate(allTools, gate)
-		if tools.GateEnforceEnabled() {
+		if gate.Active() {
 			if len(removed) > 0 {
 				logger.SugaredLogger.Infof("[CapabilityGate] mode=%s 已按闸门移除 %d 个能力: %v", mode, len(removed), removed)
 			}
@@ -427,7 +431,7 @@ func GetAllTools() []bladesTools.Tool {
 // 空/未知值交给 classifyComplexity 自动判定（保持既有行为）。
 func resolveAgentMode(agentMode string, question string) AgentMode {
 	switch AgentMode(agentMode) {
-	case AgentModeDirect, AgentModeReact, AgentModePlanExecute:
+	case AgentModeDirect, AgentModeReact, AgentModePlanExecute, AgentModePipeline:
 		return AgentMode(agentMode)
 	default:
 		return classifyComplexity(question)
@@ -443,6 +447,7 @@ func resolveToolsForMode(mode AgentMode, question string, matchedSkills []models
 	if mode == AgentModeDirect {
 		return nil
 	}
+	// pipeline 与 React 一致：挂载全量工具（是否移除外网检索由能力闸门决定）
 	out := getToolsByQuestion(question, matchedSkills)
 	out = append(out, extraTools...)
 	return WrapToolsWithQuota(out)

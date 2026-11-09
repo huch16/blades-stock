@@ -141,8 +141,13 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		// 先声明再用：后面的错误分支与终态护栏都会往这个指针里填结果，
 		// 而下面的 defer 最后注册、最后执行，能读到最终值。
 		runStart := time.Now()
+		// 运行类型：显式标注优先；pipeline 模式即使调用方未标注 ctx 也归为流水线
+		runKind := RunKindFrom(ctx)
+		if runKind == RunKindChat && AgentMode(agentMode) == AgentModePipeline {
+			runKind = RunKindPipeline
+		}
 		runRecord := &models.AgentRunRecord{
-			Kind:        RunKindFrom(ctx),
+			Kind:        runKind,
 			RequestedID: aiConfigId,
 		}
 		// finalizeRun 幂等落库。

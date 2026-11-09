@@ -108,8 +108,6 @@
       </div>
     </header>
 
-
-
     <!-- 主体聊天消息滚动区域 (自然时间线：旧消息在上，新消息在下) -->
     <main
       class="chat-messages-viewport"
@@ -874,7 +872,7 @@ const memoryCountOptions = [
 function onWindowResize() {
   isMobile.value = typeof window !== 'undefined' ? window.innerWidth <= 768 : false
 }
-const agentMode = ref<'auto' | 'react' | 'plan_execute'>('auto')
+const agentMode = ref<'auto' | 'react' | 'plan_execute' | 'pipeline'>('auto')
 const userAvatar = ref('https://tdesign.gtimg.com/site/avatar.jpg')
 const userName = ref('用户')
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -994,25 +992,25 @@ function submitModalStockAction() {
 2. 调用 GetEastMoneyKLineWithMA(${codeA}, "day", 60) 查看日K线均线系统与量价趋势；
 3. 调用 GetStockFinancialInfo(${codeA}) 与 GetStockLatestFinance(${codeA}) 穿透营收利润与真实ROE；
 4. 调用 GetStockHolderTrend(${codeA}) 穿透近几个季度股东户数增减与筹码集中度。
-【执行纪律】：严禁调用 WebSearch 从外网抓取陈旧碎片。直接输出结构化量化研报，严禁在正文输出"下一步需要调用..."等机械规划文字。`)
+【执行纪律】：直接输出结构化量化研报，严禁在正文输出"下一步需要调用..."等机械规划文字。`, false, 'pipeline')
   } else if (targetStockAction.value === 'risk') {
     applyScenario(`【L4 筹码与风险极限排雷】请对股票 ${codeA} 进行深度排雷诊断：
 1. 调用 GetStockHolderTrend(${codeA}) 穿透股东户数变动趋势，判断主力吸筹或散户接盘；
 2. 调用 GetStockMarginTrading(${codeA}) 分析两融杠杆资金多空动向；
 3. 核查控股股东股权质押比例、未来一年限售解禁日程、商誉减值与资产负债率风险。
-【执行纪律】：严禁调用 WebSearch。直接输出专业排雷研报与风控评级。`)
+【执行纪律】：直接输出专业排雷研报与风控评级。`, false, 'pipeline')
   } else if (targetStockAction.value === 'finance') {
     applyScenario(`【L4 财报体检与真实ROE验证】请调用系统内置 GetStockFinancialInfo(${codeA}) 与 GetStockLatestFinance(${codeA}) 深度体检财务质量：
 1. 对比近3年营业收入与扣非净利润增长趋势；
 2. 穿透销售毛利率、真实ROE与净利率水平；
 3. 核验经营活动现金流净额与净利润比值，验证其盈利真实性，排查应收账款与坏账风险。
-【执行纪律】：严禁调用 WebSearch。直接输出财务健康度体检结论。`)
+【执行纪律】：直接输出财务健康度体检结论。`, false, 'pipeline')
   } else if (targetStockAction.value === 'pk') {
     applyScenario(`【L4 赛道双龙头深度PK】请调用系统内置量化与行情工具，对比分析股票 ${codeA} 与 ${codeB}：
 1. 分别调用 GetEastMoneyKLineWithMA(${codeA}, "day", 60) 与 GetEastMoneyKLineWithMA(${codeB}, "day", 60) 对比量价强弱与均线排列；
 2. 分别调用 GetStockLatestFinance 对比两者的市盈率估值、真实ROE与营收成长质量；
 3. 分别调用 GetStockHolderTrend 对比两者的筹码集中度变动。
-【执行纪律】：严禁调用 WebSearch。直接输出双龙头横向对比报告与配置优选建议。`)
+【执行纪律】：直接输出双龙头横向对比报告与配置优选建议。`, false, 'pipeline')
   }
 }
 
@@ -1063,7 +1061,6 @@ function onPipelineStockCodeEnter() {
     setPipelineStock(trimmed)
   }
 }
-
 
 // 从助手回答中智能抽取选股/推荐标的代码与名称，自动贯通到下游体检与立论
 function extractStockFromAssistantText(text: string) {
@@ -1150,28 +1147,28 @@ function executeStep1() {
 
   applyScenario(`【L1 宏观大势与仓位择时】${realTimeFacts}
 【执行纪律与工具调用要求】：
-1. 优先调用系统内置 GetMarketData 获取核心宽基指数（上证指数 000001、沪深300 000300、创业板指 399006）的最新行情截面，严禁调用 WebSearch 从外网抓取过时新闻碎片！
+1. 优先调用系统内置 GetMarketData 获取核心宽基指数（上证指数 000001、沪深300 000300、创业板指 399006）的最新行情截面。
 2. 严禁在回答中输出任何"下一步需要调用..."、"我将查询..."等机械思考或规划句子。
 3. 直接输出结构化宏观研报：
    - 一、大盘核心指数行情与量价均线态势（调用 GetMarketData）
    - 二、全市场微观多空博弈与红绿灯节律诊断（结合上述系统实盘数据）
-   - 三、宏观择时评级与总仓位上限指导（必须给出明确的最高持仓上限百分比，例如 ≤30% 或 ≤70%）。`)
+   - 三、宏观择时评级与总仓位上限指导（必须给出明确的最高持仓上限百分比，例如 ≤30% 或 ≤70%）。`, false, 'pipeline')
 }
 
 function executeStep2(type: 'etf' | 'seats') {
   pipelineContext.currentStep = 2
   if (type === 'etf') {
     applyScenario(`【L2 赛道主线轮动】请调用系统内置 GetETFMomentumRanking 工具获取场内核心 ETF 21日加权动量排名：
-1. 严禁调用 WebSearch 从外网搜索。
+
 2. 完整列出动量评分 >0 的正动量进攻候选池，并根据动量衰减度指出当前资金流入最强的主线板块；
 3. 对动量 <=0 的防守/规避板块给出调仓规避建议。
-4. 直接输出研报正文，严禁输出任何机械调用步骤或规划文字。`)
+4. 直接输出研报正文，严禁输出任何机械调用步骤或规划文字。`, false, 'pipeline')
   } else {
     applyScenario(`【L2 主力风向追踪】请调用系统内置 GetLongTigerList / GetStockBillboard 工具获取最新龙虎榜明细：
-1. 严禁使用 WebSearch。
+
 2. 重点筛选机构专用席位大额净买入的股票及所属板块，分析机构资金的真实建仓方向；
 3. 排查游资席位是否存在"一日游"打板出逃迹象。
-4. 直接输出研报正文，严禁输出机械调用步骤。`)
+4. 直接输出研报正文，严禁输出机械调用步骤。`, false, 'pipeline')
   }
 }
 
@@ -1180,24 +1177,24 @@ function executeStep3(type: 'breakout' | 'trend' | 'macd' | 'dividend') {
   if (type === 'breakout') {
     applyScenario(`【L3 量化多因子初筛池 · 放量突破】请调用系统内置 ScreenByStrategy(strategyName="放量突破", limit=10) 工具：
 1. 筛选全市场呈现成交量放量突破近期整理平台的强势标的；
-2. 严禁调用 WebSearch 搜外网概念股；
+
 3. 输出入选股票的具体代码、名称、技术面评分、现价、涨跌幅、量比与突破确认点位；
-4. 综合评选出最优的前3只标的，系统将自动继承首选标的供后续 Step 4 四维深度体检。直接输出选股清单。`)
+4. 综合评选出最优的前3只标的，系统将自动继承首选标的供后续 Step 4 四维深度体检。直接输出选股清单。`, false, 'pipeline')
   } else if (type === 'trend') {
     applyScenario(`【L3 量化多因子初筛池 · 均线多头】请调用系统内置 ScreenByStrategy(strategyName="趋势跟随", limit=10) 工具：
 1. 筛选均线多头排列（MA5>MA10>MA20）且趋势持续向上的强势标的；
-2. 严禁调用 WebSearch；
-3. 输出入选股票的具体代码、名称、技术面评分与均线支撑位，直接输出选股清单。`)
+
+3. 输出入选股票的具体代码、名称、技术面评分与均线支撑位，直接输出选股清单。`, false, 'pipeline')
   } else if (type === 'macd') {
     applyScenario(`【L3 量化多因子初筛池 · MACD金叉】请调用系统内置 ScreenByStrategy(strategyName="macd_golden_cross", limit=10) 工具：
 1. 筛选近期在零轴上方形成二次金叉放量共振的个股；
-2. 严禁调用 WebSearch；
-3. 输出入选股票的具体代码、名称与金叉确认理由，直接输出选股清单。`)
+
+3. 输出入选股票的具体代码、名称与金叉确认理由，直接输出选股清单。`, false, 'pipeline')
   } else {
     applyScenario(`【L3 价值防守选股池】请利用系统内置量化筛选工具（SearchStockByIndicators / FilterStocks）：
 1. 筛选市盈率PE<15、近三年平均股息率>3.5%、ROE>12%的高股息稳健型股票；
-2. 严禁调用 WebSearch；
-3. 评估入选标的的安全边际与抗跌属性，给出防御性底仓配置建议，直接输出选股清单。`)
+
+3. 评估入选标的的安全边际与抗跌属性，给出防御性底仓配置建议，直接输出选股清单。`, false, 'pipeline')
   }
 }
 
@@ -1213,19 +1210,19 @@ function executeStep4(action: 'diag' | 'risk' | 'finance') {
 2. 调用 GetEastMoneyKLineWithMA(${code}, "day", 60) 查看日K线均线系统与关键支撑阻力位；
 3. 调用 GetStockFinancialInfo(${code}) 与 GetStockLatestFinance(${code}) 穿透营收利润与真实ROE；
 4. 调用 GetStockHolderTrend(${code}) 穿透股东户数集中度与主力资金动向。
-【执行纪律】：严禁调用 WebSearch。直接输出专业研报，给出买方 5-Verdict 确定性评级与明确的下行证伪止损线，严禁输出机械思考文字。`)
+【执行纪律】：直接输出专业研报，给出买方 5-Verdict 确定性评级与明确的下行证伪止损线，严禁输出机械思考文字。`, false, 'pipeline')
   } else if (action === 'risk') {
     applyScenario(`【L4 筹码与风险极限排雷】请对 ${targetDesc} 进行深度排雷：
 1. 调用 GetStockHolderTrend(${code}) 穿透股东户数集中度趋势；
 2. 调用 GetStockMarginTrading(${code}) 分析两融杠杆资金多空动向；
 3. 核查控股股东股权质押比例、未来一年限售解禁日程、商誉减值与资产负债率风险。
-【执行纪律】：严禁调用 WebSearch。直接输出风控评级与排雷研报。`)
+【执行纪律】：直接输出风控评级与排雷研报。`, false, 'pipeline')
   } else {
     applyScenario(`【L4 财报体检与真实ROE验证】请调用系统内置 GetStockFinancialInfo(${code}) 与 GetStockLatestFinance(${code}) 深度体检 ${targetDesc} 的财务质量：
 1. 对比近3年营业收入与扣非净利润增长趋势；
 2. 穿透销售毛利率、真实ROE与销售净利率；
 3. 核验经营活动现金流净额与净利润比值，验证其盈利真实性，排查应收账款异常。
-【执行纪律】：严禁调用 WebSearch。直接输出财务健康度结论。`)
+【执行纪律】：直接输出财务健康度结论。`, false, 'pipeline')
   }
 }
 
@@ -1240,29 +1237,29 @@ function executeStep5(customCode?: string) {
 2. 提炼核心买入立论假说（Core Thesis，1-2句话高度概括其商业壁垒与成长逻辑）；
 3. 明确列出下一阶段重点跟踪的验证催化事件（Key Catalysts）；
 4. 设定严格的下行证伪止损底线价位（Risk Factors / Invalidation Price）；
-5. 【核心纪律与工具调用】：必须直接调用系统内置 SaveStockThesis 工具，将上述结构化投资假说正式持久化存入系统认知账本数据库！并在回答末尾输出认知账本保存凭据。`)
+5. 【核心纪律与工具调用】：必须直接调用系统内置 SaveStockThesis 工具，将上述结构化投资假说正式持久化存入系统认知账本数据库！并在回答末尾输出认知账本保存凭据。`, false, 'pipeline')
 }
 
 function viewVerdictStandards() {
-  applyScenario(`请说明 Blades 买方认知账本与 5-Verdict 评级规范：包括【强力买入、逢低布局、观望等待、逢高减持、规避离场】的评定边界、核心买入立论提取、催化剂假设提取以及下行证伪止损底线的设定方法。`)
+  applyScenario(`请说明 Blades 买方认知账本与 5-Verdict 评级规范：包括【强力买入、逢低布局、观望等待、逢高减持、规避离场】的评定边界、核心买入立论提取、催化剂假设提取以及下行证伪止损底线的设定方法。`, false, 'pipeline')
 }
 
 function executeDirectDiag() {
   const code = (directDiagCode.value || '600519').trim()
   setPipelineStock(code)
-  applyScenario(`【L4 极速全维体检】请对股票 ${code} 进行全维度深度诊断：优先调用系统内置 DiagnoseStock(${code}) 获取 VectorBT 量化评分与置信胜率，调用 GetEastMoneyKLineWithMA(${code}, "day", 60) 查看均线量价，调用 GetStockLatestFinance 查看财务质量。严禁调用 WebSearch。直接给出买方 5-Verdict 裁决与止损位。`)
+  applyScenario(`【L4 极速全维体检】请对股票 ${code} 进行全维度深度诊断：优先调用系统内置 DiagnoseStock(${code}) 获取 VectorBT 量化评分与置信胜率，调用 GetEastMoneyKLineWithMA(${code}, "day", 60) 查看均线量价，调用 GetStockLatestFinance 查看财务质量。直接给出买方 5-Verdict 裁决与止损位。`, false, 'pipeline')
 }
 
 function executeDirectRisk() {
   const code = (directRiskCode.value || '600519').trim()
   setPipelineStock(code)
-  applyScenario(`【L4 专项极限排雷】请对股票 ${code} 进行深度排雷：调用 GetStockHolderTrend(${code}) 查看股东户数集中度，调用 GetStockMarginTrading(${code}) 查看两融杠杆，核查股权质押与限售解禁日程。严禁调用 WebSearch。直接输出综合排雷评级。`)
+  applyScenario(`【L4 专项极限排雷】请对股票 ${code} 进行深度排雷：调用 GetStockHolderTrend(${code}) 查看股东户数集中度，调用 GetStockMarginTrading(${code}) 查看两融杠杆，核查股权质押与限售解禁日程。直接输出综合排雷评级。`, false, 'pipeline')
 }
 
 function executeDirectPK() {
   const a = (pkCodeA.value || '300750').trim()
   const b = (pkCodeB.value || '002594').trim()
-  applyScenario(`【L4 双龙头横向对比】请调用系统内置量化工具对比 ${a} 与 ${b}：分别对比两者的日K量价走势（GetEastMoneyKLineWithMA）、最新财务ROE与估值（GetStockLatestFinance）、以及筹码集中度（GetStockHolderTrend）。严禁调用 WebSearch。直接输出双龙对比结论。`)
+  applyScenario(`【L4 双龙头横向对比】请调用系统内置量化工具对比 ${a} 与 ${b}：分别对比两者的日K量价走势（GetEastMoneyKLineWithMA）、最新财务ROE与估值（GetStockLatestFinance）、以及筹码集中度（GetStockHolderTrend）。直接输出双龙对比结论。`, false, 'pipeline')
 }
 
 function applyPresetPK(a: string, b: string) {
@@ -1380,10 +1377,10 @@ const quickChips = [
 
 const allScenarios = [
   // L1 宏观大势与环境感知
-  { category: 'L1 大势与宽基', title: '核心宽基行情与量价均线穿透', prompt: '请调用系统内置 GetMarketData 获取上证指数(000001)、沪深300(000300)与创业板指(399006)的最新点位、涨跌幅与量价均线态势，结合全市场涨跌比，评估市场多空赚钱效应与总仓位上限。严禁调用 WebSearch。' },
+  { category: 'L1 大势与宽基', title: '核心宽基行情与量价均线穿透', prompt: '请调用系统内置 GetMarketData 获取上证指数(000001)、沪深300(000300)与创业板指(399006)的最新点位、涨跌幅与量价均线态势，结合全市场涨跌比，评估市场多空赚钱效应与总仓位上限。' },
   
   // L2 赛道主线与资金风向
-  { category: 'L2 赛道与主线', title: 'ETF 加权动量轮动模型', prompt: '请调用系统内置 GetETFMomentumRanking 获取主流场内ETF的21日加权动量排名表，按动量评分排序并给出当前最具超额弹性的进攻主线与防御调仓建议。严禁调用 WebSearch。直接输出研报正文。' },
+  { category: 'L2 赛道与主线', title: 'ETF 加权动量轮动模型', prompt: '请调用系统内置 GetETFMomentumRanking 获取主流场内ETF的21日加权动量排名表，按动量评分排序并给出当前最具超额弹性的进攻主线与防御调仓建议。直接输出研报正文。' },
   { category: 'L2 赛道与主线', title: '上市公司法定公告与行业穿透', prompt: '请调用系统内置 StockNotice / GetTelegraphList 工具深入核验半导体及核心赛道上市公司的最新法定公告披露、订单备案与产业链快讯。严禁使用 WebSearch。直接输出客观证据链。' },
   { category: 'L2 赛道与主线', title: '龙虎榜机构专用席位追踪', prompt: '请调用系统内置 GetLongTigerList / GetStockBillboard 工具获取最近一个交易日的龙虎榜明细，重点筛选机构专用席位大额净买入的股票，分析机构资金的真实建仓意图。严禁使用 WebSearch。' },
 
@@ -1776,7 +1773,19 @@ function handleStop() {
 }
 
 // ========== 场景交互辅助 ==========
-function applyScenario(promptText: string, autoSend: boolean = false) {
+/**
+ * 把一段提示词填入输入框（可选自动发送）。
+ *
+ * mode：显式指定本次运行的 Agent 模式。
+ *   · 五阶流水线入口传 'pipeline' —— 后端据此启用流水线专用能力闸门
+ *     （移除外网检索 WebSearch / FetchWebPage）。此前流水线与普通对话都传
+ *     空 mode，后端无法区分，导致「严禁调用 WebSearch」只能靠提示词约束。
+ *   · 不传则沿用用户当前选择的模式。
+ */
+function applyScenario(promptText: string, autoSend: boolean = false, mode?: 'auto' | 'react' | 'plan_execute' | 'pipeline') {
+  if (mode) {
+    agentMode.value = mode
+  }
   inputValue.value = promptText
   nextTick(() => {
     const textarea = document.querySelector('.chat-input-cockpit textarea') as HTMLTextAreaElement
@@ -1949,7 +1958,7 @@ async function handleAgentConsult(payload: any) {
   }
 
   // 3. 设置执行模式
-  if (mode && ['auto', 'react', 'plan_execute', 'direct'].includes(mode)) {
+  if (mode && ['auto', 'react', 'plan_execute', 'direct', 'pipeline'].includes(mode)) {
     agentMode.value = mode as any
   }
 
@@ -2477,8 +2486,6 @@ onBeforeUnmount(() => {
     }
   }
 }
-
-
 
 /* 主体消息滚动视图 (正序) */
 .chat-messages-viewport {
@@ -3592,8 +3599,6 @@ onBeforeUnmount(() => {
     }
   }
 
-
-
   .chat-messages-viewport {
     padding: 10px 8px 20px !important;
   }
@@ -3659,8 +3664,6 @@ onBeforeUnmount(() => {
       }
     }
   }
-
-
 
   .chat-input-cockpit {
     background: #18181c !important;

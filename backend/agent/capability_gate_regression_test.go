@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,3 +161,84 @@ var (
 	_ = db.Dao
 	_ = data.SettingConfig{}
 )
+
+// ── pipeline 模式（方案 A 落地）─────────────────────────────────────────
+
+// 契约七：pipeline 模式必须拿到除「外网检索」以外的完整能力，
+// 且运行记录的类型必须是 pipeline。
+func TestPipelineModeGatesExternalSearchOnly(t *testing.T) {
+	// 用一个**会命中 news_research 组**的问题：否则 WebSearch 在分组过滤阶段
+	// 就已被移除，闸门无从验证（这正是本用例第一版的错误假设）。
+	q := "帮我查一下今天市场的热点新闻和龙虎榜，再分析贵州茅台 600519"
+	got := resolveToolsForMode(AgentModePipeline, q, nil, nil)
+	react := resolveToolsForMode(AgentModeReact, q, nil, nil)
+
+	// 前置断言：该问题下 WebSearch 必须原本就在（否则下面的验证是空转）
+	var webInReact bool
+	for _, tl := range react {
+		if tl.Name() == "WebSearch" {
+			webInReact = true
+		}
+	}
+	if !webInReact {
+		t.Fatalf("问题 %q 未命中 news_research，无法验证闸门（请换一个会命中新闻组的问题）", q)
+	}
+	if len(got) == 0 {
+		t.Fatal("pipeline 模式应有工具（它是流水线，需要一手数据工具）")
+	}
+	if len(got) != len(react) {
+		t.Errorf("pipeline 与 react 的工具数应一致（仅闸门裁剪外网检索）：%d vs %d", len(got), len(react))
+	}
+
+	// 2) 闸门面：WebSearch / FetchWebPage 必须被裁掉
+	kept, removed := tools.ApplyGate(got, tools.EffectiveGate(string(AgentModePipeline)))
+	if len(kept) != len(got)-2 {
+		t.Errorf("pipeline 闸门后应只剩 %d 个工具，实际 %d", len(got)-2, len(kept))
+	}
+	removedSet := map[string]bool{}
+	for _, r := range removed {
+		removedSet[r[:strings.IndexByte(r, '(')]] = true
+	}
+	if !removedSet["WebSearch"] || !removedSet["FetchWebPage"] {
+		t.Errorf("pipeline 闸门应移除 WebSearch 与 FetchWebPage，实际 %v", removed)
+	}
+}
+
+// 契约八：resolveAgentMode 必须识别 pipeline。
+func TestResolveAgentModeRecognizesPipeline(t *testing.T) {
+	if m := resolveAgentMode("pipeline", "任意问题"); m != AgentModePipeline {
+		t.Errorf("显式 pipeline 应保持 pipeline，实际 %q", m)
+	}
+}
+
+// 契约九：pipeline 运行必须在运行记录里标记 kind=pipeline。
+// 这样「到底哪个模型在跑」之外，还能回答「这次是流水线还是普通对话」。
+func TestPipelineRunsAreRecordedAsPipelineKind(t *testing.T) {
+	resetRunRecords()
+	cs := seedRunCards(t, 0, unreachableCard("流水线闸门卡", "pipeline-gate-model"))
+	if err := db.Dao.Model(&data.Settings{}).Where("1 = 1").Update("ai_config_id", cs[0].ID).Error; err != nil {
+		t.Fatalf("设置全局默认: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	// 显式以 pipeline 模式发起（不标注 ctx，验证 mode 推断生效）
+	ch := NewStockAiAgentApi().ChatWithContext(ctx, "ping", int(cs[0].ID), nil, false, 0, false, string(AgentModePipeline))
+	for range ch {
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(data.GetRecentAgentRuns(10)) > 0 {
+			break
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	runs := data.GetRecentAgentRuns(10)
+	if len(runs) == 0 {
+		t.Fatal("应留下运行记录")
+	}
+	if runs[0].Kind != RunKindPipeline {
+		t.Errorf("pipeline 模式运行的 Kind 应为 %q，实际 %q", RunKindPipeline, runs[0].Kind)
+	}
+}
