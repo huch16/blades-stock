@@ -163,35 +163,32 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		modelProvider = NewFallbackModelProvider(modelProvider, aiConfig.ModelName, fallbacks, fbNames)
 	}
 
-	var allTools []bladesTools.Tool
-	var mode AgentMode
-	switch AgentMode(agentMode) {
-	case AgentModeDirect:
-		mode = AgentModeDirect
-		allTools = []bladesTools.Tool{} // direct 模式：纯研报推演，无需挂载外部工具与 MCP，杜绝额外超时
-	case AgentModeReact:
-		mode = AgentModeReact
-		allTools = getToolsByQuestion(question, matchedSkills)
-		allTools = append(allTools, extraTools...)
-		allTools = WrapToolsWithQuota(allTools)
-	case AgentModePlanExecute:
-		mode = AgentModePlanExecute
-		allTools = getToolsByQuestion(question, matchedSkills)
-		allTools = append(allTools, extraTools...)
-		allTools = WrapToolsWithQuota(allTools)
-	default:
-		mode = classifyComplexity(question)
-		if mode == AgentModeDirect {
-			allTools = []bladesTools.Tool{}
-		} else {
-			allTools = getToolsByQuestion(question, matchedSkills)
-			allTools = append(allTools, extraTools...)
-			allTools = WrapToolsWithQuota(allTools)
-		}
+	mode := resolveAgentMode(agentMode, question)
+	allTools := resolveToolsForMode(mode, question, matchedSkills, extraTools)
+
+	// 兜底：Direct 模式必须零工具（纯研报推演，无需外部工具与 MCP，杜绝额外超时）。
+	// resolveToolsForMode 已保证这一点；这里再显式置空一次，
+	// 是为了让该不变量**不依赖**任何未来对 resolveToolsForMode 的改动。
+	if mode == AgentModeDirect {
+		allTools = nil
 	}
 
-	if mode == AgentModeDirect {
-		allTools = []bladesTools.Tool{}
+	// ── 能力闸门（C 期）─────────────────────────────────────────────
+	//
+	// 把「不要在本流程调用 X」从提示词请求升级为代码级约束：不该出现的工具
+	// 根本不在注入列表里。默认影子模式（只记录差异），
+	// BLADES_STOCK_GATE_ENFORCE=1 后才真正裁剪，便于先对比真实差异再打开。
+	if gate := tools.EffectiveGate(string(mode)); !gate.IsZero() && len(allTools) > 0 {
+		kept, removed := tools.ApplyGate(allTools, gate)
+		if tools.GateEnforceEnabled() {
+			if len(removed) > 0 {
+				logger.SugaredLogger.Infof("[CapabilityGate] mode=%s 已按闸门移除 %d 个能力: %v", mode, len(removed), removed)
+			}
+			allTools = kept
+		} else if len(removed) > 0 {
+			logger.SugaredLogger.Warnf("[CapabilityGate] 影子模式：mode=%s 若启用闸门将移除 %d 个能力: %v（设 BLADES_STOCK_GATE_ENFORCE=1 生效）",
+				mode, len(removed), removed)
+		}
 	}
 
 	logger.SugaredLogger.Infof("Agent mode selected: %s (user=%q), question=%q, tools=%d", mode, agentMode, question, len(allTools))
@@ -426,60 +423,43 @@ func GetAllTools() []bladesTools.Tool {
 	return WrapToolsWithQuota(allTools)
 }
 
-func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesTools.Tool {
-	var allTools []bladesTools.Tool
-
-	allTools = append(allTools, tools.GetQueryStockCodeInfoTool())
-	allTools = append(allTools, tools.GetQueryStockNewsTool())
-	allTools = append(allTools, tools.GetQueryBKDictTool())
-	allTools = append(allTools, tools.GetWebSearchTool())
-	allTools = append(allTools, tools.GetFetchWebPageTool())
-	allTools = append(allTools, tools.GetGraphQueryTool()) // P3.3: 代码图谱查询
-
-	allTools = append(allTools, tools.GetAllDataTools()...)
-
-	allTools = append(allTools, tools.GetHolidayTools()...)
-
-	allTools = append(allTools, tools.GetProjectTools()...)
-
-	allTools = append(allTools, tools.GetMCPServerTools()...)
-	allTools = append(allTools, tools.GetBacktestStatsTool())
-	allTools = append(allTools, tools.GetBacktestDetailTool())
-	allTools = append(allTools, tools.GetRunBacktestTool())
-	allTools = append(allTools, tools.GetVectorBacktestTool())
-	allTools = append(allTools, tools.GetRunVectorizedBacktestTool())
-	allTools = append(allTools, tools.GetDiagnoseStockTool())
-	allTools = append(allTools, tools.GetVectorGridSearchTool())
-	allTools = append(allTools, tools.GetStockThesisTool())
-	allTools = append(allTools, tools.SaveStockThesisTool())
-	allTools = append(allTools, tools.TriggerPostMortemAuditTool())
-	allTools = append(allTools, tools.GetPostMortemAuditHistoryTool())
-	allTools = append(allTools, tools.GetPaperPortfolioSummaryTool())
-	allTools = append(allTools, tools.ExecutePaperTradeTool())
-	allTools = append(allTools, tools.RunAutoAlphaExplorationTool())
-	allTools = append(allTools, tools.GetAutoAlphaProposalsTool())
-	allTools = append(allTools, tools.QuerySupplyChainCascadeTool())
-	allTools = append(allTools, tools.GetIndustrySupplyGraphTool())
-
-	mcpTools := getMCPTools()
-	if len(mcpTools) > 0 {
-		allTools = append(allTools, mcpTools...)
+// resolveAgentMode 解析本次运行实际使用的模式。
+// 空/未知值交给 classifyComplexity 自动判定（保持既有行为）。
+func resolveAgentMode(agentMode string, question string) AgentMode {
+	switch AgentMode(agentMode) {
+	case AgentModeDirect, AgentModeReact, AgentModePlanExecute:
+		return AgentMode(agentMode)
+	default:
+		return classifyComplexity(question)
 	}
+}
+
+// resolveToolsForMode 按运行模式决定注入哪些工具（纯函数，可单测）。
+//
+// 关键不变量：**Direct 模式必须返回空列表**。四个市场智能研报生成器
+// （盘前/盘后/ETF/Serenity）都以 Direct 模式运行，其提示词中的
+// 「无需额外调用外部工具 / 严禁调用 WebSearch」正是靠这一条得到**代码级**保证。
+func resolveToolsForMode(mode AgentMode, question string, matchedSkills []models.Skill, extraTools []bladesTools.Tool) []bladesTools.Tool {
+	if mode == AgentModeDirect {
+		return nil
+	}
+	out := getToolsByQuestion(question, matchedSkills)
+	out = append(out, extraTools...)
+	return WrapToolsWithQuota(out)
+}
+
+// getToolsByQuestion 组装本次请求的工具集：候选工具由 tools 包统一提供
+// （AssembleBuiltinTools），再按关键词分类 + 技能 required groups 过滤 + 进化重排。
+func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesTools.Tool {
+	allTools := tools.AssembleBuiltinTools()
+	allTools = append(allTools, getMCPTools()...)
 
 	groups := tools.ClassifyQuestion(question)
 	merged := mergeSkillToolGroups(groups, matchedSkills)
 	filtered := tools.FilterToolsByGroupsCapped(allTools, groups)
 
-	// 未登记能力的工具已在 TestEveryAssembledToolIsDeclared 中被禁止；
-	// 这里的统计用于运行时可观测：哪些组被命中、最终注入了多少能力。
-	injectedGroups := map[tools.ToolGroup]int{}
-	for _, tl := range filtered {
-		if c, ok := tools.CapabilityOf(tl.Name()); ok {
-			injectedGroups[c.Group]++
-		}
-	}
-	logger.SugaredLogger.Infof("tool grouping: question=%q, matched_groups=%v, skill_merged_groups=%v, total=%d, filtered=%d, injected_by_group=%v",
-		question, groupNames(groups), merged, len(allTools), len(filtered), injectedGroups)
+	logger.SugaredLogger.Infof("tool grouping: question=%q, matched_groups=%v, skill_merged_groups=%v, total=%d, filtered=%d",
+		question, groupNames(groups), merged, len(allTools), len(filtered))
 
 	// 进化回灌：按 agent_tool_ranks 实测成功率/延迟重排注入顺序。
 	return reorderToolsByRank(filtered)
