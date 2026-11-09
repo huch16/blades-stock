@@ -512,6 +512,57 @@ Agent 每次请求都回落到「第一张卡片」并持续刷 `ai config %d no
   - 「⚡ 测试连通性」成功路径与失败路径均给出可行动中文提示；
   - 注入 502 HTML 错误页后，界面只出现「HTTP 502: 网关错误 (Bad Gateway)…」，无 HTML、无内网主机名。
 
+### 十二、架构收敛第一步：模型解析唯一入口 + 运行记录（解决「到底哪个模型在跑」）
+
+用户长期反馈「AI 模型配置及运行有很多问题」，并具体表现为
+「界面显示模型 A、实际却像在用模型 B」。核实后发现根因是**同一件事有 4 套解析行为**：
+
+| 位置 | 旧行为 |
+|---|---|
+| `agent/agent_api.go` | ID → 全局默认 → **第一张非 nil**，并直接 `aiConfig.Thinking = thinkingMode` **改写配置** |
+| `data/NewDeepSeekOpenAi` | ID → **空配置**（`&AIConfig{}`，没有任何回落） |
+| `agent/llm_summarizer.go` | 自维护内联解析，额外要求 ApiKey 非空 |
+| `agent/price_alert_watcher.go` | 又一套内联解析 |
+
+于是同一次请求在不同链路上可能落到不同模型，而界面永远只显示**请求的**那个。
+
+**① `data.ResolveModel` —— 唯一解析入口**（`backend/data/model_resolver.go`）
+
+优先级明确且可解释：显式指定卡片 → 全局默认 → 第一张可用卡片。
+返回 `ModelResolution`：配置**副本** + `Source` + `Reason` + `FallbackUsed` + 当时存在的卡片 ID。
+- `WithThinking()` 只改副本 —— 从根上消灭「卡片写 A、实际按 B 跑」；
+- 四处解析全部改为调用它（含 `NewDeepSeekOpenAi` 不再返回空配置）；
+- 新增 `ResolveModelForced(requireApiKey)` 供摘要/预警这类必须有密钥的链路复用。
+
+**② 运行记录 —— 把事实固化成可查询字段**
+
+新表 `agent_run_record`（`models.AgentRunRecord`），每次运行记录：
+`kind`（chat/盘前/盘后/ETF轮动/产业拆解/…）、`requestedId`、`resolvedId`、`source`、
+`fallbackUsed`、`modelName`、`baseUrl`、`thinking`、`resolution`（人话说明）、`fallbackChain`、
+`finishReason`、`durationMs`、`contentLen`、`success`、`errorMsg`。
+运行类型通过 context 传递（`WithRunKind` / `WithRunKindIfUnset`），**不改动 `ChatWithContext` 签名**。
+记录在**关闭流之前**落库，保证消费者拿到 close 时记录已可查询（避免竞态）。
+
+**③ 界面**：设置页「AI 模型注册表」新增「🩺 最近运行记录」面板，每行直接给出
+**实际使用的模型**、解析依据（回落时高亮「已回落」并显示 `请求 #x → 实际 #y`）、
+备用链、结束原因、耗时与篇幅。并订阅 Storage/SSE？——不，改为进入 AI 标签页时自动刷新。
+
+**验证**
+- 新增 9 条解析契约测试（`backend/data/model_resolver_test.go`）：精确命中 /
+  全局默认 / 请求卡片已删时回落并如实标记 / 回落第一张 / **WithThinking 不污染存储** /
+  无卡片必须报错 / Usable 判定 / requireApiKey / 多次解析确定性。
+- 新增 5 条运行记录契约测试（`backend/agent/agent_run_record_test.go`）：
+  失败也留记录且模型/依据如实 / RunKind 随上下文标注 / IfUnset 让外层标注优先 /
+  无可用模型也留记录 / 倒序与 limit 与清空。
+- 端到端（真实服务 + mock）：请求不存在的卡片 #99999 →
+  记录显示 `请求ID=99999 → 实际ID=4`、`source=global_default`、`fallbackUsed=true`、
+  `resolution=请求的卡片 #99999 已不存在（现存卡片 [4]），改用全局默认「…」`。
+- 真实浏览器：设置页面板渲染出该行 ——
+  `盘后复盘 | report-model | 全局默认（已回落）· 请求 #99999 → 实际 #5 | 成功 | 2510 ms | 1069 字`。
+
+> 说明：本轮为「第一步」，只收敛**模型解析**与**可观测性**，尚未改动
+> 提示词驱动的工具编排（第二步：把工具收敛为声明式能力注册表）。
+
 最终体积
 --------
 

@@ -62,69 +62,66 @@ type StockAiAgent struct {
 	instance   *AgentInstance
 	sessionID  string
 	aiConfigId int
+	// resolution 本次实际使用的模型解析结果（写运行记录用）
+	resolution data.ModelResolution
 }
 
 func NewStockAiAgentApi() *StockAiAgent {
 	return &StockAiAgent{}
 }
 
-func (receiver StockAiAgent) newStockAiAgent(ctx *context.Context, aiConfigId int, thinkingMode bool, question string, agentMode string, matchedSkills []models.Skill, extraTools ...bladesTools.Tool) *StockAiAgent {
+// newStockAiAgentResolved 用**已经解析好的**模型创建 Agent。
+//
+// 与旧实现的区别（同一类问题的根治）：
+//
+//	· 模型选择收敛到 data.ResolveModel 唯一入口，不再各链路各写一套；
+//	· 传入的是配置**副本**，请求级 thinking 覆盖 WithThinking 作用在副本上，
+//	  绝不会写回存储（旧代码 `aiConfig.Thinking = thinkingMode` 会污染配置）；
+//	· 解析依据（Source/Reason/FallbackUsed）随返回值上抛，写进运行记录与日志。
+func (receiver StockAiAgent) newStockAiAgentResolved(ctx *context.Context, res data.ModelResolution, thinkingMode bool, question string, agentMode string, matchedSkills []models.Skill, extraTools ...bladesTools.Tool) *StockAiAgent {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.SugaredLogger.Errorf("panic in newStockAiAgent: %v", r)
+			logger.SugaredLogger.Errorf("panic in newStockAiAgentResolved: %v", r)
 		}
 	}()
 
-	settingConfig := data.GetSettingConfig()
-	if settingConfig == nil {
-		logger.SugaredLogger.Errorf("settingConfig is nil")
-		return nil
-	}
-
-	if aiConfigId <= 0 {
-		aiConfigId = int(settingConfig.AiConfigID)
-	}
-
-	aiConfig, ok := lo.Find(settingConfig.AiConfigs, func(item *data.AIConfig) bool {
-		return item != nil && uint(aiConfigId) == item.ID
-	})
-	if !ok {
-		for _, cfg := range settingConfig.AiConfigs {
-			if cfg != nil {
-				aiConfig = cfg
-				aiConfigId = int(cfg.ID)
-				ok = true
-				logger.SugaredLogger.Infof("ai config %d not found, fallback to first non-nil: %d (%s)", aiConfigId, cfg.ID, cfg.Name)
-				break
-			}
-		}
-	}
-	if !ok {
+	if !res.Resolved() {
 		logger.SugaredLogger.Errorf("no ai config available")
 		return nil
 	}
-	if aiConfig == nil {
-		logger.SugaredLogger.Errorf("aiConfig is nil for id: %d", aiConfigId)
-		return nil
-	}
 
-	aiConfig.Thinking = thinkingMode
+	// 请求级 thinking 只作用于副本
+	aiConfig := res.WithThinking(thinkingMode).Config
+	logger.SugaredLogger.Infof("【模型解析】%s | source=%s fallback=%v model=%q thinking=%v",
+		res.Describe(), res.Source, res.FallbackUsed, aiConfig.ModelName, aiConfig.Thinking)
+
 	sessionID := aiConfig.SessionId
 	if sessionID == "" {
 		sessionID = fmt.Sprintf("ai-config-%d", aiConfig.ID)
 	}
 
-	agentInstance := GetStockAiAgent(*ctx, *aiConfig, question, agentMode, matchedSkills, extraTools...)
+	agentInstance := GetStockAiAgent(*ctx, aiConfig, question, agentMode, matchedSkills, extraTools...)
 	if agentInstance == nil {
-		logger.SugaredLogger.Errorf("failed to create agent for config id: %d", aiConfigId)
+		logger.SugaredLogger.Errorf("failed to create agent for config id: %d", aiConfig.ID)
 		return nil
 	}
 
 	return &StockAiAgent{
 		instance:   agentInstance,
 		sessionID:  sessionID,
-		aiConfigId: aiConfigId,
+		aiConfigId: int(aiConfig.ID),
+		resolution: res,
 	}
+}
+
+// newStockAiAgent 保留旧签名，内部改为走统一解析入口。
+func (receiver StockAiAgent) newStockAiAgent(ctx *context.Context, aiConfigId int, thinkingMode bool, question string, agentMode string, matchedSkills []models.Skill, extraTools ...bladesTools.Tool) *StockAiAgent {
+	res, err := data.ResolveModel(aiConfigId)
+	if err != nil {
+		logger.SugaredLogger.Errorf("模型解析失败: %v", err)
+		return nil
+	}
+	return receiver.newStockAiAgentResolved(ctx, res, thinkingMode, question, agentMode, matchedSkills, extraTools...)
 }
 
 func (receiver StockAiAgent) Chat(question string, aiConfigId int, sysPromptId *int) chan *StreamMessage {
@@ -135,6 +132,41 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 	ch := make(chan *StreamMessage, 1024)
 
 	go func() {
+		// ── 运行记录（可观测性）─────────────────────────────────────
+		//
+		// 用户反复遇到「到底哪个模型在跑」：界面显示的是**请求的**模型，而实际可能
+		// 因“指定卡片已被删除 / 采用全局默认 / 回落第一张 / thinking 被请求覆盖”
+		// 而在用另一个。这里把事实固化成一条可查询的记录（含解析依据与备用链）。
+		//
+		// 先声明再用：后面的错误分支与终态护栏都会往这个指针里填结果，
+		// 而下面的 defer 最后注册、最后执行，能读到最终值。
+		runStart := time.Now()
+		runRecord := &models.AgentRunRecord{
+			Kind:        RunKindFrom(ctx),
+			RequestedID: aiConfigId,
+		}
+		// finalizeRun 幂等落库。
+		//
+		// 关键：必须在 sendTerminal **关闭通道之前**调用 ——
+		// 否则消费者（如市场研报的 for msg := range ch）会在记录写入前就返回，
+		// 出现“刚跑完却查不到记录”的竞态。
+		runRecordDone := false
+		finalizeRun := func() {
+			if runRecordDone {
+				return
+			}
+			runRecordDone = true
+			runRecord.DurationMs = time.Since(runStart).Milliseconds()
+			runRecord.Success = runRecord.ErrorMsg == "" && runRecord.FinishReason != ""
+			if !runRecord.Success && runRecord.ErrorMsg == "" {
+				runRecord.ErrorMsg = "运行未产生终态（可能被取消或内部异常）"
+			}
+			// 纯观测，绝不影响业务；RecordAgentRun 内部失败只记日志
+			data.RecordAgentRun(runRecord)
+		}
+		// 兜底：任何未走到 sendTerminal 的路径（含 panic）也留下记录
+		defer finalizeRun()
+
 		// ── 终态收尾护栏（P0）─────────────────────────────────────
 		//
 		// 前端只在收到带 FinishReason 的终态消息时才 finalizeStream()。
@@ -152,6 +184,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				return
 			}
 			terminalSent = true
+			if m != nil {
+				runRecord.FinishReason = m.FinishReason
+			}
+			// 先落运行记录，再关闭通道：保证消费者拿到 close 时记录已可查询
+			finalizeRun()
 			// 带超时的发送：消费者若已退出也不会让本 goroutine 永久泄漏
 			select {
 			case ch <- m:
@@ -171,6 +208,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		defer func() {
 			if r := recover(); r != nil {
 				logger.SugaredLogger.Errorf("panic in ChatWithContext: %v", r)
+				runRecord.ErrorMsg = fmt.Sprintf("内部错误: %v", r)
 				ch <- &StreamMessage{
 					Role:    "assistant",
 					Content: fmt.Sprintf("❌ 内部错误: %v", r),
@@ -191,13 +229,34 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		settingConfig := data.GetSettingConfig()
 		ctx = WithRunQuota(ctx)
 
-		var originalAiConfig *data.AIConfig
-		for _, cfg := range settingConfig.AiConfigs {
-			if cfg != nil && uint(aiConfigId) == cfg.ID {
-				originalAiConfig = cfg
-				break
+		// 统一入口解析模型（不再各链路各写一套）
+		resolved, resolveErr := data.ResolveModel(aiConfigId)
+		if resolveErr != nil {
+			logger.SugaredLogger.Errorf("模型解析失败: %v", resolveErr)
+			runRecord.ErrorMsg = resolveErr.Error()
+			ch <- &StreamMessage{
+				Role:    "assistant",
+				Content: "❌ " + resolveErr.Error(),
 			}
+			return
 		}
+		runRecord.ResolvedID = resolved.ResolvedID
+		runRecord.Source = resolved.Source
+		runRecord.FallbackUsed = resolved.FallbackUsed
+		runRecord.Resolution = resolved.Describe()
+		runRecord.ModelName = strings.TrimSpace(resolved.Config.ModelName)
+		runRecord.BaseURL = strings.TrimSpace(resolved.Config.BaseUrl)
+		runRecord.Thinking = resolved.Config.Thinking
+		if resolved.FallbackUsed {
+			logger.SugaredLogger.Warnf("【模型解析】发生回落: %s", resolved.Describe())
+		}
+
+		// 备用链（本 run 实际挂载了哪些备用模型）
+		if _, fbNames := BuildFallbackProvidersFromDB(ctx, resolved.Config); len(fbNames) > 0 {
+			runRecord.FallbackChain = strings.Join(fbNames, " -> ")
+		}
+
+		originalAiConfig := &resolved.Config
 		embedService := ResolveEmbeddingService(settingConfig, originalAiConfig)
 
 		// Match skills once, then reuse both for the skill prompt and for
@@ -255,9 +314,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
-		stockAiAgent := receiver.newStockAiAgent(&ctx, aiConfigId, thinkingMode, question, agentMode, matchedSkills)
+		// 直接复用**已解析**的结果创建 Agent，避免二次解析出现不一致
+		stockAiAgent := receiver.newStockAiAgentResolved(&ctx, resolved, thinkingMode, question, agentMode, matchedSkills)
 		if stockAiAgent == nil {
 			logger.SugaredLogger.Errorf("stockAiAgent is nil")
+			runRecord.ErrorMsg = "AI 配置不存在或无效"
 			ch <- &StreamMessage{
 				Role:    "assistant",
 				Content: "❌ AI 配置不存在或无效，请检查 AI 配置",
@@ -735,6 +796,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		if agentErr != nil {
 			logger.SugaredLogger.Errorf("agent run error: %v", agentErr)
+			// 写进运行记录：把“本次到底是哪张卡片、为什么报错”固化下来
+			runRecord.ErrorMsg = agentErr.Error()
 
 			errMsg := fmt.Sprintf("❌ Agent 调用失败：%v", agentErr)
 			lowerErr := strings.ToLower(agentErr.Error())
@@ -818,6 +881,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
+		runRecord.ContentLen = len([]rune(fullResponse.String()))
 		sendTerminal(&StreamMessage{
 			Role:         "assistant",
 			Content:      "agent-DONE",

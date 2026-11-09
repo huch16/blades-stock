@@ -215,6 +215,20 @@ func (s *AgentService) ClearAllMarketIntelligenceReports(ctx context.Context) st
 	return agent.ClearReportAndArchive("")
 }
 
+// GetRecentAgentRuns 返回最近的 Agent / 研报运行记录（倒序）。
+//
+// 这是“到底哪个模型在跑”的权威答案：每条记录同时包含
+// 请求的 aiConfigId 与**实际解析**到的卡片、解析依据、是否回落、备用链、
+// 结束原因、耗时与篇幅。界面不再需要靠猜。
+func (s *AgentService) GetRecentAgentRuns(limit int) []models.AgentRunRecord {
+	return data.GetRecentAgentRuns(limit)
+}
+
+// ClearAgentRuns 清空运行记录，返回删除条数
+func (s *AgentService) ClearAgentRuns() int64 {
+	return data.ClearAgentRuns()
+}
+
 // GenerateETFRotationReport 触发全市场 ETF 动量轮动决策分析研报
 func (s *AgentService) GenerateETFRotationReport(ctx context.Context, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
 	service := agent.NewMarketLifecycleService(ctx)

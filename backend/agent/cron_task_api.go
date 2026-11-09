@@ -260,7 +260,7 @@ func (a *CronTaskApi) executeStockAnalysis(ctx context.Context, task *models.Cro
 		prompt = fmt.Sprintf("全面分析%s(%s)的技术面、基本面、消息面和资金面", params.StockName, params.StockCode)
 	}
 	content := &strings.Builder{}
-	for msg := range NewStockAiAgentApi().ChatWithContext(ctx, prompt, params.AiConfigId, &params.SysPromptId, false, 0, params.Thinking, params.AgentMode) {
+	for msg := range NewStockAiAgentApi().ChatWithContext(WithRunKind(ctx, RunKindCron), prompt, params.AiConfigId, &params.SysPromptId, false, 0, params.Thinking, params.AgentMode) {
 		if msg == nil {
 			continue
 		}
@@ -366,7 +366,7 @@ func (a *CronTaskApi) executeMarketAnalysis(ctx context.Context, task *models.Cr
 	}
 	content := &strings.Builder{}
 
-	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, params.AiConfigId, &params.SysPromptId, false, 0, false, params.AgentMode)
+	ch := NewStockAiAgentApi().ChatWithContext(WithRunKind(ctx, RunKindCron), prompt, params.AiConfigId, &params.SysPromptId, false, 0, false, params.AgentMode)
 	for msg := range ch {
 		if msg.ReasoningContent != "" {
 			content.WriteString(msg.ReasoningContent)

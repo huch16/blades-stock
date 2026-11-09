@@ -151,18 +151,16 @@ func getSummaryModelConfig(modelName string) *LLMConfig {
 		}
 	}
 
-	// 2. 优先使用全局当前激活/选中的 AIConfigID
-	if setting.AiConfigID > 0 {
-		for _, cfg := range setting.AiConfigs {
-			if cfg != nil && cfg.ID == setting.AiConfigID && strings.TrimSpace(cfg.ApiKey) != "" {
-				return &LLMConfig{
-					BaseURL:     cfg.BaseUrl,
-					APIKey:      cfg.ApiKey,
-					Model:       cfg.ModelName,
-					MaxTokens:   500,
-					Temperature: 0.1,
-				}
-			}
+	// 2. 统一走 ResolveModel（全局默认 → 回落），且要求密钥有效。
+	//    旧实现自维护一套内联解析，与 Agent 链路的规则不一致。
+	if res, err := data.ResolveModelForced(0, true); err == nil && res.Usable() {
+		cfg := res.Config
+		return &LLMConfig{
+			BaseURL:     cfg.BaseUrl,
+			APIKey:      cfg.ApiKey,
+			Model:       cfg.ModelName,
+			MaxTokens:   500,
+			Temperature: 0.1,
 		}
 	}
 

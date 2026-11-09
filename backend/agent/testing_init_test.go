@@ -37,6 +37,7 @@ func TestMain(m *testing.M) {
 		&models.StockVerdictHistory{},
 		&models.AiRecommendStocks{},
 		&models.AIResponseResult{},
+		&models.AgentRunRecord{},
 		&models.KnowledgeCrystal{},
 		&models.PaperPortfolio{},
 		&models.PostMortemAuditRecord{},

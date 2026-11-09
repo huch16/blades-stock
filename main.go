@@ -320,6 +320,8 @@ func AutoMigrate() {
 	db.Dao.AutoMigrate(&data.IndexBasic{})
 	db.Dao.AutoMigrate(&data.Settings{})
 	db.Dao.AutoMigrate(&models.AIResponseResult{})
+	// Agent 运行记录：把“请求的模型 vs 实际使用的模型”固化为可查询事实
+	db.Dao.AutoMigrate(&models.AgentRunRecord{})
 	db.Dao.AutoMigrate(&models.StockInfoHK{})
 	db.Dao.AutoMigrate(&models.StockInfoUS{})
 	db.Dao.AutoMigrate(&data.FollowedFund{})

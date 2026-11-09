@@ -20,6 +20,8 @@ import {
   CleanupData,
   CreateDatabaseSnapshot,
   GetAiConfigTemplates,
+  GetRecentAgentRuns,
+  ClearAgentRuns,
 } from "../../wailsjs/go/main/App";
 
 const router = useRouter();
@@ -284,6 +286,81 @@ const aiConfigStore = useAiConfigStore();
 function notifyAiConfigsChanged() {
   aiConfigStore.refreshConfigs().catch(() => {
     /* 非关键路径，失败不影响设置页自身的回读校验 */
+  });
+}
+
+// ── 运行记录：回答“到底哪个模型在跑” ────────────────────────────────────
+//
+// 历史痛点：界面上的模型选择器显示的是**请求的**模型，而实际执行时可能因为
+// 「指定卡片已被删除 / 采用全局默认 / 回落第一张卡片 / 请求级 thinking 覆盖」
+// 而在用另一个。这里直接展示后端记录的**实际**解析结果与依据。
+const agentRuns = ref<Record<string, any>[]>([]);
+const loadingRuns = ref(false);
+
+const RUN_KIND_LABEL: Record<string, string> = {
+  chat: 'Agent 对话',
+  pre_market: '盘前前瞻',
+  post_market: '盘后复盘',
+  etf_rotation: 'ETF 轮动',
+  serenity: '产业拆解',
+  sector_anomaly: '赛道异动',
+  summarize: '资讯摘要',
+  cron: '定时任务',
+  holding_scan: '持仓扫描'
+};
+
+const RUN_SOURCE_LABEL: Record<string, string> = {
+  explicit: '按指定卡片',
+  global_default: '全局默认',
+  first_available: '回落第一张'
+};
+
+function runKindLabel(k: string): string {
+  return RUN_KIND_LABEL[k] || k || '—';
+}
+
+function runSourceLabel(r: Record<string, any>): string {
+  const base = RUN_SOURCE_LABEL[r?.source] || r?.source || '—';
+  return r?.fallbackUsed ? `${base}（已回落）` : base;
+}
+
+function runResultLabel(r: Record<string, any>): string {
+  if (r?.success) return '成功';
+  const msg = String(r?.errorMsg || '').trim();
+  return msg ? '失败: ' + (msg.length > 60 ? msg.slice(0, 60) + '…' : msg) : '未完成';
+}
+
+async function loadAgentRuns() {
+  loadingRuns.value = true;
+  try {
+    const list = await GetRecentAgentRuns(50);
+    agentRuns.value = Array.isArray(list) ? list.map(r => ({ ...r })) : [];
+  } catch (e: any) {
+    // 老版本后端可能还没有这个接口：降级但**必须留痕**，
+    // 否则接口异常会被静默吞掉，表现为“面板一直是空的”而查不到原因。
+    console.warn('[settings] 读取运行记录失败:', e)
+    message.warning('读取运行记录失败: ' + (e?.message || e), { duration: 5000 })
+    agentRuns.value = [];
+  } finally {
+    loadingRuns.value = false;
+  }
+}
+
+function handleClearAgentRuns() {
+  dialog.warning({
+    title: '清空运行记录',
+    content: '确定要清空全部 Agent 运行记录吗？仅删除诊断记录，不影响任何模型配置与研报。',
+    positiveText: '确认清空',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const n = await ClearAgentRuns();
+        message.success(`已清空 ${n} 条运行记录`);
+        await loadAgentRuns();
+      } catch (e: any) {
+        message.error('清空失败: ' + (e?.message || e));
+      }
+    }
   });
 }
 
@@ -1246,7 +1323,14 @@ function handleKeyDown(e: KeyboardEvent) {
 onMounted(() => {
   loadSettings();
   checkServerPing();
+  loadAgentRuns();
   window.addEventListener('keydown', handleKeyDown);
+});
+
+// 切到「AI模型注册表」时刷新运行记录：
+// 用户通常是「发现模型不对 → 回设置页求证」，所以每次进入都要给最新事实。
+watch(activeTab, (tab) => {
+  if (tab === 'ai') loadAgentRuns();
 });
 
 onBeforeUnmount(() => {
@@ -1701,6 +1785,64 @@ onBeforeUnmount(() => {
               </n-form>
             </n-card>
           </div>
+
+          <!-- ── 运行记录：模型实际使用情况 ─────────────────────────────── -->
+          <n-card size="small" class="section-card" style="margin-top: 14px;">
+            <template #header>
+              🩺 最近运行记录（模型实际使用情况）
+            </template>
+            <template #header-extra>
+              <n-space :size="8" align="center">
+                <span class="run-hint">用于回答「刚才到底用哪个模型跑的」——显示的是**实际**解析结果，不是选择器里的值</span>
+                <n-button size="tiny" secondary :loading="loadingRuns" @click="loadAgentRuns">刷新</n-button>
+                <n-button size="tiny" quaternary type="error" @click="handleClearAgentRuns">清空</n-button>
+              </n-space>
+            </template>
+
+            <div v-if="agentRuns.length === 0" class="run-empty">
+              暂无运行记录。发起一次 Agent 对话或生成一份研报后，这里会显示实际使用的模型与解析依据。
+            </div>
+            <n-table v-else size="small" :bordered="false" :single-line="false">
+              <thead>
+                <tr>
+                  <th style="width: 130px;">时间</th>
+                  <th style="width: 90px;">类型</th>
+                  <th>实际使用的模型</th>
+                  <th style="width: 150px;">解析依据</th>
+                  <th>结果</th>
+                  <th style="width: 80px;">耗时</th>
+                  <th style="width: 80px;">篇幅</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in agentRuns" :key="r.ID">
+                  <td class="run-cell-mono">{{ new Date(r.createdAt).toLocaleString() }}</td>
+                  <td>{{ runKindLabel(r.kind) }}</td>
+                  <td>
+                    <div class="run-model">{{ r.modelName || '（未记录）' }}</div>
+                    <div class="run-model-sub">
+                      <code>{{ r.baseUrl || '—' }}</code>
+                      <n-tag v-if="r.thinking" size="tiny" type="info" style="margin-left: 6px;">🧠 思考</n-tag>
+                    </div>
+                  </td>
+                  <td>
+                    <n-tag size="tiny" :type="r.fallbackUsed ? 'warning' : 'success'">
+                      {{ runSourceLabel(r) }}
+                    </n-tag>
+                    <div class="run-model-sub" v-if="r.requestedId > 0 && r.requestedId !== r.resolvedId">
+                      请求 #{{ r.requestedId }} → 实际 #{{ r.resolvedId }}
+                    </div>
+                  </td>
+                  <td>
+                    <n-tag size="tiny" :type="r.success ? 'success' : 'error'">{{ runResultLabel(r) }}</n-tag>
+                    <div class="run-model-sub" v-if="r.fallbackChain">备用链: {{ r.fallbackChain }}</div>
+                  </td>
+                  <td>{{ r.durationMs }} ms</td>
+                  <td>{{ r.contentLen }} 字</td>
+                </tr>
+              </tbody>
+            </n-table>
+          </n-card>
         </div>
       </n-tab-pane>
 
@@ -2154,6 +2296,35 @@ onBeforeUnmount(() => {
 .thinking-hint b {
   color: #d29922;
   font-weight: 600;
+}
+
+.run-hint {
+  font-size: 11.5px;
+  color: #8b949e;
+}
+
+.run-empty {
+  padding: 14px;
+  font-size: 12.5px;
+  color: #8b949e;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+
+.run-cell-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.run-model {
+  font-weight: 600;
+}
+
+.run-model-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #8b949e;
+  word-break: break-all;
 }
 
 .notify-perm-hint {

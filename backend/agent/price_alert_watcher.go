@@ -164,14 +164,10 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 	if settingConfig == nil || len(settingConfig.AiConfigs) == 0 {
 		return
 	}
+	// 统一走 ResolveModelForced（全局默认 → 回落），要求密钥有效。
 	var mainConfig data.AIConfig
-	if settingConfig.AiConfigID > 0 {
-		for _, cfgPtr := range settingConfig.AiConfigs {
-			if cfgPtr != nil && cfgPtr.ID == settingConfig.AiConfigID && strings.TrimSpace(cfgPtr.ApiKey) != "" {
-				mainConfig = *cfgPtr
-				break
-			}
-		}
+	if res, err := data.ResolveModelForced(0, true); err == nil {
+		mainConfig = res.Config
 	}
 	if mainConfig.ID == 0 {
 		for _, cfgPtr := range settingConfig.AiConfigs {

@@ -90,6 +90,10 @@ export function CheckStockBaseInfo(arg1) {
   return window['go']['main']['App']['CheckStockBaseInfo'](arg1);
 }
 
+export function ClearAgentRuns() {
+  return window['go']['main']['App']['ClearAgentRuns']();
+}
+
 export function CleanupData(arg1) {
   return window['go']['main']['App']['CleanupData'](arg1);
 }
@@ -952,6 +956,10 @@ export function VerifyBackupIntegrity(arg1) {
 
 export function GetStockThesis(arg1) {
   return window['go']['main']['App']['GetStockThesis'](arg1);
+}
+
+export function GetRecentAgentRuns(arg1) {
+  return window['go']['main']['App']['GetRecentAgentRuns'](arg1);
 }
 
 export function GetStockThesisHistory(arg1, arg2) {

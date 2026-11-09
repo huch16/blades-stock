@@ -52,6 +52,8 @@ export function CheckFrequentTrading(arg1:string):Promise<Record<string, any>>;
 
 export function CheckStockBaseInfo(arg1:context.Context):Promise<void>;
 
+export function ClearAgentRuns():Promise<number>;
+
 export function CleanupData(arg1:string):Promise<string>;
 
 export function ClearAllMarketIntelligenceReports():Promise<string>;
@@ -485,6 +487,8 @@ export function VerifyBackupIntegrity(arg1:string):Promise<string>;
 export function GetStockThesis(arg1:string):Promise<any>;
 
 export function GetStockThesisHistory(arg1:string,arg2:number):Promise<any>;
+
+export function GetRecentAgentRuns(arg1:number):Promise<Array<models.AgentRunRecord>>;
 
 export function SaveStockThesis(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<void>;
 

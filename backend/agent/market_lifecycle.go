@@ -515,6 +515,8 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 
 	// 使用带合理超时 (10分钟) 的独立生成上下文，解耦 HTTP 请求临时断连，确保后台研报稳定生成与持久化
 	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
+	genCtx = WithRunKind(genCtx, RunKindPreMarket)
 	defer cancel()
 
 	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
@@ -724,6 +726,8 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	var streamErr string
 
 	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
+	genCtx = WithRunKindIfUnset(genCtx, RunKindSectorAnomaly)
 	defer cancel()
 
 	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
@@ -921,6 +925,8 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	var streamErr string
 
 	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
+	genCtx = WithRunKind(genCtx, RunKindPostMarket)
 	defer cancel()
 
 	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
@@ -1073,6 +1079,8 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	var streamErr string
 
 	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
+	genCtx = WithRunKind(genCtx, RunKindETFRotation)
 	defer cancel()
 
 	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
@@ -1135,7 +1143,10 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 
 // GenerateSerenityResearchReport 手动一键触发任意板块/股票的 Serenity 产业链深度拆解
 func (s *MarketLifecycleService) GenerateSerenityResearchReport(ctx context.Context, targetName string, code string, aiConfigId int) (*MarketIntelligenceReport, error) {
-	return s.TriggerSectorAnomalySerenityAnalysis(ctx, targetName, code, "用户主动发起的Serenity深度产业链调研", aiConfigId)
+	// 先标上更精确的 kind：内部复用的通用入口用 WithRunKindIfUnset，不会把它覆盖
+	return s.TriggerSectorAnomalySerenityAnalysis(
+		WithRunKind(ctx, RunKindSerenity),
+		targetName, code, "用户主动发起的Serenity深度产业链调研", aiConfigId)
 }
 
 // GetLatestReport 获取最新生成的智能研报（盘前或盘后）

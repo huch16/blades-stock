@@ -2741,6 +2741,18 @@ func (a *App) ClearAllMarketIntelligenceReports() string {
 	return a.agentService.ClearAllMarketIntelligenceReports(a.ctx)
 }
 
+// GetRecentAgentRuns 返回最近的 Agent / 研报运行记录（倒序）。
+// 每条记录同时包含“请求的模型”与“实际使用的模型”及解析依据，
+// 用于解决“到底哪个模型在跑”的问题。
+func (a *App) GetRecentAgentRuns(limit int) []models.AgentRunRecord {
+	return a.agentService.GetRecentAgentRuns(limit)
+}
+
+// ClearAgentRuns 清空运行记录，返回删除条数
+func (a *App) ClearAgentRuns() int64 {
+	return a.agentService.ClearAgentRuns()
+}
+
 // SearchCronTasks
 //
 //	@Description: 搜索定时任务

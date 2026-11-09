@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/samber/lo"
+	"blades-stock/backend/logger"
 )
 
 // @Author spark
@@ -67,12 +67,15 @@ const DefaultStockAnalysisQuestionTemplate = `请对 {{stockName}}[{{stockCode}}
 // NewDeepSeekOpenAi creates an OpenAi client with a sensible default system prompt.
 func NewDeepSeekOpenAi(ctx context.Context, aiConfigId int) *OpenAi {
 	settingConfig := GetSettingConfig()
-	aiConfig, find := lo.Find(settingConfig.AiConfigs, func(item *AIConfig) bool {
-		return uint(aiConfigId) == item.ID
-	})
-	if !find {
-		aiConfig = &AIConfig{}
+
+	// 统一走 ResolveModel：与 Agent / 摘要 / 价格预警使用**同一套**解析规则。
+	// 旧实现找不到 ID 时直接 `aiConfig = &AIConfig{}`（空配置，无任何回落），
+	// 于是同一个 aiConfigId 在不同链路上会落到不同的模型（甚至什么都没有）。
+	res, resolveErr := ResolveModel(aiConfigId)
+	if resolveErr != nil {
+		logger.SugaredLogger.Warnf("[OpenAi] 模型解析失败，降级为空配置: %v", resolveErr)
 	}
+	aiConfig := &res.Config
 
 	if settingConfig.OpenAiEnable {
 		if aiConfig.TimeOut <= 0 {
