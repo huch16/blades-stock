@@ -65,6 +65,7 @@ func allGroupsEnabled() map[ToolGroup]bool {
 		GroupBase: true, GroupStockAnalysis: true, GroupMarket: true,
 		GroupScreening: true, GroupMoneyFlow: true, GroupNewsResearch: true,
 		GroupAIAnalysis: true, GroupOperations: true, GroupProject: true,
+		GroupMCPServer: true,
 	}
 }
 
@@ -182,6 +183,7 @@ func TestDeclaredGroupsAreKnown(t *testing.T) {
 		GroupBase: true, GroupStockAnalysis: true, GroupMarket: true,
 		GroupScreening: true, GroupMoneyFlow: true, GroupNewsResearch: true,
 		GroupAIAnalysis: true, GroupOperations: true, GroupProject: true,
+		GroupMCPServer: true,
 	}
 	for _, c := range AllCapabilities() {
 		if !valid[c.Group] {
@@ -223,4 +225,92 @@ func TestGroupOverflowIsObservable(t *testing.T) {
 	}
 	sort.Strings(overflow)
 	t.Logf("组内总量超出 cap 的组（超出部分会被裁掉，C/D 期改 token 预算时的输入）: %v", overflow)
+}
+
+// ── B 期策略回归（用户 2026-11-09 明确决策）─────────────────────────────
+//
+// 这些用例把「用户在意什么」固化成可执行断言，防止后续改动悄悄回退：
+//   · 基金 K 线 / TDX 系列：用户在意义模型能调用；
+//   · MCP 管理类：用户不在意 → 已独立成组，C 期整组闸门裁剪。
+
+func mustCapability(t *testing.T, name string) Capability {
+	t.Helper()
+	c, ok := CapabilityOf(name)
+	if !ok {
+		t.Fatalf("工具 %s 未登记能力（应先修 TestEveryAssembledToolIsDeclared）", name)
+	}
+	return c
+}
+
+// 契约九：用户明确「在意」的能力，不得被登记为 Niche（否则预算不足时最先被裁）。
+func TestUserCaredCapabilitiesAreNotNiche(t *testing.T) {
+	cared := []string{
+		// 基金 K 线系列
+		"GetFundKLine", "GetFundHistoryNetValue", "GetFundTop10Holdings",
+		// TDX 系列
+		"GetTdxCompanyCategory", "GetTdxCompanyInfo", "GetTdxFinanceInfo",
+		"GetTdxSymbolBelongBoard", "GetTdxXDXRInfo",
+	}
+	for _, name := range cared {
+		c := mustCapability(t, name)
+		if c.Tier == TierNiche {
+			t.Errorf("用户明确在意义模型调用 %s，但它被登记为 niche —— 预算不足时会最先被裁掉", name)
+		}
+		if c.Group != GroupStockAnalysis {
+			t.Errorf("用户在意 %s，期望归入 stock_analysis，实际 %s", name, c.Group)
+		}
+	}
+}
+
+// 契约十：用户不在意模型调用的 MCP 管理类工具，必须全部集中在 GroupMCPServer，
+// 且**一个都不能漏**（漏一个就会被当成通用工具全量注入）。
+func TestMCPServerAdminToolsAreIsolated(t *testing.T) {
+	admin := []string{
+		"ListMCPServers", "GetMCPServerDetail", "CreateMCPServer", "UpdateMCPServer",
+		"DeleteMCPServer", "EnableMCPServer", "TestMCPServer",
+		"ListMCPServerTools", "GetMCPToolDetail",
+	}
+	for _, name := range admin {
+		c := mustCapability(t, name)
+		if c.Group != GroupMCPServer {
+			t.Errorf("MCP 管理类工具 %s 应集中在 GroupMCPServer（便于 C 期整组闸门裁剪），实际 %s", name, c.Group)
+		}
+		if c.Source != SourceBuiltin {
+			t.Errorf("%s 是本仓库内置工具，Source 应为 builtin，实际 %s", name, c.Source)
+		}
+	}
+	// 反向检查：不得有别的工具被误放进该组
+	for _, c := range AllCapabilities() {
+		if c.Group == GroupMCPServer {
+			found := false
+			for _, n := range admin {
+				if c.ID == n {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("工具 %s 被误归入 mcp_server 组 —— 会被 C 期闸门连带裁掉", c.ID)
+			}
+		}
+	}
+}
+
+// 契约十一：MCP 管理类必须真的出现在注入列表里（否则闸门裁了个空组，
+// 而这些运维工具仍会全量下发）。
+func TestMCPServerAdminToolsAreActuallyAssembled(t *testing.T) {
+	present := map[string]bool{}
+	for _, tl := range assembleForTest() {
+		present[tl.Name()] = true
+	}
+	admin := []string{
+		"ListMCPServers", "GetMCPServerDetail", "CreateMCPServer", "UpdateMCPServer",
+		"DeleteMCPServer", "EnableMCPServer", "TestMCPServer",
+		"ListMCPServerTools", "GetMCPToolDetail",
+	}
+	for _, n := range admin {
+		if !present[n] {
+			t.Errorf("MCP 管理类工具 %s 未被注入列表包含 —— C 期闸门将无法裁掉它（治理失效）", n)
+		}
+	}
 }

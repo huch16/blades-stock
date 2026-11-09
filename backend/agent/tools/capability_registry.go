@@ -283,13 +283,21 @@ var builtinToolGroups = map[string]ToolGroup{
 	"GetLongHuToday":         GroupNewsResearch,
 	"GetConvertibleBondSpot": GroupMarket,
 
-	// ── 此前未登记能力组、因而绕过分组上限永久全量注入的 20 个工具 ──────────
-	// （详见 backend/agent/tools/capability_consistency_test.go 契约一）
-	// 基金系列：用户明确在意「模型能调用基金 K 线」，故归入个股/基金分析组。
+	// ── B 期：20 个「未登记」工具的策略声明（用户已明确决策）──────────────
+	//
+	// 治理前它们全部未登记组，走 FilterToolsByGroupsCapped 的 !exists 分支
+	// 而**永久全量注入、不受任何分组上限约束**（实测 20 个，占组装总量的 1/6）。
+	//
+	// 用户决策（2026-11-09）：
+	//   · 基金 K 线、TDX 系列   → 在意模型能调用，故归入个股分析组并给足层级；
+	//   · MCP 管理类工具        → 不在意。已集中到 GroupMCPServer，
+	//     C 期能力闸门会把整组从模型可见列表中裁掉（仅保留给运维/前端调用）。
+	//
+	// 基金系列（用户明确在意）：归入个股/基金分析组。
 	"GetFundKLine":           GroupStockAnalysis,
 	"GetFundHistoryNetValue": GroupStockAnalysis,
 	"GetFundTop10Holdings":   GroupStockAnalysis,
-	// TDX 系列：用户明确在意，归入个股分析组（本地通达信数据源）。
+	// TDX 系列（用户明确在意）：本地通达信数据源，归入个股分析组。
 	"GetTdxCompanyCategory":   GroupStockAnalysis,
 	"GetTdxCompanyInfo":       GroupStockAnalysis,
 	"GetTdxFinanceInfo":       GroupStockAnalysis,
@@ -300,17 +308,17 @@ var builtinToolGroups = map[string]ToolGroup{
 	"GraphQuery": GroupProject,
 	// TickFlow 实时行情：属市场行情。
 	"TickFlowRealtimeQuotes": GroupMarket,
-	// MCP 服务器管理类（供运维/前端调用）。用户明确「不在意模型能调用」，
-	// 先声明登记以便审计，C 期能力闸门会把整组从模型可见列表中裁掉。
-	"ListMCPServers":     GroupOperations,
-	"GetMCPServerDetail": GroupOperations,
-	"CreateMCPServer":    GroupOperations,
-	"UpdateMCPServer":    GroupOperations,
-	"DeleteMCPServer":    GroupOperations,
-	"EnableMCPServer":    GroupOperations,
-	"TestMCPServer":      GroupOperations,
-	"ListMCPServerTools": GroupOperations,
-	"GetMCPToolDetail":   GroupOperations,
+	// MCP 服务器**管理类**：与上方业务工具无关，属运维/配置面。
+	// 单独归组以便 C 期整组闸门裁剪。
+	"ListMCPServers":     GroupMCPServer,
+	"GetMCPServerDetail": GroupMCPServer,
+	"CreateMCPServer":    GroupMCPServer,
+	"UpdateMCPServer":    GroupMCPServer,
+	"DeleteMCPServer":    GroupMCPServer,
+	"EnableMCPServer":    GroupMCPServer,
+	"TestMCPServer":      GroupMCPServer,
+	"ListMCPServerTools": GroupMCPServer,
+	"GetMCPToolDetail":   GroupMCPServer,
 
 	// AData tools
 	"GetADataMarketCurrent": GroupMarket,

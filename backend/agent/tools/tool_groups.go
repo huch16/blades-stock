@@ -19,6 +19,10 @@ const (
 	GroupAIAnalysis    ToolGroup = "ai_analysis"
 	GroupOperations    ToolGroup = "operations"
 	GroupProject       ToolGroup = "project"
+	// GroupMCPServer MCP 服务器**管理类**工具（增删改查/启停/探测）。
+	// 与业务能力无关，属运维/配置面；用户明确「不在意模型能调用」，
+	// C 期能力闸门会整组裁掉。单独成组是为了让闸门可以一次性、无遗漏地处理。
+	GroupMCPServer ToolGroup = "mcp_server"
 )
 
 // lookupCapability 是 FilterToolsByGroups* 内部使用的统一能力查询入口。
@@ -214,7 +218,8 @@ func FilterToolsByGroups(allTools []tools.Tool, groups map[ToolGroup]bool) []too
 // 上百个工具定义全部塞进提示词。无上限的组（GroupBase/GroupProject 等体量小
 // 或必须完整的组）不在此表。
 var groupToolCaps = map[ToolGroup]int{
-	GroupStockAnalysis: 20,
+	// 白名单含 26 个（含基金/TDX 系列），cap 必须 >= 26 否则第一轮超发
+	GroupStockAnalysis: 26,
 	GroupMarket:        14,
 	GroupScreening:     12,
 	GroupMoneyFlow:     4,
@@ -233,6 +238,12 @@ var coreToolByGroup = map[ToolGroup][]string{
 		"GetStockRZRQInfo", "GetStockMarginTrading", "GetStockHolderTrend",
 		"GetStockBillboard", "AnalyzeHotMoneyActivity", "GetStockQtrMainFinance",
 		"GetStockOrgPredict", "GetETFHistorical", "QuerySupplyChainCascade", "GetIndustrySupplyGraph",
+		// B 期：用户明确「在意模型能调用」的能力。
+		// 它们此前虽归入 stock_analysis，但因非核心白名单成员，
+		// 在两轮填充里被 cap 挤出，实际模型永远调不到（见 capability_policy_test.go）。
+		"GetFundKLine", "GetFundHistoryNetValue", "GetFundTop10Holdings",
+		"GetTdxCompanyCategory", "GetTdxCompanyInfo", "GetTdxFinanceInfo",
+		"GetTdxSymbolBelongBoard", "GetTdxXDXRInfo",
 	},
 	GroupMarket: {
 		"GetMarketData", "GlobalStockIndexesReadable", "GetStockChanges", "GetChangeRank",
