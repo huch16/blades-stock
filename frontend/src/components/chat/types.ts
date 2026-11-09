@@ -44,6 +44,12 @@ export interface ChatMessage {
   name?: string
   error?: boolean
   modelName?: string
+  /**
+   * 流式收尾异常提示（输出被截断 / 内容安全拦截 / 长时间静默被看门狗收尾）。
+   * 必须在**流式结束后依然可见** —— 这些情况下正文可能不完整，
+   * 只让回复“突然结束”而不说明原因，用户无从判断是模型问题还是程序问题。
+   */
+  streamNotice?: string
 }
 
 export interface StreamChunk {

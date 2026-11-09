@@ -135,6 +135,39 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 	ch := make(chan *StreamMessage, 1024)
 
 	go func() {
+		// ── 终态收尾护栏（P0）─────────────────────────────────────
+		//
+		// 前端只在收到带 FinishReason 的终态消息时才 finalizeStream()。
+		// 历史缺陷：本函数有 5 处 close(ch)，其中只有 1 处发送了 FinishReason，
+		// 错误路径甚至**故意**只 close 不发终态（旧注释："just close"）。
+		// 后果：只要 AI 调用失败（限流/超时/thinking 与工具调用不兼容/网关 429）
+		// 或提前返回，前端 isStreaming 就永远为真 —— 界面卡在“思考中…”、
+		// 输入框持续禁用、停止按钮一直转，用户只能刷新页面。
+		//
+		// 现在用 defer 保证：无论从哪条路径返回（正常/错误/提前返回/panic），
+		// 都**一定且只会**发送一条终态消息，然后才关闭通道。
+		terminalSent := false
+		sendTerminal := func(m *StreamMessage) {
+			if terminalSent {
+				return
+			}
+			terminalSent = true
+			// 带超时的发送：消费者若已退出也不会让本 goroutine 永久泄漏
+			select {
+			case ch <- m:
+			case <-time.After(3 * time.Second):
+				logger.SugaredLogger.Warnf("终态消息发送超时，消费者可能已退出")
+			}
+			close(ch)
+		}
+		defer func() {
+			if terminalSent {
+				return
+			}
+			// 兜底：任何忘了收尾的路径（含 panic）都在此补齐终态，杜绝前端卡死
+			sendTerminal(&StreamMessage{Role: "assistant", Content: "agent-DONE", FinishReason: "stop"})
+		}()
+
 		defer func() {
 			if r := recover(); r != nil {
 				logger.SugaredLogger.Errorf("panic in ChatWithContext: %v", r)
@@ -142,7 +175,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 					Role:    "assistant",
 					Content: fmt.Sprintf("❌ 内部错误: %v", r),
 				}
-				close(ch)
+				// 不再自行 close：交给终态护栏统一发送终态后关闭
 			}
 		}()
 
@@ -216,7 +249,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 						_ = memSvc.AddUserMessage(question)
 						_ = memSvc.AddAssistantMessage(scanRes.MarkdownReport)
 					}
-					close(ch)
+					// 终态由 defer 护栏统一发送（此处直接 return）
 					return
 				}
 			}
@@ -229,7 +262,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				Role:    "assistant",
 				Content: "❌ AI 配置不存在或无效，请检查 AI 配置",
 			}
-			close(ch)
+			// 终态由 defer 护栏统一发送（此前只 close 不发终态 → 前端卡在“思考中”）
 			return
 		}
 
@@ -727,9 +760,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
-		// If agent exited early due to error, don't send status/DONE signals — just close.
+		// Agent 因错误提前退出：错误正文已在上方发出，这里只需 return，
+		// 终态（FinishReason）由 defer 护栏统一补齐。
+		// （旧实现注释写着 "don't send status/DONE signals — just close"，
+		//   正是这句让错误场景下前端永久卡在流式状态。）
 		if agentErr != nil {
-			close(ch)
 			return
 		}
 
@@ -783,13 +818,12 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
-		ch <- &StreamMessage{
+		sendTerminal(&StreamMessage{
 			Role:         "assistant",
 			Content:      "agent-DONE",
 			FinishReason: "stop",
 			Metrics:      &metrics,
-		}
-		close(ch)
+		})
 	}()
 
 	return ch

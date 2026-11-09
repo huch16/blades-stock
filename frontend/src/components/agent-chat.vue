@@ -1502,6 +1502,11 @@ function handleAgentMessage(data: StreamChunk) {
   const targetMsg = curList.find(m => m.id === streamingMsgId.value)
   if (!targetMsg) return
 
+  // 收到任何事件都重置看门狗：有动静就说明流还活着
+  if (isStreaming.value) {
+    armStreamWatchdog()
+  }
+
   if (data.role === 'assistant') {
     if ((data as any).model_name || (data as any).modelName) {
       targetMsg.modelName = ((data as any).model_name || (data as any).modelName) + ' (容灾降级)'
@@ -1560,15 +1565,65 @@ function handleAgentMessage(data: StreamChunk) {
     // 智能滚动吸底
     autoScrollIfNearBottom()
 
-    // 结束处理 (严格兼容 finish_reason 与 response_meta)
-    if (data.finish_reason === 'stop' || data.response_meta?.finish_reason === 'stop') {
+    // 结束处理：**任何终态** finish_reason 都必须收尾，而不只是 'stop'
+    const finishReason = data.finish_reason || data.response_meta?.finish_reason
+    if (finishReason && TERMINAL_FINISH_REASONS.has(finishReason)) {
+      if (finishReason !== 'stop' && !targetMsg.streamNotice) {
+        targetMsg.streamNotice =
+          FINISH_REASON_NOTICE[finishReason] || `⚠️ 模型以「${finishReason}」结束本次输出，正文可能不完整。`
+      }
       finalizeStream(targetMsg)
       return
     }
   }
 }
 
+/**
+ * OpenAI 兼容协议中的**终态** finish_reason。
+ *
+ * 旧实现只认 'stop'，于是 'length' / 'content_filter' 会让界面永远停在「思考中」。
+ * 注意：刻意**不**把 'tool_calls' / 'function_call' 列为终态 ——
+ * 它们在 Agent 多轮工具循环中是合法的中间态，当成终态会截断正常的推演流程；
+ * 这类情况由后端的终态护栏负责任地收尾。
+ */
+const TERMINAL_FINISH_REASONS = new Set(['stop', 'length', 'content_filter'])
+
+const FINISH_REASON_NOTICE: Record<string, string> = {
+  length: '⚠️ 输出达到长度上限被截断。可在「AI 模型注册表 → 高级调度参数」调大「最大输出 Tokens」，或把问题拆小后重试。',
+  content_filter: '⚠️ 输出被模型服务商的内容安全策略拦截，正文可能不完整。可换个问法或更换模型重试。'
+}
+
+// ── 流式看门狗 ────────────────────────────────────────────────────────────
+// 后端已用 defer 护栏保证「任何返回路径都会发送终态」。
+// 这里再加一层前端防线：若流式期间长时间收不到任何事件（网络中断、
+// 后端回归、SSE 静默断开），主动收尾并如实告知，杜绝“卡在思考中、
+// 输入框一直禁用、只能刷新页面”的体验。
+const STREAM_SILENCE_TIMEOUT_MS = 180_000
+let streamWatchdogId: number | null = null
+
+function clearStreamWatchdog() {
+  if (streamWatchdogId !== null) {
+    clearTimeout(streamWatchdogId)
+    streamWatchdogId = null
+  }
+}
+
+function armStreamWatchdog() {
+  clearStreamWatchdog()
+  streamWatchdogId = window.setTimeout(() => {
+    streamWatchdogId = null
+    if (!isStreaming.value) return
+    const target = messages.value.find(m => m.id === streamingMsgId.value)
+    if (target) {
+      target.streamNotice =
+        '⚠️ 已超过 3 分钟未收到模型任何输出，已自动结束本次流式接收。可重新发送，或改用响应更快的模型。'
+    }
+    finalizeStream(target)
+  }, STREAM_SILENCE_TIMEOUT_MS)
+}
+
 function finalizeStream(targetMsg?: ChatMessage) {
+  clearStreamWatchdog()
   isStreaming.value = false
   streamingMsgId.value = null
   currentStreamStatus.value = ''
@@ -1684,6 +1739,8 @@ function handleSend() {
   isStreaming.value = true
   currentStreamStatus.value = '正在思考并解析意图...'
   userIsScrolledUp = false
+  // 启动看门狗：若长时间无任何事件，自动收尾并告知（防止永久卡在流式状态）
+  armStreamWatchdog()
 
   inputValue.value = ''
   // 发送消息后瞬时定位到底部，禁止平滑动画（平滑动画尚未结束首包 Token 就已到达，会导致持续打断震荡）
@@ -2275,6 +2332,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  clearStreamWatchdog()
   // 核心风控：组件卸载或切出时，若正在流式推演，立即物理中止后端推理，严禁空转浪费 Token 与并发配额
   if (isStreaming.value) {
     AbortChatWithAgent().catch(() => {})

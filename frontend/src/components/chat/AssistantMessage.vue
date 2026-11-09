@@ -76,6 +76,12 @@
           </div>
         </div>
         <div v-else class="empty-state">（空回复）</div>
+
+        <!-- 流式收尾异常提示：必须在流式结束后仍可见，
+             否则用户只看到“回复突然结束”，无从判断原因。 -->
+        <div v-if="message.streamNotice && !isStreaming" class="stream-notice">
+          {{ message.streamNotice }}
+        </div>
       </div>
 
       <!-- 5.1 伴随动作卡片 (Agent Action Chips) —— 将 raw agent-action JSON 转化为高交互性原生芯片 -->
@@ -294,6 +300,17 @@ async function copyAnchorLink() {
 </script>
 
 <style scoped lang="less">
+.stream-notice {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-left: 3px solid #d29922;
+  border-radius: 4px;
+  background: rgba(210, 153, 34, 0.12);
+  color: #d29922;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 .msg-wrapper {
   display: flex;
   gap: 12px;
