@@ -94,6 +94,14 @@ export function CleanupData(arg1) {
   return window['go']['main']['App']['CleanupData'](arg1);
 }
 
+export function ClearAllMarketIntelligenceReports() {
+  return window['go']['main']['App']['ClearAllMarketIntelligenceReports']();
+}
+
+export function ClearMarketIntelligenceReport(arg1) {
+  return window['go']['main']['App']['ClearMarketIntelligenceReport'](arg1);
+}
+
 export function ClsCalendar() {
   return window['go']['main']['App']['ClsCalendar']();
 }

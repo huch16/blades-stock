@@ -2728,6 +2728,19 @@ func (a *App) PurgeCorruptedMarketReports() int {
 	return a.agentService.PurgeCorruptedMarketReports(a.ctx)
 }
 
+// ClearMarketIntelligenceReport 清除指定类型的市场智能研报（内存缓存 + 归档记录）。
+// reportType 为空字符串表示清除全部类型。
+// 这是用户明确要求补齐的能力：此前研报只活在进程内存里，既无 API 也无 UI 可以删除，
+// 只能重启容器。
+func (a *App) ClearMarketIntelligenceReport(reportType string) string {
+	return a.agentService.ClearMarketIntelligenceReport(a.ctx, reportType)
+}
+
+// ClearAllMarketIntelligenceReports 清除全部市场智能研报与对应归档记录
+func (a *App) ClearAllMarketIntelligenceReports() string {
+	return a.agentService.ClearAllMarketIntelligenceReports(a.ctx)
+}
+
 // SearchCronTasks
 //
 //	@Description: 搜索定时任务

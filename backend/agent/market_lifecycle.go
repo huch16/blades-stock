@@ -102,8 +102,44 @@ func formatYuanAmount(raw string) string {
 }
 
 // isValidMarketReport 严密校验模型返回内容，剔除上游网关报错文本、异常提示及无效短内容
+// isTelemetryLine 判断一行是否为**遥测/状态**行，而非研报正文或推理内容。
+//
+// 事故背景（用户截图实证）：报告正文位置只剩一行
+// “[STEP]🔄 容灾切换：主模型 [gemini-3.8-flash] 异常(…429 Token pool is empty…)”
+// 而看不到任何实际研报。根因是清理逻辑只过滤了 [STATUS]，没过滤 [STEP]/[DONE] ——
+// 这些原本是给前端展示“流程进度”的遥测信息，却混进了最终报告。
+func isTelemetryLine(line string) bool {
+	t := strings.TrimSpace(line)
+	if t == "" {
+		return false
+	}
+	for _, p := range []string{"[STATUS]", "[STEP]", "[DONE]"} {
+		if strings.HasPrefix(t, p) || strings.Contains(t, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripTelemetryLines 剔除所有遥测行（用于正文校验与报告组装）。
+func stripTelemetryLines(s string) string {
+	if s == "" {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if isTelemetryLine(line) {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
 func isValidMarketReport(content string) (bool, string) {
-	trimmed := strings.TrimSpace(content)
+	// 先剔除遥测行：否则“只有一行容灾切换日志”会被当成有效研报展示、入库
+	trimmed := stripTelemetryLines(content)
 	if trimmed == "" {
 		return false, "模型未返回任何有效内容，请检查大模型配置或网络"
 	}
@@ -125,7 +161,13 @@ func isValidMarketReport(content string) (bool, string) {
 		strings.Contains(lower, "context canceled") ||
 		strings.Contains(lower, "context deadline exceeded") ||
 		strings.Contains(lower, "bad gateway") ||
-		strings.Contains(lower, "antigravity") {
+		strings.Contains(lower, "antigravity") ||
+		// 网关/账号池限流与容灾降级提示：这类文本是链路诊断，不是研报正文
+		strings.Contains(lower, "token pool is empty") ||
+		strings.Contains(lower, "账号池") ||
+		strings.Contains(lower, "额度耗尽") ||
+		strings.Contains(lower, "网关限流") ||
+		strings.Contains(lower, "容灾切换") {
 		return false, fmt.Sprintf("模型上游网关返回异常提示：%s", trimmed)
 	}
 	if trimmed == "agent-DONE" || len([]rune(trimmed)) < 100 {
@@ -361,17 +403,11 @@ func cleanAndAssembleReport(reasoning, content string) (string, []types.AgentAct
 
 	cleanedContent, actions := types.ParseAndExtractActions(content)
 
-	var cleanReasoningLines []string
-	if reasoning != "" {
-		for _, line := range strings.Split(reasoning, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "[STATUS]") || strings.Contains(trimmed, "[STATUS]") {
-				continue
-			}
-			cleanReasoningLines = append(cleanReasoningLines, line)
-		}
-	}
-	cleanReasoning := strings.TrimSpace(strings.Join(cleanReasoningLines, "\n"))
+	// 剔除全部遥测行（[STATUS] / [STEP] / [DONE]）。
+	// 旧实现只剔除 [STATUS]，导致“[STEP]🔄 容灾切换…”被当成思考过程渲染进报告。
+	cleanReasoning := stripTelemetryLines(reasoning)
+	// 正文同样剔除（防御性：遥测绝不应出现在正文区）
+	cleanedContent = stripTelemetryLines(cleanedContent)
 
 	if cleanReasoning != "" {
 		return fmt.Sprintf("<details style=\"margin-bottom:16px;padding:10px 14px;background:rgba(128,128,128,0.08);border-radius:8px;border-left:3px solid #18a058;\">\n<summary style=\"cursor:pointer;font-weight:600;color:inherit;opacity:0.85;\">💭 展开查看思考过程与推理链条</summary>\n\n%s\n</details>\n\n%s", cleanReasoning, cleanedContent), actions
@@ -1143,18 +1179,24 @@ func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *Marke
 		return nil
 	}
 
+	// 归档归属判定：**chat_id 前缀是唯一事实源**（由各 Generate* 方法写入）。
+	//
+	// 旧实现用「chat_id LIKE %x% OR stock_name LIKE %y%」双条件，造成两个真实故障：
+	//  ① 跨类型串号：etf_rotation_decision 会因 stock_name LIKE '%ETF轮动%'
+	//     把「ETF轮动盘前内参」(chat_id=pre_market_etf_…) 当成自己的报告返回 ——
+	//     用户以为“新的分析没生成，看到的还是老报告”；
+	//  ② 删不掉：ClearReportAndArchive 只按 chat_id 前缀删除，而读路径靠 stock_name
+	//     又能把同一行捞回来。
+	// 现在读取与删除**共用同一套前缀**，两者严格一致。
 	var items []models.AIResponseResult
 	var query *gorm.DB
-	switch reportType {
-	case "pre_market_briefing":
-		query = db.Dao.Where("chat_id LIKE ? OR stock_name LIKE ?", "%pre_market%", "%盘前%")
-	case "post_market_review":
-		query = db.Dao.Where("chat_id LIKE ? OR stock_name LIKE ? OR stock_code = ?", "%post_market%", "%收盘复盘%", "收盘复盘")
-	case "etf_rotation_decision":
-		query = db.Dao.Where("chat_id LIKE ? OR stock_name LIKE ?", "%etf_rotation%", "%ETF轮动%")
-	case "serenity_industry_analysis":
-		query = db.Dao.Where("chat_id LIKE ? OR stock_name LIKE ?", "%serenity%", "%Serenity%")
-	default:
+	if prefixes, known := marketReportArchivePrefix[reportType]; known {
+		query = db.Dao.Where("1 = 0")
+		for _, p := range prefixes {
+			query = query.Or("chat_id LIKE ?", p+"%")
+		}
+	} else {
+		// 未知类型保留原有兜底行为
 		query = db.Dao.Where("stock_code IN (?, ?) OR chat_id LIKE ?", "盘前前瞻", "收盘复盘", "%market%")
 	}
 
@@ -1194,6 +1236,91 @@ func (s *MarketLifecycleService) GetLatestReportByType(reportType string) *Marke
 }
 
 // PurgeCorruptedReports 一键物理扫描并清理数据库与内存中所有因网络中断、超时、网关报错等产生的残损研报记录
+// ClearReport 清除指定类型的市场智能研报（reportType 为空表示清除全部）。
+//
+// 为什么需要这个能力（用户反馈「删除旧的报告都没有办法」）：
+//
+//	研报只存在进程内存（lifecycleReportsByType）并通过 SSE 广播，
+//	在此之前**既无 API 也无 UI** 可以清除它 —— 用户只能重启容器。
+//	更糟的是抽屉在挂载/切页时会主动拉取“最新研报”，所以一份早该作废的
+//	旧报告会被反复回显，看起来“删不掉也换不掉”。
+//
+// 返回值：实际清除的报告数量。清除后会广播 marketReportCleared，
+// 让所有已打开页面立即移除，而不是刷新后才生效。
+func ClearReport(reportType string) int {
+	lifecycleReportCacheMu.Lock()
+	cleared := 0
+	if strings.TrimSpace(reportType) == "" {
+		cleared = len(lifecycleReportsByType)
+		lifecycleReportsByType = make(map[string]*MarketIntelligenceReport)
+		lifecycleLatestReport = nil
+	} else if _, ok := lifecycleReportsByType[reportType]; ok {
+		delete(lifecycleReportsByType, reportType)
+		cleared = 1
+		if lifecycleLatestReport != nil && lifecycleLatestReport.Type == reportType {
+			lifecycleLatestReport = nil
+		}
+	}
+	lifecycleReportCacheMu.Unlock()
+
+	if cleared > 0 {
+		logger.SugaredLogger.Infof("[MarketLifecycle] 已清除研报缓存 type=%q，共 %d 份", reportType, cleared)
+		if MarketReportBroadcastHook != nil {
+			MarketReportBroadcastHook("marketReportCleared", map[string]any{"type": reportType})
+		}
+	}
+	return cleared
+}
+
+// marketReportArchivePrefix 各类型研报在归档表 ai_response_result 中的 chat_id 前缀。
+//
+// **单一事实源**：读取兜底（GetLatestReportByType）与删除（ClearReportAndArchive）
+// 必须共用它，否则就会出现“删掉了又被读回来”。
+// 与各 Generate* 方法里 SaveAIResponseResult 的 chatId 参数必须保持一致。
+var marketReportArchivePrefix = map[string][]string{
+	"pre_market_briefing":        {"pre_market_etf_"},
+	"post_market_review":         {"post_market_"},
+	"etf_rotation_decision":      {"etf_rotation_"},
+	"serenity_industry_analysis": {"serenity_"},
+}
+
+// ClearReportAndArchive 清除指定类型的研报：内存缓存 + 归档表历史记录。
+// reportType 为空表示全部类型。返回面向用户的结论文案。
+func ClearReportAndArchive(reportType string) string {
+	reportType = strings.TrimSpace(reportType)
+	cacheCleared := ClearReport(reportType)
+
+	archiveDeleted := int64(0)
+	if db.Dao != nil {
+		prefixes := []string{}
+		if reportType == "" {
+			for _, ps := range marketReportArchivePrefix {
+				prefixes = append(prefixes, ps...)
+			}
+		} else {
+			prefixes = append(prefixes, marketReportArchivePrefix[reportType]...)
+		}
+
+		if len(prefixes) > 0 {
+			q := db.Dao.Where("1 = 0")
+			for _, p := range prefixes {
+				q = q.Or("chat_id LIKE ?", p+"%")
+			}
+			res := db.Dao.Unscoped().Where(q).Delete(&models.AIResponseResult{})
+			if res.Error != nil {
+				logger.SugaredLogger.Errorf("[MarketLifecycle] 删除研报归档失败: %v", res.Error)
+				return fmt.Sprintf("❌ 内存研报已清除 %d 份，但删除归档记录失败：%v", cacheCleared, res.Error)
+			}
+			archiveDeleted = res.RowsAffected
+		}
+	}
+
+	if reportType == "" {
+		return fmt.Sprintf("✅ 已清除全部市场智能研报：内存 %d 份，归档 %d 条", cacheCleared, archiveDeleted)
+	}
+	return fmt.Sprintf("✅ 已清除该类型研报：内存 %d 份，归档 %d 条", cacheCleared, archiveDeleted)
+}
+
 func PurgeCorruptedReports() int {
 	lifecycleReportCacheMu.Lock()
 	lifecycleLatestReport = nil

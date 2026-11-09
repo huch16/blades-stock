@@ -54,6 +54,10 @@ export function CheckStockBaseInfo(arg1:context.Context):Promise<void>;
 
 export function CleanupData(arg1:string):Promise<string>;
 
+export function ClearAllMarketIntelligenceReports():Promise<string>;
+
+export function ClearMarketIntelligenceReport(arg1:string):Promise<string>;
+
 export function ClsCalendar():Promise<Array<any>>;
 
 export function CreateCronTask(arg1:models.CronTask):Promise<string>;

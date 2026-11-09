@@ -203,6 +203,18 @@ func (s *AgentService) PurgeCorruptedMarketReports(ctx context.Context) int {
 	return agent.PurgeCorruptedReports()
 }
 
+// ClearMarketIntelligenceReport 清除指定类型的市场智能研报（reportType 为空则清除全部），
+// 同时删除归档表中对应的历史记录，并广播 marketReportCleared 让在线页面立即同步。
+// 用户明确要求“旧报告要能删掉”，这是之前完全缺失的能力。
+func (s *AgentService) ClearMarketIntelligenceReport(ctx context.Context, reportType string) string {
+	return agent.ClearReportAndArchive(reportType)
+}
+
+// ClearAllMarketIntelligenceReports 清除全部市场智能研报与对应归档
+func (s *AgentService) ClearAllMarketIntelligenceReports(ctx context.Context) string {
+	return agent.ClearReportAndArchive("")
+}
+
 // GenerateETFRotationReport 触发全市场 ETF 动量轮动决策分析研报
 func (s *AgentService) GenerateETFRotationReport(ctx context.Context, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
 	service := agent.NewMarketLifecycleService(ctx)

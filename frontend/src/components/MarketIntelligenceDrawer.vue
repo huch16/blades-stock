@@ -11,6 +11,7 @@ import {
   NInput,
   NSelect,
   useMessage,
+  useDialog,
   useThemeVars
 } from 'naive-ui'
 import {
@@ -24,6 +25,7 @@ import {
   GetAiConfigs,
   GetConfig,
   PurgeCorruptedMarketReports,
+  ClearMarketIntelligenceReport,
   SaveStockThesis
 } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff, EventsEmit } from '../../wailsjs/runtime'
@@ -48,6 +50,7 @@ const emit = defineEmits(['update:show', 'changeTab'])
 
 const router = useRouter()
 const message = useMessage()
+const dialog = useDialog()
 const themeVars = useThemeVars()
 const loading = ref(false)
 const currentTab = ref(props.reportType || 'pre_market_briefing')
@@ -151,10 +154,25 @@ function isCorruptedReport(rep) {
     raw.includes('502 Bad Gateway') ||
     raw.includes('bad gateway') ||
     raw.includes('unexpected EOF') ||
-    raw.includes('unexpected end of JSON input')
+    raw.includes('unexpected end of JSON input') ||
+    // 网关限流 / 账号池空 / 容灾降级：这些是**链路遥测**，不是研报正文。
+    // 用户截图实证：报告位置只剩一行“容灾切换：主模型 … 429 Token pool is empty”，
+    // 却因为长度够而被当成了有效研报展示。
+    raw.includes('Token pool is empty') ||
+    raw.includes('账号池') ||
+    raw.includes('额度耗尽') ||
+    raw.includes('网关限流') ||
+    raw.includes('容灾切换')
   ) {
     return true
   }
+  // 遥测行（[STEP]/[STATUS]/[DONE]）不构成正文：剔除后所剩无几即为残卷
+  const withoutTelemetry = raw
+    .split('\n')
+    .filter(l => !/^\s*\[(STEP|STATUS|DONE)\]/.test(l))
+    .join('\n')
+    .trim()
+  if (withoutTelemetry.length < 100) return true
   return false
 }
 
@@ -370,6 +388,38 @@ async function loadLatestForTab(tabKey) {
   } catch (e) {
     console.warn('loadLatestForTab error:', e)
   }
+}
+
+/**
+ * 清除市场智能研报（内存缓存 + 归档记录）。
+ *
+ * 之前**完全没有**这个能力：研报只活在服务端进程内存里并通过 SSE 广播，
+ * 而抽屉挂载/切页会主动拉取“最新研报”，所以一份早该作废的旧报告会被反复回显，
+ * 用户只能重启容器 —— 这就是「删除旧的报告都没有办法」。
+ */
+async function handleClearReport(scope = 'current') {
+  const tab = currentTab.value
+  const label = scope === 'all' ? '全部市场智能研报' : `【${currentTitle.value}】研报`
+  dialog.warning({
+    title: '确认清除',
+    content: `确定要清除${label}吗？将同时删除内存缓存与归档表中的历史记录，此操作不可撤销。`,
+    positiveText: '确认清除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await ClearMarketIntelligenceReport(scope === 'all' ? '' : tab)
+        if (scope === 'all') {
+          reports.value = {}
+        } else {
+          reports.value[tab] = null
+        }
+        message.success(String(res || '已清除'))
+        await refreshAll()
+      } catch (e) {
+        message.error('清除失败: ' + (e?.message || e))
+      }
+    }
+  })
 }
 
 async function handlePurgeCorrupted() {
@@ -843,6 +893,9 @@ onBeforeUnmount(() => {
           <NButton size="tiny" type="primary" :loading="loading" @click="generate">
             {{ currentReport && !isReportCorrupted ? '🔄 重新推演' : '🚀 立即生成' }}
           </NButton>
+          <NButton v-if="currentReport" size="tiny" secondary type="error" @click="handleClearReport('current')">
+            🗑️ 清除此报告
+          </NButton>
         </div>
       </div>
 
@@ -985,6 +1038,9 @@ onBeforeUnmount(() => {
               @click="generate"
             >
               {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
+            </NButton>
+            <NButton v-if="currentReport" secondary type="error" @click="handleClearReport('current')">
+              🗑️ 清除此报告
             </NButton>
           </NSpace>
         </div>
@@ -1148,6 +1204,9 @@ onBeforeUnmount(() => {
           <NButton size="tiny" type="primary" :loading="loading" @click="generate">
             {{ currentReport && !isReportCorrupted ? '🔄 重新推演' : '🚀 立即生成' }}
           </NButton>
+          <NButton v-if="currentReport" size="tiny" secondary type="error" @click="handleClearReport('current')">
+            🗑️ 清除此报告
+          </NButton>
         </div>
       </div>
 
@@ -1291,6 +1350,9 @@ onBeforeUnmount(() => {
               @click="generate"
             >
               {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
+            </NButton>
+            <NButton v-if="currentReport" secondary type="error" @click="handleClearReport('current')">
+              🗑️ 清除此报告
             </NButton>
           </NSpace>
         </div>
