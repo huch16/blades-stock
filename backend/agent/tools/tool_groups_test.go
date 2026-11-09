@@ -7,10 +7,10 @@ import (
 	bladesTools "github.com/go-kratos/blades/tools"
 )
 
-// buildAllFakeTools 依据真实 toolGroupMap 构造同组映射的假工具，验证裁剪逻辑。
+// buildAllFakeTools 依据真实 builtinToolGroups（能力注册表）构造同组映射的假工具，验证裁剪逻辑。
 func buildAllFakeTools() []bladesTools.Tool {
 	names := map[string]bool{}
-	for name := range toolGroupMap {
+	for name := range builtinToolGroups {
 		names[name] = true
 	}
 	// 未映射工具（如 WebSearch）也应存在
@@ -47,7 +47,7 @@ func TestFilterToolsByGroupsCapped_StockAnalysisCap(t *testing.T) {
 	}
 	// 组内工具总数不得超过上限
 	count := 0
-	for n, g := range toolGroupMap {
+	for n, g := range builtinToolGroups {
 		if g != GroupStockAnalysis {
 			continue
 		}
@@ -68,7 +68,7 @@ func TestFilterToolsByGroupsCapped_UncappedAndUnmapped(t *testing.T) {
 		t.Errorf("unmapped CustomUnmappedTool should always be injected, got=%v", got)
 	}
 	// base 无上限，全部注入
-	for n, g := range toolGroupMap {
+	for n, g := range builtinToolGroups {
 		if g != GroupBase {
 			continue
 		}
@@ -85,7 +85,7 @@ func TestFilterToolsByGroupsCapped_FillUpToCap(t *testing.T) {
 	got := groupNamesOf(out)
 	cap := groupToolCaps[GroupScreening]
 	count := 0
-	for name, g := range toolGroupMap {
+	for name, g := range builtinToolGroups {
 		if g != GroupScreening {
 			continue
 		}
@@ -121,7 +121,7 @@ func TestFilterToolsByGroupsCapped_CorePriorityOverFill(t *testing.T) {
 	got := groupNamesOf(out)
 	cap := groupToolCaps[GroupScreening]
 	count := 0
-	for name, g := range toolGroupMap {
+	for name, g := range builtinToolGroups {
 		if g != GroupScreening {
 			continue
 		}

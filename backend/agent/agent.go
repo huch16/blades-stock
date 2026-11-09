@@ -470,8 +470,16 @@ func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesT
 	merged := mergeSkillToolGroups(groups, matchedSkills)
 	filtered := tools.FilterToolsByGroupsCapped(allTools, groups)
 
-	logger.SugaredLogger.Infof("tool grouping: question=%q, matched_groups=%v, skill_merged_groups=%v, total=%d, filtered=%d",
-		question, groupNames(groups), merged, len(allTools), len(filtered))
+	// 未登记能力的工具已在 TestEveryAssembledToolIsDeclared 中被禁止；
+	// 这里的统计用于运行时可观测：哪些组被命中、最终注入了多少能力。
+	injectedGroups := map[tools.ToolGroup]int{}
+	for _, tl := range filtered {
+		if c, ok := tools.CapabilityOf(tl.Name()); ok {
+			injectedGroups[c.Group]++
+		}
+	}
+	logger.SugaredLogger.Infof("tool grouping: question=%q, matched_groups=%v, skill_merged_groups=%v, total=%d, filtered=%d, injected_by_group=%v",
+		question, groupNames(groups), merged, len(allTools), len(filtered), injectedGroups)
 
 	// 进化回灌：按 agent_tool_ranks 实测成功率/延迟重排注入顺序。
 	return reorderToolsByRank(filtered)

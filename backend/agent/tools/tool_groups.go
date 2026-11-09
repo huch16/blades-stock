@@ -21,150 +21,19 @@ const (
 	GroupProject       ToolGroup = "project"
 )
 
-var toolGroupMap = map[string]ToolGroup{
-	"QueryStockCodeInfo":           GroupBase,
-	"QueryBKDictInfo":              GroupBase,
-	"GetCurrentTime":               GroupBase,
-	"GetFollowedStocks":            GroupBase,
-	"GetHolidayInfo":               GroupBase,
-	"GetHolidayYear":               GroupBase,
-	"GetHolidayBatch":              GroupBase,
-	"IsTradingDay":                 GroupBase,
-	"GetNextTradingDay":            GroupBase,
-	"CreateAiRecommendStocks":      GroupBase,
-	"BatchCreateAiRecommendStocks": GroupBase,
-
-	"GetStockInfo":            GroupStockAnalysis,
-	"GetStockKLine":           GroupStockAnalysis,
-	"GetETFMomentumRanking":   GroupStockAnalysis,
-	"GetEastMoneyKLine":       GroupStockAnalysis,
-	"GetEastMoneyKLineWithMA": GroupStockAnalysis,
-	"GetStockMinuteData":      GroupStockAnalysis,
-	"GetStockFinancialInfo":   GroupStockAnalysis,
-	"GetStockHolderNum":       GroupStockAnalysis,
-	"GetStockRZRQInfo":        GroupStockAnalysis,
-	"GetStockConceptInfo":     GroupStockAnalysis,
-
-	"GetMarketData":              GroupMarket,
-	"GlobalStockIndexesReadable": GroupMarket,
-	"GetStockChanges":            GroupMarket,
-	"GetStockChangeHistoryList":  GroupMarket,
-	"GetDailyChangeStats":        GroupMarket,
-	"GetChangeRank":              GroupMarket,
-	"GetDailyDimensionStats":     GroupMarket,
-	"GetTypeStatsByDate":         GroupMarket,
-
-	"StockEarningsReview":         GroupStockAnalysis,
-	"FinancialQA":                 GroupAIAnalysis,
-	"GetStockLatestFinance":       GroupStockAnalysis,
-	"GetStockQtrMainFinance":      GroupStockAnalysis,
-	"GetStockOrgPredict":          GroupStockAnalysis,
-	"GetStockPredictSummary":      GroupStockAnalysis,
-	"GetStockValuationPercentile": GroupStockAnalysis,
-	"GetStockMarginTrading":       GroupStockAnalysis,
-	"GetStockBlockTrade":          GroupStockAnalysis,
-	"GetStockHolderTrend":         GroupStockAnalysis,
-	"GetStockBillboard":           GroupStockAnalysis,
-	"GetStockOperationDeptTrade":  GroupStockAnalysis,
-	"AnalyzeHotMoneyActivity":     GroupStockAnalysis,
-	"AnalyzeChipConcentration":    GroupStockAnalysis,
-	"AnalyzeCapitalGame":          GroupStockAnalysis,
-	"ComparableCompanyAnalysis":   GroupStockAnalysis,
-	"HotspotDiscovery":            GroupMarket,
-	"IndustryResearch":            GroupStockAnalysis,
-	"TrackingReport":              GroupStockAnalysis,
-	"FinanceDataQuery":            GroupStockAnalysis,
-	"FinanceSearch":               GroupNewsResearch,
-	"FilterStocks":                GroupScreening,
-	"SearchStockByIndicators":     GroupScreening,
-	"SearchBk":                    GroupScreening,
-	"SearchETF":                   GroupScreening,
-	"HotStrategyTable":            GroupScreening,
-	"HotStockTable":               GroupScreening,
-	"ScreenByStrategy":            GroupScreening,
-	"GetStockMoneyData":           GroupMoneyFlow,
-	"GetMutualTop10Deal":          GroupMoneyFlow,
-	"GetStockHistoryMoneyData":    GroupMoneyFlow,
-	"GetIndustryMoneyRank":        GroupMoneyFlow,
-	"QueryStockNewsTool":          GroupNewsResearch,
-	"WebSearch":                   GroupNewsResearch,
-	"FetchWebPage":                GroupNewsResearch,
-	"GetNewsListData":             GroupNewsResearch,
-	"GetStockResearchReport":      GroupNewsResearch,
-	"GetIndustryResearchReport":   GroupNewsResearch,
-	"GetSecuritiesCompanyOpinion": GroupNewsResearch,
-	"StockNotice":                 GroupNewsResearch,
-	"GetStockNotice":              GroupNewsResearch,
-	"InteractiveAnswer":           GroupNewsResearch,
-	"GetInvestCalendar":           GroupNewsResearch,
-	"GetLongTigerList":            GroupNewsResearch,
-	"GetHotStockList":             GroupNewsResearch,
-	"GetHotEventList":             GroupNewsResearch,
-	"GetUplimitLadder":            GroupNewsResearch,
-	"GetUplimitHotPlates":         GroupNewsResearch,
-	"GetUplimitHotStocks":         GroupNewsResearch,
-	"GetUplimitExplodedStocks":    GroupNewsResearch,
-	"GetUplimitPlateStocks":       GroupNewsResearch,
-	"GetWallstreetcnLives":        GroupNewsResearch,
-	"GetWallstreetcnMarketReal":   GroupMarket,
-	"GetWallstreetcnKline":        GroupMarket,
-	"GetWallstreetcnCalendar":     GroupNewsResearch,
-	"AiRecommendStocks":           GroupAIAnalysis,
-	"GetAIAnalysisHistory":        GroupAIAnalysis,
-	"GetAIAnalysisDetail":         GroupAIAnalysis,
-	"GetAIAnalysisContent":        GroupAIAnalysis,
-	"GetStockThesis":              GroupAIAnalysis,
-	"SaveStockThesis":             GroupAIAnalysis,
-	"TriggerPostMortemAudit":      GroupAIAnalysis,
-	"GetPostMortemAuditHistory":   GroupAIAnalysis,
-	"GetPaperPortfolioSummary":    GroupAIAnalysis,
-	"ExecutePaperTrade":           GroupAIAnalysis,
-	"RunAutoAlphaExploration":     GroupAIAnalysis,
-	"GetAutoAlphaProposals":       GroupAIAnalysis,
-	"QuerySupplyChainCascade":     GroupStockAnalysis,
-	"GetIndustrySupplyGraph":      GroupStockAnalysis,
-	"GetBacktestStats":            GroupAIAnalysis,
-	"GetBacktestDetail":           GroupAIAnalysis,
-	"RunBacktest":                 GroupAIAnalysis,
-	"VectorBacktest":              GroupAIAnalysis,
-	"RunVectorizedBacktest":       GroupAIAnalysis,
-	"DiagnoseStock":               GroupAIAnalysis,
-	"VectorGridSearch":            GroupAIAnalysis,
-	"SetTradingPrice":             GroupOperations,
-	"SendDingDingMessage":         GroupOperations,
-	"SendToDingDing":              GroupOperations,
-	"SearchFund":                  GroupOperations,
-	"GetFundInfo":                 GroupOperations,
-	"GetEconomicData":             GroupOperations,
-
-	// AKShare tools
-	"GetFuturesSpot":         GroupMarket,
-	"GetETFSpot":             GroupMarket,
-	"GetETFHistorical":       GroupStockAnalysis,
-	"GetOpenFundNetValue":    GroupStockAnalysis,
-	"GetBoardConcept":        GroupMarket,
-	"GetBoardIndustry":       GroupMarket,
-	"GetMacroCPI":            GroupMarket,
-	"GetMacroGDP":            GroupMarket,
-	"GetMacroPMI":            GroupMarket,
-	"GetMacroMoneySupply":    GroupMarket,
-	"GetLongHuToday":         GroupNewsResearch,
-	"GetConvertibleBondSpot": GroupMarket,
-
-	// AData tools
-	"GetADataMarketCurrent": GroupMarket,
-	"GetADataKLine":         GroupStockAnalysis,
-	"GetADataTradeCalendar": GroupBase,
-	"GetADataNorthFlow":     GroupMoneyFlow,
-
-	"ReadProjectFile":    GroupProject,
-	"ListProjectDir":     GroupProject,
-	"SearchProjectFiles": GroupProject,
-	"GitOperation":       GroupProject,
-	"LearnProject":       GroupProject,
-	"WriteProjectFile":   GroupProject,
-	"RunCommand":         GroupProject,
+// lookupCapability 是 FilterToolsByGroups* 内部使用的统一能力查询入口。
+// 返回空组 + false 表示「未登记」——这些工具会走通用基础分支，
+// 因此 capability_consistency_test.go 会把它们列为必须修复的缺陷。
+func lookupCapability(t tools.Tool) (ToolGroup, bool) {
+	c, ok := CapabilityOf(t.Name())
+	if !ok {
+		return "", false
+	}
+	return c.Group, true
 }
+
+// toolGroupMap 已迁移至 capability_registry.go 的 builtinToolGroups。
+// （工具身份现在由能力注册表统一持有，见 DeclareCapabilities。）
 
 type groupKeywords struct {
 	group    ToolGroup
@@ -332,7 +201,7 @@ func ClassifyQuestion(question string) map[ToolGroup]bool {
 func FilterToolsByGroups(allTools []tools.Tool, groups map[ToolGroup]bool) []tools.Tool {
 	var filtered []tools.Tool
 	for _, t := range allTools {
-		group, exists := toolGroupMap[t.Name()]
+		group, exists := lookupCapability(t)
 		if !exists || groups[group] {
 			filtered = append(filtered, t)
 		}
@@ -377,7 +246,9 @@ var coreToolByGroup = map[ToolGroup][]string{
 		"GetMutualTop10Deal",
 	},
 	GroupNewsResearch: {
-		"GetNewsListData", "GetStockResearchReport", "GetLongTigerList", "GetStockBillboard",
+		// 注：GetStockBillboard 曾误列于此，但它登记在 stock_analysis 组，
+		// 这里的条目永远不会命中（剪枝按工具的真实组取白名单），已移除。
+		"GetNewsListData", "GetStockResearchReport", "GetLongTigerList",
 		"GetStockNotice", "GetHotStockList", "GetHotEventList",
 		"GetUplimitHotStocks", "GetUplimitHotPlates", "GetWallstreetcnLives",
 		"WebSearch", "FetchWebPage",
@@ -411,7 +282,7 @@ func FilterToolsByGroupsCapped(allTools []tools.Tool, groups map[ToolGroup]bool)
 	// 第一遍：未映射组工具 + 命中组内属于白名单的工具 + 无上限组的工具。
 	added := make(map[ToolGroup]int)
 	for _, t := range allTools {
-		group, exists := toolGroupMap[t.Name()]
+		group, exists := lookupCapability(t)
 		if !exists {
 			// 未映射到任何特定组的通用基础工具
 			filtered = append(filtered, t)
@@ -433,7 +304,7 @@ func FilterToolsByGroupsCapped(allTools []tools.Tool, groups map[ToolGroup]bool)
 	}
 	// 第二遍：白名单工具数未达上限的组，按原顺序补充剩余工具，直至上限。
 	for _, t := range allTools {
-		group, exists := toolGroupMap[t.Name()]
+		group, exists := lookupCapability(t)
 		if !exists || !groups[group] {
 			continue
 		}
@@ -479,6 +350,11 @@ func isValidToolGroup(g ToolGroup) bool {
 
 // GetToolGroup returns the ToolGroup assigned to a tool name (used for validation & testing).
 func GetToolGroup(toolName string) (ToolGroup, bool) {
-	g, ok := toolGroupMap[toolName]
+	// 统一读能力注册表（工具身份的唯一事实源）
+	c, ok := CapabilityOf(toolName)
+	if !ok {
+		return "", false
+	}
+	g := c.Group
 	return g, ok
 }
