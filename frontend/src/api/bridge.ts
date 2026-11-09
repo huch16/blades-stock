@@ -362,15 +362,17 @@ function formatHttpError(method: string, status: number, rawText: string): strin
   const raw = (rawText || '').trim()
   const looksLikeHtml = /^\s*<(!doctype|html|\?xml)/i.test(raw) || /<html[\s>]/i.test(raw.slice(0, 500))
 
+  // 必须说清楚**这是本系统的网关**返回的，不是你填的模型服务商。
+  // 历史文案把两者混为一谈，用户看到 502 就去怪 DeepSeek/网关，方向完全错了。
   const gatewayHints: Record<number, string> = {
-    502: '网关错误 (Bad Gateway)：上游服务（模型网关或反向代理）未正常响应，通常是上游超时/宕机或服务商限流，请稍后重试或改用其他模型。',
-    503: '服务暂不可用 (Service Unavailable)：上游服务过载或维护中，请稍后重试。',
-    504: '网关超时 (Gateway Timeout)：上游响应过慢已被反向代理中断，请稍后重试或改用响应更快的模型。',
+    502: `本系统网关错误 (Bad Gateway)：请求未能完整送达/送达后未及时响应，通常由反向代理或隧道瞬时中断、或调用耗时超出网关容忍度引起。这是**本系统入口**返回的，不代表你配置的模型服务商有问题。请稍后重试；若反复出现，请检查部署入口（nginx / Cloudflare 隧道）日志。`,
+    503: `本系统服务暂不可用 (Service Unavailable)：容器正在重启或过载。这是**本系统入口**返回的，与模型服务商无关，请稍后重试。`,
+    504: `本系统网关超时 (Gateway Timeout)：调用耗时超出网关容忍度已被中断。这是**本系统入口**返回的，请稍后重试。`,
   }
   const hint = gatewayHints[status]
   if (hint) {
     console.error(`[UniversalBridge] ${method} HTTP ${status} raw body:`, raw)
-    return `HTTP ${status}: ${hint}`
+    return `HTTP ${status} [接口 ${method}] ${hint}`
   }
   if (looksLikeHtml) {
     console.error(`[UniversalBridge] ${method} HTTP ${status} HTML body:`, raw)
@@ -379,6 +381,26 @@ function formatHttpError(method: string, status: number, rawText: string): strin
   const detail = raw.length > 300 ? raw.slice(0, 300) + '…' : raw
   return `HTTP ${status}: ${detail || '请求失败'}`
 }
+
+// 默认 RPC 超时预算（普通查询/写入接口足够）
+const DEFAULT_RPC_TIMEOUT_MS = 30_000
+
+// 长耗时生成类接口的超时预算：与服务端 10 分钟后台推演 context 对齐
+const LONG_RUNNING_TIMEOUT_MS = 600_000
+
+/**
+ * 这些接口在服务端会真正跑一次完整的大模型长文推演（各自持有独立的
+ * 10 分钟 context），耗时 40~90s 是常态，绝不能套用 30s 熔断。
+ * 依据：backend/agent/market_lifecycle.go 中 4 个方法均使用
+ * context.WithTimeout(context.Background(), 10*time.Minute)。
+ */
+const LONG_RUNNING_METHODS = new Set([
+  'GeneratePreMarketBriefing',
+  'GeneratePostMarketReview',
+  'GenerateETFRotationReport',
+  'GenerateSerenityResearchReport',
+  'TriggerSectorAnomalySerenityAnalysis'
+])
 
 // 4. Web 模式下的通用 HTTP RPC 发起器
 export async function callWebApi(method: string, ...args: any[]): Promise<any> {
@@ -418,9 +440,19 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
 
   const url = `/api/App/${method}`
 
-  // 注入 30 秒硬超时熔断控制器，防止慢速接口无截止时间悬挂占用连接
+  // 超时预算：默认 30s 硬熔断，防止慢速接口无截止时间悬挂占用连接。
+  //
+  // 但**长耗时生成类接口必须给足预算**：它们在服务端用独立的 10 分钟
+  // context 在后台推演（market_lifecycle.go），nginx 侧 proxy_read_timeout
+  // 也是 600s。实测 GeneratePreMarketBriefing 正常耗时约 41s（40~90s 是常态）。
+  // 统一 30s 熔断会在报告生成完成前就提前掐断，用户看到的是
+  // 「研报生成失败」—— 而报告其实还在后台正常生成。这正是
+  // 「盘前推演等失败」的根因（与模型好坏无关）。
+  const timeoutMs = LONG_RUNNING_METHODS.has(method)
+    ? LONG_RUNNING_TIMEOUT_MS
+    : DEFAULT_RPC_TIMEOUT_MS
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null
-  const timer = controller ? setTimeout(() => controller.abort(), 30_000) : null
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
 
   const fetchPromise = (async () => {
     try {
@@ -483,9 +515,16 @@ export async function callWebApi(method: string, ...args: any[]): Promise<any> {
     } catch (err: any) {
       if (timer) clearTimeout(timer)
       if (err.name === 'AbortError') {
-        console.warn(`[UniversalBridge] RPC call to "${method}" timed out after 30s.`)
+        const secs = Math.round(timeoutMs / 1000)
+        console.warn(`[UniversalBridge] RPC call to "${method}" timed out after ${secs}s.`)
         // 附带 cause，保留原始 AbortError 以供上层排查（preserve-caught-error）
-        throw new Error(`请求超时：接口 "${method}" 响应耗时超过 30 秒，已执行保护性熔断`, { cause: err })
+        // 文案必须包含中文「超时 / 熔断」，因为长耗时生成类页面（如市场研报抽屉）
+        // 靠关键词判断是否切入「后台持续生成中」的轮询兜底；
+        // 旧文案是纯中文而抽屉只匹配英文 'timeout' → 永远匹配不上，直接报失败。
+        throw new Error(
+          `请求超时：接口 "${method}" 响应耗时超过 ${secs} 秒，已执行保护性熔断（timeout）`,
+          { cause: err }
+        )
       }
       console.error(`[UniversalBridge] RPC call to "${method}" (${requestId}) failed:`, err)
       throw err

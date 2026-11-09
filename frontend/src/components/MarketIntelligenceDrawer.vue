@@ -487,11 +487,17 @@ async function generate() {
     const errMsg = String(err?.message || err)
     // 弹性容错机制：大模型深度推演因长文本容易触发反向代理（如 Nginx）的 60s 超时 (502)
     // 但后端已通过解耦独立的 10 分钟 context 在后台继续推演，此时切入后台轮询等待
+    // 注意：必须同时匹配**中文**的「超时 / 熔断」。
+    // bridge 抛出的超时文案原本是纯中文（“请求超时：接口 … 超过 30 秒，已执行保护性熔断”），
+    // 而这里只匹配英文 'timeout' → 永远命中不了 → 直接报「研报生成失败」，
+    // 后台其实还在正常生成。这是「盘前推演等失败」的直接原因。
     if (
       errMsg.includes('502') ||
       errMsg.includes('503') ||
       errMsg.includes('504') ||
       errMsg.includes('timeout') ||
+      errMsg.includes('超时') ||
+      errMsg.includes('熔断') ||
       errMsg.includes('Failed to fetch') ||
       errMsg.includes('NetworkError') ||
       errMsg.includes('context canceled')
@@ -982,10 +988,6 @@ onBeforeUnmount(() => {
             </NButton>
           </NSpace>
         </div>
-        <!-- 合规免责声明条 -->
-        <div style="font-size: 11px; color: #888; border-top: 1px dashed rgba(255, 255, 255, 0.08); padding-top: 6px; line-height: 1.4;">
-          ⚖️ <strong>【合规风险提示与免责声明】</strong>：本系统宏观研报由纯Go量化引擎与买方投研Agent协同推演生成，所有策略指标、资产仓位与多空研判仅供量化投研学术探讨与辅助参考，不构成任何形式的投资建议或买卖要约。市场有风险，投资决策需审慎独立。
-        </div>
       </div>
     </div>
   </div>
@@ -1291,10 +1293,6 @@ onBeforeUnmount(() => {
               {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
             </NButton>
           </NSpace>
-        </div>
-        <!-- 合规免责声明条 -->
-        <div style="font-size: 11px; color: #888; border-top: 1px dashed rgba(255, 255, 255, 0.08); padding-top: 6px; line-height: 1.4;">
-          ⚖️ <strong>【合规风险提示与免责声明】</strong>：本系统宏观研报由纯Go量化引擎与买方投研Agent协同推演生成，所有策略指标、资产仓位与多空研判仅供量化投研学术探讨与辅助参考，不构成任何形式的投资建议或买卖要约。市场有风险，投资决策需审慎独立。
         </div>
       </div>
     </template>

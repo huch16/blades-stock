@@ -58,27 +58,23 @@ const marketStatus = ref('')
 let marketStatusTimer = null
 
 // Web 浏览器原生桌面推送通知辅助
+//
+// 关键约束：此处**绝不主动 requestPermission()**。
+// 本函数由 SSE 推送（突发快讯 / 价格预警 / 研报完成）触发，
+// 旧实现在 permission === 'default' 时就弹权限请求 →
+// 用户一打开页面就会被一条与当前操作无关的"是否允许通知"打断
+//（在自动化环境中还会直接卡住整个浏览器会话）。
+// 权限必须由**明确的用户手势**申请：见设置页「数据源与预警推送」中的
+// 「🔔 授权浏览器通知」按钮，以及下方 enableBrowserNotifications()。
 function sendBrowserNotification(title, body) {
   if (typeof window === 'undefined' || isWails() || !('Notification' in window)) return
-  if (Notification.permission === 'granted') {
-    try {
-      new Notification(title, {
-        body: body || '',
-        icon: '/favicon.ico',
-      })
-    } catch (_e) {}
-  } else if (Notification.permission === 'default') {
-    Notification.requestPermission().then(permission => {
-      if (permission === 'granted') {
-        try {
-          new Notification(title, {
-            body: body || '',
-            icon: '/favicon.ico',
-          })
-        } catch (_e) {}
-      }
-    }).catch(() => {})
-  }
+  if (Notification.permission !== 'granted') return
+  try {
+    new Notification(title, {
+      body: body || '',
+      icon: '/favicon.ico',
+    })
+  } catch (_e) {}
 }
 
 // Agent 全局控制总线状态
@@ -1480,10 +1476,7 @@ onMounted(() => {
                         <ErrorBoundary>
                           <RouterView />
                         </ErrorBoundary>
-                        <!-- 全局合规免责声明底栏 -->
-                        <div class="global-compliance-bar">
-                          <span>【合规风险提示与免责声明】：本系统为量化投研算法与辅助分析软件，所有量化策略指标、历史回测数据、AI 研判推演及风控测算均基于公开客观历史数据与既定算法模型生成，不构成任何形式的投资建议、买卖要约或收益承诺。证券市场有风险，投资决策需审慎独立。</span>
-                        </div>
+                        <!-- 全局免责声明底栏已按用户要求移除（原先在每一页常驻显示） -->
                       </n-scrollbar>
                     </n-spin>
                   </n-gi>
@@ -1707,18 +1700,6 @@ body.is-dark .mobile-tab-agent.active .agent-icon-glow {
 }
 
 /* 全局合规免责声明条 */
-.global-compliance-bar {
-  text-align: center;
-  padding: 12px 20px 20px 20px;
-  font-size: 11.5px;
-  color: #8b949e;
-  line-height: 1.6;
-  border-top: 1px dashed rgba(255, 255, 255, 0.08);
-  margin-top: 24px;
-}
-html.light .global-compliance-bar,
-html[theme-mode='light'] .global-compliance-bar {
-  color: #666;
-  border-top-color: rgba(0, 0, 0, 0.08);
-}
+/* 全局合规免责声明底栏样式已随模板一并移除 */
+/* .global-compliance-bar 相关样式已移除 */
 </style>

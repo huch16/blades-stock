@@ -3,8 +3,11 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -413,12 +416,28 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 	}
 	apiKey = realKey
 
+	// ── 总耗时预算（20s）──────────────────────────────────────────
+	//
+	// 历史缺陷：这里是「2 次尝试 × 30s 客户端超时」= 最坏 **60s+**。
+	// 这已经超过了前端 bridge 的 30s 熔断与多数反向代理 / Cloudflare 的容忍度，
+	// 结果是用户看到一句完全误导的「HTTP 502 网关错误」——
+	// 他会以为是自己填的模型服务商挂了，而真相是本系统网关先放弃了请求。
+	//
+	// 现在给整个方法一个硬预算：任何一次尝试都不会把总时长拖过 20s，
+	// 超时则返回明确的中文「超时」结论（而不是让代理层摔出 502）。
+	const connTestBudget = 20 * time.Second
+	deadline := time.Now().Add(connTestBudget)
+
+	timeoutMsg := fmt.Sprintf(
+		"连通性测试超时：%d 秒内未收到模型服务端任何响应。"+
+			"常见原因：网络不可达、需要走代理（可在「基础与运行环境」开启全局代理并先保存）、"+
+			"或该 Base URL 指向的网关/中转已宕机。请先用 curl 或浏览器验证该地址可访问。",
+		int(connTestBudget.Seconds()))
+
 	// 使用共享 transport（继承全局代理 / UA / 连接池）。
 	// 注意：**不要**在这里调用 resty 的 SetProxy——resty v2 的 SetProxy 会直接写
 	// transport.Proxy 字段，若传入的是共享 transport 就会污染全局所有并发请求。
 	// 全局代理已由 ConfigureFromSettings 在每次保存设置时同步到共享 transport。
-	client := data.CreateHTTPClientWithTimeout(30 * time.Second)
-	client.SetBaseURL(baseUrl)
 
 	// 输出预算：历史缺陷是固定 max_tokens=16。
 	// 对**推理模型**（MiniMax-M3 / deepseek-reasoner / GLM-Z 等）而言，
@@ -447,13 +466,29 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 
 	var lastMsg string
 	for i, payload := range attempts {
+		remaining := time.Until(deadline)
+		if remaining < 1500*time.Millisecond {
+			logger.SugaredLogger.Warnf("TestAiConnection 总预算 %v 已耗尽，停止重试", connTestBudget)
+			if lastMsg == "" {
+				lastMsg = timeoutMsg
+			}
+			break
+		}
+		// 每次尝试只允许使用「剩余预算」，绝不单独占用 30s 把总时长拉长
+		client := data.CreateHTTPClientWithTimeout(remaining)
+		client.SetBaseURL(baseUrl)
+
 		resp, err := client.R().
 			SetHeader("Authorization", "Bearer "+apiKey).
 			SetHeader("Content-Type", "application/json").
 			SetBody(payload).
 			Post("/chat/completions")
 		if err != nil {
-			logger.SugaredLogger.Errorf("TestAiConnection error: %v", err)
+			logger.SugaredLogger.Errorf("TestAiConnection error (attempt %d/%d): %v", i+1, len(attempts), err)
+			if isNetworkTimeoutError(err) {
+				lastMsg = timeoutMsg
+				break
+			}
 			return "无法访问接口：" + err.Error()
 		}
 		if !resp.IsError() {
@@ -470,6 +505,27 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 		break
 	}
 	return lastMsg
+}
+
+// isNetworkTimeoutError 判断错误是否属于「连接/读取超时」类问题。
+// 这类情况必须给出「超时」结论，而不是把上游原始错误（或代理层 502）
+// 直接丢给用户 —— 那会让他误判成"模型服务商挂了"。
+func isNetworkTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	l := strings.ToLower(err.Error())
+	return strings.Contains(l, "timeout") ||
+		strings.Contains(l, "deadline exceeded") ||
+		strings.Contains(l, "context canceled") ||
+		strings.Contains(l, "i/o timeout")
 }
 
 // isTokenBudgetError 判断错误是否属于「输出预算不足」类问题

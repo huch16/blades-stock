@@ -245,6 +245,38 @@ const aiConfigs = ref<CleanAIConfig[]>([]);
 const deletingCards = ref(false);
 const isSavingAiOnly = ref(false);
 
+// ── 浏览器通知授权（必须由用户手势触发）────────────────────────────
+const browserNotifyPermission = ref<string>(
+  typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+);
+const browserNotifyHint = computed(() => {
+  switch (browserNotifyPermission.value) {
+    case 'granted':
+      return '已授权 ✅';
+    case 'denied':
+      return '已被浏览器拒绝，需在浏览器地址栏的站点设置中重新允许';
+    case 'unsupported':
+      return '当前环境不支持浏览器通知';
+    default:
+      return '尚未授权（应用不会再自动弹窗打扰你）';
+  }
+});
+
+async function requestBrowserNotifyPermission() {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    message.warning('当前环境不支持浏览器通知');
+    return;
+  }
+  try {
+    const perm = await Notification.requestPermission();
+    browserNotifyPermission.value = perm;
+    if (perm === 'granted') message.success('已授权浏览器通知');
+    else if (perm === 'denied') message.warning('浏览器已拒绝通知授权，请在站点设置中手动允许');
+  } catch (e: any) {
+    message.error('申请通知授权失败: ' + (e?.message || e));
+  }
+}
+
 // 让 Agent 对话页 / 市场页的模型选择器立即感知配置变更（删除/新增/改默认）。
 // 否则那些页面会用内存里缓存的旧列表，继续拿一个**已被删除**的模型发请求，
 // 表现为“删了还在用 / 怎么删都删不掉”。
@@ -647,7 +679,15 @@ async function fetchAiModels(aiConfig: CleanAIConfig, index: number, opts: { sil
       }
     }
   } catch (err: any) {
-    if (!opts.silent) message.error('获取模型失败: ' + (err?.message || err), { duration: 6000 });
+    const msg = String(err?.message || err);
+    if (!opts.silent) {
+      // 5xx 是本系统网关返回的，请求根本没走到模型服务商 —— 必须说清楚，
+      // 否则用户会去排查"Base URL/API Key"，方向完全错了。
+      message.error(
+        /^HTTP 5\d\d/.test(msg) ? `获取模型列表未能完成：${msg}` : '获取模型失败: ' + msg,
+        { duration: 12000 }
+      );
+    }
   } finally {
     meta.loadingModels = false;
   }
@@ -682,7 +722,12 @@ async function testAiConfig(aiConfig: CleanAIConfig, index: number) {
       message.success(`连接测试成功！模型 [${modelName}] 响应正常 (耗时: ${latency} ms)`);
     }
   } catch (err: any) {
-    message.error('测试异常: ' + (err?.message || err));
+    const msg = String(err?.message || err);
+    // 同上：5xx 来自本系统入口，不是模型服务商的结论
+    message.error(
+      /^HTTP 5\d\d/.test(msg) ? `连通性测试未能完成：${msg}` : '测试异常: ' + msg,
+      { duration: 12000 }
+    );
   } finally {
     meta.testing = false;
   }
@@ -1802,10 +1847,19 @@ onBeforeUnmount(() => {
 
                 <n-gi>
                   <n-form-item label="桌面系统级原生弹窗通知">
-                    <n-switch v-model:value="formValue.localPush.enable">
-                      <template #checked>已启用桌面弹窗通知</template>
-                      <template #unchecked>已关闭桌面弹窗</template>
-                    </n-switch>
+                    <n-space align="center" :size="8">
+                      <n-switch v-model:value="formValue.localPush.enable">
+                        <template #checked>已启用桌面弹窗通知</template>
+                        <template #unchecked>已关闭桌面弹窗</template>
+                      </n-switch>
+                      <!-- 浏览器通知授权必须由用户手势触发。
+                           应用自身不再主动弹权限请求（旧行为会在页面打开时
+                           被一条与当前操作无关的"是否允许通知"打断）。 -->
+                      <n-button size="tiny" quaternary type="primary" @click="requestBrowserNotifyPermission">
+                        🔔 授权浏览器通知
+                      </n-button>
+                      <span class="notify-perm-hint">{{ browserNotifyHint }}</span>
+                    </n-space>
                   </n-form-item>
                 </n-gi>
 
@@ -2100,6 +2154,12 @@ onBeforeUnmount(() => {
 .thinking-hint b {
   color: #d29922;
   font-weight: 600;
+}
+
+.notify-perm-hint {
+  font-size: 11.5px;
+  color: #8b949e;
+  line-height: 1.5;
 }
 
 .advanced-params {
