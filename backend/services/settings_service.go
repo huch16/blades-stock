@@ -36,6 +36,72 @@ func truncateForLog(body string) string {
 	return body[:maxLogBodyLen] + "...(truncated)"
 }
 
+// resolveRealApiKey 把前端回传的**掩码**密钥还原为数据库中的真实密钥。
+//
+// 为什么必须有这一步（用户反馈「测试连通性还是不成功？？？」）：
+//
+//	GetMaskedSettingConfig 下发时会把 ApiKey 打码为 sk-a****1234；
+//	设置页在用户未改动密钥时，表单里保存的就是这个掩码；
+//	而 testAiConfig() / fetchAiModels() 会把表单里的 apiKey 原样送到后端。
+//	后端再拿它当 Bearer 去请求真正的供应商 → 供应商返回 401，
+//	用户看到的是一句与真实原因完全无关的报错。
+//
+// RPC 签名（baseUrl, apiKey, modelName）不能改（Wails 绑定兼容），
+// 因此只能在后端按 baseUrl（+ modelName）回到已保存配置里找真实密钥。
+//
+// 返回 ok=false 表示“提交的是掩码但匹配不到任何已保存配置”，
+// 调用方**必须**据此拒绝请求，而不是把掩码发给上游。
+func resolveRealApiKey(baseURL, apiKey, modelName string) (string, bool) {
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return apiKey, true
+	}
+	// 只有掩码才需要还原；明文（含本地模型常用的 "none"）原样使用。
+	if !data.IsMaskedSecret(apiKey) {
+		return apiKey, true
+	}
+
+	cfg := data.GetSettingConfig()
+	if cfg == nil || len(cfg.AiConfigs) == 0 {
+		return apiKey, false
+	}
+
+	normURL := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	normModel := strings.TrimSpace(modelName)
+
+	var urlOnlyFallback string
+	for _, c := range cfg.AiConfigs {
+		if c == nil {
+			continue
+		}
+		stored := strings.TrimSpace(c.ApiKey)
+		// 跳过空密钥与同样是掩码的条目（内存里的应该是明文，防御性跳过）
+		if stored == "" || data.IsMaskedSecret(stored) {
+			continue
+		}
+		if strings.TrimRight(strings.TrimSpace(c.BaseUrl), "/") != normURL {
+			continue
+		}
+		// 优先 baseUrl + modelName 精确匹配，避免同地址多卡片时张冠李戴
+		if normModel != "" && strings.TrimSpace(c.ModelName) == normModel {
+			return stored, true
+		}
+		if urlOnlyFallback == "" {
+			urlOnlyFallback = stored
+		}
+	}
+	if urlOnlyFallback != "" {
+		return urlOnlyFallback, true
+	}
+	return apiKey, false
+}
+
+// maskedKeyUnresolvedMsg 掩码无法匹配到已保存配置时给用户的可行动指引。
+// 绝不能把上游那句 "Invalid API key" 当成结论抛给用户 —— 真正的原因在这里。
+const maskedKeyUnresolvedMsg = "当前 API Key 显示为掩码（例如 sk-a****1234），" +
+	"系统未能从已保存的配置中匹配到对应的真实密钥（接口地址或多与已保存的卡片不一致）。" +
+	"请在该卡片里重新粘贴一次完整密钥后再测试；若是新建卡片，请先点「💾 保存 AI 模型配置」保存后再测试。"
+
 // SettingsService 系统配置、交易风控、审计日志与设备管理服务
 type SettingsService struct {
 	versionInfo *models.VersionInfo
@@ -278,6 +344,15 @@ func (s *SettingsService) FetchAiModels(baseUrl, apiKey string) []string {
 	if apiKey == "" {
 		apiKey = "none"
 	}
+	// 掩码无法还原时不能拿掩码去请求上游：那只会换来一个误导性的 401。
+	// 这里直接返回空列表并打日志（该方法签名只能返回 []string，
+	// 具体的可行动指引由 TestAiConnection 与会话测试路径给出）。
+	if realKey, ok := resolveRealApiKey(baseUrl, apiKey, ""); ok {
+		apiKey = realKey
+	} else {
+		logger.SugaredLogger.Errorf("FetchAiModels 中止：提交的是掩码密钥且无法按 baseUrl=%s 还原真实密钥", baseUrl)
+		return []string{}
+	}
 
 	type modelItem struct {
 		ID string `json:"id"`
@@ -330,6 +405,13 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 	if apiKey == "" {
 		apiKey = "none"
 	}
+	// 关键：前端提交的很可能是掩码（用户未改动密钥时的常态）。
+	// 必须还原为真实密钥，否则必然 401 —— 这正是「测试连通性总是不成功」的根因。
+	realKey, resolved := resolveRealApiKey(baseUrl, apiKey, modelName)
+	if !resolved {
+		return maskedKeyUnresolvedMsg
+	}
+	apiKey = realKey
 
 	// 使用共享 transport（继承全局代理 / UA / 连接池）。
 	// 注意：**不要**在这里调用 resty 的 SetProxy——resty v2 的 SetProxy 会直接写
@@ -469,6 +551,14 @@ func (s *SettingsService) FetchAiModelInfo(baseUrl, apiKey, modelName string) *A
 		Source:    "",
 	}
 
+	if apiKey != "" {
+		// 同样要还原掩码（否则 /models/<id> 会 401，静默退化为拿不到元信息）
+		if realKey, ok := resolveRealApiKey(baseUrl, apiKey, modelName); ok {
+			apiKey = realKey
+		} else {
+			apiKey = ""
+		}
+	}
 	if apiKey != "" {
 		type modelDetail struct {
 			ID             string `json:"id"`
