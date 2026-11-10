@@ -457,6 +457,11 @@ function selectSerenityPreset(preset) {
 }
 
 let pollTimer = null
+// 后台生成进度：实测生产环境单份研报要 230~600 秒（模型极慢时更久），
+// 轮询期间必须让用户看到"还在跑、已等了多久"，而不是一个静止的转圈。
+// 旧实现在 180 秒时静默宣布"等待超时"，而报告往往在 230 秒才成功 —— 
+// 用户因此长期以为"每一步都不出结果"。
+const backgroundStatus = ref('')
 
 function startPollingForCompletion(tabKey, startTime) {
   if (pollTimer) {
@@ -464,10 +469,18 @@ function startPollingForCompletion(tabKey, startTime) {
     pollTimer = null
   }
   let attempts = 0
-  const maxAttempts = 36 // 最长轮询 180 秒 (36 * 5s)
+  // 轮询上限必须**不小于**后台生成的最坏耗时：
+  //   · 生成上下文上限 10 分钟（market_lifecycle.go 的 genCtx）；
+  //   · 模型调用挂起时实测要等满 ~300s 才超时（生产运行记录 dur=301762ms）。
+  // 旧值 36×5s=180s 会在报告即将就绪前就宣布"生成超时"，
+  // 用户看到失败，而 30 秒后报告其实已经悄悄落库。
+  // 取 120×5s=600s：覆盖 300s 模型超时，又短于 10 分钟生成上下文上限。
+  const maxAttempts = 120 // 最长轮询 600 秒
 
   pollTimer = setInterval(async () => {
     attempts++
+    const waited = Math.round((Date.now() - startTime) / 1000)
+    backgroundStatus.value = `大模型深度推演中… 已等待 ${waited} 秒（深度研报通常需要 4~10 分钟，请保持页面打开）`
     try {
       let report = null
       if (typeof GetLatestMarketIntelligenceReportByType === 'function') {
@@ -479,6 +492,7 @@ function startPollingForCompletion(tabKey, startTime) {
         if (reportTime >= startTime - 5000) {
           clearInterval(pollTimer)
           pollTimer = null
+          backgroundStatus.value = ''
           reports.value[tabKey] = report
           loading.value = false
           message.success(`【${currentTitle.value}】后台大模型深度研报生成完成，已自动呈现在此！`)
@@ -493,7 +507,12 @@ function startPollingForCompletion(tabKey, startTime) {
       clearInterval(pollTimer)
       pollTimer = null
       loading.value = false
-      message.warning('后台生成等待超时，请稍后刷新抽屉或检查大模型运行日志。')
+      message.warning(
+        `已等待 ${Math.round((Date.now() - startTime) / 1000)} 秒仍未生成完成。` +
+          '可能原因：当前大模型响应极慢或已挂起（可在设置页查看「最近运行记录」确认耗时与错误），' +
+          '建议改用响应更快的模型，或稍后重新推演。'
+      )
+      backgroundStatus.value = ''
     }
   }, 5000)
 }
@@ -524,6 +543,15 @@ async function generate() {
       )
     }
 
+    // 后端"同步窗口内未完成、已转后台"的明确信号（market_report_async.go）。
+    // 生产入口约 20s 硬切断，研报推演常态 40~90s，这是常规路径而非异常：
+    // 必须转入轮询等后台结果，而不是把空报告当残损弹给用户。
+    if (res && res.inBackground) {
+      message.loading(res.statusText || '大模型深度推演中，系统已转入后台持续生成...', { duration: 8000 })
+      startPollingForCompletion(currentTab.value, startTime)
+      return
+    }
+
     if (res && !isCorruptedReport(res)) {
       reports.value[currentTab.value] = res
       message.success(`【${currentTitle.value}】生成成功！`)
@@ -548,6 +576,10 @@ async function generate() {
       errMsg.includes('timeout') ||
       errMsg.includes('超时') ||
       errMsg.includes('熔断') ||
+      // 后端"同步窗口内未完成、已转后台"的明确信号（market_report_async.go）。
+      // 这是生产入口 20s 硬切断下的常规路径，必须无条件转入轮询，
+      // 而不是弹一个"生成失败"把用户吓住。
+      errMsg.includes('后台') ||
       errMsg.includes('Failed to fetch') ||
       errMsg.includes('NetworkError') ||
       errMsg.includes('context canceled')
@@ -771,6 +803,10 @@ onBeforeUnmount(() => {
         <span v-if="lifecycle?.currentTime" class="status-clock">
           {{ lifecycle?.currentTime }}
         </span>
+        <div v-if="backgroundStatus" class="background-status">
+          <NSpin size="small" />
+          <span>{{ backgroundStatus }}</span>
+        </div>
         <div class="model-picker-wrap">
           <span class="model-picker-label">🤖 模型:</span>
           <NSelect
@@ -1072,6 +1108,10 @@ onBeforeUnmount(() => {
           <span v-if="lifecycle?.currentTime" class="status-clock">
             {{ lifecycle?.currentTime }}
           </span>
+          <div v-if="backgroundStatus" class="background-status">
+            <NSpin size="small" />
+            <span>{{ backgroundStatus }}</span>
+          </div>
           <div class="model-picker-wrap">
             <span class="model-picker-label">🤖 模型:</span>
             <NSelect
@@ -2225,3 +2265,17 @@ onBeforeUnmount(() => {
   gap: 14px;
 }
 </style>
+
+.background-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  border-left: 3px solid #18a058;
+  background: rgba(24, 160, 88, 0.12);
+  color: #3ba76a;
+  font-size: 12.5px;
+  line-height: 1.5;
+}

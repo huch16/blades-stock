@@ -57,6 +57,14 @@ type MarketIntelligenceReport struct {
 	GeneratedAt time.Time           `json:"generatedAt"`       // 生成时间
 	TradingDate string              `json:"tradingDate"`       // 归属交易日
 	Source      string              `json:"source"`            // 模型来源
+	// InBackground 为 true 表示"生成仍在后台进行，本次未在响应窗口内完成"。
+	//
+	// 为什么需要它：生产入口（Cloudflare/instabox）对单请求约 20 秒硬切断，
+	// 而研报推演常态 40~90 秒。同步等满是必然 502，用户看到"没有结果"。
+	// 现在同步窗口只等 12 秒：未完成就返回这个带标记的占位报告，
+	// 前端据此转入轮询；生成在独立 context 上继续，完成后自动呈现。
+	InBackground bool   `json:"inBackground,omitempty"`
+	StatusText   string `json:"statusText,omitempty"` // 面向用户的进度说明
 }
 
 var (

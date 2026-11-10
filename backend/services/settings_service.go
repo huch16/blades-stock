@@ -416,23 +416,31 @@ func (s *SettingsService) TestAiConnection(baseUrl, apiKey, modelName string) st
 	}
 	apiKey = realKey
 
-	// ── 总耗时预算（20s）──────────────────────────────────────────
+	// ── 总耗时预算（10s）──────────────────────────────────────────
 	//
-	// 历史缺陷：这里是「2 次尝试 × 30s 客户端超时」= 最坏 **60s+**。
-	// 这已经超过了前端 bridge 的 30s 熔断与多数反向代理 / Cloudflare 的容忍度，
-	// 结果是用户看到一句完全误导的「HTTP 502 网关错误」——
-	// 他会以为是自己填的模型服务商挂了，而真相是本系统网关先放弃了请求。
+	// 历史缺陷①：这里是「2 次尝试 × 30s 客户端超时」= 最坏 60s+，
+	//   超过前端 30s 熔断与多数反向代理容忍度，用户看到误导性的 502。
+	// 历史缺陷②：20 秒预算仍然不够。实测生产入口（Cloudflare/instabox）
+	//   对单请求约 **20 秒**硬切断 —— 任何耗时逼近它的请求都会被代理层
+	//   变成 502 HTML 页，用户看到的是「本系统网关错误」，方向全错。
 	//
-	// 现在给整个方法一个硬预算：任何一次尝试都不会把总时长拖过 20s，
-	// 超时则返回明确的中文「超时」结论（而不是让代理层摔出 502）。
-	const connTestBudget = 20 * time.Second
+	// 因此现在：
+	//   1) 先用 4 秒 TCP 预检（dial）——不可达/被防火墙丢弃的地址在
+	//      **1 秒级**就失败并给出精确原因，而不是挂满整个预算；
+	//   2) 再给 HTTP 尝试 10 秒总预算，加上预检也稳稳落在 20s 切断之内。
+	const connTestBudget = 10 * time.Second
 	deadline := time.Now().Add(connTestBudget)
 
 	timeoutMsg := fmt.Sprintf(
-		"连通性测试超时：%d 秒内未收到模型服务端任何响应。"+
-			"常见原因：网络不可达、需要走代理（可在「基础与运行环境」开启全局代理并先保存）、"+
-			"或该 Base URL 指向的网关/中转已宕机。请先用 curl 或浏览器验证该地址可访问。",
+		"连通性测试未能完成：%d 秒内未收到模型服务端任何响应。"+
+			"常见原因：该地址网络不可达、需要走代理（可在「基础与运行环境」开启全局代理并先保存）、"+
+			"或 Base URL 指向的网关/中转已无响应。",
 		int(connTestBudget.Seconds()))
+
+	// TCP 预检：把「连不上」和「连上了但服务不理」区分开，且让前者秒级失败。
+	if preflightErr := preflightDial(baseUrl); preflightErr != "" {
+		return "连接失败：" + preflightErr
+	}
 
 	// 使用共享 transport（继承全局代理 / UA / 连接池）。
 	// 注意：**不要**在这里调用 resty 的 SetProxy——resty v2 的 SetProxy 会直接写
@@ -837,4 +845,35 @@ func (s *SettingsService) CheckFrequentTrading(stockCode string) map[string]any 
 		"canTrade": canTrade,
 		"msg":      msg,
 	}
+}
+
+// preflightDial 对 BaseURL 的 host:port 做一次带超时的 TCP 连接测试。
+// 返回空字符串表示可连通；否则返回可读的中文原因。
+//
+// 存在价值：模型服务商不可达（DNS 失败、端口拒绝、出口被防火墙丢弃）时，
+// HTTP 尝试要等满整个预算才失败，而在生产入口约 20s 硬切断的环境下，
+// 那已经足够让代理层把请求变成 502 —— 用户看到的是"网关错误"，
+// 完全指不到真正的原因上。预检把这类情况前移到 4 秒内，并给出准确结论。
+func preflightDial(baseURL string) string {
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Host == "" {
+		return "Base URL 无法解析"
+	}
+	host := u.Host
+	if u.Port() == "" {
+		if u.Scheme == "https" {
+			host += ":443"
+		} else {
+			host += ":80"
+		}
+	}
+	conn, err := net.DialTimeout("tcp", host, 4*time.Second)
+	if err != nil {
+		if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+			return host + " 连接超时（4 秒无响应）——通常是地址错误、出口被防火墙拦截，或该网关已下线"
+		}
+		return host + " 无法连接（" + err.Error() + "）"
+	}
+	_ = conn.Close()
+	return ""
 }

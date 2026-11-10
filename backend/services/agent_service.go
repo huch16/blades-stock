@@ -170,18 +170,21 @@ func (s *AgentService) GetMarketLifecycleStatus(ctx context.Context) agent.Marke
 	return agent.NewMarketLifecycleService(ctx).GetMarketLifecycleStatus()
 }
 
-// GeneratePreMarketBriefing 生成盘前智能晨报
+// GeneratePreMarketBriefing 生成盘前智能晨报。
+//
+// 只同步等待 marketReportSoftWait（12s）——生产入口对单请求有约 20s 硬切断，
+// 同步等满 40~90s 必然 502；超时则由后台继续生成，前端转入轮询等待。
 func (s *AgentService) GeneratePreMarketBriefing(ctx context.Context, aiConfigId int) *agent.MarketIntelligenceReport {
-	report, err := agent.NewMarketLifecycleService(ctx).GeneratePreMarketBriefing(ctx, aiConfigId)
+	report, err := s.GeneratePreMarketBriefingAsync(ctx, aiConfigId)
 	if err != nil {
 		logger.SugaredLogger.Errorf("生成盘前前瞻失败：%v", err)
 	}
 	return report
 }
 
-// GeneratePostMarketReview 生成收盘深度复盘
+// GeneratePostMarketReview 生成收盘深度复盘（同步部分不超过 12s，见盘前说明）
 func (s *AgentService) GeneratePostMarketReview(ctx context.Context, aiConfigId int) *agent.MarketIntelligenceReport {
-	report, err := agent.NewMarketLifecycleService(ctx).GeneratePostMarketReview(ctx, aiConfigId)
+	report, err := s.GeneratePostMarketReviewAsync(ctx, aiConfigId)
 	if err != nil {
 		logger.SugaredLogger.Errorf("生成收盘复盘失败：%v", err)
 	}
@@ -230,15 +233,15 @@ func (s *AgentService) ClearAgentRuns() int64 {
 }
 
 // GenerateETFRotationReport 触发全市场 ETF 动量轮动决策分析研报
+// （同步部分不超过 12s，超时转后台 + 前端轮询）
 func (s *AgentService) GenerateETFRotationReport(ctx context.Context, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
-	service := agent.NewMarketLifecycleService(ctx)
-	return service.GenerateETFRotationReport(ctx, aiConfigId)
+	return s.GenerateETFRotationReportAsync(ctx, aiConfigId)
 }
 
 // GenerateSerenityResearchReport 触发 Serenity 产业深度拆解研报
+// （同步部分不超过 12s，超时转后台 + 前端轮询）
 func (s *AgentService) GenerateSerenityResearchReport(ctx context.Context, targetName string, code string, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
-	service := agent.NewMarketLifecycleService(ctx)
-	return service.GenerateSerenityResearchReport(ctx, targetName, code, aiConfigId)
+	return s.GenerateSerenityResearchReportAsync(ctx, targetName, code, aiConfigId)
 }
 
 // CreateSkill 创建技能
