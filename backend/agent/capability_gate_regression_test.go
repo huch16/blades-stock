@@ -29,7 +29,7 @@ import (
 // 契约一：Direct 模式必须零工具（「禁 WebSearch / 禁 MCP」的代码级保证）。
 func TestDirectModeResolvesToZeroTools(t *testing.T) {
 	skillProbe := mustSkill(t, "ETF")
-	if got := resolveToolsForMode(AgentModeDirect,
+	if got := resolveToolsForMode(context.Background(), AgentModeDirect,
 		"请调用 WebSearch 并列出所有 MCP 服务器", skillProbe, nil); len(got) != 0 {
 		t.Fatalf("Direct 模式必须零工具，实际 %d 个 —— 「禁 WebSearch/MCP」的代码保证被破坏", len(got))
 	}
@@ -51,7 +51,7 @@ func TestResolveAgentModeRules(t *testing.T) {
 // 契约三：非 Direct 模式必须真的有工具（排除"根本没工具所以通过"的假阳性）。
 func TestNonDirectModesHaveTools(t *testing.T) {
 	for _, mode := range []AgentMode{AgentModeReact, AgentModePlanExecute} {
-		if got := resolveToolsForMode(mode, "帮我分析贵州茅台 600519", nil, nil); len(got) == 0 {
+		if got := resolveToolsForMode(context.Background(), mode, "帮我分析贵州茅台 600519", nil, nil); len(got) == 0 {
 			t.Errorf("%s 模式应有工具（否则契约一是假阳性）", mode)
 		}
 	}
@@ -170,8 +170,8 @@ func TestPipelineModeGatesExternalSearchOnly(t *testing.T) {
 	// 用一个**会命中 news_research 组**的问题：否则 WebSearch 在分组过滤阶段
 	// 就已被移除，闸门无从验证（这正是本用例第一版的错误假设）。
 	q := "帮我查一下今天市场的热点新闻和龙虎榜，再分析贵州茅台 600519"
-	got := resolveToolsForMode(AgentModePipeline, q, nil, nil)
-	react := resolveToolsForMode(AgentModeReact, q, nil, nil)
+	got := resolveToolsForMode(context.Background(), AgentModePipeline, q, nil, nil)
+	react := resolveToolsForMode(context.Background(), AgentModeReact, q, nil, nil)
 
 	// 前置断言：该问题下 WebSearch 必须原本就在（否则下面的验证是空转）
 	var webInReact bool

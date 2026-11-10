@@ -23,41 +23,14 @@ import (
 //
 // 这些错误此前没有任何测试能发现。以下用例让它们全部变成红灯。
 
-// assembleForTest 复现「本次请求实际注入给模型的工具列表」。
+// assembleForTest 就是**真实**的组装清单。
 //
-// 与 agent.go getToolsByQuestion 的组合逻辑一致；单独抽出是为了让一致性测试
-// 能在不启动 Agent 的情况下枚举全部候选工具。
-// 若未来组装逻辑变化，这里必须同步（TestAssembledToolsHaveNoDuplicates 会先报警）。
+// 这里刻意不再自己复制一份 append 列表：D 期前的版本曾在测试里维护副本，
+// 结果搬移真实清单时误删了 GetMCPServerTools()，副本却没变、测试全绿 ——
+// 「测试副本与真实实现分叉」正是这类回归能溜过去的原因。
+// 现在测试与生产共用同一个函数，任何清单变化都会立刻反映到断言上。
 func assembleForTest() []bladesTools.Tool {
-	var all []bladesTools.Tool
-	all = append(all, GetQueryStockCodeInfoTool())
-	all = append(all, GetQueryStockNewsTool())
-	all = append(all, GetQueryBKDictTool())
-	all = append(all, GetWebSearchTool())
-	all = append(all, GetFetchWebPageTool())
-	all = append(all, GetGraphQueryTool())
-	all = append(all, GetAllDataTools()...)
-	all = append(all, GetHolidayTools()...)
-	all = append(all, GetProjectTools()...)
-	all = append(all, GetMCPServerTools()...)
-	all = append(all, GetBacktestStatsTool())
-	all = append(all, GetBacktestDetailTool())
-	all = append(all, GetRunBacktestTool())
-	all = append(all, GetVectorBacktestTool())
-	all = append(all, GetRunVectorizedBacktestTool())
-	all = append(all, GetDiagnoseStockTool())
-	all = append(all, GetVectorGridSearchTool())
-	all = append(all, GetStockThesisTool())
-	all = append(all, SaveStockThesisTool())
-	all = append(all, TriggerPostMortemAuditTool())
-	all = append(all, GetPostMortemAuditHistoryTool())
-	all = append(all, GetPaperPortfolioSummaryTool())
-	all = append(all, ExecutePaperTradeTool())
-	all = append(all, RunAutoAlphaExplorationTool())
-	all = append(all, GetAutoAlphaProposalsTool())
-	all = append(all, QuerySupplyChainCascadeTool())
-	all = append(all, GetIndustrySupplyGraphTool())
-	return all
+	return AssembleBuiltinTools()
 }
 
 func allGroupsEnabled() map[ToolGroup]bool {

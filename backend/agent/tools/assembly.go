@@ -30,6 +30,14 @@ func AssembleBuiltinTools() []bladesToolsPkg.Tool {
 
 	allTools = append(allTools, GetProjectTools()...)
 
+	// MCP 服务器管理类工具（增删改查/启停/探测）。
+	// 它们归属 GroupMCPServer（见 capability_registry.go），默认不参与业务分类，
+	// 因此只在外层显式启用该组时注入 —— 这正是 B 期隔离策略的落地方式。
+	// 注意：这一行曾在搬移时被误删，导致 MCP 工具从组装清单里消失；
+	// 现有的一致性测试用的是自己的副本，未能发现。修法：让**唯一**组装函数
+	// 同时被测试使用（见下），杜绝「测试副本」与「真实清单」分叉。
+	allTools = append(allTools, GetMCPServerTools()...)
+
 	allTools = append(allTools, GetBacktestStatsTool())
 	allTools = append(allTools, GetBacktestDetailTool())
 	allTools = append(allTools, GetRunBacktestTool())

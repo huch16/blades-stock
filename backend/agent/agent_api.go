@@ -235,6 +235,9 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		ctx = WithRunQuota(ctx)
 
 		// 统一入口解析模型（不再各链路各写一套）
+		// 把「本次注入了哪些能力」回写到运行记录（D 期可观测性）
+		ctx = WithInjectedSink(ctx, &runRecord.ToolsInjected)
+
 		resolved, resolveErr := data.ResolveModel(aiConfigId)
 		if resolveErr != nil {
 			logger.SugaredLogger.Errorf("模型解析失败: %v", resolveErr)

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 
 	"blades-stock/backend/agent/tools"
@@ -8,7 +9,7 @@ import (
 )
 
 func TestGetAllTools(t *testing.T) {
-	allTools := getToolsByQuestion("分析一下茅台的股票行情和资金流向", nil)
+	allTools := getToolsByQuestion(context.Background(), "分析一下茅台的股票行情和资金流向", nil)
 	t.Logf("Total tools count: %d", len(allTools))
 
 	toolNames := make(map[string]int)

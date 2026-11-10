@@ -28,6 +28,10 @@ type AgentRunRecord struct {
 	ModelName    string `json:"modelName" gorm:"size:160"`
 	BaseURL      string `json:"baseUrl" gorm:"size:255"`
 	Thinking     bool   `json:"thinking"`
+	// ToolsInjected 本次实际注入给模型的工具能力摘要（可读、可复现）。
+	// 形如："base:12 stock_analysis:26 n=41 est_tokens=1834"。
+	// 有了它，「模型当时能看到什么」不再只能靠翻容器日志。
+	ToolsInjected string `json:"toolsInjected" gorm:"size:512"`
 	// Resolution 人类可读的解析依据；FallbackChain 本 run 实际挂载的备用模型链
 	Resolution    string `json:"resolution" gorm:"size:512"`
 	FallbackChain string `json:"fallbackChain" gorm:"size:512"`

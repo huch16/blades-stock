@@ -54,3 +54,33 @@ func RunKindFrom(ctx context.Context) string {
 	}
 	return RunKindChat
 }
+
+// ── 注入能力摘要的回传通道 ────────────────────────────────────────────────
+//
+// 运行记录在 ChatWithContext 创建，而工具集在 GetStockAiAgent 深处解析。
+// 两者相隔数层，用一个「指向字符串的指针」放进 context，
+// 让深处能把摘要写回调用方，而不必把私有结构改成一串参数。
+
+type injectedSinkCtxKey struct{}
+
+// WithInjectedSink 把能力摘要的回写目标挂到 ctx。
+func WithInjectedSink(ctx context.Context, sink *string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if sink == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, injectedSinkCtxKey{}, sink)
+}
+
+// injectedSinkFrom 取回写目标（无则 nil）。
+func injectedSinkFrom(ctx context.Context) *string {
+	if ctx == nil {
+		return nil
+	}
+	if v, ok := ctx.Value(injectedSinkCtxKey{}).(*string); ok {
+		return v
+	}
+	return nil
+}

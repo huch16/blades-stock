@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -168,7 +169,7 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 	}
 
 	mode := resolveAgentMode(agentMode, question)
-	allTools := resolveToolsForMode(mode, question, matchedSkills, extraTools)
+	allTools := resolveToolsForMode(ctx, mode, question, matchedSkills, extraTools)
 
 	// 兜底：Direct 模式必须零工具（纯研报推演，无需外部工具与 MCP，杜绝额外超时）。
 	// resolveToolsForMode 已保证这一点；这里再显式置空一次，
@@ -443,19 +444,23 @@ func resolveAgentMode(agentMode string, question string) AgentMode {
 // 关键不变量：**Direct 模式必须返回空列表**。四个市场智能研报生成器
 // （盘前/盘后/ETF/Serenity）都以 Direct 模式运行，其提示词中的
 // 「无需额外调用外部工具 / 严禁调用 WebSearch」正是靠这一条得到**代码级**保证。
-func resolveToolsForMode(mode AgentMode, question string, matchedSkills []models.Skill, extraTools []bladesTools.Tool) []bladesTools.Tool {
+func resolveToolsForMode(ctx context.Context, mode AgentMode, question string, matchedSkills []models.Skill, extraTools []bladesTools.Tool) []bladesTools.Tool {
 	if mode == AgentModeDirect {
+		// Direct 零工具：摘要也要如实反映，而不是留空让人以为"没记"
+		if sink := injectedSinkFrom(ctx); sink != nil {
+			*sink = "direct:0"
+		}
 		return nil
 	}
 	// pipeline 与 React 一致：挂载全量工具（是否移除外网检索由能力闸门决定）
-	out := getToolsByQuestion(question, matchedSkills)
+	out := getToolsByQuestion(ctx, question, matchedSkills)
 	out = append(out, extraTools...)
 	return WrapToolsWithQuota(out)
 }
 
 // getToolsByQuestion 组装本次请求的工具集：候选工具由 tools 包统一提供
 // （AssembleBuiltinTools），再按关键词分类 + 技能 required groups 过滤 + 进化重排。
-func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesTools.Tool {
+func getToolsByQuestion(ctx context.Context, question string, matchedSkills []models.Skill) []bladesTools.Tool {
 	allTools := tools.AssembleBuiltinTools()
 	allTools = append(allTools, getMCPTools()...)
 
@@ -463,11 +468,61 @@ func getToolsByQuestion(question string, matchedSkills []models.Skill) []bladesT
 	merged := mergeSkillToolGroups(groups, matchedSkills)
 	filtered := tools.FilterToolsByGroupsCapped(allTools, groups)
 
-	logger.SugaredLogger.Infof("tool grouping: question=%q, matched_groups=%v, skill_merged_groups=%v, total=%d, filtered=%d",
-		question, groupNames(groups), merged, len(allTools), len(filtered))
+	// ── D 期：按 token 预算二次裁剪（默认影子模式）─────────────────────
+	//
+	// 实测基线：全部 128 个内置工具的「名称+描述+schema」约 4,770 tokens；
+	// 个数上限只能压数量（119→100 个），压不掉成本（仍约 4,014 tokens）。
+	// 因此这里再按**实测成本**预算裁一道，Tier 低的优先砍。
+	//
+	// 默认只记录差异，BLADES_STOCK_GATE_ENFORCE=1 才真正裁剪 ——
+	// 与能力闸门同一开关，遵循「先对比真实差异再打开」。
+	if tools.TokenBudgetEnabled() {
+		if _, dropped := tools.FilterByTokenBudget(filtered, groups); len(dropped) > 0 {
+			logger.SugaredLogger.Warnf("[TokenBudget] 建议裁剪 %d 个工具: %v", len(dropped), dropped)
+		}
+	} else {
+		kept, dropped := tools.FilterByTokenBudget(filtered, groups)
+		if len(dropped) > 0 {
+			logger.SugaredLogger.Warnf("[TokenBudget] 影子模式：若启用预算将裁剪 %d 个工具: %v（设 BLADES_STOCK_GATE_ENFORCE=1 生效）",
+				len(dropped), dropped)
+		}
+		_ = kept
+	}
+
+	logger.SugaredLogger.Infof("tool grouping: question=%q, matched_groups=%v, skill_merged_groups=%v, total=%d, filtered=%d, est_tokens=%d",
+		question, groupNames(groups), merged, len(allTools), len(filtered), tools.EstimateTokens(filtered))
+
+	// 回写能力摘要（运行记录的 ToolsInjected 字段）
+	if sink := injectedSinkFrom(ctx); sink != nil {
+		*sink = summarizeInjected(groups, filtered)
+	}
 
 	// 进化回灌：按 agent_tool_ranks 实测成功率/延迟重排注入顺序。
 	return reorderToolsByRank(filtered)
+}
+
+// summarizeInjected 生成可读的能力注入摘要，形如
+// "base:12 stock_analysis:26 n=41 est_tokens=1834"。
+// 写入运行记录后，「模型当时能看到什么」可以直接查询，不必翻日志。
+func summarizeInjected(groups map[tools.ToolGroup]bool, injected []bladesTools.Tool) string {
+	perGroup := map[tools.ToolGroup]int{}
+	for _, tl := range injected {
+		if c, ok := tools.CapabilityOf(tl.Name()); ok {
+			perGroup[c.Group]++
+		}
+	}
+	keys := make([]string, 0, len(perGroup))
+	for g := range perGroup {
+		keys = append(keys, string(g))
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys)+2)
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s:%d", k, perGroup[tools.ToolGroup(k)]))
+	}
+	parts = append(parts, fmt.Sprintf("n=%d", len(injected)))
+	parts = append(parts, fmt.Sprintf("est_tokens=%d", tools.EstimateTokens(injected)))
+	return strings.Join(parts, " ")
 }
 
 // mergeSkillToolGroups force-enables each matched skill's required tool groups

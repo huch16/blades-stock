@@ -1810,6 +1810,7 @@ onBeforeUnmount(() => {
                   <th>实际使用的模型</th>
                   <th style="width: 150px;">解析依据</th>
                   <th>结果</th>
+                  <th style="width: 200px;">注入能力</th>
                   <th style="width: 80px;">耗时</th>
                   <th style="width: 80px;">篇幅</th>
                 </tr>
@@ -1836,6 +1837,11 @@ onBeforeUnmount(() => {
                   <td>
                     <n-tag size="tiny" :type="r.success ? 'success' : 'error'">{{ runResultLabel(r) }}</n-tag>
                     <div class="run-model-sub" v-if="r.fallbackChain">备用链: {{ r.fallbackChain }}</div>
+                  </td>
+                  <td>
+                    <div class="run-model-sub" :title="r.toolsInjected">
+                      {{ r.toolsInjected || '—' }}
+                    </div>
                   </td>
                   <td>{{ r.durationMs }} ms</td>
                   <td>{{ r.contentLen }} 字</td>
