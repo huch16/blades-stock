@@ -186,7 +186,7 @@ watch(() => props.content, (newContent) => {
   display: inline-block;
   width: 2px;
   height: 1.2em;
-  background: var(--td-brand-color, #0052d9);
+  background: var(--bs-brand, #0052d9);
   margin-left: 2px;
   animation: cursor-blink 1.06s infinite;
   vertical-align: text-bottom;
@@ -218,9 +218,9 @@ watch(() => props.content, (newContent) => {
   border-radius: 4px;
   background: linear-gradient(
     90deg,
-    var(--td-bg-color-secondarycontainer, rgba(140,140,140,0.08)) 0%,
-    var(--td-bg-color-tertiarycontainer, rgba(140,140,140,0.12)) 50%,
-    var(--td-bg-color-secondarycontainer, rgba(140,140,140,0.08)) 100%
+    var(--bs-bg-secondary, rgba(140,140,140,0.08)) 0%,
+    var(--bs-bg-tertiary, rgba(140,140,140,0.12)) 50%,
+    var(--bs-bg-secondary, rgba(140,140,140,0.08)) 100%
   );
   background-size: 200% 100%;
   width: var(--width, 85%);
@@ -246,7 +246,7 @@ watch(() => props.content, (newContent) => {
   gap: 4px;
   margin-top: 12px;
   padding-top: 8px;
-  border-top: 1px dashed var(--td-component-border);
+  border-top: 1px dashed var(--bs-border-component);
   opacity: 0;
   animation: end-mark-in 0.3s ease-out 0.2s forwards;
 }
@@ -255,7 +255,7 @@ watch(() => props.content, (newContent) => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--td-text-color-disabled);
+  background: var(--bs-text-disabled);
   animation: dot-bounce 0.6s infinite ease-in-out;
 }
 

@@ -147,16 +147,16 @@ function onReference() {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
 }
 
 .msg-name {
   font-weight: 500;
-  color: var(--td-text-color-primary);
+  color: var(--bs-text-primary);
 }
 
 .msg-time {
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
 }
 
 .msg-bubble {
@@ -185,17 +185,17 @@ function onReference() {
 
 .action-btn {
   background: transparent;
-  border: 1px solid var(--td-component-border);
+  border: 1px solid var(--bs-border-component);
   border-radius: 4px;
   cursor: pointer;
   padding: 2px 6px;
   font-size: 11px;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
   transition: all 0.15s;
 
   &:hover {
-    background: var(--td-bg-color-component-hover);
-    color: var(--td-brand-color);
+    background: var(--bs-bg-component-hover);
+    color: var(--bs-brand);
   }
 }
 
@@ -245,7 +245,7 @@ function onReference() {
 
 .btn-save {
   background: #fff;
-  color: var(--td-brand-color, #0052d9);
+  color: var(--bs-brand, #0052d9);
   font-weight: 500;
 }
 </style>

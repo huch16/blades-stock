@@ -124,15 +124,15 @@ onMounted(() => {
   align-items: flex-end;
   gap: 10px;
   padding: 8px 10px;
-  border: 1px solid var(--td-border-level-2-color, #dcdcdc);
+  border: 1px solid var(--bs-border-2, #dcdcdc);
   border-radius: 12px;
-  background: var(--td-bg-color-container, #ffffff);
+  background: var(--bs-bg-container, #ffffff);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .chat-sender-body:focus-within {
-  border-color: var(--td-brand-color, #0052d9);
-  box-shadow: 0 0 0 3px var(--td-brand-color-focus, rgba(0, 82, 217, 0.14));
+  border-color: var(--bs-brand, #0052d9);
+  box-shadow: 0 0 0 3px var(--bs-brand-focus, rgba(0, 82, 217, 0.14));
 }
 
 .chat-sender--loading .chat-sender-body {
@@ -149,7 +149,7 @@ onMounted(() => {
   font-family: inherit;
   font-size: 14px;
   line-height: 1.6;
-  color: var(--td-text-color-primary, #1f2329);
+  color: var(--bs-text-primary, #1f2329);
   padding: 6px 2px;
   max-height: 200px;
   overflow-y: hidden;

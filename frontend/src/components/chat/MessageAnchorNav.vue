@@ -166,8 +166,8 @@ const showNav = computed(() => props.show && props.items.length > 0)
   top: 50%;
   transform: translateY(-50%);
   z-index: 100;
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-border);
+  background: var(--bs-bg-container);
+  border: 1px solid var(--bs-border-component);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   font-family: inherit;
@@ -212,22 +212,22 @@ const showNav = computed(() => props.show && props.items.length > 0)
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--td-bg-color-component);
+  background: var(--bs-bg-component);
   border: none;
-  border-left: 1px solid var(--td-component-border);
+  border-left: 1px solid var(--bs-border-component);
   border-radius: 0 12px 12px 0;
   cursor: pointer;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
   transition: all 0.2s;
   z-index: 10;
 
   &:hover {
-    background: var(--td-brand-color-light);
-    color: var(--td-brand-color);
+    background: var(--bs-brand-light);
+    color: var(--bs-brand);
   }
 
   &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
+    outline: 2px solid var(--bs-brand);
     outline-offset: -2px;
   }
 
@@ -236,7 +236,7 @@ const showNav = computed(() => props.show && props.items.length > 0)
     bottom: 0;
     transform: none;
     border-left: none;
-    border-top: 1px solid var(--td-component-border);
+    border-top: 1px solid var(--bs-border-component);
     border-radius: 0 0 12px 12px;
     width: 44px;
     height: 44px;
@@ -264,21 +264,21 @@ const showNav = computed(() => props.show && props.items.length > 0)
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--td-component-border);
-  background: var(--td-bg-color-component);
+  border-bottom: 1px solid var(--bs-border-component);
+  background: var(--bs-bg-component);
   flex-shrink: 0;
 }
 
 .nav-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--td-text-color-primary);
+  color: var(--bs-text-primary);
 }
 
 .nav-count {
   font-size: 11px;
-  color: var(--td-text-color-disabled);
-  background: var(--td-bg-color-secondarycontainer);
+  color: var(--bs-text-disabled);
+  background: var(--bs-bg-secondary);
   padding: 2px 8px;
   border-radius: 10px;
 }
@@ -304,16 +304,16 @@ const showNav = computed(() => props.show && props.items.length > 0)
   transition: all 0.15s;
 
   &:hover {
-    background: var(--td-bg-color-component-hover);
+    background: var(--bs-bg-component-hover);
   }
 
   &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
+    outline: 2px solid var(--bs-brand);
     outline-offset: -2px;
   }
 
   &.active {
-    background: var(--td-brand-color-light);
+    background: var(--bs-brand-light);
   }
 }
 
@@ -336,7 +336,7 @@ const showNav = computed(() => props.show && props.items.length > 0)
 .nav-item-label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--td-text-color-primary);
+  color: var(--bs-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -344,11 +344,11 @@ const showNav = computed(() => props.show && props.items.length > 0)
 
 .nav-item-time {
   font-size: 10px;
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
 }
 
 .nav-active-indicator {
-  color: var(--td-brand-color);
+  color: var(--bs-brand);
   font-size: 12px;
   flex-shrink: 0;
 }
@@ -359,11 +359,11 @@ const showNav = computed(() => props.show && props.items.length > 0)
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px 10px;
-  border-top: 1px solid var(--td-component-border);
-  background: var(--td-bg-color-component);
+  border-top: 1px solid var(--bs-border-component);
+  background: var(--bs-bg-component);
   flex-shrink: 0;
   font-size: 10px;
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
 }
 
 .nav-shortcuts kbd {
@@ -373,13 +373,13 @@ const showNav = computed(() => props.show && props.items.length > 0)
   min-width: 18px;
   height: 18px;
   padding: 0 6px;
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1px solid var(--td-component-border);
+  background: var(--bs-bg-secondary);
+  border: 1px solid var(--bs-border-component);
   border-radius: 4px;
   font-family: inherit;
   font-size: 10px;
-  color: var(--td-text-color-secondary);
-  box-shadow: 0 1px 0 var(--td-text-color-disabled);
+  color: var(--bs-text-secondary);
+  box-shadow: 0 1px 0 var(--bs-text-disabled);
 }
 
 /* 悬浮按钮 */
@@ -391,7 +391,7 @@ const showNav = computed(() => props.show && props.items.length > 0)
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--td-brand-color);
+  background: var(--bs-brand);
   color: #fff;
   border: none;
   box-shadow: 0 4px 16px rgba(0, 82, 217, 0.3);
@@ -412,7 +412,7 @@ const showNav = computed(() => props.show && props.items.length > 0)
   }
 
   &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
+    outline: 2px solid var(--bs-brand);
     outline-offset: 2px;
   }
 
@@ -439,7 +439,7 @@ const showNav = computed(() => props.show && props.items.length > 0)
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--td-bg-color-container);
+  border: 2px solid var(--bs-bg-container);
 }
 
 @keyframes fab-in {

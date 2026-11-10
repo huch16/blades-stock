@@ -218,14 +218,19 @@ func FilterToolsByGroups(allTools []tools.Tool, groups map[ToolGroup]bool) []too
 // 上百个工具定义全部塞进提示词。无上限的组（GroupBase/GroupProject 等体量小
 // 或必须完整的组）不在此表。
 var groupToolCaps = map[ToolGroup]int{
-	// 白名单含 26 个（含基金/TDX 系列），cap 必须 >= 26 否则第一轮超发
-	GroupStockAnalysis: 26,
+	// ⚠️ cap 必须**大于**白名单条目数，否则白名单自己就吃满配额，
+	// 组内其余工具永久不可达 —— 而提示词仍可能点名要求调用它们。
+	// 实测：cap 曾等于白名单数（26），导致 19 个工具组装了却注入不到。
+	// 现白名单 29 条，cap 取 32，保留 3 个非核心工具的余量。
+	GroupStockAnalysis: 32,
 	GroupMarket:        14,
 	GroupScreening:     12,
-	GroupMoneyFlow:     4,
-	GroupNewsResearch:  14,
-	GroupAIAnalysis:    16,
-	GroupOperations:    5,
+	// 白名单 4 条，cap 必须留余量（否则组内其余工具永久不可达）
+	GroupMoneyFlow:    6,
+	GroupNewsResearch: 14,
+	// 白名单 16 条，cap 必须留余量
+	GroupAIAnalysis: 18,
+	GroupOperations: 5,
 }
 
 // coreToolByGroup 每组的高频核心工具白名单（按优先级排序，越靠前越优先保留）。
@@ -238,6 +243,12 @@ var coreToolByGroup = map[ToolGroup][]string{
 		"GetStockRZRQInfo", "GetStockMarginTrading", "GetStockHolderTrend",
 		"GetStockBillboard", "AnalyzeHotMoneyActivity", "GetStockQtrMainFinance",
 		"GetStockOrgPredict", "GetETFHistorical", "QuerySupplyChainCascade", "GetIndustrySupplyGraph",
+		// ⚠️ 提示词点名要求调用的工具，必须留在核心白名单 —— 否则模型照提示词
+		// 去调用时后端没有它，直接抛 `tool not found`。
+		// （实测事故：prompt_config.go 要求调用 GetStockBlockTrade 跟踪大宗交易折溢价，
+		//   但它不在白名单里、且 stock_analysis 的 cap 恰好等于白名单条目数 →
+		//   余量为 0 → 永远注入不到。）
+		"GetStockBlockTrade", "AnalyzeChipConcentration", "AnalyzeCapitalGame",
 		// B 期：用户明确「在意模型能调用」的能力。
 		// 它们此前虽归入 stock_analysis，但因非核心白名单成员，
 		// 在两轮填充里被 cap 挤出，实际模型永远调不到（见 capability_policy_test.go）。

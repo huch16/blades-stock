@@ -47,7 +47,7 @@ const html = computed(() => {
   overflow-wrap: anywhere;
   font-size: 13.5px;
   line-height: 1.72;
-  color: var(--chat-text, var(--td-text-color-primary, #2c3e50));
+  color: var(--chat-text, var(--bs-text-primary, #2c3e50));
   word-break: break-word;
 }
 
@@ -117,13 +117,13 @@ const html = computed(() => {
 }
 
 .chat-markdown :deep(a) {
-  color: var(--td-brand-color, #2080f0);
+  color: var(--bs-brand, #2080f0);
   text-decoration: none;
   border-bottom: 1px solid rgba(32, 128, 240, 0.35);
 }
 
 .chat-markdown :deep(a:hover) {
-  border-bottom-color: var(--td-brand-color, #2080f0);
+  border-bottom-color: var(--bs-brand, #2080f0);
 }
 
 .chat-markdown :deep(code) {
@@ -179,7 +179,7 @@ const html = computed(() => {
 .chat-markdown :deep(blockquote) {
   margin: 8px 0;
   padding: 4px 12px;
-  border-left: 3px solid var(--td-brand-color, #2080f0);
+  border-left: 3px solid var(--bs-brand, #2080f0);
   background: rgba(32, 128, 240, 0.06);
   color: var(--chat-text-weak, #5c6b7a);
 }

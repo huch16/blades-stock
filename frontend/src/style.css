@@ -20,6 +20,74 @@ body.is-dark {
     color: rgba(255, 255, 255, 0.9) !important;
 }
 
+/* ---------------------------------------------------------------------------
+   TDesign 移除后的主题变量补齐
+   ---------------------------------------------------------------------------
+   TDesign 已从项目中彻底移除，但大量组件仍写着
+       background: var(--bs-bg-container, #ffffff);
+   这类**带浅色回退值**的引用。变量不存在 → 永远取回退值 →
+   整站在暗色模式下依旧呈现浅色（实测 agent-chat 的头部计算背景恒为
+   rgb(255,255,255)），这正是"AI Agent 助手页面与暗黑模式不匹配"的根因。
+
+   这里定义一套自己的主题变量 --bs-*，浅色取值与原先的回退值完全一致
+   （保证亮色外观零变化），暗色下统一覆盖为深色面板色。
+   随后由脚本把全仓 254 处 var(--td-*, …) 机械映射为 var(--bs-*, …)。
+*/
+:root {
+    /* 面板与容器 */
+    --bs-bg-container: #ffffff;
+    --bs-bg-container-hover: #f7f8fa;
+    --bs-bg-secondary: #f2f3f5;
+    --bs-bg-tertiary: #e7e9ec;
+    --bs-bg-component: #f2f3f5;
+    --bs-bg-component-hover: #e7e9ec;
+    --bs-bg-page: #f5f6f7;
+    /* 描边 */
+    --bs-border-1: #e5e6eb;
+    --bs-border-2: #c9cdd4;
+    --bs-border-component: #e5e6eb;
+    /* 品牌与语义色 */
+    --bs-brand: #0052d9;
+    --bs-brand-hover: #366ef4;
+    --bs-brand-focus: #366ef4;
+    --bs-brand-light: #ecf2fe;
+    --bs-error: #e34d59;
+    --bs-error-light: #fff0ed;
+    --bs-success-light: #e8f8f2;
+    /* 文字 */
+    --bs-text-primary: #1d2129;
+    --bs-text-secondary: #4e5969;
+    --bs-text-placeholder: #86909c;
+    --bs-text-disabled: #c9cdd4;
+}
+
+/* 暗色覆盖：仅替换变量值，组件样式本身不需要改一行 */
+html.dark,
+html[theme-mode='dark'],
+body.is-dark {
+    --bs-bg-container: #1e1e24;
+    --bs-bg-container-hover: #2b2b32;
+    --bs-bg-secondary: #2b2b32;
+    --bs-bg-tertiary: #35353d;
+    --bs-bg-component: #2b2b32;
+    --bs-bg-component-hover: #35353d;
+    --bs-bg-page: #16161a;
+    --bs-border-1: #3a3a44;
+    --bs-border-2: #4a4a56;
+    --bs-border-component: #3a3a44;
+    --bs-brand: #4c8dff;
+    --bs-brand-hover: #6ba1ff;
+    --bs-brand-focus: #3d7ef0;
+    --bs-brand-light: rgba(76, 141, 255, 0.16);
+    --bs-error: #ff6b6b;
+    --bs-error-light: rgba(255, 107, 107, 0.16);
+    --bs-success-light: rgba(59, 167, 106, 0.18);
+    --bs-text-primary: rgba(255, 255, 255, 0.92);
+    --bs-text-secondary: rgba(255, 255, 255, 0.68);
+    --bs-text-placeholder: rgba(255, 255, 255, 0.45);
+    --bs-text-disabled: rgba(255, 255, 255, 0.32);
+}
+
 /* 优化暗黑模式下容器背景图合成与滚动性能 */
 html.dark *,
 body.is-dark * {
@@ -115,7 +183,7 @@ body {
 }
 
 .t-chat__text__assistant {
-    color: var(--td-text-color-primary, rgba(230, 235, 242, 0.88)) !important;
+    color: var(--bs-text-primary, rgba(230, 235, 242, 0.88)) !important;
     line-height: 1.62 !important;
 }
 
@@ -126,8 +194,8 @@ body {
     line-height: 1.4 !important;
     margin: 14px 0 8px 0 !important;
     padding-left: 8px !important;
-    border-left: 3px solid var(--td-brand-color, #38ada9) !important;
-    color: var(--td-text-color-primary, rgba(240, 245, 250, 0.95)) !important;
+    border-left: 3px solid var(--bs-brand, #38ada9) !important;
+    color: var(--bs-text-primary, rgba(240, 245, 250, 0.95)) !important;
 }
 
 .t-chat__text__content h2 {
@@ -137,7 +205,7 @@ body {
     margin: 12px 0 6px 0 !important;
     padding-left: 6px !important;
     border-left: 2.5px solid #409eff !important;
-    color: var(--td-text-color-primary, rgba(240, 245, 250, 0.92)) !important;
+    color: var(--bs-text-primary, rgba(240, 245, 250, 0.92)) !important;
 }
 
 .t-chat__text__content h3 {
@@ -145,7 +213,7 @@ body {
     font-weight: 600 !important;
     line-height: 1.4 !important;
     margin: 10px 0 4px 0 !important;
-    color: var(--td-text-color-primary, rgba(240, 245, 250, 0.9)) !important;
+    color: var(--bs-text-primary, rgba(240, 245, 250, 0.9)) !important;
 }
 
 .t-chat__text__content h4,
@@ -204,23 +272,23 @@ body {
     margin: 10px 0 !important;
     font-size: 12.5px !important;
     line-height: 1.5 !important;
-    border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+    border: 1px solid var(--bs-border-component, rgba(255, 255, 255, 0.08)) !important;
     border-radius: 6px !important;
     overflow: hidden !important;
 }
 
 .t-chat__text__content th {
-    background: var(--td-bg-color-secondarycontainer, rgba(255, 255, 255, 0.04)) !important;
-    color: var(--td-text-color-secondary, rgba(255, 255, 255, 0.72)) !important;
+    background: var(--bs-bg-secondary, rgba(255, 255, 255, 0.04)) !important;
+    color: var(--bs-text-secondary, rgba(255, 255, 255, 0.72)) !important;
     font-weight: 600 !important;
     padding: 6px 10px !important;
     text-align: left !important;
-    border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+    border: 1px solid var(--bs-border-component, rgba(255, 255, 255, 0.08)) !important;
 }
 
 .t-chat__text__content td {
     padding: 5px 10px !important;
-    border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+    border: 1px solid var(--bs-border-component, rgba(255, 255, 255, 0.08)) !important;
     font-variant-numeric: tabular-nums !important;
 }
 
@@ -234,9 +302,9 @@ body {
 
 /* 引用块：温润微卡片 */
 .t-chat__text__content blockquote {
-    border-left: 3px solid var(--td-brand-color, #38ada9) !important;
+    border-left: 3px solid var(--bs-brand, #38ada9) !important;
     background: rgba(56, 173, 169, 0.06) !important;
-    color: var(--td-text-color-secondary, rgba(255, 255, 255, 0.72)) !important;
+    color: var(--bs-text-secondary, rgba(255, 255, 255, 0.72)) !important;
     padding: 6px 12px !important;
     margin: 8px 0 !important;
     border-radius: 0 6px 6px 0 !important;

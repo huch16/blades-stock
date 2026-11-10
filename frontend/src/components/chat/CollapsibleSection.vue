@@ -70,9 +70,9 @@ watch(() => props.expanded, (val) => {
 
 <style scoped>
 .collapsible-section {
-  border: 1px solid var(--td-component-border);
+  border: 1px solid var(--bs-border-component);
   border-radius: 8px;
-  background: var(--td-bg-color-container-hover);
+  background: var(--bs-bg-container-hover);
   overflow: hidden;
 }
 
@@ -84,9 +84,9 @@ watch(() => props.expanded, (val) => {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
   background: linear-gradient(135deg, rgba(56, 173, 169, 0.06) 0%, rgba(46, 139, 87, 0.06) 100%);
-  border-bottom: 1px solid var(--td-component-border);
+  border-bottom: 1px solid var(--bs-border-component);
   user-select: none;
   transition: background 0.2s;
 
@@ -95,7 +95,7 @@ watch(() => props.expanded, (val) => {
   }
 
   &:focus-visible {
-    outline: 2px solid var(--td-brand-color);
+    outline: 2px solid var(--bs-brand);
     outline-offset: -2px;
   }
 }
@@ -103,7 +103,7 @@ watch(() => props.expanded, (val) => {
 .collapsible-arrow {
   transition: transform 0.2s;
   flex-shrink: 0;
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
 }
 
 .collapsible-arrow.expanded {

@@ -223,16 +223,16 @@ function handleCopyResult(call: ToolCall) {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--td-component-border);
+  background: var(--bs-border-component);
   transition: background 0.3s;
 }
 
 .connector-line.connector-active {
-  background: var(--td-brand-color, #0052d9);
+  background: var(--bs-brand, #0052d9);
   background: linear-gradient(
     180deg,
-    var(--td-brand-color) 0%,
-    var(--td-brand-color-light) 100%
+    var(--bs-brand) 0%,
+    var(--bs-brand-light) 100%
   );
 }
 
@@ -243,8 +243,8 @@ function handleCopyResult(call: ToolCall) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--td-text-color-disabled);
-  border: 2px solid var(--td-bg-color-container);
+  background: var(--bs-text-disabled);
+  border: 2px solid var(--bs-bg-container);
   transition: all 0.3s;
 }
 
@@ -287,8 +287,8 @@ function handleCopyResult(call: ToolCall) {
 }
 
 .tool-card {
-  background: var(--td-bg-color-container);
-  border: 1px solid var(--td-component-border);
+  background: var(--bs-bg-container);
+  border: 1px solid var(--bs-border-component);
   border-radius: 8px;
   overflow: hidden;
   transition: all 0.2s;
@@ -303,8 +303,8 @@ function handleCopyResult(call: ToolCall) {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: var(--td-bg-color-component);
-  border-bottom: 1px solid var(--td-component-border);
+  background: var(--bs-bg-component);
+  border-bottom: 1px solid var(--bs-border-component);
 }
 
 .tool-icon-wrapper {
@@ -314,7 +314,7 @@ function handleCopyResult(call: ToolCall) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--td-bg-color-secondarycontainer);
+  background: var(--bs-bg-secondary);
   border-radius: 6px;
   flex-shrink: 0;
 }
@@ -327,7 +327,7 @@ function handleCopyResult(call: ToolCall) {
 .streaming-ring {
   position: absolute;
   inset: -2px;
-  border: 2px solid var(--td-brand-color);
+  border: 2px solid var(--bs-brand);
   border-radius: 8px;
   border-right-color: transparent;
   border-bottom-color: transparent;
@@ -349,7 +349,7 @@ function handleCopyResult(call: ToolCall) {
 .tool-name {
   font-size: 13px;
   font-weight: 500;
-  color: var(--td-text-color-primary);
+  color: var(--bs-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -402,7 +402,7 @@ function handleCopyResult(call: ToolCall) {
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
   flex-shrink: 0;
 }
 
@@ -420,21 +420,21 @@ function handleCopyResult(call: ToolCall) {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--td-brand-color-light, #e8f5e9);
-  border-bottom: 1px solid var(--td-component-border);
+  background: var(--bs-brand-light, #e8f5e9);
+  border-bottom: 1px solid var(--bs-border-component);
 }
 
 .progress-bar {
   flex: 1;
   height: 4px;
-  background: var(--td-border-level-1-color);
+  background: var(--bs-border-1);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--td-brand-color), var(--td-brand-color-hover));
+  background: linear-gradient(90deg, var(--bs-brand), var(--bs-brand-hover));
   border-radius: 2px;
   transition: width 0.3s ease;
   animation: progress-shimmer 1.5s infinite;
@@ -442,13 +442,13 @@ function handleCopyResult(call: ToolCall) {
 
 @keyframes progress-shimmer {
   0% { box-shadow: 0 0 0 transparent; }
-  50% { box-shadow: 0 0 8px var(--td-brand-color); }
+  50% { box-shadow: 0 0 8px var(--bs-brand); }
   100% { box-shadow: 0 0 0 transparent; }
 }
 
 .progress-text {
   font-size: 11px;
-  color: var(--td-brand-color);
+  color: var(--bs-brand);
   font-weight: 500;
 }
 
@@ -465,20 +465,20 @@ function handleCopyResult(call: ToolCall) {
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
   user-select: none;
   list-style: none;
 
   &::-webkit-details-marker { display: none; }
 
-  &:hover { color: var(--td-brand-color); }
+  &:hover { color: var(--bs-brand); }
 }
 
 .tool-args,
 .tool-result {
   margin-top: 6px;
   padding: 10px;
-  background: var(--td-bg-color-secondarycontainer, rgba(0,0,0,0.03));
+  background: var(--bs-bg-secondary, rgba(0,0,0,0.03));
   border-radius: 6px;
   font-size: 11px;
   line-height: 1.5;
@@ -490,7 +490,7 @@ function handleCopyResult(call: ToolCall) {
 }
 
 .tool-result {
-  background: var(--td-success-color-light, rgba(34, 197, 94, 0.08));
+  background: var(--bs-success-light, rgba(34, 197, 94, 0.08));
 }
 
 /* 错误状态 */
@@ -499,8 +499,8 @@ function handleCopyResult(call: ToolCall) {
   align-items: flex-start;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--td-error-color-light, rgba(245, 108, 108, 0.08));
-  border-top: 1px solid var(--td-error-color-light, rgba(245, 108, 108, 0.2));
+  background: var(--bs-error-light, rgba(245, 108, 108, 0.08));
+  border-top: 1px solid var(--bs-error-light, rgba(245, 108, 108, 0.2));
 }
 
 .error-icon { font-size: 14px; flex-shrink: 0; }
@@ -509,7 +509,7 @@ function handleCopyResult(call: ToolCall) {
   flex: 1;
   margin: 0;
   font-size: 11px;
-  color: var(--td-error-color, #f56c6c);
+  color: var(--bs-error, #f56c6c);
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   white-space: pre-wrap;
   word-break: break-word;
@@ -519,7 +519,7 @@ function handleCopyResult(call: ToolCall) {
 .tools-empty {
   text-align: center;
   padding: 24px;
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
   font-size: 13px;
 }
 

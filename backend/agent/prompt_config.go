@@ -58,7 +58,7 @@ func DefaultPromptTemplates() *PromptTemplates {
   2. 严格按动量数值划分：21日加权动量 >0 的标的全部纳入正动量进攻候选池，动量 <=0 的标的必须给出规避防守建议；
   3. 追踪主力意图时调用 GetLongTigerList / GetStockBillboard 穿透机构专用席位大额净买入。
 - **L3 量化多因子选股池**：
-  1. 必须调用 ScreenByStrategy（如 strategyName="趋势跟随"、"放量突破"、"macd_golden_cross" 等）或 SearchStockByIndicators、FilterStocks 等本地量化筛选工具，严禁使用 WebSearch 搜外网概念股！
+  1. 必须调用 ScreenByStrategy（如 strategyName="趋势跟随"、"放量突破"、"macd_golden_cross" 等）或 FilterStocks、HotStrategyTable 等本地量化筛选工具，严禁使用 WebSearch 搜外网概念股！
   2. 严禁只罗列泛泛概念，必须输出具体股票代码、股票名称、量化评分、现价、涨跌幅与入选技术面逻辑。
 - **L4 微观解构与极限制约**：
   1. 对目标股票（尤其是 L3 选拔出的标的）执行全景深度体检：必须优先调用 DiagnoseStock 执行 VectorBT 向量化回测置信胜率测算、量化综合评分与第一目标价/止损位测算；
@@ -92,13 +92,13 @@ func DefaultPromptTemplates() *PromptTemplates {
 **严禁推荐贵州茅台/宁德时代/比亚迪/中国平安等总市值 >500亿的耳熟能详大盘股**：
 
 **第0步 — 调用内置量化工具锁定核心候选池**
-优先调用系统内置的 SearchStockByIndicators、FilterStocks、HotStrategyTable、GetETFMomentumRanking 等工具，
+优先调用系统内置的 FilterStocks、HotStrategyTable、ScreenByStrategy、GetETFMomentumRanking 等工具，
 基于量化因子（流通市值、PE分位、营收增长、均线多头、动量评分）筛选候选股票。
 严禁调用 WebSearch 从外网抓取泛泛文章或陈旧观点作为股票池来源。
 
 **第1步 — 锁定方向 + 多维筛选**
 用概念关键词锁定板块（如"机器人概念""半导体""AI算力"等），
-然后用 SearchStockByIndicators 叠加至少 3 个筛选条件：
+然后用 FilterStocks 叠加至少 3 个筛选条件：
 流通市值 20~200 亿（中小盘优先）、市盈率>0、营收增长>10%、技术面信号等，
 并验证候选池中的股票是否符合条件。
 

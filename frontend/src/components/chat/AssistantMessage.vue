@@ -339,22 +339,22 @@ async function copyAnchorLink() {
   align-items: center;
   gap: 10px;
   font-size: 12px;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
 }
 
 .msg-name {
   font-weight: 600;
-  color: var(--td-text-color-primary);
+  color: var(--bs-text-primary);
 }
 
 .msg-time {
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
 }
 
 .streaming-badge {
   font-size: 11px;
-  background: var(--td-brand-color-light, #e8f5e9);
-  color: var(--td-brand-color, #0052d9);
+  background: var(--bs-brand-light, #e8f5e9);
+  color: var(--bs-brand, #0052d9);
   padding: 2px 8px;
   border-radius: 10px;
   animation: pulse 1.5s infinite;
@@ -370,9 +370,9 @@ async function copyAnchorLink() {
 .section-steps,
 .section-tools,
 .section-report {
-  border: 1px solid var(--td-component-border);
+  border: 1px solid var(--bs-border-component);
   border-radius: 8px;
-  background: var(--td-bg-color-container-hover);
+  background: var(--bs-bg-container-hover);
   overflow: hidden;
 }
 
@@ -389,9 +389,9 @@ async function copyAnchorLink() {
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
   background: linear-gradient(135deg, rgba(56, 173, 169, 0.06) 0%, rgba(46, 139, 87, 0.06) 100%);
-  border-bottom: 1px solid var(--td-component-border);
+  border-bottom: 1px solid var(--bs-border-component);
   user-select: none;
   transition: background 0.2s;
 
@@ -403,7 +403,7 @@ async function copyAnchorLink() {
 :deep(.collapsible-arrow) {
   transition: transform 0.2s;
   flex-shrink: 0;
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
 }
 
 :deep(.collapsible-arrow.expanded) {
@@ -416,7 +416,7 @@ async function copyAnchorLink() {
   overflow-y: auto;
   font-size: 12.5px !important;
   line-height: 1.58 !important;
-  color: var(--td-text-color-secondary, rgba(220, 226, 235, 0.78)) !important;
+  color: var(--bs-text-secondary, rgba(220, 226, 235, 0.78)) !important;
 
   .t-chat__text {
     font-size: 12.5px !important;
@@ -449,7 +449,7 @@ async function copyAnchorLink() {
   gap: 8px;
   padding: 4px 0;
   font-size: 12px;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
   line-height: 1.5;
   position: relative;
 
@@ -460,7 +460,7 @@ async function copyAnchorLink() {
     top: 16px;
     bottom: -4px;
     width: 1px;
-    background: var(--td-component-border);
+    background: var(--bs-border-component);
   }
 }
 
@@ -468,7 +468,7 @@ async function copyAnchorLink() {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--td-text-color-disabled);
+  background: var(--bs-text-disabled);
   flex-shrink: 0;
   margin-top: 4px;
   position: relative;
@@ -505,8 +505,8 @@ async function copyAnchorLink() {
 
 /* 主内容区（买方投研报告高密度、护眼排版） */
 .msg-main-content {
-  background: var(--td-bg-color-container, #171b22);
-  border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08));
+  background: var(--bs-bg-container, #171b22);
+  border: 1px solid var(--bs-border-component, rgba(255, 255, 255, 0.08));
   border-radius: 8px;
   padding: 12px 16px;
   position: relative;
@@ -525,7 +525,7 @@ async function copyAnchorLink() {
   }
 
   :deep(.t-chat__text__assistant) {
-    color: var(--td-text-color-primary, rgba(230, 235, 242, 0.88)) !important;
+    color: var(--bs-text-primary, rgba(230, 235, 242, 0.88)) !important;
     line-height: 1.62 !important;
   }
 
@@ -549,8 +549,8 @@ async function copyAnchorLink() {
       line-height: 1.4 !important;
       margin: 14px 0 8px 0 !important;
       padding-left: 8px !important;
-      border-left: 3px solid var(--td-brand-color, #38ada9) !important;
-      color: var(--td-text-color-primary, rgba(240, 245, 250, 0.95)) !important;
+      border-left: 3px solid var(--bs-brand, #38ada9) !important;
+      color: var(--bs-text-primary, rgba(240, 245, 250, 0.95)) !important;
     }
 
     h2 {
@@ -560,7 +560,7 @@ async function copyAnchorLink() {
       margin: 12px 0 6px 0 !important;
       padding-left: 6px !important;
       border-left: 2.5px solid #409eff !important;
-      color: var(--td-text-color-primary, rgba(240, 245, 250, 0.92)) !important;
+      color: var(--bs-text-primary, rgba(240, 245, 250, 0.92)) !important;
     }
 
     h3 {
@@ -568,7 +568,7 @@ async function copyAnchorLink() {
       font-weight: 600 !important;
       line-height: 1.4 !important;
       margin: 10px 0 4px 0 !important;
-      color: var(--td-text-color-primary, rgba(240, 245, 250, 0.9)) !important;
+      color: var(--bs-text-primary, rgba(240, 245, 250, 0.9)) !important;
     }
 
     h4, h5, h6 {
@@ -617,23 +617,23 @@ async function copyAnchorLink() {
       margin: 10px 0 !important;
       font-size: 12.5px !important;
       line-height: 1.5 !important;
-      border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+      border: 1px solid var(--bs-border-component, rgba(255, 255, 255, 0.08)) !important;
       border-radius: 6px !important;
       overflow: hidden !important;
     }
 
     th {
-      background: var(--td-bg-color-secondarycontainer, rgba(255, 255, 255, 0.04)) !important;
-      color: var(--td-text-color-secondary, rgba(255, 255, 255, 0.72)) !important;
+      background: var(--bs-bg-secondary, rgba(255, 255, 255, 0.04)) !important;
+      color: var(--bs-text-secondary, rgba(255, 255, 255, 0.72)) !important;
       font-weight: 600 !important;
       padding: 6px 10px !important;
       text-align: left !important;
-      border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+      border: 1px solid var(--bs-border-component, rgba(255, 255, 255, 0.08)) !important;
     }
 
     td {
       padding: 5px 10px !important;
-      border: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+      border: 1px solid var(--bs-border-component, rgba(255, 255, 255, 0.08)) !important;
       font-variant-numeric: tabular-nums !important;
     }
 
@@ -647,9 +647,9 @@ async function copyAnchorLink() {
 
     /* 引用块优化：温和微卡片 */
     blockquote {
-      border-left: 3px solid var(--td-brand-color, #38ada9) !important;
+      border-left: 3px solid var(--bs-brand, #38ada9) !important;
       background: rgba(56, 173, 169, 0.06) !important;
-      color: var(--td-text-color-secondary, rgba(255, 255, 255, 0.72)) !important;
+      color: var(--bs-text-secondary, rgba(255, 255, 255, 0.72)) !important;
       padding: 6px 12px !important;
       margin: 8px 0 !important;
       border-radius: 0 6px 6px 0 !important;
@@ -671,7 +671,7 @@ async function copyAnchorLink() {
     /* 分割线 */
     hr {
       border: none !important;
-      border-top: 1px solid var(--td-component-border, rgba(255, 255, 255, 0.08)) !important;
+      border-top: 1px solid var(--bs-border-component, rgba(255, 255, 255, 0.08)) !important;
       margin: 12px 0 !important;
     }
   }
@@ -696,13 +696,13 @@ async function copyAnchorLink() {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: var(--td-text-color-secondary, #4e5969);
+  color: var(--bs-text-secondary, #4e5969);
 
   .typing-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--td-brand-color, #0052d9);
+    background: var(--bs-brand, #0052d9);
     animation: typing-bounce 1.4s infinite ease-in-out both;
 
     &:nth-child(1) { animation-delay: -0.32s; }
@@ -728,7 +728,7 @@ async function copyAnchorLink() {
 }
 
 .empty-state {
-  color: var(--td-text-color-disabled);
+  color: var(--bs-text-disabled);
   font-style: italic;
   text-align: center;
   padding: 20px;
@@ -742,11 +742,11 @@ async function copyAnchorLink() {
   gap: 8px;
   margin-top: 6px;
   padding: 4px 10px;
-  background: var(--td-bg-color-secondarycontainer, rgba(140, 140, 140, 0.06));
-  border: 1px solid var(--td-border-level-1-color, rgba(140, 140, 140, 0.12));
+  background: var(--bs-bg-secondary, rgba(140, 140, 140, 0.06));
+  border: 1px solid var(--bs-border-1, rgba(140, 140, 140, 0.12));
   border-radius: 12px;
   font-size: 11px;
-  color: var(--td-text-color-secondary);
+  color: var(--bs-text-secondary);
   user-select: none;
 }
 
@@ -770,7 +770,7 @@ async function copyAnchorLink() {
   gap: 6px 10px;
   margin-top: 6px;
   padding-left: 4px;
-  border-top: 1px solid var(--td-component-border);
+  border-top: 1px solid var(--bs-border-component);
   padding-top: 8px;
 }
 
@@ -778,8 +778,8 @@ async function copyAnchorLink() {
 .action-chips-container {
   margin-top: 10px;
   padding: 8px 12px;
-  background: var(--td-bg-color-secondarycontainer, rgba(24, 160, 88, 0.06));
-  border: 1px dashed var(--td-brand-color, #18a058);
+  background: var(--bs-bg-secondary, rgba(24, 160, 88, 0.06));
+  border: 1px dashed var(--bs-brand, #18a058);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
@@ -792,7 +792,7 @@ async function copyAnchorLink() {
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--td-text-color-primary, #333);
+  color: var(--bs-text-primary, #333);
 }
 
 .action-chips-icon {
@@ -810,10 +810,10 @@ async function copyAnchorLink() {
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  background: var(--td-bg-color-container, #fff);
-  border: 1px solid var(--td-brand-color, #18a058);
+  background: var(--bs-bg-container, #fff);
+  border: 1px solid var(--bs-brand, #18a058);
   border-radius: 6px;
-  color: var(--td-brand-color, #18a058);
+  color: var(--bs-brand, #18a058);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -822,7 +822,7 @@ async function copyAnchorLink() {
 }
 
 .action-chip-btn:hover {
-  background: var(--td-brand-color, #18a058);
+  background: var(--bs-brand, #18a058);
   color: #fff;
   transform: translateY(-1px);
   box-shadow: 0 4px 10px rgba(24, 160, 88, 0.25);

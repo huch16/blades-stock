@@ -1191,7 +1191,7 @@ function executeStep3(type: 'breakout' | 'trend' | 'macd' | 'dividend') {
 
 3. 输出入选股票的具体代码、名称与金叉确认理由，直接输出选股清单。`, false, 'pipeline')
   } else {
-    applyScenario(`【L3 价值防守选股池】请利用系统内置量化筛选工具（SearchStockByIndicators / FilterStocks）：
+    applyScenario(`【L3 价值防守选股池】请利用系统内置量化筛选工具（FilterStocks / ScreenByStrategy）：
 1. 筛选市盈率PE<15、近三年平均股息率>3.5%、ROE>12%的高股息稳健型股票；
 
 3. 评估入选标的的安全边际与抗跌属性，给出防御性底仓配置建议，直接输出选股清单。`, false, 'pipeline')
@@ -1385,7 +1385,7 @@ const allScenarios = [
   { category: 'L2 赛道与主线', title: '龙虎榜机构专用席位追踪', prompt: '请调用系统内置 GetLongTigerList / GetStockBillboard 工具获取最近一个交易日的龙虎榜明细，重点筛选机构专用席位大额净买入的股票，分析机构资金的真实建仓意图。严禁使用 WebSearch。' },
 
   // L3 量化多因子选股池
-  { category: 'L3 量化选股池', title: '强势平台放量突破选股', prompt: '请利用系统内置量化筛选工具（SearchStockByIndicators / FilterStocks / HotStrategyTable），筛选突破近期整理平台且放量上涨、均线多头排列的强势标的，给出具体技术面评分与入选逻辑。严禁使用 WebSearch。' },
+  { category: 'L3 量化选股池', title: '强势平台放量突破选股', prompt: '请利用系统内置量化筛选工具（ScreenByStrategy / FilterStocks / HotStrategyTable），筛选突破近期整理平台且放量上涨、均线多头排列的强势标的，给出具体技术面评分与入选逻辑。严禁使用 WebSearch。' },
   { category: 'L3 量化选股池', title: '低估值高股息价值防守', prompt: '请利用系统内置指标工具筛选市盈率PE<15、近三年股息率>3.5%、ROE>12%的高股息稳健型股票，评估其安全边际与抗跌属性。严禁使用 WebSearch。' },
   { category: 'L3 量化选股池', title: '业绩预告超预期挖掘', prompt: '请检索近期披露业绩预告中净利润同比大幅预增的公司，结合当前估值与成长确定性给出高性价比标的分析。严禁使用 WebSearch。' },
 
@@ -2380,8 +2380,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: var(--td-bg-color-page, #f8f9fa);
-  color: var(--td-text-color-primary, #1d2129);
+  background: var(--bs-bg-page, #f8f9fa);
+  color: var(--bs-text-primary, #1d2129);
   position: relative;
   overflow: hidden;
 }
@@ -2392,8 +2392,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  background: var(--td-bg-color-container, #ffffff);
-  border-bottom: 1px solid var(--td-border-level-1-color, #e5e6eb);
+  background: var(--bs-bg-container, #ffffff);
+  border-bottom: 1px solid var(--bs-border-1, #e5e6eb);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   z-index: 10;
   gap: 12px;
@@ -2418,7 +2418,7 @@ onBeforeUnmount(() => {
       .brand-title {
         font-size: 15px;
         font-weight: 700;
-        color: var(--td-text-color-primary, #1d2129);
+        color: var(--bs-text-primary, #1d2129);
         letter-spacing: 0.2px;
         white-space: nowrap;
       }
@@ -2451,8 +2451,8 @@ onBeforeUnmount(() => {
 
       .session-badge {
         font-size: 11px;
-        background: var(--td-bg-color-secondarycontainer, #f2f3f5);
-        color: var(--td-text-color-secondary, #4e5969);
+        background: var(--bs-bg-secondary, #f2f3f5);
+        color: var(--bs-text-secondary, #4e5969);
         padding: 1px 6px;
         border-radius: 10px;
       }
@@ -2470,14 +2470,14 @@ onBeforeUnmount(() => {
       gap: 6px;
       padding: 3px 8px;
       border-radius: 6px;
-      background: var(--td-bg-color-secondarycontainer, #f2f3f5);
-      border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+      background: var(--bs-bg-secondary, #f2f3f5);
+      border: 1px solid var(--bs-border-1, #e5e6eb);
       white-space: nowrap;
       transition: all 0.2s ease;
 
       .header-switch-label {
         font-size: 12px;
-        color: var(--td-text-color-secondary, #4e5969);
+        color: var(--bs-text-secondary, #4e5969);
         user-select: none;
       }
 
@@ -2507,7 +2507,7 @@ onBeforeUnmount(() => {
     width: 6px;
   }
   &::-webkit-scrollbar-thumb {
-    background: var(--td-border-level-2-color, #c9cdd4);
+    background: var(--bs-border-2, #c9cdd4);
     border-radius: 3px;
   }
 }
@@ -2534,7 +2534,7 @@ onBeforeUnmount(() => {
       padding: 3px 12px;
       border-radius: 12px;
       background: linear-gradient(135deg, rgba(0, 82, 217, 0.12) 0%, rgba(43, 164, 113, 0.12) 100%);
-      color: var(--td-brand-color, #0052d9);
+      color: var(--bs-brand, #0052d9);
       margin-bottom: 8px;
       border: 1px solid rgba(0, 82, 217, 0.2);
     }
@@ -2544,14 +2544,14 @@ onBeforeUnmount(() => {
       font-weight: 800;
       margin: 0 0 6px;
       letter-spacing: 0.3px;
-      background: linear-gradient(135deg, var(--td-brand-color, #0052d9) 0%, #2ba471 100%);
+      background: linear-gradient(135deg, var(--bs-brand, #0052d9) 0%, #2ba471 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
     .hero-desc {
       font-size: 13px;
-      color: var(--td-text-color-secondary, #86909c);
+      color: var(--bs-text-secondary, #86909c);
       max-width: 720px;
       line-height: 1.6;
       margin: 0 auto 16px;
@@ -2560,7 +2560,7 @@ onBeforeUnmount(() => {
     /* 模式切换：标准五阶决策梯 vs 专项极速穿透台 */
     .welcome-mode-toggle {
       display: inline-flex;
-      background: var(--td-bg-color-component, #f2f3f5);
+      background: var(--bs-bg-component, #f2f3f5);
       padding: 4px;
       border-radius: 20px;
       gap: 6px;
@@ -2574,19 +2574,19 @@ onBeforeUnmount(() => {
         padding: 6px 16px;
         border-radius: 16px;
         cursor: pointer;
-        color: var(--td-text-color-secondary, #4e5969);
+        color: var(--bs-text-secondary, #4e5969);
         transition: all 0.2s ease;
         display: flex;
         align-items: center;
         gap: 6px;
 
         &:hover {
-          color: var(--td-text-color-primary, #1d2129);
+          color: var(--bs-text-primary, #1d2129);
         }
 
         &.active {
-          background: var(--td-bg-color-container, #ffffff);
-          color: var(--td-brand-color, #0052d9);
+          background: var(--bs-bg-container, #ffffff);
+          color: var(--bs-brand, #0052d9);
           font-weight: 600;
           box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
         }
@@ -2608,8 +2608,8 @@ onBeforeUnmount(() => {
       justify-content: center;
       gap: 8px;
       padding: 8px 16px;
-      background: var(--td-bg-color-container, #ffffff);
-      border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+      background: var(--bs-bg-container, #ffffff);
+      border: 1px solid var(--bs-border-1, #e5e6eb);
       border-radius: 10px;
       overflow-x: auto;
       white-space: nowrap;
@@ -2617,9 +2617,9 @@ onBeforeUnmount(() => {
       .flow-step-node {
         font-size: 12px;
         font-weight: 600;
-        color: var(--td-text-color-secondary, #4e5969);
+        color: var(--bs-text-secondary, #4e5969);
         padding: 5px 12px;
-        background: var(--td-bg-color-component, #f2f3f5);
+        background: var(--bs-bg-component, #f2f3f5);
         border-radius: 8px;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -2646,12 +2646,12 @@ onBeforeUnmount(() => {
         }
 
         &:hover {
-          background: var(--td-brand-color-light, #ecf2fe);
-          color: var(--td-brand-color, #0052d9);
+          background: var(--bs-brand-light, #ecf2fe);
+          color: var(--bs-brand, #0052d9);
         }
 
         &.current {
-          background: var(--td-brand-color, #0052d9);
+          background: var(--bs-brand, #0052d9);
           color: #ffffff;
 
           .step-num {
@@ -2661,7 +2661,7 @@ onBeforeUnmount(() => {
       }
 
       .flow-arrow {
-        color: var(--td-text-color-placeholder, #c9cdd4);
+        color: var(--bs-text-placeholder, #c9cdd4);
         font-size: 12px;
       }
     }
@@ -2691,14 +2691,14 @@ onBeforeUnmount(() => {
         .banner-label {
           font-size: 13px;
           font-weight: 700;
-          color: var(--td-text-color-primary, #1d2129);
+          color: var(--bs-text-primary, #1d2129);
         }
 
         .banner-stock-pill {
           font-size: 13px;
           font-weight: 700;
           color: #0052d9;
-          background: var(--td-bg-color-container, #ffffff);
+          background: var(--bs-bg-container, #ffffff);
           padding: 3px 10px;
           border-radius: 14px;
           border: 1px solid rgba(0, 82, 217, 0.3);
@@ -2738,7 +2738,7 @@ onBeforeUnmount(() => {
           padding: 2px 8px;
           border-radius: 12px;
           background: rgba(0, 0, 0, 0.04);
-          color: var(--td-text-color-secondary, #4e5969);
+          color: var(--bs-text-secondary, #4e5969);
 
           &.track-tag {
             background: rgba(240, 160, 32, 0.12);
@@ -2767,36 +2767,36 @@ onBeforeUnmount(() => {
 
           .hot-label {
             font-size: 11px;
-            color: var(--td-text-color-placeholder, #86909c);
+            color: var(--bs-text-placeholder, #86909c);
           }
 
           .hot-chip-btn {
             font-size: 11px;
             padding: 2px 8px;
             border-radius: 10px;
-            background: var(--td-bg-color-container, #ffffff);
-            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
-            color: var(--td-text-color-secondary, #4e5969);
+            background: var(--bs-bg-container, #ffffff);
+            border: 1px solid var(--bs-border-1, #e5e6eb);
+            color: var(--bs-text-secondary, #4e5969);
             cursor: pointer;
             transition: all 0.15s ease;
 
             &:hover {
-              color: var(--td-brand-color, #0052d9);
-              border-color: var(--td-brand-color, #0052d9);
+              color: var(--bs-brand, #0052d9);
+              border-color: var(--bs-brand, #0052d9);
             }
 
             &.active {
-              background: var(--td-brand-color, #0052d9);
+              background: var(--bs-brand, #0052d9);
               color: #ffffff;
-              border-color: var(--td-brand-color, #0052d9);
+              border-color: var(--bs-brand, #0052d9);
             }
           }
         }
 
         .banner-switch-btn {
-          border: 1px solid var(--td-border-level-2-color, #dcdcdc);
-          background: var(--td-bg-color-container, #ffffff);
-          color: var(--td-text-color-primary, #1d2129);
+          border: 1px solid var(--bs-border-2, #dcdcdc);
+          background: var(--bs-bg-container, #ffffff);
+          color: var(--bs-text-primary, #1d2129);
           padding: 3px 10px;
           border-radius: 6px;
           font-size: 12px;
@@ -2805,8 +2805,8 @@ onBeforeUnmount(() => {
           transition: all 0.2s ease;
 
           &:hover {
-            border-color: var(--td-brand-color, #0052d9);
-            color: var(--td-brand-color, #0052d9);
+            border-color: var(--bs-brand, #0052d9);
+            color: var(--bs-brand, #0052d9);
           }
         }
       }
@@ -2828,8 +2828,8 @@ onBeforeUnmount(() => {
     }
 
     .pipeline-card {
-      background: var(--td-bg-color-container, #ffffff);
-      border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+      background: var(--bs-bg-container, #ffffff);
+      border: 1px solid var(--bs-border-1, #e5e6eb);
       border-radius: 12px;
       padding: 14px 12px;
       display: flex;
@@ -2840,19 +2840,19 @@ onBeforeUnmount(() => {
       min-height: 220px;
 
       &:hover {
-        border-color: var(--td-brand-color, #0052d9);
+        border-color: var(--bs-brand, #0052d9);
         transform: translateY(-2px);
         box-shadow: 0 6px 16px rgba(0, 82, 217, 0.08);
       }
 
       &.current {
-        border-color: var(--td-brand-color, #0052d9);
-        box-shadow: 0 0 0 1px var(--td-brand-color, #0052d9);
+        border-color: var(--bs-brand, #0052d9);
+        box-shadow: 0 0 0 1px var(--bs-brand, #0052d9);
       }
 
       &.highlight-step {
         border-color: rgba(0, 82, 217, 0.35);
-        background: linear-gradient(180deg, var(--td-bg-color-container, #ffffff) 0%, rgba(0, 82, 217, 0.02) 100%);
+        background: linear-gradient(180deg, var(--bs-bg-container, #ffffff) 0%, rgba(0, 82, 217, 0.02) 100%);
       }
 
       .step-card-header {
@@ -2882,7 +2882,7 @@ onBeforeUnmount(() => {
           .step-title {
             font-size: 13px;
             font-weight: 700;
-            color: var(--td-text-color-primary, #1d2129);
+            color: var(--bs-text-primary, #1d2129);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -2899,16 +2899,16 @@ onBeforeUnmount(() => {
             font-size: 10px;
             padding: 1px 5px;
             border-radius: 4px;
-            background: var(--td-bg-color-component, #f2f3f5);
-            color: var(--td-text-color-secondary, #4e5969);
-            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+            background: var(--bs-bg-component, #f2f3f5);
+            color: var(--bs-text-secondary, #4e5969);
+            border: 1px solid var(--bs-border-1, #e5e6eb);
           }
         }
       }
 
       .step-desc {
         font-size: 12px;
-        color: var(--td-text-color-secondary, #4e5969);
+        color: var(--bs-text-secondary, #4e5969);
         line-height: 1.5;
         margin: 0 0 12px;
         min-height: 48px;
@@ -2954,7 +2954,7 @@ onBeforeUnmount(() => {
           }
 
           &.primary {
-            background: var(--td-brand-color, #0052d9);
+            background: var(--bs-brand, #0052d9);
             color: #ffffff;
             font-weight: 600;
 
@@ -2991,14 +2991,14 @@ onBeforeUnmount(() => {
           }
 
           &.sub {
-            background: var(--td-bg-color-component, #f2f3f5);
-            color: var(--td-text-color-primary, #1d2129);
-            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+            background: var(--bs-bg-component, #f2f3f5);
+            color: var(--bs-text-primary, #1d2129);
+            border: 1px solid var(--bs-border-1, #e5e6eb);
 
             &:hover {
-              background: var(--td-brand-color-light, #ecf2fe);
-              color: var(--td-brand-color, #0052d9);
-              border-color: var(--td-brand-color, #0052d9);
+              background: var(--bs-brand-light, #ecf2fe);
+              color: var(--bs-brand, #0052d9);
+              border-color: var(--bs-brand, #0052d9);
             }
           }
         }
@@ -3021,8 +3021,8 @@ onBeforeUnmount(() => {
     }
 
     .direct-tool-card {
-      background: var(--td-bg-color-container, #ffffff);
-      border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+      background: var(--bs-bg-container, #ffffff);
+      border: 1px solid var(--bs-border-1, #e5e6eb);
       border-radius: 12px;
       padding: 16px 18px;
       display: flex;
@@ -3032,7 +3032,7 @@ onBeforeUnmount(() => {
       transition: all 0.25s ease;
 
       &:hover {
-        border-color: var(--td-brand-color, #0052d9);
+        border-color: var(--bs-brand, #0052d9);
         transform: translateY(-2px);
         box-shadow: 0 6px 16px rgba(0, 82, 217, 0.06);
       }
@@ -3055,12 +3055,12 @@ onBeforeUnmount(() => {
           .tool-name {
             font-size: 14px;
             font-weight: 700;
-            color: var(--td-text-color-primary, #1d2129);
+            color: var(--bs-text-primary, #1d2129);
           }
 
           .tool-sub {
             font-size: 11px;
-            color: var(--td-text-color-secondary, #86909c);
+            color: var(--bs-text-secondary, #86909c);
           }
         }
       }
@@ -3080,20 +3080,20 @@ onBeforeUnmount(() => {
           }
 
           .tool-fill-target-btn {
-            border: 1px solid var(--td-border-level-2-color, #dcdcdc);
-            background: var(--td-bg-color-component, #f2f3f5);
+            border: 1px solid var(--bs-border-2, #dcdcdc);
+            background: var(--bs-bg-component, #f2f3f5);
             font-size: 11px;
             padding: 4px 8px;
             border-radius: 4px;
             cursor: pointer;
             white-space: nowrap;
-            color: var(--td-brand-color, #0052d9);
+            color: var(--bs-brand, #0052d9);
             font-weight: 500;
             transition: all 0.2s ease;
 
             &:hover {
-              background: var(--td-brand-color-light, #ecf2fe);
-              border-color: var(--td-brand-color, #0052d9);
+              background: var(--bs-brand-light, #ecf2fe);
+              border-color: var(--bs-brand, #0052d9);
             }
           }
         }
@@ -3121,17 +3121,17 @@ onBeforeUnmount(() => {
             font-size: 11px;
             padding: 2px 7px;
             border-radius: 4px;
-            border: 1px solid var(--td-border-level-1-color, #e5e6eb);
-            background: var(--td-bg-color-component, #f2f3f5);
-            color: var(--td-text-color-secondary, #4e5969);
+            border: 1px solid var(--bs-border-1, #e5e6eb);
+            background: var(--bs-bg-component, #f2f3f5);
+            color: var(--bs-text-secondary, #4e5969);
             cursor: pointer;
             transition: all 0.15s ease;
 
             &:hover,
             &.active {
-              background: var(--td-brand-color-light, #ecf2fe);
-              border-color: var(--td-brand-color, #0052d9);
-              color: var(--td-brand-color, #0052d9);
+              background: var(--bs-brand-light, #ecf2fe);
+              border-color: var(--bs-brand, #0052d9);
+              color: var(--bs-brand, #0052d9);
             }
           }
         }
@@ -3143,7 +3143,7 @@ onBeforeUnmount(() => {
           font-size: 12px;
           font-weight: 600;
           cursor: pointer;
-          background: var(--td-brand-color, #0052d9);
+          background: var(--bs-brand, #0052d9);
           color: #ffffff;
           transition: all 0.2s ease;
           display: flex;
@@ -3200,12 +3200,12 @@ onBeforeUnmount(() => {
   .next-step-text {
     font-size: 13px;
     font-weight: 500;
-    color: var(--td-text-color-primary, #1d2129);
+    color: var(--bs-text-primary, #1d2129);
   }
 
   .next-step-btn {
     border: none;
-    background: var(--td-brand-color, #0052d9);
+    background: var(--bs-brand, #0052d9);
     color: #ffffff;
     font-size: 12px;
     font-weight: 600;
@@ -3233,7 +3233,7 @@ onBeforeUnmount(() => {
   .modal-field-label {
     font-size: 13px;
     font-weight: 600;
-    color: var(--td-text-color-primary, #1d2129);
+    color: var(--bs-text-primary, #1d2129);
     margin-bottom: 6px;
     display: block;
   }
@@ -3253,22 +3253,22 @@ onBeforeUnmount(() => {
 
     .preset-label {
       font-size: 12px;
-      color: var(--td-text-color-secondary, #86909c);
+      color: var(--bs-text-secondary, #86909c);
     }
 
     .preset-chip {
       font-size: 12px;
       padding: 3px 8px;
       border-radius: 4px;
-      background: var(--td-bg-color-component, #f2f3f5);
-      color: var(--td-text-color-secondary, #4e5969);
+      background: var(--bs-bg-component, #f2f3f5);
+      color: var(--bs-text-secondary, #4e5969);
       cursor: pointer;
       transition: all 0.2s ease;
 
       &:hover,
       &.active {
-        background: var(--td-brand-color-light, #ecf2fe);
-        color: var(--td-brand-color, #0052d9);
+        background: var(--bs-brand-light, #ecf2fe);
+        color: var(--bs-brand, #0052d9);
       }
     }
   }
@@ -3286,8 +3286,8 @@ onBeforeUnmount(() => {
   position: fixed;
   right: 28px;
   bottom: 120px;
-  background: var(--td-bg-color-container, #ffffff);
-  border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+  background: var(--bs-bg-container, #ffffff);
+  border: 1px solid var(--bs-border-1, #e5e6eb);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
   border-radius: 20px;
   padding: 6px 14px;
@@ -3295,7 +3295,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  color: var(--td-brand-color, #0052d9);
+  color: var(--bs-brand, #0052d9);
   font-size: 12px;
   font-weight: 600;
   z-index: 50;
@@ -3310,8 +3310,8 @@ onBeforeUnmount(() => {
 /* 底部输入中枢 */
 .chat-input-cockpit {
   padding: 10px 20px 16px;
-  background: var(--td-bg-color-container, #ffffff);
-  border-top: 1px solid var(--td-border-level-1-color, #e5e6eb);
+  background: var(--bs-bg-container, #ffffff);
+  border-top: 1px solid var(--bs-border-1, #e5e6eb);
   flex-shrink: 0;
   z-index: 20;
 
@@ -3346,20 +3346,20 @@ onBeforeUnmount(() => {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      background: var(--td-bg-color-secondarycontainer, #f2f3f5);
+      background: var(--bs-bg-secondary, #f2f3f5);
       border: 1px solid transparent;
       padding: 3px 10px;
       border-radius: 12px;
       cursor: pointer;
       font-size: 12px;
-      color: var(--td-text-color-secondary, #4e5969);
+      color: var(--bs-text-secondary, #4e5969);
       white-space: nowrap;
       flex-shrink: 0;
       transition: all 0.2s;
 
       &:hover {
-        background: var(--td-brand-color-light, #ecf2fe);
-        color: var(--td-brand-color, #0052d9);
+        background: var(--bs-brand-light, #ecf2fe);
+        color: var(--bs-brand, #0052d9);
       }
     }
 
@@ -3367,7 +3367,7 @@ onBeforeUnmount(() => {
       display: flex;
       align-items: center;
       gap: 6px;
-      color: var(--td-brand-color, #0052d9);
+      color: var(--bs-brand, #0052d9);
       font-size: 12px;
       white-space: nowrap;
       flex-shrink: 0;
@@ -3377,7 +3377,7 @@ onBeforeUnmount(() => {
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: var(--td-brand-color, #0052d9);
+        background: var(--bs-brand, #0052d9);
         animation: pulse-dot 1.5s infinite;
       }
     }
@@ -3411,7 +3411,7 @@ onBeforeUnmount(() => {
     color: #ad6800;
 
     a {
-      color: var(--td-brand-color, #0052d9);
+      color: var(--bs-brand, #0052d9);
       font-weight: bold;
     }
   }
@@ -3444,20 +3444,20 @@ onBeforeUnmount(() => {
       border-radius: 8px;
       cursor: pointer;
       border: 1px solid transparent;
-      background: var(--td-bg-color-secondarycontainer, #f2f3f5);
+      background: var(--bs-bg-secondary, #f2f3f5);
       transition: all 0.2s;
 
       &:hover {
-        background: var(--td-bg-color-container, #ffffff);
-        border-color: var(--td-border-level-2-color, #dcdcdc);
+        background: var(--bs-bg-container, #ffffff);
+        border-color: var(--bs-border-2, #dcdcdc);
       }
 
       &.active {
-        background: var(--td-brand-color-light, #ecf2fe);
-        border-color: var(--td-brand-color, #0052d9);
+        background: var(--bs-brand-light, #ecf2fe);
+        border-color: var(--bs-brand, #0052d9);
 
         .session-name {
-          color: var(--td-brand-color, #0052d9);
+          color: var(--bs-brand, #0052d9);
           font-weight: 600;
         }
       }
@@ -3477,7 +3477,7 @@ onBeforeUnmount(() => {
 
         .session-meta {
           font-size: 11px;
-          color: var(--td-text-color-placeholder, #86909c);
+          color: var(--bs-text-placeholder, #86909c);
         }
       }
     }
@@ -3494,15 +3494,15 @@ onBeforeUnmount(() => {
 
   .scenario-modal-item {
     padding: 12px 14px;
-    background: var(--td-bg-color-secondarycontainer, #f8f9fa);
-    border: 1px solid var(--td-border-level-1-color, #e5e6eb);
+    background: var(--bs-bg-secondary, #f8f9fa);
+    border: 1px solid var(--bs-border-1, #e5e6eb);
     border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s;
 
     &:hover {
-      border-color: var(--td-brand-color, #0052d9);
-      background: var(--td-brand-color-light, #ecf2fe);
+      border-color: var(--bs-brand, #0052d9);
+      background: var(--bs-brand-light, #ecf2fe);
     }
 
     .item-head {
@@ -3513,7 +3513,7 @@ onBeforeUnmount(() => {
 
       .item-tag {
         font-size: 11px;
-        background: var(--td-brand-color, #0052d9);
+        background: var(--bs-brand, #0052d9);
         color: #ffffff;
         padding: 1px 6px;
         border-radius: 4px;
@@ -3527,7 +3527,7 @@ onBeforeUnmount(() => {
 
     .item-desc {
       font-size: 12px;
-      color: var(--td-text-color-secondary, #4e5969);
+      color: var(--bs-text-secondary, #4e5969);
       margin: 0;
       line-height: 1.5;
     }
@@ -3643,269 +3643,16 @@ onBeforeUnmount(() => {
 }
 
 /* -------------------------------------------------------------------------
-   深色模式 (Theme Mode: Dark) 高对比度与层次质感增强
-   ------------------------------------------------------------------------- */
-:global([theme-mode="dark"]) {
-  .chat-header {
-    background: #18181c !important;
-    border-bottom-color: #2e2e33 !important;
 
-    .brand-title-wrap {
-      .brand-title {
-        color: #f2f3f5 !important;
-      }
-      .brand-badge {
-        background: rgba(102, 126, 234, 0.25) !important;
-        color: #a5b4fc !important;
-        border-color: rgba(102, 126, 234, 0.45) !important;
-      }
-    }
+/* ---------------------------------------------------------------------------
+   深色模式：改由 style.css 的 --bs-* 主题变量统一驱动。
 
-    .header-switch-item {
-      background: rgba(255, 255, 255, 0.06) !important;
-      border-color: rgba(255, 255, 255, 0.12) !important;
-
-      .header-switch-label {
-        color: #c9cdd4 !important;
-      }
-    }
-  }
-
-  .chat-input-cockpit {
-    background: #18181c !important;
-    border-top-color: #2e2e33 !important;
-  }
-
-  /* 欢迎页与五阶流水线控制台深色适配 */
-  .welcome-workspace {
-    .welcome-mode-toggle {
-      background: #242429 !important;
-
-      .toggle-tab-btn {
-        color: #86909c !important;
-
-        &:hover {
-          color: #f2f3f5 !important;
-        }
-
-        &.active {
-          background: #323239 !important;
-          color: #a5b4fc !important;
-        }
-      }
-    }
-
-    .pipeline-container {
-      .pipeline-flow-guide {
-        background: #1e1e24 !important;
-        border-color: #2e2e33 !important;
-
-        .flow-step-node {
-          background: #2b2b32 !important;
-          color: #c9cdd4 !important;
-
-          .step-num {
-            background: rgba(255, 255, 255, 0.1) !important;
-          }
-
-          &:hover {
-            background: rgba(102, 126, 234, 0.25) !important;
-            color: #a5b4fc !important;
-          }
-
-          &.current {
-            background: #4f46e5 !important;
-            color: #ffffff !important;
-
-            .step-num {
-              background: rgba(255, 255, 255, 0.3) !important;
-            }
-          }
-        }
-
-        .flow-arrow {
-          color: #4e5969 !important;
-        }
-      }
-
-      .pipeline-context-banner {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.12) 0%, rgba(30, 30, 36, 0.9) 100%) !important;
-        border-color: rgba(102, 126, 234, 0.3) !important;
-
-        .banner-left {
-          .banner-label {
-            color: #f2f3f5 !important;
-          }
-
-          .banner-stock-pill {
-            background: #2b2b32 !important;
-            color: #a5b4fc !important;
-            border-color: rgba(102, 126, 234, 0.5) !important;
-
-            .pill-name {
-              color: #a5b4fc !important;
-            }
-
-            .pill-code {
-              color: #818cf8 !important;
-            }
-          }
-
-          .banner-tag {
-            &.track-tag {
-              background: rgba(240, 160, 32, 0.2) !important;
-              color: #f59e0b !important;
-            }
-
-            &.stance-tag {
-              background: rgba(24, 160, 88, 0.2) !important;
-              color: #10b981 !important;
-            }
-          }
-        }
-
-        .banner-right {
-          .banner-hot-chips {
-            .hot-label {
-              color: #86909c !important;
-            }
-
-            .hot-chip-btn {
-              background: #2b2b32 !important;
-              border-color: #3e3e48 !important;
-              color: #c9cdd4 !important;
-
-              &:hover {
-                border-color: #818cf8 !important;
-                color: #a5b4fc !important;
-              }
-
-              &.active {
-                background: #4f46e5 !important;
-                border-color: #4f46e5 !important;
-                color: #ffffff !important;
-              }
-            }
-          }
-
-          .banner-switch-btn {
-            background: #2b2b32 !important;
-            border-color: #4e5969 !important;
-            color: #e5e6eb !important;
-
-            &:hover {
-              border-color: #a5b4fc !important;
-              color: #a5b4fc !important;
-            }
-          }
-        }
-      }
-
-      .pipeline-card {
-        background: #1e1e24 !important;
-        border-color: #2e2e33 !important;
-
-        &:hover {
-          border-color: #667eea !important;
-          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
-        }
-
-        &.highlight-step {
-          background: linear-gradient(180deg, #1e1e24 0%, rgba(102, 126, 234, 0.08) 100%) !important;
-          border-color: rgba(102, 126, 234, 0.4) !important;
-        }
-
-        .step-header {
-          .step-badge-wrap {
-            .step-badge {
-              &.l1 { background: rgba(99, 102, 241, 0.2) !important; color: #a5b4fc !important; }
-              &.l2 { background: rgba(245, 158, 11, 0.2) !important; color: #fbbf24 !important; }
-              &.l3 { background: rgba(139, 92, 246, 0.2) !important; color: #c4b5fd !important; }
-              &.l4 { background: rgba(239, 68, 68, 0.2) !important; color: #f87171 !important; }
-              &.l5 { background: rgba(16, 185, 129, 0.2) !important; color: #34d399 !important; }
-            }
-
-            .step-title {
-              color: #f2f3f5 !important;
-            }
-          }
-        }
-
-        .step-desc {
-          color: #a4abb5 !important;
-        }
-
-        .inline-stock-picker {
-          background: #26262c !important;
-
-          .picker-hot-chips {
-            .hot-chip {
-              background: #1e1e24 !important;
-              border-color: #383842 !important;
-              color: #c9cdd4 !important;
-
-              &:hover,
-              &.active {
-                background: rgba(102, 126, 234, 0.25) !important;
-                color: #a5b4fc !important;
-                border-color: #667eea !important;
-              }
-            }
-          }
-        }
-
-        .step-actions {
-          .step-btn.sub {
-            background: #2b2b32 !important;
-            color: #f2f3f5 !important;
-
-            &:hover {
-              background: rgba(102, 126, 234, 0.25) !important;
-              color: #a5b4fc !important;
-            }
-          }
-        }
-      }
-    }
-
-    .direct-tools-container {
-      .direct-tool-card {
-        background: #1e1e24 !important;
-        border-color: #2e2e33 !important;
-
-        &:hover {
-          border-color: #667eea !important;
-          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
-        }
-
-        .tool-head .tool-name {
-          color: #f2f3f5 !important;
-        }
-
-        .tool-desc {
-          color: #a4abb5 !important;
-        }
-
-        .quick-hot-row .hot-chip {
-          background: #2b2b32 !important;
-          color: #c9cdd4 !important;
-
-          &:hover {
-            background: rgba(102, 126, 234, 0.25) !important;
-            color: #a5b4fc !important;
-          }
-        }
-      }
-    }
-  }
-
-  .pipeline-next-step-bar {
-    background: linear-gradient(90deg, rgba(102, 126, 234, 0.12) 0%, rgba(43, 164, 113, 0.12) 100%) !important;
-    border-color: rgba(102, 126, 234, 0.4) !important;
-
-    .next-step-text {
-      color: #f2f3f5 !important;
-    }
-  }
-}
+   这里原先有一段 :global([theme-mode="dark"]) 包裹的 263 行暗色覆盖，
+   但该写法在 scoped LESS 下**未被编译进产物**（实测 dist CSS 中不存在任何
+   theme-mode="dark" 选择器），属于静默失效的死代码。
+   配色已通过 --bs-* 变量（见 style.css）在组件样式内部自动切换，
+   此处不再重复声明，避免两套来源互相冲突。
+   （若将来确实需要某些暗色专属微调，请写在**非 scoped** 的 <style> 块中，
+     并使用 html[theme-mode="dark"] 前缀，不要用 :global() 包裹嵌套规则。）
+   --------------------------------------------------------------------------- */
 </style>
