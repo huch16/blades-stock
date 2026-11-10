@@ -127,6 +127,18 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 	if timeout <= 0 {
 		timeout = 300 * time.Second
 	}
+	// 这里的 timeout 是**每一次 LLM 请求**的上限（不是整个 Agent 运行的上限）。
+	//
+	// 踩坑记录：曾建议用户把卡片「请求超时」调到 120 秒以“快速失败”，结果
+	// 慢速推理模型的**单次**响应就要 200~400 秒，于是每一次调用都被自己的
+	// 配置掐断，用户看到 `context deadline exceeded`，且旧提示语还把它
+	// 误报为“服务商繁忙”。低于 120 秒几乎必然误杀正常请求，故在此留痕。
+	if timeout < 120*time.Second {
+		logger.SugaredLogger.Warnf(
+			"[ModelFactory] 卡片「%s」的单次请求超时仅 %v，低于常见推理模型的单次响应耗时，"+
+				"极可能出现 context deadline exceeded。建议在「高级调度参数」调大至 300 秒以上。",
+			aiConfig.Name, timeout)
+	}
 	maxTok := aiConfig.MaxTokens
 	if maxTok <= 0 {
 		maxTok = 4096

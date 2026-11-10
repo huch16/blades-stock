@@ -1731,8 +1731,15 @@ onBeforeUnmount(() => {
                         </n-form-item>
                       </n-gi>
                       <n-gi>
-                        <n-form-item label="请求超时 (秒, ≥ 5)">
-                          <n-input-number v-model:value="cfg.timeOut" :min="5" :max="3600" :step="30" style="width: 100%;" />
+                        <n-form-item label="请求超时 (秒) —— 单次模型请求上限">
+                          <div style="width: 100%;">
+                            <n-input-number v-model:value="cfg.timeOut" :min="5" :max="3600" :step="30" style="width: 100%;" />
+                            <div class="advanced-hint" style="margin-top: 4px;">
+                              ⚠️ 这是**每一次**模型请求的上限，不是整次分析的上限。
+                              慢速推理模型单次响应常需 200~400 秒，设得过小会被自己的配置掐断
+                              （报 <code>context deadline exceeded</code>）。建议 ≥ 300。
+                            </div>
+                          </div>
                         </n-form-item>
                       </n-gi>
                       <n-gi>

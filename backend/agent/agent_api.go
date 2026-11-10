@@ -821,6 +821,19 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				errMsg += "\n\n**可能原因**：模型在执行过程中进行了过多轮工具调用仍无法收敛，可能陷入了循环。\n\n**解决方案**：\n1. 尝试更精确地描述你的问题，减少模糊性\n2. 切换到支持更长上下文或更强推理能力的模型\n3. 简化查询条件"
 			} else if strings.Contains(lowerErr, "reasoning") || strings.Contains(lowerErr, "thinking") {
 				errMsg += "\n\n**可能原因**：当前模型开启了 thinking/reasoning 模式，但该模式与 Agent 工具调用不兼容。\n\n**解决方案**：请在 AI 配置中关闭 thinking 模式，或切换到支持工具调用的模型（如 deepseek-chat、gpt-4o 等）。"
+			} else if isRequestTimeoutError(agentErr) {
+				// ⚠️ 必须与"服务端繁忙"区分开：这条错误的真实原因是**我们自己配置的
+				// 单次请求超时**（卡片「高级调度参数 → 请求超时」）。把它说成
+				// "服务商限流/过载"会把用户引向完全错误的方向 —— 实测曾因此让用户
+				// 反复切换模型，而真正该做的是调大这一项。
+				errMsg += fmt.Sprintf(
+					"\n\n**真实原因**：单次模型请求超过了当前配置的「请求超时」上限（%d 秒）。"+
+						"这不是服务商故障，也不是限流。\n\n"+
+						"**解决方案**：进入「设置 → AI模型注册表」，展开该卡片的"+
+						"「⚙️ 高级调度参数」，把「请求超时 (秒)」调大（慢速推理模型建议 ≥ 300 秒；"+
+						"实测本平台部分模型单次响应可达 200~400 秒）。\n\n"+
+						"**其他可选**：改用响应更快的模型，或关闭该卡片的「深度思考」以减少单次推理耗时。",
+					effectiveRequestTimeoutSec(aiConfigId))
 			} else if isTransientModelError(agentErr) {
 				errMsg += "\n\n**提示**：模型服务端暂时繁忙（限流/过载/网络中断），已自动重试仍失败，请稍后再试或切换其他 AI 配置。"
 			}
@@ -1087,4 +1100,47 @@ func runETFBacktestForQuestion(question string) string {
 	}
 
 	return sb.String()
+}
+
+// isRequestTimeoutError 判断错误是否由**我们自己的单次请求超时**引起。
+//
+// 与 isTransientModelError 刻意分离：后者表示"上游真的繁忙"；
+// 而 `context deadline exceeded` 在这里几乎总是卡片「请求超时」配置过低
+// （chat_model_factory 用 aiConfig.TimeOut 作为每一次 LLM 请求的上限）。
+// 混为一谈会把用户引向错误的排查方向。
+func isRequestTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	lower := strings.ToLower(err.Error())
+	for _, m := range []string{
+		"context deadline exceeded",
+		"request timeout",
+		"timeout awaiting response headers",
+		"client.timeout exceeded",
+		"i/o timeout",
+	} {
+		if strings.Contains(lower, m) {
+			return true
+		}
+	}
+	return false
+}
+
+// effectiveRequestTimeoutSec 返回某张卡片实际生效的"单次请求超时"秒数，
+// 供错误提示如实告知用户该改哪一项。
+func effectiveRequestTimeoutSec(aiConfigId int) int {
+	cfg := data.GetSettingConfig()
+	if cfg == nil {
+		return 0
+	}
+	for _, c := range cfg.AiConfigs {
+		if c != nil && int(c.ID) == aiConfigId {
+			if c.TimeOut > 0 {
+				return c.TimeOut
+			}
+			return 300
+		}
+	}
+	return 0
 }

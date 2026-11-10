@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -211,5 +212,48 @@ func TestGetRecentAgentRunsOrderingAndLimit(t *testing.T) {
 	}
 	if len(data.GetRecentAgentRuns(10)) != 0 {
 		t.Error("清空后应为空")
+	}
+}
+
+// 契约六：`context deadline exceeded` 必须被判定为「我们自己的单次请求超时」，
+// 而不是「服务端繁忙」—— 两者混淆会把用户引向完全错误的排查方向。
+func TestRequestTimeoutIsNotClassifiedAsServerBusy(t *testing.T) {
+	cases := []string{
+		"context deadline exceeded",
+		"Post \"https://x/v1/chat/completions\": context deadline exceeded",
+		"request timeout",
+		"timeout awaiting response headers",
+		"i/o timeout",
+	}
+	for _, c := range cases {
+		err := errors.New(c)
+		if !isRequestTimeoutError(err) {
+			t.Errorf("%q 应被判定为请求超时", c)
+		}
+	}
+	// 真正的上游繁忙不应被判成请求超时（否则提示语又会反转错方向）
+	for _, c := range []string{"429 Too Many Requests", "503 Service Unavailable", "overloaded"} {
+		if isRequestTimeoutError(errors.New(c)) {
+			t.Errorf("%q 是上游繁忙，不应判为请求超时", c)
+		}
+	}
+	if isRequestTimeoutError(nil) {
+		t.Error("nil 不应判为请求超时")
+	}
+}
+
+// 契约七：effectiveRequestTimeoutSec 必须如实反映卡片的 TimeOut，
+// 让错误提示能明确告诉用户"该改哪一项、改成多少"。
+func TestEffectiveRequestTimeoutReflectsCard(t *testing.T) {
+	resetRunRecords()
+	cs := seedRunCards(t, 0, unreachableCard("超时卡", "timeout-model"))
+	if err := db.Dao.Model(&data.AIConfig{}).Where("id = ?", cs[0].ID).Update("time_out", 120).Error; err != nil {
+		t.Fatalf("设置 time_out 失败: %v", err)
+	}
+	if got := effectiveRequestTimeoutSec(int(cs[0].ID)); got != 120 {
+		t.Errorf("应读到卡片配置的 120，实际 %d", got)
+	}
+	if got := effectiveRequestTimeoutSec(999999); got != 0 {
+		t.Errorf("不存在的卡片应返回 0，实际 %d", got)
 	}
 }

@@ -175,6 +175,10 @@ func (s *AgentService) GeneratePreMarketBriefingAsync(ctx context.Context, aiCon
 		return rep, nil
 	}
 	if err != nil {
+		if notice := businessRuleNotice(err); notice != "" {
+			// 业务规则拒绝：给前端一个明确原因，不要让它拿到 null
+			return blockedReport(t.kind, notice), nil
+		}
 		return nil, err
 	}
 	return rep, nil
@@ -194,6 +198,10 @@ func (s *AgentService) GeneratePostMarketReviewAsync(ctx context.Context, aiConf
 		return rep, nil
 	}
 	if err != nil {
+		if notice := businessRuleNotice(err); notice != "" {
+			// 业务规则拒绝：给前端一个明确原因，不要让它拿到 null
+			return blockedReport(t.kind, notice), nil
+		}
 		return nil, err
 	}
 	return rep, nil
@@ -213,6 +221,10 @@ func (s *AgentService) GenerateETFRotationReportAsync(ctx context.Context, aiCon
 		return rep, nil
 	}
 	if err != nil {
+		if notice := businessRuleNotice(err); notice != "" {
+			// 业务规则拒绝：给前端一个明确原因，不要让它拿到 null
+			return blockedReport(t.kind, notice), nil
+		}
 		return nil, err
 	}
 	return rep, nil
@@ -233,6 +245,10 @@ func (s *AgentService) GenerateSerenityResearchReportAsync(ctx context.Context, 
 		return rep, nil
 	}
 	if err != nil {
+		if notice := businessRuleNotice(err); notice != "" {
+			// 业务规则拒绝：给前端一个明确原因，不要让它拿到 null
+			return blockedReport(t.kind, notice), nil
+		}
 		return nil, err
 	}
 	return rep, nil
@@ -267,4 +283,36 @@ func errString(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// businessRuleNotice 把**业务规则拒绝**转成面向用户的可读说明。
+//
+// 为什么需要它：盘后复盘要求 15:00 收盘后触发，盘中调用时生成器直接
+// `return nil, error`，而该 RPC 的返回值只有 *MarketIntelligenceReport
+// （Wails 绑定契约，无 error 通道）→ 前端拿到 null → **用户点了按钮
+// 却什么都看不到，也没有任何原因**。这是"每个环节都要有确定反馈"的缺口。
+//
+// 这里把这类**确定性、可行动**的业务拒绝（区别于模型故障）转成带
+// StatusText 的空报告，前端据此给出明确提示。
+func businessRuleNotice(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	for _, marker := range []string{
+		"尚未收盘", "严禁在开盘前", "尚未生成", "未到", "不在交易时段", "非交易日",
+	} {
+		if strings.Contains(msg, marker) {
+			return msg
+		}
+	}
+	return ""
+}
+
+// blockedReport 构造一个"业务上暂不可生成"的可读回执。
+func blockedReport(kind, notice string) *agent.MarketIntelligenceReport {
+	return &agent.MarketIntelligenceReport{
+		Type:       reportTaskTypeKey(kind),
+		StatusText: notice,
+	}
 }

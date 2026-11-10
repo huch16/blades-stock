@@ -552,6 +552,15 @@ async function generate() {
       return
     }
 
+    // 业务规则拒绝（如"盘后复盘需 15:00 收盘后触发"）：后端会返回一份
+    // 空正文 + statusText 的回执。必须把原因明确告诉用户，
+    // 而不是让按钮点下去没有任何反应。
+    if (res && !res.inBackground && !res.content && res.statusText) {
+      message.warning(res.statusText, { duration: 9000 })
+      loading.value = false
+      return
+    }
+
     if (res && !isCorruptedReport(res)) {
       reports.value[currentTab.value] = res
       message.success(`【${currentTitle.value}】生成成功！`)

@@ -152,3 +152,41 @@ func TestBackgroundPlaceholderTypeMapping(t *testing.T) {
 		}
 	}
 }
+
+// 契约七：业务规则拒绝必须转成**可读回执**，而不是让前端拿到 null。
+//
+// 实测缺口：盘中点「盘后复盘」→ 生成器 `return nil, "尚未收盘…"` →
+// 该 RPC 无 error 通道 → 前端收到 null → **用户点了按钮却什么都看不到**。
+func TestBusinessRuleRejectionBecomesReadableReceipt(t *testing.T) {
+	notices := []string{
+		"当前交易日尚未收盘（需等待 15:00 闭市归档），严禁在开盘前或盘中提前生成收盘复盘报告！",
+		"该交易日尚未生成数据",
+		"当前不在交易时段",
+	}
+	for _, n := range notices {
+		got := businessRuleNotice(errors.New(n))
+		if got == "" {
+			t.Errorf("业务规则消息 %q 应被识别", n)
+		}
+	}
+	// 真实故障不得被当成业务规则（否则会掩盖模型故障）
+	for _, n := range []string{"context deadline exceeded", "401 unauthorized", "connection refused"} {
+		if businessRuleNotice(errors.New(n)) != "" {
+			t.Errorf("模型故障 %q 不应被当作业务规则拒绝", n)
+		}
+	}
+	if businessRuleNotice(nil) != "" {
+		t.Error("nil 应返回空")
+	}
+
+	rep := blockedReport("post_market", notices[0])
+	if rep == nil || rep.StatusText == "" {
+		t.Fatal("回执必须携带可读原因")
+	}
+	if rep.Type != "post_market_review" {
+		t.Errorf("回执的 Type 必须还原为研报类型，实际 %q", rep.Type)
+	}
+	if rep.Content != "" || rep.InBackground {
+		t.Error("业务拒绝的回执应是空正文且不标记 inBackground（语义不同）")
+	}
+}
