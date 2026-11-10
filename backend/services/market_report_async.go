@@ -37,6 +37,26 @@ import (
 //	这样无论模型多慢、入口多严，用户都能在 20 秒内得到确定反馈，
 //	并最终拿到真正的结果，而不是旧研报冒充新研报。
 
+// detachForBackground 让后台任务**脱离 HTTP 请求上下文**。
+//
+// 为什么必须这么做（踩过的坑，务必保留这段注释）：
+//
+//	cmd/server/dispatcher.go 把 `r.Context()` 注入 RPC 方法的 ctx 参数，
+//	而 HTTP handler 一旦返回，r.Context() 立刻被取消。
+//	异步包装若把同一个 ctx 传给后台 goroutine，那么"12 秒返回 inBackground
+//	占位"的瞬间，后台生成就被取消了 —— 前端拿到"后台生成中"，
+//	然后永远轮询不到结果。生产运行记录里那条
+//	`dur=1.1s err=context canceled` 就是它的签名。
+//
+// context.WithoutCancel（Go 1.21+）保留 ctx 中的值（追踪 ID、运行类型等），
+// 但剥离取消信号与截止时间 —— 后台任务因此能跑满它自己的 10 分钟上限。
+func detachForBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return context.WithoutCancel(ctx)
+}
+
 // marketReportSoftWait 同步等待研报的软上限。
 //
 // 必须显著小于入口的 20s 硬切断（留出协议与回传余量）。
@@ -142,9 +162,11 @@ func awaitReport(t *reportTask, softWait time.Duration) (*agent.MarketIntelligen
 
 // GeneratePreMarketBriefingAsync 盘前晨报：同步部分不超过 12 秒。
 func (s *AgentService) GeneratePreMarketBriefingAsync(ctx context.Context, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
-	svc := agent.NewMarketLifecycleService(ctx)
+	// 关键：后台任务必须用**脱离请求**的 ctx，否则 handler 一返回就被取消
+	bg := detachForBackground(ctx)
+	svc := agent.NewMarketLifecycleService(bg)
 	t := startReportTask("pre_market", func() (*agent.MarketIntelligenceReport, error) {
-		return svc.GeneratePreMarketBriefing(ctx, aiConfigId)
+		return svc.GeneratePreMarketBriefing(bg, aiConfigId)
 	})
 	rep, err, ready := awaitReport(t, marketReportSoftWait)
 	if !ready {
@@ -160,9 +182,10 @@ func (s *AgentService) GeneratePreMarketBriefingAsync(ctx context.Context, aiCon
 
 // GeneratePostMarketReviewAsync 收盘复盘：同步部分不超过 12 秒。
 func (s *AgentService) GeneratePostMarketReviewAsync(ctx context.Context, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
-	svc := agent.NewMarketLifecycleService(ctx)
+	bg := detachForBackground(ctx)
+	svc := agent.NewMarketLifecycleService(bg)
 	t := startReportTask("post_market", func() (*agent.MarketIntelligenceReport, error) {
-		return svc.GeneratePostMarketReview(ctx, aiConfigId)
+		return svc.GeneratePostMarketReview(bg, aiConfigId)
 	})
 	rep, err, ready := awaitReport(t, marketReportSoftWait)
 	if !ready {
@@ -178,9 +201,10 @@ func (s *AgentService) GeneratePostMarketReviewAsync(ctx context.Context, aiConf
 
 // GenerateETFRotationReportAsync ETF 轮动：同步部分不超过 12 秒。
 func (s *AgentService) GenerateETFRotationReportAsync(ctx context.Context, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
-	svc := agent.NewMarketLifecycleService(ctx)
+	bg := detachForBackground(ctx)
+	svc := agent.NewMarketLifecycleService(bg)
 	t := startReportTask("etf_rotation", func() (*agent.MarketIntelligenceReport, error) {
-		return svc.GenerateETFRotationReport(ctx, aiConfigId)
+		return svc.GenerateETFRotationReport(bg, aiConfigId)
 	})
 	rep, err, ready := awaitReport(t, marketReportSoftWait)
 	if !ready {
@@ -196,10 +220,11 @@ func (s *AgentService) GenerateETFRotationReportAsync(ctx context.Context, aiCon
 
 // GenerateSerenityResearchReportAsync Serenity 产业链拆解：同步部分不超过 12 秒。
 func (s *AgentService) GenerateSerenityResearchReportAsync(ctx context.Context, targetName, code string, aiConfigId int) (*agent.MarketIntelligenceReport, error) {
-	svc := agent.NewMarketLifecycleService(ctx)
+	bg := detachForBackground(ctx)
+	svc := agent.NewMarketLifecycleService(bg)
 	kind := "serenity:" + code
 	t := startReportTask(kind, func() (*agent.MarketIntelligenceReport, error) {
-		return svc.GenerateSerenityResearchReport(ctx, targetName, code, aiConfigId)
+		return svc.GenerateSerenityResearchReport(bg, targetName, code, aiConfigId)
 	})
 	rep, err, ready := awaitReport(t, marketReportSoftWait)
 	if !ready {

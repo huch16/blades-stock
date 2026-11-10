@@ -1591,11 +1591,17 @@ const FINISH_REASON_NOTICE: Record<string, string> = {
 }
 
 // ── 流式看门狗 ────────────────────────────────────────────────────────────
-// 后端已用 defer 护栏保证「任何返回路径都会发送终态」。
-// 这里再加一层前端防线：若流式期间长时间收不到任何事件（网络中断、
-// 后端回归、SSE 静默断开），主动收尾并如实告知，杜绝“卡在思考中、
-// 输入框一直禁用、只能刷新页面”的体验。
-const STREAM_SILENCE_TIMEOUT_MS = 180_000
+// 后端已用 defer 护栏保证「任何返回路径都会发送终态」，因此这里只是
+// 「SSE 断开且没有任何终态到达」的兜底。
+//
+// ⚠️ 阈值必须大于**最慢一次真实运行**，否则会把仍在正常推演的任务掐死。
+// 踩坑记录：初版取 180s，而生产实测慢速模型（NVIDIA）单次流水线要
+//   283.5s / 382.8s / 422.7s
+// —— 看门狗在任务仍在推演时就 finalizeStream()，之后真正的回答到达时
+// isStreaming 已为 false、被直接丢弃，用户看到的就是「五阶流水线每步都不出结果」。
+// 现取 900s（15 分钟）：显著高于实测最坏 422.7s，又短于"真的该放弃"的尺度。
+// 若将来出现更慢的模型，请同步上调本值，而不是让用户承担误杀。
+const STREAM_SILENCE_TIMEOUT_MS = 900_000
 let streamWatchdogId: number | null = null
 
 function clearStreamWatchdog() {
@@ -1613,7 +1619,7 @@ function armStreamWatchdog() {
     const target = messages.value.find(m => m.id === streamingMsgId.value)
     if (target) {
       target.streamNotice =
-        '⚠️ 已超过 3 分钟未收到模型任何输出，已自动结束本次流式接收。可重新发送，或改用响应更快的模型。'
+        '⚠️ 已超过 15 分钟未收到模型任何输出，本次流式接收已自动结束（通常是连接中断）。可重新发送，或改用响应更快的模型。'
     }
     finalizeStream(target)
   }, STREAM_SILENCE_TIMEOUT_MS)
