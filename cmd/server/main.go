@@ -344,6 +344,44 @@ func main() {
 	agent.MarketReportBroadcastHook = globalSSEHub.Broadcast
 	agent.PriceAlertBroadcastHook = globalSSEHub.Broadcast
 
+	// 【P1 修复】启动价格预警与 Agent 触发式分析监听器。
+	//
+	// 此前它只在三个桌面 shell（app_{darwin,linux,windows}.go）里启动，
+	// cmd/server **从未启动过** → 在 Docker/Web 部署下「价格预警 + 异动 AI 分析」
+	// 整条链路根本不运行。而前端早已在等这个事件：
+	//   bridge.ts  defaultEvents 含 'stockPriceAlertTriggered'
+	//   App.vue     EventsOn('stockPriceAlertTriggered', ...) 已有完整的通知 UI
+	// 即：UI 已就绪、SSE 广播钩子（PriceAlertBroadcastHook）也已在上一行接好，
+	// 唯独没有把它打开 —— 属於「已建成但从未打开开关」型缺陷，用户端表现为
+	// “设了预警价但永远不提醒”。
+	//
+	// 传 context.Background() 是安全的：watcher 内部把 Wails 原生通道包在
+	// `wailsCtx != nil && wailsCtx.Value("events") != nil` 守卫里，
+	// 服务端没有该上下文时自动只走 SSE 钩子，不会 panic。
+	agent.GetPriceAlertWatcher().Start(context.Background())
+
+	// 【P1 修复】把「技能自动提取」进化任务纳入 Web 模式定时调度。
+	//
+	// 原实现只在 app.go 的 cron 里注册（每日 02:30），Web 模式无任何 cron，
+	// 于是自学习能力在生产环境完全不跑。该任务自带 7 天限频（在 agent_memories
+	// 里落一条 skill_pass 记录）且**只写草稿供人工审阅、绝不自动建技能**，
+	// 因此加入后没有行为风险，只是把被漏掉的能力补齐。
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.SugaredLogger.Warnf("[SkillExtractionCron] recovered from panic: %v", r)
+			}
+		}()
+		// 启动后错开一段时间再跑首次，避免与启动期的数据预热抢资源
+		time.Sleep(3 * time.Minute)
+		agent.RunSkillExtractionPass()
+		skillTicker := time.NewTicker(24 * time.Hour)
+		defer skillTicker.Stop()
+		for range skillTicker.C {
+			agent.RunSkillExtractionPass()
+		}
+	}()
+
 	// 5. 初始化通用 RPC 反射分发器
 	dispatcher := NewRPCDispatcher(marketService, quantService, agentService, settingsService)
 

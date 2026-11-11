@@ -121,6 +121,14 @@ func reorderToolsByRankWith(ts []bladesTools.Tool, ranks map[string]ToolRank) []
 
 const evolutionAdviceCooldown = 6 * time.Hour
 
+// maybeGenerateEvolutionAdvice 低分轨迹异步生成 Prompt 优化建议并写入长期记忆。
+//
+// ⚠️ 【当前无生产触发路径，DORMANT】—— 唯一调用点在
+// GenerateReflection 内部（result.Score < 0 分支），而 GenerateReflection
+// 本身已无调用者（见其注释，提交 a158883）。
+// 即：Prompt 进化闭环目前**整条不运行**。
+// 特别提醒：本函数**会真实调用 LLM**（ev.OptimizePrompt），
+// 所以恢复它前先确认这正是预期成本，不要与「零 Token 确定性路径」混为一谈。
 func (ev *Evolver) maybeGenerateEvolutionAdvice(sessionID string, trace *AgentTrace) {
 	go func() {
 		defer func() {
@@ -226,6 +234,12 @@ func toolCallSucceeded(resp string) bool {
 // answers, negative-scored answers (need a second opinion), and a deterministic
 // ~1/3 sample of medium answers get an LLM call. Everything else falls back to
 // the cheap keyword scorer.
+//
+// ⚠️ 【当前无调用者，DORMANT】—— 它原本只服务于 GenerateReflection 的调用点，
+// 该调用点已在提交 a158883（strip agent reflection token burn）中删除，
+// 本函数随之成为孤儿。保留它是因为它精确记录了当时**计划**的成本上限策略，
+// 未来若要恢复 LLM 反思打分，应从这里重新接线（而不是无条件调用）。
+// 注意它**不是**安全兜底：它的存在不代表反射已启用，详见 GenerateReflection 注释。
 func shouldRunLLMReflection(answer string, autoScore int) bool {
 	n := len([]rune(answer))
 	if n < 150 {

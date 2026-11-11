@@ -144,15 +144,60 @@ func (w *PriceAlertAgentWatcher) checkAlerts() {
 	}
 }
 
-// triggerAgentAnalysis 驱动 Agent 进行突发事件深度归因分析并向前端推送
+// triggerAgentAnalysis 驱动 Agent 进行突发事件深度归因分析并向前端推送。
+//
+// 【设计原则】确定性告警优先于 AI 丰富化：
+// 「价格突破预警价」是完全确定的事实（纯算术比较），它的载荷
+// （code/name/reason/price/changePercent/time）**不需要任何模型**就能推给用户；
+// AI 归因只是附加价值（aiAnalysis/actions）。
+// 因此这里把分析抽到 analyzeAnomaly（失败即返回空串），
+// 而**先发告警、后附分析** —— 避免“没配好模型就收不到任何告警”这种
+// 把确定性能力耦合到 LLM 可用性上的失效模式（违反零 Token 确定性法则）。
 func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string, price, changePercent float64) {
+	cleanedAnalysis, actions := w.analyzeAnomaly(code, name, reason, price, changePercent)
+	w.broadcastPriceAlert(code, name, reason, price, changePercent, cleanedAnalysis, actions)
+}
+
+// broadcastPriceAlert 组装告警载荷并广播到桌面原生通道 + Web SSE。
+//
+// 两条通道都带守卫：服务端没有 Wails 上下文时自动只走 SSE，不会 panic。
+func (w *PriceAlertAgentWatcher) broadcastPriceAlert(code, name, reason string, price, changePercent float64, aiAnalysis string, actions any) {
+	// ⚠️ 注意：不要在后台监控中直接 EventsEmit "agent:action"，否则会导致用户正在正常使用时
+	// 界面不时突然弹出全屏 K线图或诊断抽屉！Action 应该放在 stockPriceAlertTriggered 载荷中供用户在通知里点击！
+	alertPayload := map[string]any{
+		"code":          code,
+		"name":          name,
+		"reason":        reason,
+		"price":         price,
+		"changePercent": changePercent,
+		"time":          time.Now().Format("15:04:05"),
+		"aiAnalysis":    aiAnalysis,
+		"actions":       actions,
+	}
+
+	// 1. 桌面原生通道（仅在 Wails 上下文有效）
+	if w.wailsCtx != nil && w.wailsCtx.Value("events") != nil {
+		runtime.EventsEmit(w.wailsCtx, "stockPriceAlertTriggered", alertPayload)
+	}
+
+	// 2. Web SSE 通道
+	if PriceAlertBroadcastHook != nil {
+		PriceAlertBroadcastHook("stockPriceAlertTriggered", alertPayload)
+	}
+}
+
+// analyzeAnomaly 调起 Agent 做异动归因，返回清理后的分析文本与行动建议。
+//
+// 一切失败路径（无 AI 配置 / 模型无效 / Agent 构建失败 / 并发超限 / 推理报错）
+// 都只返回空结果，**绝不阻断告警本身**；调用方仍会把确定性告警发出去。
+func (w *PriceAlertAgentWatcher) analyzeAnomaly(code, name, reason string, price, changePercent float64) (string, any) {
 	// 全局闸门：并发 Agent 实例数超过上限时跳过，避免价格预警高峰期同时调起几十个 Agent
 	// 推垮后端或造成内存压力（每个 Agent 会加载 100+ 工具及其描述，初始占用较大）。
 	const maxConcurrentAgent = 2
 	if cur := atomic.AddInt32(&watcherRunningAgentCount, 1); cur > maxConcurrentAgent {
 		atomic.AddInt32(&watcherRunningAgentCount, -1)
-		logger.SugaredLogger.Warnf("⚠️ 跳过价格预警 Agent 触发：当前并发 %d 超过上限 %d（股票=%s）", cur-1, maxConcurrentAgent, code)
-		return
+		logger.SugaredLogger.Warnf("⚠️ 跳过价格预警 Agent 归因（告警仍会发出）：当前并发 %d 超过上限 %d（股票=%s）", cur-1, maxConcurrentAgent, code)
+		return "", nil
 	}
 	defer atomic.AddInt32(&watcherRunningAgentCount, -1)
 
@@ -162,7 +207,8 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 	// 获取当前激活的 AI 配置（优先使用用户设置的当前活动配置，避免失效配置报错）
 	settingConfig := data.GetSettingConfig()
 	if settingConfig == nil || len(settingConfig.AiConfigs) == 0 {
-		return
+		logger.SugaredLogger.Debugf("价格预警无 AI 配置，仅发送确定性告警（股票=%s）", code)
+		return "", nil
 	}
 	// 统一走 ResolveModelForced（全局默认 → 回落），要求密钥有效。
 	var mainConfig data.AIConfig
@@ -178,13 +224,15 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 		}
 	}
 	if mainConfig.ID == 0 {
-		return
+		logger.SugaredLogger.Debugf("价格预警无可用模型，仅发送确定性告警（股票=%s）", code)
+		return "", nil
 	}
 
 	// 调起 Agent 生成简报
 	agentInstance := GetStockAiAgent(w.ctx, mainConfig, prompt, string(AgentModeReact), nil)
 	if agentInstance == nil {
-		return
+		logger.SugaredLogger.Warnf("价格预警 Agent 构建失败，仅发送确定性告警（股票=%s）", code)
+		return "", nil
 	}
 
 	invocation := &blades.Invocation{
@@ -205,31 +253,7 @@ func (w *PriceAlertAgentWatcher) triggerAgentAnalysis(code, name, reason string,
 			}
 		}
 	}
-	aiAnalysisText := md.String()
-
 	// 解析告警分析中是否包含行动建议 (Agent-Action)
-	cleanedAnalysis, actions := types.ParseAndExtractActions(aiAnalysisText)
-	// ⚠️ 注意：不要在后台监控中直接 EventsEmit "agent:action"，否则会导致用户正在正常使用时
-	// 界面不时突然弹出全屏 K线图或诊断抽屉！Action 应该放在 stockPriceAlertTriggered 载荷中供用户在通知里点击！
-
-	alertPayload := map[string]any{
-		"code":          code,
-		"name":          name,
-		"reason":        reason,
-		"price":         price,
-		"changePercent": changePercent,
-		"time":          time.Now().Format("15:04:05"),
-		"aiAnalysis":    cleanedAnalysis,
-		"actions":       actions,
-	}
-
-	// 1. 将告警事件以及 Agent 推理结果广播给前端 UI（仅在 Wails 原生桌面上下文有效）
-	if w.wailsCtx != nil && w.wailsCtx.Value("events") != nil {
-		runtime.EventsEmit(w.wailsCtx, "stockPriceAlertTriggered", alertPayload)
-	}
-
-	// 2. 将告警事件广播至 Web SSE 客户端
-	if PriceAlertBroadcastHook != nil {
-		PriceAlertBroadcastHook("stockPriceAlertTriggered", alertPayload)
-	}
+	cleanedAnalysis, actions := types.ParseAndExtractActions(md.String())
+	return cleanedAnalysis, actions
 }
