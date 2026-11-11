@@ -598,6 +598,13 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			// model wrote into its content (MiniMax-M3 style) as the stream
 			// arrives. Fresh per attempt so a retry never inherits a stuck state.
 			var thinkFilter thinkStreamFilter
+			// 【空答检测】这两个计数只属于**本次尝试**，绝不跨重试继承：
+			// 若沿用外层共享变量，第 1 次尝试收了推理、第 2 次什么都没收，
+			// 错误文案就会归因错误。
+			firstChunkSeen := false
+			// processChars = 模型 reasoning + 本系统发出的工具步骤文本。
+			// 两者对用户都是「有过程、无结论」，因此合并计数（见 EmptyOutputError 注释）。
+			processChars := 0
 			invocation := &blades.Invocation{
 				Message:     blades.UserMessage(question),
 				Instruction: blades.SystemMessage(sysPrompt),
@@ -621,6 +628,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				if firstChunkTime.IsZero() {
 					firstChunkTime = time.Now()
 				}
+				firstChunkSeen = true
 
 				if msg.Role == blades.RoleAssistant {
 					text := msg.Text()
@@ -663,6 +671,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 					if msg.Metadata != nil {
 						if rc, ok := msg.Metadata["reasoning_content"].(string); ok && rc != "" {
+							processChars += len([]rune(rc))
 							ch <- &StreamMessage{
 								Role:             "assistant",
 								Content:          "",
@@ -693,10 +702,12 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 						}
 						go RecordAuditLog(auditEntry)
 						logger.SugaredLogger.Infof("[ToolCall] %s(%s)", tp.Name, safeReq)
+						toolStepText := fmt.Sprintf("[STEP]🔧 调用工具：%s(%s)\n", tp.Name, safeReq)
+						processChars += len([]rune(toolStepText))
 						ch <- &StreamMessage{
 							Role:             "assistant",
 							Content:          "",
-							ReasoningContent: fmt.Sprintf("[STEP]🔧 调用工具：%s(%s)\n", tp.Name, safeReq),
+							ReasoningContent: toolStepText,
 						}
 						if safeResp != "" {
 							resultLen := len(safeResp)
@@ -709,13 +720,29 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 								summary = summary[:80] + "..."
 							}
 							summary = strings.ReplaceAll(summary, "\n", " ")
+							resultStepText := fmt.Sprintf("[STEP]%s 工具 %s 返回数据 (%d 字符): %s\n", status, tp.Name, resultLen, summary)
+							processChars += len([]rune(resultStepText))
 							ch <- &StreamMessage{
 								Role:             "assistant",
 								Content:          "",
-								ReasoningContent: fmt.Sprintf("[STEP]%s 工具 %s 返回数据 (%d 字符): %s\n", status, tp.Name, resultLen, summary),
+								ReasoningContent: resultStepText,
 							}
 						}
 					}
+				}
+			}
+			// 【空答检测】模型正常结束本轮，但正文一个字都没有。
+			//
+			// 以前这里直接 `return nil`，上层会把本轮记为 ok=true / finish=stop，
+			// 前端只能渲染「（空回复）」，用户得不到任何可行动的线索 ——
+			// 实测生产环境 nemotron-3.5-super-vl-120b-a12b 出现过「同一卡片、
+			// 同一问题，有时 2000+ 字符，有时跑满 55 秒却一字不给」。
+			// 既然是间歇性的，就交给重试机制处理；重试仍失败时，错误文案
+			// 会把真实原因说清楚（而非无信息量的「空回复」）。
+			if fullResponse.Len() == 0 {
+				return data.EmptyOutputError{
+					ProcessChars:   processChars,
+					FirstChunkSeen: firstChunkSeen,
 				}
 			}
 			return nil
@@ -735,7 +762,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				break
 			}
 			_, isDegenerate := agentErr.(data.DegenerateOutputError)
-			if (!isTransientModelError(agentErr) && !isDegenerate) || fullResponse.Len() > 0 {
+			// 「静默空答」同样是可重试的瞬时故障（间歇性实测：同卡片同问题
+			// 有时有正文、有时 55 秒空答），必须并入可重试集合，否则用户
+			// 只是白等一轮就拿到空回复。
+			isEmptyOutput := data.IsEmptyOutput(agentErr)
+			if (!isTransientModelError(agentErr) && !isDegenerate && !isEmptyOutput) || fullResponse.Len() > 0 {
 				break
 			}
 			retryCount++
@@ -815,6 +846,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				errMsg = fmt.Sprintf("❌ AI服务请求参数校验失败 (HTTP 400 Bad Request)。\n\n**可能原因**：网关或大模型服务端拒绝了请求参数（例如：参数重复定义、模型不支持特定思考模式或工具定义）。\n**解决方案**：系统已对常见网关参数自动执行容错过滤；若仍失败，请前往「系统设置 -> AI配置」检查该模型的配置（如检查 Base URL 格式、关闭 thinking 模式，或切换其他可用模型）。\n\n(底层详情: %v)", agentErr)
 			} else if _, ok := agentErr.(data.DegenerateOutputError); ok {
 				errMsg = "❌ 模型输出异常：检测到乱码(<unk>)流，已自动重试仍失败。\n\n**建议**：请重试一次；若反复出现，请切换 AI 配置中的模型。"
+			} else if emptyErr, ok := agentErr.(data.EmptyOutputError); ok {
+				errMsg = emptyOutputUserMessage(emptyErr, aiConfigId)
 			} else if strings.Contains(lowerErr, "unexpected end of json input") || lowerErr == "eof" || strings.Contains(lowerErr, "unexpected eof") {
 				errMsg = "❌ 模型服务响应中断：模型服务端返回了空响应或流式传输被意外切断 (unexpected end of JSON input)。\n\n**可能原因**：\n1. 当前大模型服务商（如 MiniMax/DeepSeek）瞬时过载、限流或网络握手重置\n2. 上下文或搜索内容较长触发了网关传输截断\n\n**解决方案**：\n1. 系统已尝试自动重试，请直接重新点击发送或换一个问题重试\n2. 建议在「AI配置」中配置备用模型，或开启 Fallback 多模型自动降级机制"
 			} else if strings.Contains(lowerErr, "exceeds max iterations") {
@@ -973,6 +1006,37 @@ func postProcessResponse(sessionID, question, response string, toolNames []strin
 
 // isTransientModelError reports whether an agent/model error is a transient
 // server-side condition (rate limit, overload, 5xx) that may succeed on retry.
+// emptyOutputUserMessage 把「模型静默空答」翻译成用户**可执行**的操作指引。
+//
+// 存在意义：这种情况在旧实现下会被记为 ok=true/finish=stop，前端只渲染
+// 无信息量的「（空回复）」，用户无从判断是软件坏了、网络不通、还是模型问题，
+// 只能反复重试。这里把「到底发生了什么」和「该动哪个开关」讲清楚。
+func emptyOutputUserMessage(e data.EmptyOutputError, aiConfigId int) string {
+	var b strings.Builder
+	b.WriteString("❌ 模型没有给出正文回答（本轮正常结束，但内容为空）。\n\n")
+	b.WriteString("**本次实际发生了什么**：")
+	switch {
+	case e.ProcessChars > 0:
+		fmt.Fprintf(&b, "模型产出了 %d 字符的思考/工具过程，但**始终没有写出最终答案**。", e.ProcessChars)
+	case !e.FirstChunkSeen:
+		b.WriteString("上游模型服务**没有返回任何内容**（连接建立后即结束）。")
+	default:
+		b.WriteString("上游返回了响应，但**正文为空**。")
+	}
+	b.WriteString("\n系统已自动重试，仍未获得正文。\n\n")
+
+	b.WriteString("**可能原因与解决方案**：\n")
+	if e.ProcessChars > 0 {
+		b.WriteString("1. **思考模式吃掉了全部输出预算**（最常见）：到「设置 → AI模型注册表」关闭该卡片的「深度思考」，或把「最大输出长度 (maxTokens)」调大\n")
+		b.WriteString("2. **模型执行了工具却未收敛出结论**：换用输出更稳定的模型（如 MiniMax-M3 / DeepSeek），或把问题问得更具体\n")
+	} else {
+		b.WriteString("1. **上游网关瞬时异常或配额不足**：稍后重试，或到「设置 → AI模型注册表」点该卡片的「检测连通性」\n")
+		b.WriteString("2. **该模型当前不可用**：切换为其他 AI 配置，或配置备用模型启用自动降级\n")
+	}
+	fmt.Fprintf(&b, "\n(本次使用的 AI 配置 ID: %d)", aiConfigId)
+	return b.String()
+}
+
 func isTransientModelError(err error) bool {
 	if err == nil {
 		return false

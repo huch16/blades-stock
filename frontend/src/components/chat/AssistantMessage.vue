@@ -75,7 +75,44 @@
             <span class="typing-text">{{ message.statusText || '正在思考并撰写投研报告...' }}</span>
           </div>
         </div>
-        <div v-else class="empty-state">（空回复）</div>
+        <!-- 空回复：绝不能只显示「（空回复）」——用户看到这四个字时完全无法
+             判断是软件坏了、网络不通、还是模型问题，只能反复重试。
+             这里根据**实际握有的事实**分三种情况给出可行动的说明：
+               ① 有思考内容 → 把思考折叠区指出来（答案其实“藏在思考里”）
+               ② 有工具过程 → 说明模型调了工具但没写结论
+               ③ 什么都没有 → 给排查步骤
+             后端现已把这种情况归类为「静默空答」并返回带原因的文案，
+             这里是第二道防线（覆盖旧构建 / 历史消息 / 其他入口）。 -->
+        <div v-else class="empty-state empty-state-actionable">
+          <div class="empty-title">⚠️ 模型没有给出正文回答</div>
+          <div v-if="reasoning || rawReasoning">
+            本轮模型产出了<b>思考内容</b>但没有写出最终答案，思考过程已折叠在上方
+            <b>「💭 思考过程」</b>中。
+            <div class="empty-hint-title">怎么办：</div>
+            <ol>
+              <li>到「设置 → AI模型注册表」关闭该卡片的<b>「深度思考」</b>后重试（最常见原因：思考吃掉了全部输出预算）</li>
+              <li>或把该卡片的<b>「最大输出长度 (maxTokens)」</b>调大</li>
+              <li>或换用输出更稳定的模型（MiniMax-M3 / DeepSeek 等）</li>
+            </ol>
+          </div>
+          <div v-else-if="toolCalls.length">
+            模型执行了 <b>{{ toolCalls.length }}</b> 次工具调用，但没有写出结论。
+            <div class="empty-hint-title">怎么办：</div>
+            <ol>
+              <li>直接重新发送（上游空答多为间歇性，重试常可恢复）</li>
+              <li>若反复出现，到「设置 → AI模型注册表」点该卡片<b>「检测连通性」</b>，或切换其他模型</li>
+            </ol>
+          </div>
+          <div v-else>
+            上游模型服务<b>没有返回任何内容</b>（连接建立后即结束）。
+            <div class="empty-hint-title">怎么办：</div>
+            <ol>
+              <li>重新发送一次（大概率为上游瞬时异常）</li>
+              <li>仍无改善时，到「设置 → AI模型注册表」点该卡片<b>「检测连通性」</b>确认可用</li>
+              <li>或切换为其他 AI 配置</li>
+            </ol>
+          </div>
+        </div>
 
         <!-- 流式收尾异常提示：必须在流式结束后仍可见，
              否则用户只看到“回复突然结束”，无从判断原因。 -->
@@ -732,6 +769,40 @@ async function copyAnchorLink() {
   font-style: italic;
   text-align: center;
   padding: 20px;
+}
+
+/* 可行动的空回复提示：左对齐、非斜体（这是排查指引，不是一句占位文案），
+   用警示色边框把它与普通正文区分开，避免被误读成模型正文。 */
+.empty-state-actionable {
+  text-align: left;
+  font-style: normal;
+  color: var(--bs-text-secondary);
+  line-height: 1.85;
+  padding: 14px 16px;
+  border-left: 3px solid #e6a23c;
+  border-radius: 6px;
+  background: var(--bs-bg-secondary);
+}
+
+.empty-state-actionable .empty-title {
+  font-weight: 600;
+  color: #e6a23c;
+  margin-bottom: 6px;
+}
+
+.empty-state-actionable .empty-hint-title {
+  margin-top: 8px;
+  font-weight: 600;
+  color: var(--bs-text-primary);
+}
+
+.empty-state-actionable ol {
+  margin: 4px 0 0;
+  padding-left: 22px;
+}
+
+.empty-state-actionable li {
+  margin-bottom: 3px;
 }
 
 /* 指标胶囊 */
