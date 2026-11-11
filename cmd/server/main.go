@@ -211,6 +211,32 @@ func main() {
 	// 3. 初始化分词词典与舆情情感分析器 (防止新闻切词 nil 指针异常)
 	data.InitAnalyzeSentiment()
 
+	// 【P1 修复】Web 模式启动时必须用数据库中的设置初始化共享 HTTP 客户端。
+	//
+	// 桌面端的 app_{darwin,linux,windows}.go 都在启动时调用了
+	// data.ConfigureFromSettings(...)，而 cmd/server 以前**从未调用** →
+	// 在 Docker/Web 部署下，用户配置的「全局网络代理」与「请求超时」
+	// 根本不会作用到共享 transport 上，表现为：需要代理才能访问的数据源
+	// （行情/新闻/模型网关）在桌面端正常、在 Web 端全部失败。
+	//
+	// 这里用 GetSettingConfig()（已内含默认值与 BrowserPath 自纠错）而不是
+	// 裸读一行 Settings，保证与运行期其他调用点使用**同一份**生效配置。
+	if db.Dao != nil {
+		settingConfig := data.GetSettingConfig()
+		if settingConfig != nil {
+			data.ConfigureFromSettings(settingConfig)
+			// 日志必须报告**实际生效值**：ConfigureFromSettings 在 CrawlTimeOut<=0 时
+			// 会回退为 300s，若直接打印原始值会打出误导人的“超时=0s”。
+			effectiveTimeoutSec := settingConfig.CrawlTimeOut
+			if effectiveTimeoutSec <= 0 {
+				effectiveTimeoutSec = 300
+			}
+			logger.SugaredLogger.Infof(
+				"[Server] 已应用数据库设置到共享 HTTP 客户端 (代理启用=%v 超时=%ds)",
+				settingConfig.HttpProxyEnabled, effectiveTimeoutSec)
+		}
+	}
+
 	// 4. 启动市场资讯后台定时采集与实时 SSE 广播
 	go func() {
 		defer func() {

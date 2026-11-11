@@ -92,6 +92,46 @@ onErrorCaptured((err: any, instance, info) => {
   return false
 })
 
+/**
+ * 当前已加载的构建标识。
+ *
+ * 为什么诊断报告必须带上它（实战教训）：用户报“某页面一打开就报错，重试多次
+ * 都抛同一异常”，而同一页面在服务端用全新会话打开却完全正常。
+ * 这种“确定性代码缺陷”的表象，最常见的真实原因是**浏览器里混着新旧 chunk**
+ *（部署过程中打开过页面 / 强缓存命中旧入口），而不是代码真的坏了。
+ * 只凭错误堆栈无法区分二者，而构建标识可以：
+ *   · 报告里的构建标识 == 服务端当前 index.html 引用的 hash → 代码缺陷
+ *   · 不一致 → 加载了旧版本资源，清缓存/强刷即可
+ *
+ * 取入口 <script type="module" src="/assets/index-<hash>.js"> 的 URL，
+ * 它天然带内容 hash，是最可靠的构建指纹。
+ */
+function getBuildIdentity(): string {
+  try {
+    const scripts = Array.from(document.querySelectorAll('script[src]')) as HTMLScriptElement[]
+    const entry = scripts
+      .map(s => s.getAttribute('src') || '')
+      .find(src => /\/assets\/index-[A-Za-z0-9_-]+\.js/.test(src))
+    if (entry) return entry
+    const anyAsset = scripts.map(s => s.getAttribute('src') || '').find(src => src.includes('/assets/'))
+    return anyAsset || '(未能识别入口脚本)'
+  } catch {
+    return '(读取构建标识失败)'
+  }
+}
+
+/** 读取 staleChunkGuard 的重载时间戳，用于判断本会话是否发生过陈旧 chunk 回退 */
+function getStaleChunkHint(): string {
+  try {
+    // 必须与 utils/staleChunkGuard.ts 的 RELOAD_STAMP_KEY 保持一致，
+    // 否则会静默地永远报“无”，诊断信息反而误导人。
+    const stamp = Number(sessionStorage.getItem('blades_stock_chunk_recover_at') || 0)
+    return stamp > 0 ? `本会话曾因陈旧 chunk 自动刷新过一次（${new Date(stamp).toLocaleString()}）` : '无'
+  } catch {
+    return '(sessionStorage 不可读)'
+  }
+}
+
 function handleRetry() {
   if (isDeterministicError.value) return
   hasError.value = false
@@ -111,6 +151,12 @@ async function copyDiagnostics() {
     `=== Blades Stock 技术诊断报告 (ErrorBoundary) ===`,
     `时间: ${errorTime.value || new Date().toISOString()}`,
     `路由: ${currentRoute.value || window.location.href}`,
+    // 构建指纹与陈旧 chunk 线索：用于区分“代码缺陷”与“加载了旧版本资源”。
+    // 请与服务器上 `curl -s <站点>/ | grep -o 'assets/index-[^"]*\.js'` 的结果对比：
+    //   一致   → 确实是当前版本的代码缺陷，请附上本报告排查
+    //   不一致 → 浏览器持有旧入口，清缓存并强制刷新（Ctrl+Shift+R）后复测
+    `构建标识(入口脚本): ${getBuildIdentity()}`,
+    `陈旧chunk回退迹象: ${getStaleChunkHint()}`,
     `重试次数: ${retryCount.value}`,
     `确定性故障: ${isDeterministicError.value ? '是 (Deterministic Bug)' : '否 (Transient)'}`,
     `错误信息: ${errorMessage.value}`,

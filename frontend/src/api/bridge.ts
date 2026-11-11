@@ -398,8 +398,10 @@ const LONG_RUNNING_METHODS = new Set([
   'GeneratePreMarketBriefing',
   'GeneratePostMarketReview',
   'GenerateETFRotationReport',
-  'GenerateSerenityResearchReport',
-  'TriggerSectorAnomalySerenityAnalysis'
+  'GenerateSerenityResearchReport'
+  // 注：曾列有 'TriggerSectorAnomalySerenityAnalysis'，但它**未注册为 RPC**
+  //（它是内部触发路径，由价格异动监视器调用；其能力已通过
+  //  GenerateSerenityResearchReport 对外提供）。留在超时表里属于死配置，已移除。
 ])
 
 // 4. Web 模式下的通用 HTTP RPC 发起器

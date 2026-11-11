@@ -52,9 +52,22 @@ function updateTab(name) {
 
 <template>
   <n-card>
+    <!--
+      display-directive="if"（懒挂载）—— 重要修复
+
+      默认情况下 n-tab-pane 会**全部急切挂载**：6 个 pane 的子组件在页面打开时
+      就统统 mount，于是：
+        ① 任何一个子组件的渲染异常都会把整页拖进 ErrorBoundary
+           （用户看到“研究中心视图组件异常已自动隔离”，其余 5 个完好的 tab 一并不可用）；
+        ② 6 个组件同时发起各自的 RPC 拉数据，首屏变慢且并发请求翻倍。
+      改为按需挂载后：故障被隔离在单个 tab 内，首屏只拉当前 tab 的数据。
+      子组件均在 onMounted/onBeforeUnmount 中成对注册与注销 SSE 监听，
+      因此切换 tab 时的卸载/重建不会造成监听泄漏或重复。
+    -->
     <n-tabs
       type="line"
       animated
+      display-directive="if"
       :value="nowTab"
       style="--wails-draggable:no-drag"
       @update-value="updateTab"
