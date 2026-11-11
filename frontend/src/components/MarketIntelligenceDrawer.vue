@@ -457,6 +457,26 @@ function selectSerenityPreset(preset) {
 }
 
 let pollTimer = null
+
+/**
+ * 统一的「本次生成已结束」收尾：清轮询、清后台进度条、解除 loading。
+ *
+ * 为什么必须集中一处（实测缺陷）：
+ *   报告送达有**多条**路径——SSE 实时广播、轮询命中、轮询超时、同步直接返回、
+ *   业务拒绝、异常兜底。之前每条路径各自清理，结果漏掉了一条：
+ *   SSE 送达时只清了 loading 与轮询，**没有清后台进度条**，
+ *   于是"报告已经显示出来了，界面还在转圈 + 显示'已等待 N 秒'"，
+ *   用户完全无法判断到底还在不在跑。
+ * 现在所有终态路径一律调用本函数，不再各清各的。
+ */
+function endGeneration() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+  backgroundStatus.value = ''
+  loading.value = false
+}
 // 后台生成进度：实测生产环境单份研报要 230~600 秒（模型极慢时更久），
 // 轮询期间必须让用户看到"还在跑、已等了多久"，而不是一个静止的转圈。
 // 旧实现在 180 秒时静默宣布"等待超时"，而报告往往在 230 秒才成功 —— 
@@ -490,11 +510,8 @@ function startPollingForCompletion(tabKey, startTime) {
         const reportTime = new Date(report.generatedAt).getTime()
         // 判定生成的研报时间是否在点击推演之后（容差 5 秒）
         if (reportTime >= startTime - 5000) {
-          clearInterval(pollTimer)
-          pollTimer = null
-          backgroundStatus.value = ''
           reports.value[tabKey] = report
-          loading.value = false
+          endGeneration()
           message.success(`【${currentTitle.value}】后台大模型深度研报生成完成，已自动呈现在此！`)
           return
         }
@@ -504,15 +521,12 @@ function startPollingForCompletion(tabKey, startTime) {
     }
 
     if (attempts >= maxAttempts) {
-      clearInterval(pollTimer)
-      pollTimer = null
-      loading.value = false
+      endGeneration()
       message.warning(
         `已等待 ${Math.round((Date.now() - startTime) / 1000)} 秒仍未生成完成。` +
           '可能原因：当前大模型响应极慢或已挂起（可在设置页查看「最近运行记录」确认耗时与错误），' +
           '建议改用响应更快的模型，或稍后重新推演。'
       )
-      backgroundStatus.value = ''
     }
   }, 5000)
 }
@@ -557,17 +571,17 @@ async function generate() {
     // 而不是让按钮点下去没有任何反应。
     if (res && !res.inBackground && !res.content && res.statusText) {
       message.warning(res.statusText, { duration: 9000 })
-      loading.value = false
+      endGeneration()
       return
     }
 
     if (res && !isCorruptedReport(res)) {
       reports.value[currentTab.value] = res
+      endGeneration()
       message.success(`【${currentTitle.value}】生成成功！`)
-      loading.value = false
     } else {
       message.warning('生成完成，暂无有效内容返回，请检查所选大模型的 API Key 及配额是否有效。')
-      loading.value = false
+      endGeneration()
     }
   } catch (err) {
     console.error('generate error:', err)
@@ -597,7 +611,7 @@ async function generate() {
       startPollingForCompletion(currentTab.value, startTime)
     } else {
       message.error(`研报生成失败: ${errMsg}。请检查 AI 配置是否有效，或切换其他大模型重试。`)
-      loading.value = false
+      endGeneration()
     }
   }
 }
@@ -641,11 +655,8 @@ EventsOn('marketIntelligenceReport', (incoming) => {
   if (!incoming || isCorruptedReport(incoming)) return
   if (reports.value[incoming.type] !== undefined) {
     reports.value[incoming.type] = incoming
-    if (pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
-    }
-    loading.value = false
+    // 走统一收尾：必须把后台进度条一并清掉，否则报告已到、界面还在转圈
+    endGeneration()
     message.success(`【${incoming.title || '智能研报'}】已由智能体实时同步！`)
   }
 })
