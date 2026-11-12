@@ -1025,6 +1025,12 @@ Highlights / 核心亮点
    - 全局静态代码检查（`go vet ./...`）达成 0 警告、0 错误。
    - 后端全部模块自动化测试（`go test ./backend/...`）100% 成功通过。
    - 根目录冗余编译临时大文件彻底清理，桌面端 Wails 二进制完成编译与本地 SQLite WAL 同步。
+   - **P0：记忆 session 隔离**（`blades_agent_memory_impl.go`）：`workingEntry` 新增 `SessionID` 字段，`WorkingPrompt()`/`GetWorking()`/`SummarizeAndArchive()` 按会话隔离，消除多用户/多标签页并发时的记忆串场风险。
+   - **P0：工具成功率记录加锁**（`blades_agent_evolution_impl.go`）：`Evolver` 新增 `sync.Mutex`，保护 `RecordToolUse()`/`RankTools()` 的读-改-写原子性，高并发下工具成功率统计不再丢失。
+   - **P1：回测并发控制+行情限流**（`post_mortem_loop.go` / `backtest_manager.go` / 新增 `rate_limiter.go`）：全局令牌桶限流器（默认 2 次/秒）+ K 线获取并发 semaphore（4 个）；每日复盘每只股票只获取一次 K 线（之前每个 horizon 都重复获取），行情请求减少约 2/3，避免行情接口被打爆。
+   - **前端：研报生成并发防护**（`MarketIntelligenceDrawer.vue`）：按标签页独立 loading 状态 + 全局互斥锁，同一时间只允许一个研报类型进行大模型推演，避免并发启动多个 Agent 任务。
+   - **后端：ETF 动量轮动回测 RPC 接入**（`QuantService.RunETFMomentumBacktest` / `App.RunETFMomentumBacktest`）：`etf_backtest.go` 原有但零生产调用者的回测框架现已通过 RPC 暴露，前端可一键触发 ETF 动量轮动回测。
+   - **构建脚本修复**（`build.ps1`）：修复 UTF-8 无 BOM 导致 PowerShell 5.1 解析失败（`MissingCatchOrFinally`）；修复 `$env:PATH` 整体覆盖导致 git 不可用、构建中止的缺陷；新增 `build_scripts_test.go` 防回归门禁（3 个测试，搭在 `go test` 上自动执行）。
 
 升级与兼容性说明
 ---------------
