@@ -57,7 +57,7 @@ func truncateForLog(body string) string {
 func resolveRealApiKey(baseURL, apiKey, modelName string) (string, bool) {
 	apiKey = strings.TrimSpace(apiKey)
 	if apiKey == "" {
-		return apiKey, true
+		return apiKey, false
 	}
 	// 只有掩码才需要还原；明文（含本地模型常用的 "none"）原样使用。
 	if !data.IsMaskedSecret(apiKey) {
@@ -215,7 +215,8 @@ func (s *SettingsService) CheckDeviceBinding(token string, apiBase string) map[s
 	}
 
 	url := fmt.Sprintf("%s/user/device-check?uuid=%s", apiBase, uuid)
-	resp, err := data.SharedHTTPClient.R().
+	client := data.CreateHTTPClientWithTimeout(5 * time.Second)
+	resp, err := client.R().
 		SetHeader("Authorization", "Bearer "+token).
 		Get(url)
 	if err != nil {
@@ -367,7 +368,7 @@ func (s *SettingsService) FetchAiModels(baseUrl, apiKey string) []string {
 	// 使用**共享 transport**（继承用户配置的全局代理、UA 与连接池），而不是 resty.New()：
 	// 旧实现完全绕过了代理配置，导致需要代理的网络环境下“拉取列表”必然失败，
 	// 而同一张卡片的对话却能正常工作（对话走的是共享客户端）——这是典型的“能聊不能列”。
-	client := data.CreateHTTPClientWithTimeout(30 * time.Second)
+	client := data.CreateHTTPClientWithTimeout(10 * time.Second)
 	client.SetBaseURL(baseUrl)
 
 	resp, err := client.R().
@@ -560,11 +561,11 @@ func classifyAIError(status int, raw, modelName string) string {
 			strings.Contains(l, "does not exist") || strings.Contains(l, "unknown") ||
 			strings.Contains(l, "no such") || strings.Contains(l, "invalid model"))) ||
 		(status == 404 && strings.Contains(l, "model")):
-		return fmt.Sprintf("当前接口地址下不存在模型「%s」。请点「拉取列表」从服务端返回的模型中选择，或核对模型标识拼写。%s", modelName, suffix)
-	case isTokenBudgetError(raw):
-		return fmt.Sprintf("输出预算不足（推理模型会在思考阶段消耗 token，已自动重试放宽预算）。%s", suffix)
+		return fmt.Sprintf("当前接口地址下不存在模型「%s」。请点「拉取列表」从服务端返回的模型中选择,或核对模型标识拼写。%s", modelName, suffix)
 	case status == 401 || status == 403:
 		return "API Key 无效或权限不足（HTTP " + strconv.Itoa(status) + "）。" + suffix
+	case isTokenBudgetError(raw):
+		return fmt.Sprintf("输出预算不足（推理模型会在思考阶段消耗 token，已自动重试放宽预算）。%s", suffix)
 	case status == 404:
 		return fmt.Sprintf("接口路径不存在（404）：请确认 Base URL 指向 .../v1（不是 .../v1/chat/completions）。%s", suffix)
 	case status == 429:
@@ -761,7 +762,7 @@ func (s *SettingsService) ExportAuditLogCSV(query models.AuditLogQuery) (string,
 		q.Where("request_body LIKE ? OR response LIKE ?", keyword, keyword)
 	}
 
-	if err := q.Order("created_at desc").Find(&list).Error; err != nil {
+	if err := q.Order("created_at desc").Limit(50000).Find(&list).Error; err != nil {
 		return "", err
 	}
 

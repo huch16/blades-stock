@@ -1506,8 +1506,35 @@ func GetSettingConfig() *SettingConfig {
 	settingConfig := &SettingConfig{}
 	settings := &Settings{}
 	aiConfigs := make([]*AIConfig, 0)
-	// 处理数据库查询可能返回的空结果
-	db.Dao.Model(&Settings{}).First(settings)
+	// 处理数据库查询可能返回的空结果：若不存在任何 Settings 行，创建默认行
+	if err := db.Dao.Model(&Settings{}).First(settings).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 创建默认配置行
+			defaultSettings := &Settings{
+				OpenAiEnable:              true,
+				RefreshInterval:           3,
+				CrawlTimeOut:              60,
+				KDays:                     60,
+				BrowserPath:               "",
+				HttpProxyEnabled:          false,
+				BacktestEnabled:           true,
+				BacktestAccuracyThreshold: 5.0,
+				BacktestVerifyDays:        2,
+				McpTimeout:                8,
+				ToolRunBudget:             15,
+				ToolDailyBudget:           200,
+				ToolDailyCostUSD:          2.0,
+			}
+			if createErr := db.Dao.Create(defaultSettings).Error; createErr != nil {
+				logger.SugaredLogger.Warnf("创建默认 Settings 行失败: %v", createErr)
+			} else {
+				*settings = *defaultSettings
+				logger.SugaredLogger.Info("数据库未找到 Settings 行，已创建默认配置")
+			}
+		} else {
+			logger.SugaredLogger.Error("查询 Settings 失败:", err)
+		}
+	}
 	// 始终加载 AI 配置列表，无论 OpenAiEnable 是否开启
 	// 这样前端配置选择器（如市场资讯总结）能始终展示已有配置
 	// 按 ID 升序返回，保证前端卡片顺序与“第一张卡片即默认回落项”的语义一致

@@ -180,8 +180,8 @@ func ResolveModelForced(aiConfigId int, requireApiKey bool) (ModelResolution, er
 	if err != nil {
 		return res, err
 	}
-	if requireApiKey && !IsMaskedSecret(res.Config.ApiKey) && strings.TrimSpace(res.Config.ApiKey) == "" {
-		return res, fmt.Errorf("卡片「%s」未配置 API Key", aiConfigDisplayName(&res.Config))
+	if requireApiKey && (IsMaskedSecret(res.Config.ApiKey) || strings.TrimSpace(res.Config.ApiKey) == "") {
+		return res, fmt.Errorf("卡片「%s」未配置有效的 API Key（检测到掩码或空密钥）", aiConfigDisplayName(&res.Config))
 	}
 	return res, nil
 }
