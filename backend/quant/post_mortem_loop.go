@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"blades-stock/backend/data"
@@ -12,6 +13,9 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 )
+
+// klineFetchSemaphore 限制并行获取 K 线的数量，避免同时打开过多行情连接。
+var klineFetchSemaphore = make(chan struct{}, 4)
 
 // PostMortemLoopService 实现 T+1 / T+5 / T+20 决策胜率闭环对账、死后剖析与经验结晶自沉淀
 type PostMortemLoopService struct{}
@@ -50,6 +54,15 @@ func (s *PostMortemLoopService) RunDailyAudit(ctx context.Context, targetDate st
 
 	horizons := []int{1, 5, 20}
 
+	// 1. 收集所有需要处理的任务，并预解析价格，避免重复解析
+	type auditTask struct {
+		rec         models.AiRecommendStocks
+		initDate    string
+		initPrice   float64
+		stopLoss    float64
+		targetPrice float64
+	}
+	var tasks []auditTask
 	for _, rec := range recommendations {
 		if rec.DataTime == nil {
 			continue
@@ -65,7 +78,6 @@ func (s *PostMortemLoopService) RunDailyAudit(ctx context.Context, targetDate st
 
 		stopLoss, _ := strconv.ParseFloat(rec.RecommendStopLossPrice, 64)
 		if stopLoss <= 0 {
-			// 若未明确给定，按默认买方量化底线 5% 止损
 			stopLoss = initialPrice * 0.95
 		}
 
@@ -77,7 +89,54 @@ func (s *PostMortemLoopService) RunDailyAudit(ctx context.Context, targetDate st
 			targetPrice = initialPrice * 1.10
 		}
 
-		// 检查各个周期的对账
+		tasks = append(tasks, auditTask{
+			rec:         rec,
+			initDate:    initDate,
+			initPrice:   initialPrice,
+			stopLoss:    stopLoss,
+			targetPrice: targetPrice,
+		})
+	}
+
+	// 2. 并行获取 K 线（带 semaphore 并发控制 + 限流），每只股票只获取一次
+	type klineResult struct {
+		recID  uint
+		klines []data.KLineData
+		err    error
+	}
+	klineCh := make(chan klineResult, len(tasks))
+	var wg sync.WaitGroup
+	for _, t := range tasks {
+		wg.Add(1)
+		go func(task auditTask) {
+			defer wg.Done()
+			klineFetchSemaphore <- struct{}{}
+			defer func() { <-klineFetchSemaphore }()
+			KlineRateWait() // 行情接口限流
+			klines := fetchStockDailyKLines(task.rec.StockCode, 60)
+			klineCh <- klineResult{recID: task.rec.ID, klines: klines}
+		}(t)
+	}
+	wg.Wait()
+	close(klineCh)
+
+	// 将 K 线按 rec.ID 索引
+	klinesMap := make(map[uint][]data.KLineData)
+	for r := range klineCh {
+		if r.err != nil || len(r.klines) == 0 {
+			continue
+		}
+		klinesMap[r.recID] = r.klines
+	}
+
+	// 3. 对每只股票的 3 个 horizon 进行评估（共享已获取的 K 线）
+	for _, t := range tasks {
+		rec := t.rec
+		klines, ok := klinesMap[rec.ID]
+		if !ok {
+			continue
+		}
+
 		for _, h := range horizons {
 			sourceRef := fmt.Sprintf("ai_rec_%d_h%d", rec.ID, h)
 
@@ -90,14 +149,8 @@ func (s *PostMortemLoopService) RunDailyAudit(ctx context.Context, targetDate st
 				continue
 			}
 
-			// 获取该标的 K 线历史进行验证
-			klines := fetchStockDailyKLines(rec.StockCode, 60)
-			if len(klines) == 0 {
-				continue
-			}
-
 			// 找到推荐日及后续交易日
-			evalRes := evaluateHorizonPerformance(klines, initDate, h, initialPrice, stopLoss, targetPrice)
+			evalRes := evaluateHorizonPerformance(klines, t.initDate, h, t.initPrice, t.stopLoss, t.targetPrice)
 			if !evalRes.Valid {
 				continue
 			}
@@ -109,10 +162,10 @@ func (s *PostMortemLoopService) RunDailyAudit(ctx context.Context, targetDate st
 				StockCode:          rec.StockCode,
 				StockName:          rec.StockName,
 				InitialRating:      rec.Rating,
-				InitialPrice:       initialPrice,
-				InitialStopLoss:    stopLoss,
-				InitialTargetPrice: targetPrice,
-				InitialDate:        initDate,
+				InitialPrice:       t.initPrice,
+				InitialStopLoss:    t.stopLoss,
+				InitialTargetPrice: t.targetPrice,
+				InitialDate:        t.initDate,
 				HorizonDays:        h,
 				EvaluatedAt:        now,
 				ActualReturn:       evalRes.ActualReturn,
@@ -138,7 +191,7 @@ func (s *PostMortemLoopService) RunDailyAudit(ctx context.Context, targetDate st
 				crystal := models.KnowledgeCrystal{
 					Category:       "risk_warning",
 					Title:          fmt.Sprintf("【复盘警示】%s(%s) 止损击穿与死后剖析", rec.StockName, rec.StockCode),
-					TriggerPattern: fmt.Sprintf("推荐标的: %s | 周期: T+%d | 击穿止损: %.2f元", rec.StockCode, h, stopLoss),
+					TriggerPattern: fmt.Sprintf("推荐标的: %s | 周期: T+%d | 击穿止损: %.2f元", rec.StockCode, h, t.stopLoss),
 					Summary:        reflection,
 					KeyInsights:    lessons,
 					AccuracyScore:  88.0,
@@ -314,7 +367,12 @@ func (s *PostMortemLoopService) GetRecentAuditRecords(limit int) ([]models.PostM
 	return list, err
 }
 
+// fetchStockDailyKLines 获取日线行情，带限流与并发控制。
+// 协程安全：KlineRateWait 控制长期请求频率，semaphore 控制瞬时并发连接数。
 func fetchStockDailyKLines(stockCode string, limit int) []data.KLineData {
+	klineFetchSemaphore <- struct{}{}
+	defer func() { <-klineFetchSemaphore }()
+	KlineRateWait()
 	res := data.FetchKLineWithFallback(stockCode, "", "101", limit, "")
 	if res != nil && res.Data != nil {
 		return *res.Data

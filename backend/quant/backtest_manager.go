@@ -122,6 +122,7 @@ func (m *BacktestManager) RunSingleReportBacktest(r models.AIResponseResult) (*m
 	pred := extractPredictionFromReport(r.Content)
 	analysisDate := r.CreatedAt.Format("2006-01-02")
 
+	KlineRateWait() // 行情接口限流
 	close, high, low, _, _, dates, err := m.loader.LoadKLineData(pureCode, 365)
 	if err != nil || len(close) == 0 {
 		return nil, fmt.Errorf("no price data for %s: %w", pureCode, err)
@@ -404,6 +405,7 @@ func (m *BacktestManager) batchLoadStockData(reports []models.AIResponseResult) 
 
 	stockData := make(map[string]*stockPriceData)
 	for code := range stockCodes {
+		KlineRateWait() // 行情接口限流
 		c, h, l, o, v, d, err := m.loader.LoadKLineData(code, 365)
 		if err != nil {
 			logger.SugaredLogger.Warnf("load kline for %s failed: %v", code, err)

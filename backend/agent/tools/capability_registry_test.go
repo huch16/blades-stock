@@ -23,9 +23,9 @@ func TestCapabilityRegistry_DeclareAndQuery(t *testing.T) {
 	}()
 
 	DeclareCapabilities(Capability{
-		ID:    testID,
-		Group: GroupMarket,
-		Tier:  TierCore,
+		ID:     testID,
+		Group:  GroupMarket,
+		Tier:   TierCore,
 		Source: SourceBuiltin,
 	})
 
@@ -122,9 +122,9 @@ type fakeTool struct {
 	name string
 }
 
-func (f *fakeTool) Name() string          { return f.name }
-func (f *fakeTool) Description() string   { return "fake tool for test" }
-func (f *fakeTool) InputSchema() *jsonschema.Schema { return nil }
+func (f *fakeTool) Name() string                     { return f.name }
+func (f *fakeTool) Description() string              { return "fake tool for test" }
+func (f *fakeTool) InputSchema() *jsonschema.Schema  { return nil }
 func (f *fakeTool) OutputSchema() *jsonschema.Schema { return nil }
 func (f *fakeTool) Handle(ctx context.Context, input string) (string, error) {
 	return "fake", nil
@@ -133,7 +133,7 @@ func (f *fakeTool) Handle(ctx context.Context, input string) (string, error) {
 // TestCapabilityRegistry_TierString 锁定 ToolTier 的字符串表示。
 func TestCapabilityRegistry_TierString(t *testing.T) {
 	cases := []struct {
-		t   ToolTier
+		t    ToolTier
 		want string
 	}{
 		{TierCore, "core"},
@@ -151,7 +151,7 @@ func TestCapabilityRegistry_TierString(t *testing.T) {
 // TestCapabilityRegistry_SourceString 锁定 ToolSource 的字符串表示。
 func TestCapabilityRegistry_SourceString(t *testing.T) {
 	cases := []struct {
-		s   ToolSource
+		s    ToolSource
 		want string
 	}{
 		{SourceBuiltin, "builtin"},
