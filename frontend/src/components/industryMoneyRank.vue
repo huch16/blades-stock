@@ -40,10 +40,12 @@ onBeforeUnmount(()=>{
 function GetRankData(){
   message.loading("正在刷新数据...")
   GetIndustryMoneyRankSina(fenlei.value,sort.value).then(result => {
-    if(result.length>0){
+    if(Array.isArray(result) && result.length>0){
       dataList.value = result
-      //console.log(result)
     }
+  }).catch(err => {
+    dataList.value = []
+    console.warn('industryMoneyRank GetIndustryMoneyRankSina failed:', err)
   })
 }
 </script>

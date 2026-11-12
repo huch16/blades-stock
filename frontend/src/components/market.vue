@@ -333,12 +333,15 @@ function changeIndustryRankSort() {
 function industryRank() {
 
   GetIndustryRank(sort.value, 150).then(result => {
-    if (result.length > 0) {
-      //console.log(result)
+    if (Array.isArray(result) && result.length > 0) {
       industryRanks.value = result
     } else {
+      industryRanks.value = []
       message.info("暂无数据")
     }
+  }).catch(err => {
+    industryRanks.value = []
+    console.warn('market.vue industryRank failed:', err)
   })
 }
 
@@ -536,6 +539,7 @@ function goToIntelligence(type) {
     <n-tabs
       type="line"
       animated
+      display-directive="if"
       :value="nowTab"
       style="--wails-draggable:no-drag"
       @update-value="updateTab"
@@ -611,7 +615,7 @@ function goToIntelligence(type) {
               :x-gap="8"
             >
               <n-gi
-                v-for="(val, key) in globalStockIndexes"
+                v-for="(val, key) in (globalStockIndexes || {})"
                 :key="key"
               >
                 <n-list bordered>
@@ -1179,6 +1183,7 @@ function goToIntelligence(type) {
         <n-tabs
           type="card"
           animated
+          display-directive="if"
         >
           <n-tab-pane
             name="netamount"
@@ -1312,6 +1317,7 @@ function goToIntelligence(type) {
         <n-tabs
           type="card"
           animated
+          display-directive="if"
         >
           <n-tab-pane
             name="全球"

@@ -32,9 +32,12 @@ onBeforeUnmount(()=>{
 function GetMoneyRankSinaData(){
   message.loading("正在刷新数据...")
   GetMoneyRankSina(sort.value).then(result => {
-    if(result.length>0){
+    if(Array.isArray(result) && result.length>0){
       dataList.value = result
     }
+  }).catch(err => {
+    dataList.value = []
+    console.warn('rankTable GetMoneyRankSina failed:', err)
   })
 }
 </script>
