@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NModal,
@@ -52,8 +52,15 @@ const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const themeVars = useThemeVars()
-const loading = ref(false)
+// 【工业级修复】按标签页独立的 loading 状态，避免“切换标签页后看到别的报告还在转圈”的误导。
+// key: reportType (pre_market_briefing / post_market_review / etf_rotation_decision / serenity_industry_analysis)
+const tabLoading = reactive({})
+// 【工业级修复】全局互斥锁：同一时间只允许一个报告类型进行大模型推演，
+// 防止用户在多个标签页快速点击导致并发启动 3 个 Agent 任务（浪费 Token/配额/时间）。
+const generatingTab = ref<string | null>(null)
 const currentTab = ref(props.reportType || 'pre_market_briefing')
+// 向后兼容：所有模板中 :loading="loading" 自动映射为当前标签页的独立状态
+const loading = computed(() => tabLoading[currentTab.value] || false)
 const lifecycle = ref(null)
 const aiConfigs = ref([])
 const selectedAiConfigId = ref(0)
@@ -475,7 +482,11 @@ function endGeneration() {
     pollTimer = null
   }
   backgroundStatus.value = ''
-  loading.value = false
+  // 只释放当前标签页的 loading；全局锁只在释放者就是持有者时才置空
+  delete tabLoading[currentTab.value]
+  if (generatingTab.value === currentTab.value) {
+    generatingTab.value = null
+  }
 }
 // 后台生成进度：实测生产环境单份研报要 230~600 秒（模型极慢时更久），
 // 轮询期间必须让用户看到"还在跑、已等了多久"，而不是一个静止的转圈。
@@ -537,7 +548,20 @@ async function generate() {
     return
   }
 
-  loading.value = true
+  // 【工业级修复】同一标签页防重复点击
+  if (tabLoading[currentTab.value]) {
+    message.warning(`【${currentTitle.value}】正在后台推演中，请勿重复点击。\n如需查看进度，请保持页面打开，等待后台完成或轮询结果。`)
+    return
+  }
+  // 【工业级修复】全局互斥：其他标签页正在生成时，阻止并发启动
+  if (generatingTab.value !== null && generatingTab.value !== currentTab.value) {
+    message.warning(`另一份报告（${generatingTab.value}）正在后台大模型推演中，\n请等待其完成后再生成本报告，避免并发消耗大模型配额。`)
+    return
+  }
+
+  // 设置当前标签页 loading + 占用全局互斥锁
+  tabLoading[currentTab.value] = true
+  generatingTab.value = currentTab.value
   const startTime = Date.now()
   message.info(`正在生成【${currentTitle.value}】，多Agent量化模型深度推演中...`)
 
@@ -566,9 +590,8 @@ async function generate() {
       return
     }
 
-    // 业务规则拒绝（如"盘后复盘需 15:00 收盘后触发"）：后端会返回一份
-    // 空正文 + statusText 的回执。必须把原因明确告诉用户，
-    // 而不是让按钮点下去没有任何反应。
+    // 【工业级修复】同步返回成功后，立即释放当前标签页的互斥锁，
+    // 允许用户立即生成其他标签页的报告
     if (res && !res.inBackground && !res.content && res.statusText) {
       message.warning(res.statusText, { duration: 9000 })
       endGeneration()
@@ -609,6 +632,7 @@ async function generate() {
     ) {
       message.loading('大模型深度推演耗时较长（通常需 40~90 秒），上游代理连接已断开，系统已自动转入后台持续生成中...', { duration: 8000 })
       startPollingForCompletion(currentTab.value, startTime)
+      return
     } else {
       message.error(`研报生成失败: ${errMsg}。请检查 AI 配置是否有效，或切换其他大模型重试。`)
       endGeneration()

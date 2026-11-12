@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -115,6 +116,31 @@ func (s *QuantService) RunVectorGridSearch(stockCode, strategyType string) map[s
 		"overfitting_risk":      resp.OverfittingRisk,
 		"train_test_split_desc": resp.TrainTestSplitDesc,
 	}
+}
+
+// RunETFMomentumBacktest 执行 ETF 动量轮动策略回测 (21日加权对数回归 + 硬风控状态机)
+//
+// etf_backtest.go 的 RunETFMomentumBacktest 此前无任何生产调用者，属于「已开发未集成」的
+// 集成缺口。本方法将其暴露为 RPC，前端即可一键触发 ETF 动量轮动回测，输出
+// 总收益、年化收益、最大回撤、胜率、盈亏比、交易次数等确定性指标。
+//
+// TickFlow API Key 从环境变量 TICKFLOW_API_KEY 读取，不通过 RPC 传输敏感凭据。
+// 若未配置 Key，RunETFMomentumBacktest 会自动回退为只读模式（读取已缓存/K线数据）。
+func (s *QuantService) RunETFMomentumBacktest(symbols string, topN int, momentumDays int, initCash float64, fees float64, slippage float64) (*quant.ETFMomentumResult, error) {
+	cfg := &quant.ETFMomentumConfig{
+		TopN:         topN,
+		MomentumDays: momentumDays,
+		InitCash:     initCash,
+		Fees:         fees,
+		Slippage:     slippage,
+	}
+	if symbols != "" {
+		cfg.Symbols = strings.Split(symbols, ",")
+		for i, s := range cfg.Symbols {
+			cfg.Symbols[i] = strings.TrimSpace(s)
+		}
+	}
+	return quant.RunETFMomentumBacktest(cfg)
 }
 
 // ScanHoldingRisk 执行盘前持仓确定性多维度风控扫描 (零 Token 纯 Go 计算)

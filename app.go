@@ -1584,6 +1584,19 @@ func (a *App) TriggerAIReportBacktest(limit int) (*quant.AIReportBacktestResult,
 	return a.quantService.TriggerAIReportBacktest(limit)
 }
 
+// RunETFMomentumBacktest 触发 ETF 动量轮动策略回测 (21日加权对数回归 + 硬风控状态机)
+//
+// etf_backtest.go 的 RunETFMomentumBacktest 此前无任何生产调用者，属于「已开发未集成」
+// 的集成缺口。本 RPC 将其暴露给前端，用户可一键触发 ETF 动量轮动回测，输出
+// 总收益、年化收益、最大回撤、胜率、盈亏比、交易次数等确定性指标。
+//
+// symbols: 逗号分隔的 ETF 代码列表（如 "510300.SH,510050.SH"），为空则使用默认 26 标的池
+// topN: 同时持有 ETF 数量；momentumDays: 动量回看窗口（默认 21）
+// initCash: 初始资金；fees: 单边交易成本（‰）；slippage: 单边滑点（‰）
+func (a *App) RunETFMomentumBacktest(symbols string, topN int, momentumDays int, initCash float64, fees float64, slippage float64) (*quant.ETFMomentumResult, error) {
+	return a.quantService.RunETFMomentumBacktest(symbols, topN, momentumDays, initCash, fees, slippage)
+}
+
 // RunSkillABTest runs an A/B test between two skills.
 func (a *App) RunSkillABTest(skillID1, skillID2 uint, limit int) (*quant.SkillABTestResult, error) {
 	return a.quantService.RunSkillABTest(skillID1, skillID2, limit)
