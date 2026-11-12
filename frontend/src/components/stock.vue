@@ -587,10 +587,15 @@ onMounted(() => {
       }
     })
     message.destroyAll()
+  }).catch(err => {
+    message.destroyAll()
+    console.warn('stock.vue GetFollowList/BatchGreet failed:', err)
   })
 
   GetVersionInfo().then((res) => {
     icon.value = res.icon
+  }).catch(err => {
+    console.warn('stock.vue GetVersionInfo failed:', err)
   })
 })
 // 清理拖拽事件监听器
