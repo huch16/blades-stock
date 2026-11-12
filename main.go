@@ -29,6 +29,11 @@ import (
 )
 
 // crashOutputFile 持有崩溃转储文件句柄，避免被 GC 回收后关闭（运行时不会重新打开它）。
+//
+// 一旦没有引用，GC 会回收 *os.File 并关闭 fd，致命错误堆栈就写不进 logs/crash.log 了。
+// 不能删，也不能改成局部变量。
+//
+//lint:ignore U1000 故意只赋值不读取 —— 这个变量的存在意义就是**保持文件句柄存活**；
 var crashOutputFile *os.File
 
 // setupCrashOutput 把 Go 运行时致命错误（任意 goroutine 的 panic、并发 map 读写、栈溢出等）

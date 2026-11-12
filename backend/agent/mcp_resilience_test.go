@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync/atomic"
 	"testing"
@@ -44,14 +43,6 @@ func (t *flakyTool) Handle(ctx context.Context, input string) (string, error) {
 		return "", errors.New("unknown error")
 	}
 	return "ok:" + input, nil
-}
-
-func mustParseErrorJSON(t *testing.T, s string) map[string]any {
-	var m map[string]any
-	if err := json.Unmarshal([]byte(s), &m); err != nil {
-		t.Fatalf("result is not valid JSON: %v, body: %s", err, s)
-	}
-	return m
 }
 
 func TestWrapMCPToolHandlerV2_SuccessClearsBreaker(t *testing.T) {

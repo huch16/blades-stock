@@ -35,14 +35,6 @@ func newTempDB(t *testing.T, setup func(*gorm.DB)) string {
 	return dbPath
 }
 
-// makeMissingTablesSchema 仅创建部分表，模拟 "auto migrate 没跑完 / 升级失败"。
-func makeMissingTablesSchema(g *gorm.DB) {
-	type Stub struct {
-		ID uint `gorm:"primaryKey"`
-	}
-	g.AutoMigrate(&Stub{}) // 仅建一张空表，让 RequiredTables 缺失
-}
-
 func TestStartOfUseHealthCheck_OK(t *testing.T) {
 	dbPath := newTempDB(t, func(g *gorm.DB) {
 		// 建齐所有 RequiredTables，模拟"刚跑完 AutoMigrate"的状态

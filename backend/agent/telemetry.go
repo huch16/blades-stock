@@ -42,7 +42,6 @@ var (
 	toolQuotaUsedGauge       metric.Int64Gauge
 	toolQuotaExceededCounter metric.Int64Counter
 	toolCostCounter          metric.Float64Counter
-	modelCostCounter         metric.Float64Counter
 
 	// 检索器指标
 	retrieverHitsCounter   metric.Int64Counter
@@ -291,15 +290,6 @@ func initMetrics() {
 		)
 		if err != nil {
 			logger.SugaredLogger.Warnf("创建 toolCostCounter 失败: %v", err)
-		}
-
-		modelCostCounter, err = meter.Float64Counter(
-			"agent_model_cost_usd_total",
-			metric.WithDescription("Agent 模型调用累计估算成本(美元)"),
-			metric.WithUnit("USD"),
-		)
-		if err != nil {
-			logger.SugaredLogger.Warnf("创建 modelCostCounter 失败: %v", err)
 		}
 
 		// Retriever metrics

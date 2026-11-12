@@ -43,8 +43,6 @@ type App struct {
 	AiTools            []data.Tool
 	summaryMu          sync.Mutex
 	summaryCancel      context.CancelFunc
-	agentMu            sync.Mutex
-	agentCancel        context.CancelFunc
 	stockAlertMu       sync.Mutex
 	stockAlertLastSent map[string]time.Time
 	priceAtAlertReset  map[string]float64
@@ -1206,16 +1204,6 @@ func GetStockInfos(follows ...data.FollowedStock) *[]data.StockInfo {
 		}
 	}
 	return &stockInfos
-}
-func getStockInfo(follow data.FollowedStock) *data.StockInfo {
-	stockCode := follow.StockCode
-	stockDatas, err := data.NewStockDataApi().GetStockCodeRealTimeData(stockCode)
-	if err != nil || stockDatas == nil || len(*stockDatas) == 0 {
-		return &data.StockInfo{}
-	}
-	stockData := (*stockDatas)[0]
-	addStockFollowData(follow, &stockData)
-	return &stockData
 }
 
 func addStockFollowData(follow data.FollowedStock, stockData *data.StockInfo) {

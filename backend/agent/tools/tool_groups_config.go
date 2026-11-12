@@ -18,8 +18,7 @@ type toolGroupConfigOverride struct {
 }
 
 var (
-	toolGroupCfgOnce    sync.Once
-	toolGroupCfgApplied bool
+	toolGroupCfgOnce sync.Once
 )
 
 // applyToolGroupConfig loads the optional keyword config file and merges it
@@ -79,7 +78,6 @@ func applyToolGroupConfig() {
 			}
 		}
 		groupKeywordsList = merged
-		toolGroupCfgApplied = true
 		logger.SugaredLogger.Infof("已从 %s 加载工具组关键词配置", path)
 	})
 }

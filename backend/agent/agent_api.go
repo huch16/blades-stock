@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -112,16 +111,6 @@ func (receiver StockAiAgent) newStockAiAgentResolved(ctx *context.Context, res d
 		aiConfigId: int(aiConfig.ID),
 		resolution: res,
 	}
-}
-
-// newStockAiAgent 保留旧签名，内部改为走统一解析入口。
-func (receiver StockAiAgent) newStockAiAgent(ctx *context.Context, aiConfigId int, thinkingMode bool, question string, agentMode string, matchedSkills []models.Skill, extraTools ...bladesTools.Tool) *StockAiAgent {
-	res, err := data.ResolveModel(aiConfigId)
-	if err != nil {
-		logger.SugaredLogger.Errorf("模型解析失败: %v", err)
-		return nil
-	}
-	return receiver.newStockAiAgentResolved(ctx, res, thinkingMode, question, agentMode, matchedSkills, extraTools...)
 }
 
 func (receiver StockAiAgent) Chat(question string, aiConfigId int, sysPromptId *int) chan *StreamMessage {
@@ -1100,70 +1089,6 @@ func extractStockInfo(question string) (stockCode, stockName string) {
 	}
 
 	return
-}
-
-// isETFRelatedQuestion 检测问题是否与 ETF 相关
-func isETFRelatedQuestion(question string) bool {
-	etfKeywords := []string{
-		"ETF", "etf", "基金", "轮动", "动量", "板块轮动", "资金流向",
-		"北向资金", "技术面", "消息面", "开盘前", "集合竞价",
-		"ETF池", "动量轮动", "因子分析", "投委会", "持仓评审",
-		"海外联动", "宏观", "资金流", "申赎", "主力资金",
-		"溢价率", "双动量", "回撤冷却", "盈亏比", "仓位管理",
-		"集合竞价复核", "投委会精选",
-	}
-	q := strings.ToLower(question)
-	for _, kw := range etfKeywords {
-		if strings.Contains(q, strings.ToLower(kw)) {
-			return true
-		}
-	}
-	return false
-}
-
-// runETFBacktestForQuestion 运行 ETF 回测并返回格式化结果
-func runETFBacktestForQuestion(question string) string {
-	// 1. 检查环境变量或系统配置中的 TickFlow API Key
-	apiKey := os.Getenv("TICKFLOW_API_KEY")
-	if apiKey == "" {
-		settingConfig := data.GetSettingConfig()
-		if settingConfig != nil && settingConfig.TickFlowAPIKey != "" {
-			apiKey = settingConfig.TickFlowAPIKey
-		}
-	}
-
-	if apiKey == "" {
-		return "【ETF回测提示】检测到 ETF 相关策略需求。系统支持基于 TickFlow 数据的双动量轮动回测。配置 TICKFLOW_API_KEY 环境变量后可实时自动计算并注入多因子回测结论与调仓信号。"
-	}
-
-	// 2. 配置并运行 ETF 动量轮动回测
-	cfg := quant.DefaultETFMomentumConfig()
-	cfg.TickFlowAPIKey = apiKey
-
-	res, err := quant.RunETFMomentumBacktest(cfg)
-	if err != nil {
-		logger.SugaredLogger.Warnf("ETF 动量回测执行失败: %v", err)
-		return fmt.Sprintf("【ETF回测提示】回测引擎已触发，但计算过程中出现异常: %v", err)
-	}
-
-	if res == nil {
-		return ""
-	}
-
-	// 3. 格式化回测分析报告注入 System Prompt
-	var sb strings.Builder
-	sb.WriteString("【ETF动量轮动回测实时数据注入】\n")
-	sb.WriteString(fmt.Sprintf("• 回测周期: %s 至 %s (标的池: %d只ETF)\n", cfg.StartDate, cfg.EndDate, len(cfg.Symbols)))
-	sb.WriteString(fmt.Sprintf("• 累计收益: %.2f%% | 年化收益率: %.2f%% | 最大回撤: %.2f%%\n", res.TotalReturn*100, res.AnnualReturn*100, res.MaxDrawdown*100))
-	sb.WriteString(fmt.Sprintf("• 交易胜率: %.1f%% (总交易次数: %d, 盈亏比: %.2f)\n", res.WinRate*100, res.TotalTrades, res.ProfitFactor))
-	if len(res.Trades) > 0 {
-		latestTrade := res.Trades[len(res.Trades)-1]
-		sb.WriteString(fmt.Sprintf("• 最新调仓信号: [%s] 代码: %s, 数量: %.0f, 价格: %.2f\n", latestTrade.Date, latestTrade.Symbol, latestTrade.Shares, latestTrade.Price))
-	} else {
-		sb.WriteString("• 当前推荐持仓信号: 维持防守策略\n")
-	}
-
-	return sb.String()
 }
 
 // isRequestTimeoutError 判断错误是否由**我们自己的单次请求超时**引起。

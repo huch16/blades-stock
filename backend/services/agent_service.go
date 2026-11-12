@@ -28,7 +28,6 @@ type PromptTemplateItem struct {
 
 // AgentService AI 智能体推演、技能库、MCP 与市场智能研报服务
 type AgentService struct {
-	agentMu        sync.Mutex
 	sessionsMu     sync.Mutex
 	sessions       map[string]context.CancelFunc
 	defaultEmitter MessageEmitter

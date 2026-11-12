@@ -403,19 +403,6 @@ func trimEquityCurvePrefix(equity []float64) []float64 {
 	return equity
 }
 
-func runQuantDiagnosis(cleanCode string, days int) QuantDimensionResult {
-	loader := NewStockDataLoader()
-	closeP, highP, lowP, openP, volP, dates, err := loader.LoadKLineData(cleanCode, days)
-	if err != nil || len(closeP) < 20 {
-		return QuantDimensionResult{
-			Score:        0,
-			StrategyName: "MA均线趋势跟踪 (5/20)",
-			Evaluation:   "历史K线样本不足(<20根)或数据源异常，无法进行量化回测",
-		}
-	}
-	return runQuantDiagnosisOnData(closeP, highP, lowP, openP, volP, dates)
-}
-
 func runTechnicalDiagnosis(closeP, highP, lowP, volP []float64) TechnicalDimensionResult {
 	n := len(closeP)
 	currentPrice := closeP[n-1]
