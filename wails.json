@@ -25,7 +25,7 @@
   "info": {
     "companyName": "sparkmemory",
     "productName": "Blades Stock",
-    "productVersion": "3.0.0",
+    "productVersion": "3.1.0",
     "copyright": "Copyright#sparkmemory@163.com",
     "comments": "股票行情实时获取,AI赋能分析股票,支持DeepSeek，OpenAI， Ollama，LMStudio，AnythingLLM，硅基流动，火山方舟，阿里云百炼等平台或模型。软件发行版见GitHub：https://github.com/huch16/blades-stock"
   }
