@@ -398,7 +398,8 @@ const LONG_RUNNING_METHODS = new Set([
   'GeneratePreMarketBriefing',
   'GeneratePostMarketReview',
   'GenerateETFRotationReport',
-  'GenerateSerenityResearchReport'
+  'GenerateSerenityResearchReport',
+  'RunETFMomentumBacktest' // ETF 动量轮动回测：读取 26 只标的历史 K 线并做 21 日加权对数回归，耗时可达数十秒至数分钟
   // 注：曾列有 'TriggerSectorAnomalySerenityAnalysis'，但它**未注册为 RPC**
   //（它是内部触发路径，由价格异动监视器调用；其能力已通过
   //  GenerateSerenityResearchReport 对外提供）。留在超时表里属于死配置，已移除。
