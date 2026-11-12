@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, reactive, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
