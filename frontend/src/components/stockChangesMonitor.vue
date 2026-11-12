@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { h, onBeforeMount, onBeforeUnmount, onMounted, ref, reactive} from 'vue'
 import {GetStockChanges, GetConfig, GetStockChangeHistory, SaveStockChangesToHistory, GetAllStockChangesWithPaging} from "../../wailsjs/go/main/App";
 import {NButton, NSpace, NTag, NText, useMessage} from "naive-ui";

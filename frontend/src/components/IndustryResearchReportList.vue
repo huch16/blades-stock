@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {onBeforeMount, ref} from 'vue'
 import { IndustryResearchReport,EMDictCode} from "../../wailsjs/go/main/App";
 import { RefreshCircleSharp,} from "@vicons/ionicons5";

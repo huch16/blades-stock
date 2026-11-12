@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { GetStockKLineWithFallback, GetStockKLinePageWithFallback } from '../../wailsjs/go/main/App'
 import {
   CandlestickSeries,

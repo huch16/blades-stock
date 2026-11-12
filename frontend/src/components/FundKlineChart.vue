@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { GetFundKLine } from '../../wailsjs/go/main/App'
 import {
   CandlestickSeries,

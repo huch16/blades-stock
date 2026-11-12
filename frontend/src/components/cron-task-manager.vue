@@ -846,7 +846,7 @@
   </n-modal>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onBeforeUnmount, computed, h, watch } from 'vue'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import { NButton, NIcon, NTag, NSpace, NPopconfirm, useMessage, NText, NCard, NRadioGroup, NRadio, NInputNumber, NSelect, NAlert, NSwitch } from 'naive-ui'

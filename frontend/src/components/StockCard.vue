@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import StockSparkLine from "./stockSparkLine.vue"
 import { setCurrentStock } from "../utils/stockContextBus"
 

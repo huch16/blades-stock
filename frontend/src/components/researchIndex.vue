@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeMount, onBeforeUnmount, ref, watch } from 'vue'
 import ResearchReport from "./researchReport.vue";
 import CronTaskManager from "./cron-task-manager.vue";

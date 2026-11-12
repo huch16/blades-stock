@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {h, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, computed} from "vue";
 import {Add, RefreshOutline} from "@vicons/ionicons5";
 import {NButton, NText, useMessage, NTag, NModal, NDataTable, NPopover, NIcon} from "naive-ui";

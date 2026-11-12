@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { RefreshCircleSharp } from "@vicons/ionicons5";
 import { onMounted, onUnmounted, ref } from 'vue'
 

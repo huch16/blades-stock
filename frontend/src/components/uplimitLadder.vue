@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {onBeforeMount, onBeforeUnmount, ref, computed, h, defineAsyncComponent} from 'vue'
 import {GetConfig, GetUplimitHot, IsTradingTime, IsTradingDay, GetLatestTradingDay} from "../../wailsjs/go/main/App";
 import { consultAgent } from "../utils/agentControlBus";

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 
 import {GetStockKLine} from "../../wailsjs/go/main/App";
 import * as echarts from "../utils/echarts";

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { GetStockList, GetConfig } from '../../wailsjs/go/main/App'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime'
 import StockLightweightKlineChart from './StockLightweightKlineChart.vue'

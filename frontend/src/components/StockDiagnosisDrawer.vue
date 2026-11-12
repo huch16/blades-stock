@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, watch, computed, onMounted, onBeforeUnmount } from 'vue'
 import {
   NDrawer,

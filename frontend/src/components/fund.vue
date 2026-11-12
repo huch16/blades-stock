@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {ref, onBeforeUnmount} from "vue";
 import {EventsOn, EventsOff} from "../../wailsjs/runtime";
 import {useRoute} from 'vue-router'

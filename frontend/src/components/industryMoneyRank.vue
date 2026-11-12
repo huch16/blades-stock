@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 
 import {CaretDown, CaretUp} from "@vicons/ionicons5";
 import {NText,useMessage} from "naive-ui";

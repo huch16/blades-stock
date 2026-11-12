@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {onMounted, onUnmounted, ref, watchEffect} from "vue";
 import * as echarts from '../utils/echarts';
 import {GetStockMinutePriceLineData} from "../../wailsjs/go/main/App"; // 如果您使用多个组件，请将此样式导入放在您的主文件中

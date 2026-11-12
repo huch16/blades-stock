@@ -230,7 +230,7 @@
   </n-modal>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, computed, h } from 'vue'
 import {
   NButton,

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {h, ref, computed, reactive, watch, defineAsyncComponent} from "vue";
 import {NButton, NText, NFlex, NTag, NDataTable, useMessage} from "naive-ui";
 import {

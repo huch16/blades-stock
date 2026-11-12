@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { computed, h, onBeforeMount, onMounted, ref, reactive } from 'vue'
 import { GetAIResponseResultList, GetConfig, SaveAsMarkdown, DeleteAIResponseResult } from "../../wailsjs/go/main/App"
 import { NButton, NEllipsis, NText, useMessage } from "naive-ui"

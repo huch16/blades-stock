@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 
 import {NText,useMessage} from "naive-ui";
 import {onBeforeUnmount, onMounted, ref} from "vue";

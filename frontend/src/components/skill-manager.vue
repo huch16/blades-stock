@@ -233,7 +233,7 @@
   </n-modal>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, h, onMounted } from 'vue'
 import {
   NButton, NSpace, NInput, NDataTable, NModal, NForm, NFormItem,
