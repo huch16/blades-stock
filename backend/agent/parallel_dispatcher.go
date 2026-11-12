@@ -96,11 +96,22 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 	groups := tools.ClassifyQuestion(question)
 	subPrompts := decomposeIntoSubPrompts(question, groups)
 
+	// 总超时控制：整个并行预取最多等 30 秒，超时后放弃预取，直接进入主流程
+	// 避免多个子 Agent 串行等待导致总耗时过长
+	prefetchCtx, prefetchCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer prefetchCancel()
+
 	var (
 		mu      sync.Mutex
 		results []PreFetchedData
 		wg      sync.WaitGroup
 	)
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
 
 	for g, prompt := range subPrompts {
 		if g == tools.GroupBase {
@@ -137,7 +148,7 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 			// defer llmSem.Release(1)
 
 			// 2) Per-sub-agent deadline from config
-			subCtx, cancel := context.WithTimeout(ctx, subAgentTimeout)
+			subCtx, cancel := context.WithTimeout(prefetchCtx, subAgentTimeout)
 			defer cancel()
 
 			groupTools := tools.FilterToolsByGroupsCapped(allTools, map[tools.ToolGroup]bool{
@@ -216,7 +227,14 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 		}(g, prompt)
 	}
 
-	wg.Wait()
+	// 等待所有子Agent完成，或总超时（30秒）到达
+	select {
+	case <-done:
+		// 所有子Agent已完成
+	case <-prefetchCtx.Done():
+		// 总超时，放弃等待，返回已收集的结果
+		logger.SugaredLogger.Warnf("[parallel] 预取总超时（30s），返回已收集的 %d 个分组数据", len(results))
+	}
 
 	if len(results) == 0 {
 		return nil

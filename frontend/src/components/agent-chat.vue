@@ -1347,6 +1347,8 @@ const perceptionSnapshot = ref<any>(null)
 let perceptionTimer: any = null
 
 async function refreshPerceptionSnapshot() {
+  // 流式输出期间不刷新感知快照，避免抢占 RPC 带宽导致 AI 分析卡顿
+  if (isStreaming.value) return
   try {
     const snap = await GetSystemStateSnapshot()
     if (snap) {
@@ -1595,13 +1597,11 @@ const FINISH_REASON_NOTICE: Record<string, string> = {
 // 「SSE 断开且没有任何终态到达」的兜底。
 //
 // ⚠️ 阈值必须大于**最慢一次真实运行**，否则会把仍在正常推演的任务掐死。
-// 踩坑记录：初版取 180s，而生产实测慢速模型（NVIDIA）单次流水线要
-//   283.5s / 382.8s / 422.7s
-// —— 看门狗在任务仍在推演时就 finalizeStream()，之后真正的回答到达时
-// isStreaming 已为 false、被直接丢弃，用户看到的就是「五阶流水线每步都不出结果」。
-// 现取 900s（15 分钟）：显著高于实测最坏 422.7s，又短于"真的该放弃"的尺度。
-// 若将来出现更慢的模型，请同步上调本值，而不是让用户承担误杀。
-const STREAM_SILENCE_TIMEOUT_MS = 900_000
+// 现取 60s（1 分钟）：若 1 分钟内模型无任何输出，通常是连接中断或模型卡死，
+// 应立即告知用户并提供重试入口，而不是让用户长时间空等。
+// 若用户确认使用极慢模型，可在「AI 模型注册表」调大该卡片的「请求超时」
+// 并在此处相应上调。
+const STREAM_SILENCE_TIMEOUT_MS = 60_000
 let streamWatchdogId: number | null = null
 
 function clearStreamWatchdog() {
@@ -1619,7 +1619,9 @@ function armStreamWatchdog() {
     const target = messages.value.find(m => m.id === streamingMsgId.value)
     if (target) {
       target.streamNotice =
-        '⚠️ 已超过 15 分钟未收到模型任何输出，本次流式接收已自动结束（通常是连接中断）。可重新发送，或改用响应更快的模型。'
+        '⚠️ 已超过 60 秒未收到模型任何输出，流式推理已中断。可能是模型响应极慢或连接中断。<br>' +
+        '<button class="retry-btn" @click="handleRetry">🔄 重新发送</button> ' +
+        '<button class="abort-btn" @click="handleStop">⏹ 停止本轮</button>'
     }
     finalizeStream(target)
   }, STREAM_SILENCE_TIMEOUT_MS)
