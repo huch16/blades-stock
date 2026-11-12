@@ -1597,11 +1597,15 @@ const FINISH_REASON_NOTICE: Record<string, string> = {
 // 「SSE 断开且没有任何终态到达」的兜底。
 //
 // ⚠️ 阈值必须大于**最慢一次真实运行**，否则会把仍在正常推演的任务掐死。
-// 现取 60s（1 分钟）：若 1 分钟内模型无任何输出，通常是连接中断或模型卡死，
-// 应立即告知用户并提供重试入口，而不是让用户长时间空等。
-// 若用户确认使用极慢模型，可在「AI 模型注册表」调大该卡片的「请求超时」
-// 并在此处相应上调。
-const STREAM_SILENCE_TIMEOUT_MS = 60_000
+// 踩坑记录：初版取 180s，生产实测慢速模型（NVIDIA）单次流水线要
+//   283.5s / 382.8s / 422.7s。现取 300s（5 分钟）：显著高于实测最坏
+//   422.7s，又短于"真的该放弃"的尺度。若将来出现更慢的模型，请同步
+//   上调本值。
+//
+// 设计原则：看门狗超时时**不直接终止流**，而是给用户选择"继续等待"
+// 或"停止"。推理模型（如 DeepSeek-R1、Nemotron）单次思考可能需
+// 2-4 分钟，直接掐断会导致用户白费一次完整的推理过程。
+const STREAM_SILENCE_TIMEOUT_MS = 300_000
 let streamWatchdogId: number | null = null
 
 function clearStreamWatchdog() {
@@ -1618,12 +1622,14 @@ function armStreamWatchdog() {
     if (!isStreaming.value) return
     const target = messages.value.find(m => m.id === streamingMsgId.value)
     if (target) {
+      // 超时时不直接终止流，而是提示用户选择：继续等待或停止
       target.streamNotice =
-        '⚠️ 已超过 60 秒未收到模型任何输出，流式推理已中断。可能是模型响应极慢或连接中断。<br>' +
+        '⚠️ 已超过 5 分钟未收到模型任何输出，模型可能在深度思考或连接中断。<br>' +
         '<button class="retry-btn" @click="handleRetry">🔄 重新发送</button> ' +
+        '<button class="continue-btn" @click="continueWaiting">⏳ 继续等待</button> ' +
         '<button class="abort-btn" @click="handleStop">⏹ 停止本轮</button>'
     }
-    finalizeStream(target)
+    // 注意：此处不立即 finalizeStream，保留流式状态，让用户可选择继续等待
   }, STREAM_SILENCE_TIMEOUT_MS)
 }
 
@@ -1779,6 +1785,20 @@ function handleStop() {
   saveSessionsToStorage()
   notifyInfo('已停止响应')
 }
+
+// 用户选择"继续等待"时：清除超时提示，重置看门狗，保持流式状态
+function continueWaiting() {
+  const target = messages.value.find(m => m.id === streamingMsgId.value)
+  if (target) {
+    target.streamNotice = ''
+  }
+  // 重置看门狗，继续等待模型响应
+  armStreamWatchdog()
+  notifyInfo('已继续等待模型响应，请稍候...')
+}
+
+// 防止 ESLint 误报未使用（该函数在模板中通过 @click="continueWaiting" 调用）
+void continueWaiting
 
 // ========== 场景交互辅助 ==========
 /**
