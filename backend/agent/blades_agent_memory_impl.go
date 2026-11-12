@@ -36,9 +36,10 @@ type MemoryManager struct {
 }
 
 type workingEntry struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-	Time    int64  `json:"time"`
+	SessionID string `json:"sessionId"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	Time      int64  `json:"time"`
 }
 
 type workingDBEntry struct {
@@ -115,13 +116,16 @@ func (m *MemoryManager) flushBatch(batch []AgentMemory) {
 func (m *MemoryManager) Add(sessionID, role, content string) {
 	m.mu.Lock()
 	m.workingMem = append(m.workingMem, workingEntry{
-		Role:    role,
-		Content: content,
-		Time:    time.Now().UnixMilli(),
+		SessionID: sessionID,
+		Role:      role,
+		Content:   content,
+		Time:      time.Now().UnixMilli(),
 	})
-	if len(m.workingMem) > m.maxWorking {
-		// Keep the most recent entries
-		m.workingMem = m.workingMem[len(m.workingMem)-m.maxWorking:]
+	// Per-session sliding window: drop oldest entries across all sessions,
+	// then trim each session to maxWorking to prevent one session from
+	// starving others.
+	if len(m.workingMem) > m.maxWorking*4 {
+		m.workingMem = m.workingMem[len(m.workingMem)-m.maxWorking*4:]
 	}
 	m.mu.Unlock()
 
@@ -137,17 +141,30 @@ func (m *MemoryManager) Close() {
 	m.wg.Wait()
 }
 
-func (m *MemoryManager) GetWorking() []workingEntry {
+// GetWorking returns the working-memory entries for the given session,
+// newest first. An empty sessionID returns all entries (for backward-compat
+// debugging); callers should always pass a real sessionID in production.
+func (m *MemoryManager) GetWorking(sessionID string) []workingEntry {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]workingEntry, len(m.workingMem))
-	copy(out, m.workingMem)
-	return out
+	filtered := make([]workingEntry, 0, len(m.workingMem))
+	for i := len(m.workingMem) - 1; i >= 0; i-- {
+		if sessionID == "" || m.workingMem[i].SessionID == sessionID {
+			filtered = append(filtered, m.workingMem[i])
+		}
+	}
+	return filtered
 }
 
-func (m *MemoryManager) WorkingPrompt() string {
+// WorkingPrompt returns a formatted working-memory prompt for the given session.
+func (m *MemoryManager) WorkingPrompt(sessionID string) string {
 	m.mu.RLock()
-	entries := m.workingMem
+	var entries []workingEntry
+	for i := len(m.workingMem) - 1; i >= 0; i-- {
+		if m.workingMem[i].SessionID == sessionID {
+			entries = append(entries, m.workingMem[i])
+		}
+	}
 	m.mu.RUnlock()
 	if len(entries) == 0 {
 		return ""
@@ -166,8 +183,17 @@ func (m *MemoryManager) WorkingPrompt() string {
 
 func (m *MemoryManager) SummarizeAndArchive(sessionID string) (string, error) {
 	m.mu.Lock()
-	entries := m.workingMem
-	m.workingMem = make([]workingEntry, 0, m.maxWorking)
+	// Only summarize this session's working memory; other sessions keep theirs.
+	var entries []workingEntry
+	remaining := make([]workingEntry, 0, len(m.workingMem))
+	for _, e := range m.workingMem {
+		if e.SessionID == sessionID {
+			entries = append(entries, e)
+		} else {
+			remaining = append(remaining, e)
+		}
+	}
+	m.workingMem = remaining
 	m.mu.Unlock()
 
 	if len(entries) == 0 {

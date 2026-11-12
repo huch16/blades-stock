@@ -44,7 +44,9 @@ func DefaultEvolver() *Evolver {
 	return defaultEvolver
 }
 
-type Evolver struct{}
+type Evolver struct {
+	mu sync.Mutex
+}
 
 func NewEvolver() *Evolver {
 	return &Evolver{}
@@ -141,6 +143,8 @@ func (ev *Evolver) GenerateSkillFromTraces(llm LLMOptimizerFunc) (string, error)
 }
 
 func (ev *Evolver) RankTools() []ToolRank {
+	ev.mu.Lock()
+	defer ev.mu.Unlock()
 	var ranks []ToolRank
 	db.Dao.Order("success_count desc").Find(&ranks)
 	if len(ranks) == 0 {
@@ -150,6 +154,8 @@ func (ev *Evolver) RankTools() []ToolRank {
 }
 
 func (ev *Evolver) RecordToolUse(toolName string, success bool, durationMs float64) {
+	ev.mu.Lock()
+	defer ev.mu.Unlock()
 	var rank ToolRank
 	err := db.Dao.Where("tool_name = ?", toolName).First(&rank).Error
 	if err != nil {
