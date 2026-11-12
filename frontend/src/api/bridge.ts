@@ -96,10 +96,15 @@ class WebEventBus {
   private sseSource: EventSource | null = null
   private sseConnected: boolean = false
   private retryTimer: any = null
+  private sseActivityTimer: any = null
   private attachedEvents: Set<string> = new Set()
   private retryCount: number = 0
   private readonly maxRetryDelay: number = 30000
   private readonly baseRetryDelay: number = 2000
+  // SSE 连接最后收到任何事件的时间戳，用于检测代理静默切断长连接
+  private lastSSEActivity: number = 0
+  // SSE 活跃检测间隔：若 30 秒未收到任何事件，主动重连
+  private readonly sseActivityInterval: number = 30000
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -228,10 +233,33 @@ class WebEventBus {
       this.sseSource.onopen = () => {
         this.sseConnected = true
         this.retryCount = 0
+        this.lastSSEActivity = Date.now()
+        // 启动 SSE 连接活跃检测：若 30 秒未收到任何事件（包括心跳），主动重连
+        // 防止代理（Nginx / Cloudflare）静默切断空闲长连接导致前端无感知
+        if (this.sseActivityTimer) {
+          clearInterval(this.sseActivityTimer)
+        }
+        this.sseActivityTimer = setInterval(() => {
+          const idleMs = Date.now() - this.lastSSEActivity
+          if (idleMs > this.sseActivityInterval) {
+            console.warn('[bridge] SSE 连接已空闲 ' + Math.round(idleMs / 1000) + ' 秒，主动重连')
+            this.sseConnected = false
+            if (this.sseSource) {
+              this.sseSource.close()
+              this.sseSource = null
+            }
+            if (this.sseActivityTimer) {
+              clearInterval(this.sseActivityTimer)
+              this.sseActivityTimer = null
+            }
+            this.ensureSSEConnection()
+          }
+        }, this.sseActivityInterval)
       }
 
       this.sseSource.onmessage = (e) => {
         this.retryCount = 0
+        this.lastSSEActivity = Date.now()
         this.handleSSEMessage(e)
       }
 
@@ -247,6 +275,10 @@ class WebEventBus {
       this.sseSource.onerror = () => {
         this.sseConnected = false
         this.attachedEvents.clear()
+        if (this.sseActivityTimer) {
+          clearInterval(this.sseActivityTimer)
+          this.sseActivityTimer = null
+        }
         if (this.sseSource) {
           this.sseSource.close()
           this.sseSource = null
