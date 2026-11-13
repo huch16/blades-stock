@@ -168,41 +168,52 @@ npm run dev
 
 ## 🐳 部署指南
 
-### Docker 快速部署（推荐）
+提供两条互不依赖的部署路径，按服务器实际情况任选其一。
+
+### 方式一：原生一键部署（推荐，无需 Docker）
+
+脚本会自动完成：环境自检 → 安装 Go 1.26 / Node.js 20（版本不符自动升级）
+→ 拉取代码 → 构建前后端 → 生成 systemd 服务 → 健康检查。
 
 ```bash
-# 构建镜像
-docker build -t blades-stock:latest .
+# 在服务器上执行（二选一）
 
-# 运行容器（端口 8000，访问口令 2266762）
-docker run -d \
-  --name blades-stock \
-  -p 8000:8000 \
+# A. 已有仓库：原地更新并部署
+cd ~/blades-stock && git pull && sudo bash scripts/deploy-vps.sh
+
+# B. 全新服务器：脚本会自动克隆到 /opt/blades-stock
+curl -fsSL https://raw.githubusercontent.com/huch16/blades-stock/dev/scripts/deploy-vps.sh -o /tmp/deploy-vps.sh
+sudo bash /tmp/deploy-vps.sh
+```
+
+部署完成后输出访问地址与口令。常用运维命令：
+
+```bash
+systemctl status blades-stock      # 查看状态
+journalctl -u blades-stock -f      # 实时日志
+systemctl restart blades-stock     # 重启
+```
+
+> 可选环境变量覆盖：`BLADES_DIR`（安装目录，默认 `/opt/blades-stock`）、
+> `BLADES_PORT`（默认 `8000`）、`BLADES_BRANCH`（Git 引用，默认 `v3.1.3`）、
+> `BLADES_TOKEN`（访问口令，默认 `2266762`）。
+
+### 方式二：Docker 容器化部署
+
+```bash
+# 一键脚本（自动安装 Docker、硬件自适应、SWAP 守护）
+sudo bash scripts/deploy-docker.sh
+
+# 或手动构建运行
+docker build -t blades-stock:latest .
+docker run -d --name blades-stock -p 8000:8000 \
   -e BLADES_AUTH_TOKEN=2266762 \
   -e BLADES_DATA_DIR=/app/data \
   blades-stock:latest
-
-# 查看日志
 docker logs -f blades-stock
 ```
 
 浏览器访问 `http://<服务器IP>:8000`，输入访问口令 `2266762` 即可使用。
-
-### 生产环境部署（VPS）
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/huch16/blades-stock.git
-cd blades-stock
-
-# 2. 执行部署脚本（自动处理依赖、数据库、口令生成）
-chmod +x scripts/deploy-vps.sh
-./scripts/deploy-vps.sh
-
-# 3. 访问地址
-# http://<你的公网IP>:8000
-# 访问口令：2266762（可在 .env 中修改 BLADES_AUTH_TOKEN）
-```
 
 ### 推荐硬件配置
 | 规格 | CPU | 内存 | 磁盘 | 适用场景 |
