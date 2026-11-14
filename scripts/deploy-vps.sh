@@ -133,12 +133,73 @@ ok "当前提交: $(git rev-parse --short HEAD) — $(git log -1 --pretty=%s | c
 
 # ------------------------- 5. 构建前端 ---------------------------------------
 step "[5/7] 构建前端 (Vue 3 + Vite)"
+
+# Vite/Rollup 构建峰值内存可达 2~4GB，Node 默认堆上限（约 2GB）会直接
+# OOM 崩溃（实测小内存 VPS 上表现为 “Aborted (core dumped)”）。
+# 这里按宿主机内存自适应设置堆上限，并在内存偏小时补一块 SWAP 兜底。
+TOTAL_MEM_MB=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 2048)
+SWAP_MB=$(awk '/SwapTotal/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+
+# 内存偏小时补 SWAP：<4GB 内存补 4GB，否则补 2GB
+SWAP_WANT_MB=2048
+if [ "$TOTAL_MEM_MB" -lt 4096 ]; then
+    SWAP_WANT_MB=4096
+fi
+if [ "$SWAP_MB" -lt 1024 ]; then
+    warn "Swap 仅 ${SWAP_MB}MB，创建 $((SWAP_WANT_MB/1024))GB 应急 SWAP 防止构建 OOM..."
+    if [ ! -f /swapfile ]; then
+        (fallocate -l "${SWAP_WANT_MB}M" /swapfile 2>/dev/null \
+            || dd if=/dev/zero of=/swapfile bs=1M count="${SWAP_WANT_MB}" 2>/dev/null) || true
+        if [ -f /swapfile ]; then
+            chmod 600 /swapfile
+            mkswap /swapfile >/dev/null 2>&1 || true
+            swapon /swapfile 2>/dev/null || true
+            grep -q '^/swapfile' /etc/fstab 2>/dev/null || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            ok "$((SWAP_WANT_MB/1024))GB SWAP 已就绪"
+        else
+            warn "SWAP 创建失败（磁盘空间不足？），构建可能因内存不足失败"
+        fi
+    else
+        swapon /swapfile 2>/dev/null || true
+        ok "复用已有 /swapfile"
+    fi
+fi
+
+# 堆上限取「内存的 70%」，下限 2048MB、上限 6144MB（与 Dockerfile 对齐）
+NODE_HEAP=$(( TOTAL_MEM_MB * 70 / 100 ))
+if [ "$NODE_HEAP" -lt 2048 ]; then NODE_HEAP=2048; fi
+if [ "$NODE_HEAP" -gt 6144 ]; then NODE_HEAP=6144; fi
+export NODE_OPTIONS="--max-old-space-size=${NODE_HEAP}"
+echo "    内存: ${TOTAL_MEM_MB}MB / SWAP: ${SWAP_MB}MB → Node 堆上限: ${NODE_HEAP}MB"
+
 cd "${INSTALL_DIR}/frontend"
+BUILD_LOG=/tmp/blades-frontend-build.log
+
 echo "    npm install（首次较慢，约 1-3 分钟）..."
-npm install --no-audit --no-fund >/dev/null 2>&1 || die "npm install 失败"
+if ! npm install --no-audit --no-fund > "${BUILD_LOG}" 2>&1; then
+    echo "--- npm install 失败，日志末尾 ---"
+    tail -25 "${BUILD_LOG}"
+    die "npm install 失败（完整日志: ${BUILD_LOG}）"
+fi
+ok "依赖安装完成"
+
 echo "    npm run build ..."
-npm run build 2>&1 | tail -5
+if ! npm run build > "${BUILD_LOG}" 2>&1; then
+    echo "--- npm run build 失败，日志末尾 ---"
+    tail -30 "${BUILD_LOG}"
+    echo "-----------------------------------------"
+    if grep -qiE 'heap out of memory|Aborted|Allocation failed|JavaScript heap' "${BUILD_LOG}"; then
+        die "前端构建因内存不足失败。请手动加大 SWAP 后重试：\n      fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile\n      # 然后重新运行: sudo bash scripts/deploy-vps.sh"
+    fi
+    die "前端构建失败（完整日志: ${BUILD_LOG}）"
+fi
 [ -f dist/index.html ] || die "前端构建失败：dist/index.html 不存在"
+ok "前端构建完成"
+
+# 去掉构建告警干扰，仅回显体积概览
+if [ -f dist/index.html ]; then
+    echo "    dist 体积: $(du -sh dist | cut -f1)"
+fi
 
 # 发布韧性：保留上一版本产物，供服务端做旧 chunk 回退（避免部署打断在线用户）
 rm -rf dist-previous
