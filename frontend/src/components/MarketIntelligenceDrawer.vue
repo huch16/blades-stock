@@ -981,9 +981,6 @@ onBeforeUnmount(() => {
           <span v-if="currentReport?.source && !isReportCorrupted" class="meta-item meta-source">
             来源：{{ currentReport.source }}
           </span>
-          <span v-if="!currentReport || isReportCorrupted" class="meta-item meta-empty">
-            当前尚未生成该维度研报，点击右侧按钮立即推演
-          </span>
         </div>
         <div class="meta-right">
           <NButton v-if="displayContent" size="tiny" secondary @click="copyMarkdown">
@@ -1307,9 +1304,6 @@ onBeforeUnmount(() => {
           </span>
           <span v-if="currentReport?.source && !isReportCorrupted" class="meta-item meta-source">
             来源：{{ currentReport.source }}
-          </span>
-          <span v-if="!currentReport || isReportCorrupted" class="meta-item meta-empty">
-            当前尚未生成该维度研报，点击右侧按钮立即推演
           </span>
         </div>
         <div class="meta-right">
