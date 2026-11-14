@@ -207,6 +207,25 @@ const currentTitle = computed(() => {
   return found ? `${found.icon} ${found.title}` : '智能市场研报'
 })
 
+// ── 生成中的统一按钮语义（消除“一个任务多个转圈”的错觉）──────────────────
+//
+// 实测困惑：页面上有 4~5 个按钮都绑定了同一个 `loading`，一旦开始生成，
+// 它们会**同时**转圈，用户误以为“有 3 个程序在跑”。实际上是**一个任务**，
+// 只是状态被多个按钮重复渲染了。
+// 现约定：只有 meta-bar 的主按钮显示 spinner（唯一个转圈），
+// 其余生成类按钮统一改为禁用 + 『⏳ 推演中…』文案。
+const generateBusy = computed(() => loading.value)
+const primaryBtnText = computed(() => {
+  if (generateBusy.value) return '⏳ 推演中…'
+  return currentReport.value && !isReportCorrupted.value ? '🔄 重新推演' : '🚀 立即生成'
+})
+
+// 主动放弃等待（后台仍会跑完并入库，稍后刷新即可看到）
+function handleStopGeneration() {
+  endGeneration()
+  message.info('已停止等待。后台推演仍会继续，完成后点「刷新缓存」或重新进入本页即可查看。')
+}
+
 // 针对 Serenity 研报自动解析结构化买方认知假说 (Thesis)，实现从研报到认知账本的直通沉淀
 const extractedThesis = computed(() => {
   if (currentTab.value !== 'serenity_industry_analysis') return null
@@ -932,8 +951,8 @@ onBeforeUnmount(() => {
             placeholder="可选代码(如: 300308)"
             style="width: 130px;"
           />
-          <NButton type="primary" size="small" :loading="loading" @click="generate">
-            🔬 发起深度拆解
+          <NButton type="primary" size="small" :disabled="generateBusy" @click="generate">
+            {{ generateBusy ? '⏳ 推演中…' : '🔬 发起深度拆解' }}
           </NButton>
         </div>
         <div class="serenity-presets-row">
@@ -970,8 +989,8 @@ onBeforeUnmount(() => {
           <NButton v-if="displayContent" size="tiny" secondary @click="copyMarkdown">
             📋 复制 Markdown
           </NButton>
-          <NButton size="tiny" type="primary" :loading="loading" @click="generate">
-            {{ currentReport && !isReportCorrupted ? '🔄 重新推演' : '🚀 立即生成' }}
+          <NButton size="tiny" type="primary" :disabled="generateBusy" @click="generate">
+            {{ primaryBtnText }}
           </NButton>
           <NButton v-if="currentReport" size="tiny" secondary type="error" @click="handleClearReport('current')">
             🗑️ 清除此报告
@@ -989,8 +1008,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <NSpace>
-          <NButton size="small" type="primary" :loading="loading" @click="generate">
-            🚀 立即重新推演
+          <NButton size="small" type="primary" :disabled="generateBusy" @click="generate">
+            {{ generateBusy ? '⏳ 推演中…' : '🚀 立即重新推演' }}
           </NButton>
           <NButton size="small" secondary @click="handlePurgeCorrupted">
             🧹 物理清除残损记录
@@ -1067,11 +1086,23 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 6. 研报正文展示容器 -->
-      <NSpin :show="loading">
+      <!-- 仅在「已有正文但正在重新推演」时才叠加遮罩；空状态由下方进度面板统一呈现单一转圈 -->
+      <NSpin :show="loading && !!displayContent">
         <div v-if="!currentReport || !displayContent" class="empty-report-view">
-          <NEmpty :description="'尚未生成 ' + currentTitle" style="padding: 48px 0;">
+          <!-- 生成中：**整页唯一的进度面板**，避免多个按钮同时转圈被误认为“有 3 个任务在跑” -->
+          <div v-if="generateBusy" class="generating-panel">
+            <NSpin size="small" />
+            <div class="generating-title">正在推演 {{ currentTitle }}</div>
+            <div class="generating-hint">{{ backgroundStatus || '已提交后台生成，请保持页面打开…' }}</div>
+            <div class="generating-tips">
+              若长时间无结果，通常是所选模型响应极慢或返回空响应。可到「设置 → AI模型注册表」点该卡片「检测连通性」，
+              或在「最近运行记录」查看真实耗时与错误。
+            </div>
+            <NButton size="small" secondary @click="handleStopGeneration">⏹ 停止等待</NButton>
+          </div>
+          <NEmpty v-else :description="'尚未生成 ' + currentTitle" style="padding: 48px 0;">
             <template #extra>
-              <NButton type="primary" size="medium" :loading="loading" @click="generate">
+              <NButton type="primary" size="medium" @click="generate">
                 🚀 立即启动 {{ currentTitle }} 多Agent分析
               </NButton>
             </template>
@@ -1114,10 +1145,10 @@ onBeforeUnmount(() => {
             </NButton>
             <NButton
               type="primary"
-              :loading="loading"
+              :disabled="generateBusy"
               @click="generate"
             >
-              {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
+              {{ primaryBtnText }}
             </NButton>
             <NButton v-if="currentReport" secondary type="error" @click="handleClearReport('current')">
               🗑️ 清除此报告
@@ -1247,8 +1278,8 @@ onBeforeUnmount(() => {
             placeholder="可选代码(如: 300308)"
             style="width: 130px;"
           />
-          <NButton type="primary" size="small" :loading="loading" @click="generate">
-            🔬 发起深度拆解
+          <NButton type="primary" size="small" :disabled="generateBusy" @click="generate">
+            {{ generateBusy ? '⏳ 推演中…' : '🔬 发起深度拆解' }}
           </NButton>
         </div>
         <div class="serenity-presets-row">
@@ -1285,8 +1316,8 @@ onBeforeUnmount(() => {
           <NButton v-if="displayContent" size="tiny" secondary @click="copyMarkdown">
             📋 复制 Markdown
           </NButton>
-          <NButton size="tiny" type="primary" :loading="loading" @click="generate">
-            {{ currentReport && !isReportCorrupted ? '🔄 重新推演' : '🚀 立即生成' }}
+          <NButton size="tiny" type="primary" :disabled="generateBusy" @click="generate">
+            {{ primaryBtnText }}
           </NButton>
           <NButton v-if="currentReport" size="tiny" secondary type="error" @click="handleClearReport('current')">
             🗑️ 清除此报告
@@ -1304,8 +1335,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <NSpace>
-          <NButton size="small" type="primary" :loading="loading" @click="generate">
-            🚀 立即重新推演
+          <NButton size="small" type="primary" :disabled="generateBusy" @click="generate">
+            {{ generateBusy ? '⏳ 推演中…' : '🚀 立即重新推演' }}
           </NButton>
           <NButton size="small" secondary @click="handlePurgeCorrupted">
             🧹 物理清除残损记录
@@ -1382,11 +1413,23 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 6. 研报正文展示容器 -->
-      <NSpin :show="loading">
+      <!-- 仅在「已有正文但正在重新推演」时才叠加遮罩；空状态由下方进度面板统一呈现单一转圈 -->
+      <NSpin :show="loading && !!displayContent">
         <div v-if="!currentReport || !displayContent" class="empty-report-view">
-          <NEmpty :description="'尚未生成 ' + currentTitle" style="padding: 48px 0;">
+          <!-- 生成中：**整页唯一的进度面板**，避免多个按钮同时转圈被误认为“有 3 个任务在跑” -->
+          <div v-if="generateBusy" class="generating-panel">
+            <NSpin size="small" />
+            <div class="generating-title">正在推演 {{ currentTitle }}</div>
+            <div class="generating-hint">{{ backgroundStatus || '已提交后台生成，请保持页面打开…' }}</div>
+            <div class="generating-tips">
+              若长时间无结果，通常是所选模型响应极慢或返回空响应。可到「设置 → AI模型注册表」点该卡片「检测连通性」，
+              或在「最近运行记录」查看真实耗时与错误。
+            </div>
+            <NButton size="small" secondary @click="handleStopGeneration">⏹ 停止等待</NButton>
+          </div>
+          <NEmpty v-else :description="'尚未生成 ' + currentTitle" style="padding: 48px 0;">
             <template #extra>
-              <NButton type="primary" size="medium" :loading="loading" @click="generate">
+              <NButton type="primary" size="medium" @click="generate">
                 🚀 立即启动 {{ currentTitle }} 多Agent分析
               </NButton>
             </template>
@@ -1430,10 +1473,10 @@ onBeforeUnmount(() => {
             </NButton>
             <NButton
               type="primary"
-              :loading="loading"
+              :disabled="generateBusy"
               @click="generate"
             >
-              {{ currentReport && !isReportCorrupted ? '重新推演' : '立即生成' }}
+              {{ primaryBtnText }}
             </NButton>
             <NButton v-if="currentReport" secondary type="error" @click="handleClearReport('current')">
               🗑️ 清除此报告
@@ -2309,6 +2352,35 @@ onBeforeUnmount(() => {
   gap: 14px;
 }
 </style>
+
+/* ── 生成进度面板：整页唯一的进度指示，取代此前多个按钮各自转圈 ── */
+.generating-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 44px 24px;
+  text-align: center;
+}
+
+.generating-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bs-text-primary, #333);
+}
+
+.generating-hint {
+  font-size: 13px;
+  color: var(--bs-text-secondary, #666);
+  line-height: 1.6;
+}
+
+.generating-tips {
+  max-width: 560px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--bs-text-disabled, #999);
+}
 
 .background-status {
   display: flex;
