@@ -50,6 +50,16 @@ export interface ChatMessage {
    * 只让回复“突然结束”而不说明原因，用户无从判断是模型问题还是程序问题。
    */
   streamNotice?: string
+  /**
+   * 看门狗超时标记：为 true 时在消息下方渲染**真正的按钮**
+   * （重新发送 / 继续等待 / 停止本轮）。
+   *
+   * 为什么不用 HTML 字符串（踩过的坑）：曾经把 `<br><button @click=...>`
+   * 直接拼进 streamNotice，而模板用的是 `{{ streamNotice }}` 文本插值 ——
+   * 结果标签被**原样当文字渲染**，用户看到一串 `<button class="retry-btn">`
+   * 源码且点击无效。按钮必须走真实的模板 + 事件，不能注入 HTML。
+   */
+  streamTimeout?: boolean
 }
 
 export interface StreamChunk {

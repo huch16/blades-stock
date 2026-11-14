@@ -12,6 +12,8 @@
     @resend="onResend"
     @save-thesis="onSaveThesis"
     @export-image="onExportImage"
+    @continue-wait="onContinueWait"
+    @stop="onStop"
   />
 </template>
 
@@ -37,6 +39,9 @@ const emit = defineEmits<{
   resend: [msg: ChatMessage]
   saveThesis: [msg: ChatMessage]
   exportImage: [msg: ChatMessage]
+  // 看门狗超时后的用户选择（继续等待 / 停止本轮）
+  continueWait: [msgId: string]
+  stop: [msgId: string]
 }>()
 
 const aiConfigStore = useAiConfigStore()
@@ -82,6 +87,14 @@ function onSaveThesis(msg: ChatMessage) {
 
 function onExportImage(msg: ChatMessage) {
   emit('exportImage', msg)
+}
+
+function onContinueWait() {
+  emit('continueWait', props.message.id)
+}
+
+function onStop() {
+  emit('stop', props.message.id)
 }
 </script>
 

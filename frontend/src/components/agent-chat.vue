@@ -540,6 +540,8 @@
           @resend="handleResend"
           @save-thesis="handleSaveThesisFromMsg"
           @export-image="handleExportImage"
+          @continue-wait="continueWaiting"
+          @stop="handleStop"
         />
 
         <!-- 下游时序推荐条 (消除断层与信息孤岛) -->
@@ -1622,12 +1624,13 @@ function armStreamWatchdog() {
     if (!isStreaming.value) return
     const target = messages.value.find(m => m.id === streamingMsgId.value)
     if (target) {
-      // 超时时不直接终止流，而是提示用户选择：继续等待或停止
+      // 超时时不直接终止流，而是提示用户选择：继续等待或停止。
+      // 注意：这里只写**纯文本** + 一个布尔标记，按钮由 AssistantMessage 用
+      // 真实模板渲染并通过事件回传。曾把 `<button>` 拼进 streamNotice，
+      // 而模板用 {{ }} 文本插值，导致标签被原样显示、点击无效。
       target.streamNotice =
-        '⚠️ 已超过 5 分钟未收到模型任何输出，模型可能在深度思考或连接中断。<br>' +
-        '<button class="retry-btn" @click="handleRetry">🔄 重新发送</button> ' +
-        '<button class="continue-btn" @click="continueWaiting">⏳ 继续等待</button> ' +
-        '<button class="abort-btn" @click="handleStop">⏹ 停止本轮</button>'
+        '⚠️ 已超过 5 分钟未收到模型任何输出，模型可能在深度思考或连接中断。'
+      target.streamTimeout = true
     }
     // 注意：此处不立即 finalizeStream，保留流式状态，让用户可选择继续等待
   }, STREAM_SILENCE_TIMEOUT_MS)
@@ -1638,6 +1641,10 @@ function finalizeStream(targetMsg?: ChatMessage) {
   isStreaming.value = false
   streamingMsgId.value = null
   currentStreamStatus.value = ''
+  // 流已终结：撤下看门狗超时按钮（无论后续是否继续等待，都不应再显示）
+  if (targetMsg) {
+    targetMsg.streamTimeout = false
+  }
 
   if (targetMsg) {
     if (targetMsg.rawContent) {
@@ -1773,12 +1780,20 @@ function handleSend() {
   })
 }
 
-function handleStop() {
+function handleStop(msgId?: string) {
   try {
     AbortChatWithAgent()
   } catch (e) {
     console.warn('AbortChatWithAgent failed:', e)
   }
+  // 撤下看门狗超时按钮（支持从具体消息发起）
+  const target = msgId
+    ? messages.value.find(m => m.id === msgId)
+    : messages.value.find(m => m.id === streamingMsgId.value)
+  if (target) {
+    target.streamTimeout = false
+  }
+  clearStreamWatchdog()
   isStreaming.value = false
   streamingMsgId.value = null
   currentStreamStatus.value = ''
@@ -1787,18 +1802,18 @@ function handleStop() {
 }
 
 // 用户选择"继续等待"时：清除超时提示，重置看门狗，保持流式状态
-function continueWaiting() {
-  const target = messages.value.find(m => m.id === streamingMsgId.value)
+function continueWaiting(msgId?: string) {
+  const target = msgId
+    ? messages.value.find(m => m.id === msgId)
+    : messages.value.find(m => m.id === streamingMsgId.value)
   if (target) {
     target.streamNotice = ''
+    target.streamTimeout = false
   }
   // 重置看门狗，继续等待模型响应
   armStreamWatchdog()
   notifyInfo('已继续等待模型响应，请稍候...')
 }
-
-// 防止 ESLint 误报未使用（该函数在模板中通过 @click="continueWaiting" 调用）
-void continueWaiting
 
 // ========== 场景交互辅助 ==========
 /**

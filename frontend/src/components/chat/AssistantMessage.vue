@@ -118,6 +118,19 @@
              否则用户只看到“回复突然结束”，无从判断原因。 -->
         <div v-if="message.streamNotice && !isStreaming" class="stream-notice">
           {{ message.streamNotice }}
+          <!-- 看门狗超时：渲染**真实按钮**并向外 emit，
+               绝不把 HTML 拼进 streamNotice（那会被 {{ }} 当成纯文本原样显示）。 -->
+          <div v-if="message.streamTimeout" class="stream-notice-actions">
+            <button type="button" class="notice-btn notice-btn-primary" @click="emit('retry')">
+              🔄 重新发送
+            </button>
+            <button type="button" class="notice-btn" @click="emit('continueWait')">
+              ⏳ 继续等待
+            </button>
+            <button type="button" class="notice-btn notice-btn-danger" @click="emit('stop')">
+              ⏹ 停止本轮
+            </button>
+          </div>
         </div>
       </div>
 
@@ -197,12 +210,15 @@ const props = defineProps<{
 }>()
 
 // 事件全部通过模板中的 $emit 触发，无需在脚本中持有 emit 引用
-defineEmits<{
+const emit = defineEmits<{
   copy: [content: string]
   retry: []
   reference: []
   saveThesis: [msg: ChatMessage]
   exportImage: [msg: ChatMessage]
+  // 看门狗超时后的用户选择（由 agent-chat.vue 处理）
+  continueWait: []
+  stop: []
 }>()
 
 // 注入锚点注册函数
@@ -346,6 +362,50 @@ async function copyAnchorLink() {
   color: #d29922;
   font-size: 12.5px;
   line-height: 1.6;
+}
+
+/* 看门狗超时后的操作按钮（真实按钮，非注入 HTML） */
+.stream-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.notice-btn {
+  padding: 5px 12px;
+  font-size: 12.5px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.notice-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.notice-btn-primary {
+  background: #18a058;
+  border-color: #18a058;
+  color: #fff;
+}
+
+.notice-btn-primary:hover {
+  background: #36ad6a;
+  border-color: #36ad6a;
+}
+
+.notice-btn-danger {
+  color: #e88080;
+  border-color: rgba(232, 128, 128, 0.5);
+}
+
+.notice-btn-danger:hover {
+  background: rgba(232, 128, 128, 0.15);
 }
 
 .msg-wrapper {
