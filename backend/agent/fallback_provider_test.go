@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -193,5 +194,135 @@ func TestFormatFallbackReason(t *testing.T) {
 		if res != c.expected {
 			t.Errorf("FormatFallbackReason(%q) = %q, expected %q", c.errStr, res, c.expected)
 		}
+	}
+}
+
+// TestEmptyOutputFallback 测试空答触发降级（v3.2.0 核心修复）
+//
+// 生产铁证：运行记录同时出现
+//
+//	「失败: 模型未产出正文（空响应）」与「备用链: nemotron-...」，
+//	即备用链配置完好却从未启用。根因是空答时 err == nil，
+//	旧的降级逻辑只在 err != nil 时切换。
+func TestEmptyOutputFallback(t *testing.T) {
+	// 场景一：主模型空答（无正文、无工具调用）→ 必须降级到备用模型
+	var notifiedCur, notifiedNext string
+	var notifiedErr error
+	notifier := func(cur, next string, err error) {
+		notifiedCur = cur
+		notifiedNext = next
+		notifiedErr = err
+	}
+	ctx := WithFallbackNotifier(context.Background(), notifier)
+
+	fb := NewFallbackModelProvider(
+		&successMockProvider{name: "MiniMax-M3", respText: ""},
+		"MiniMax-M3",
+		[]blades.ModelProvider{&successMockProvider{name: "nemotron-3", respText: "fallback normal answer"}},
+		[]string{"nemotron-3"},
+	)
+
+	var streamText string
+	gen := fb.NewStreaming(ctx, &blades.ModelRequest{
+		Messages: []*blades.Message{blades.UserMessage("test")},
+	})
+	gen(func(resp *blades.ModelResponse, err error) bool {
+		if err != nil {
+			return false
+		}
+		if resp != nil && resp.Message != nil {
+			streamText += resp.Message.Text()
+		}
+		return true
+	})
+
+	if streamText != "fallback normal answer" {
+		t.Fatalf("空答应触发降级，期望 fallback 内容，实际: %q", streamText)
+	}
+	if notifiedCur != "MiniMax-M3" || notifiedNext != "nemotron-3" {
+		t.Fatalf("降级通知错误: cur=%s next=%s", notifiedCur, notifiedNext)
+	}
+	if notifiedErr == nil {
+		t.Fatal("降级通知应携带空答错误")
+	}
+
+	// 场景二：有工具调用 → 不得降级（工具调用轮次本身无正文是合法的）
+	fb2 := NewFallbackModelProvider(
+		&toolMockProvider{name: "toolModel", toolCalls: []blades.Part{
+			blades.ToolPart{Name: "GetStockKLine", Request: "{}", Response: "ok"},
+		}},
+		"toolModel",
+		[]blades.ModelProvider{&successMockProvider{name: "fallback2", respText: "SHOULD NOT APPEAR"}},
+		[]string{"fallback2"},
+	)
+
+	var toolText string
+	var fallbackInvoked bool
+	gen2 := fb2.NewStreaming(context.Background(), &blades.ModelRequest{
+		Messages: []*blades.Message{blades.UserMessage("test with tool")},
+	})
+	gen2(func(resp *blades.ModelResponse, err error) bool {
+		if err != nil {
+			return false
+		}
+		if resp != nil && resp.Message != nil {
+			if t := resp.Message.Text(); strings.Contains(t, "SHOULD NOT APPEAR") {
+				fallbackInvoked = true
+			}
+			toolText += resp.Message.Text()
+		}
+		return true
+	})
+
+	if fallbackInvoked {
+		t.Fatal("有工具调用时不应触发空答降级")
+	}
+	if strings.Contains(toolText, "SHOULD NOT APPEAR") {
+		t.Fatal("有工具调用时不应出现备用模型内容")
+	}
+
+	// 场景三：无备用模型的空答 → 不得 panic，正常结束
+	fb3 := NewFallbackModelProvider(
+		&successMockProvider{name: "onlyModel", respText: ""},
+		"onlyModel",
+		nil,
+		nil,
+	)
+	gen3 := fb3.NewStreaming(context.Background(), &blades.ModelRequest{
+		Messages: []*blades.Message{blades.UserMessage("test no fallback")},
+	})
+	done3 := false
+	gen3(func(resp *blades.ModelResponse, err error) bool {
+		done3 = true
+		return true
+	})
+	if !done3 {
+		t.Fatal("无备用模型时流应正常结束")
+	}
+}
+
+// toolMockProvider 用于测试有工具调用场景
+type toolMockProvider struct {
+	name      string
+	toolCalls []blades.Part
+}
+
+func (m *toolMockProvider) Name() string { return m.name }
+
+func (m *toolMockProvider) Generate(ctx context.Context, req *blades.ModelRequest) (*blades.ModelResponse, error) {
+	msg := &blades.Message{
+		Role:  blades.RoleAssistant,
+		Parts: m.toolCalls,
+	}
+	return &blades.ModelResponse{Message: msg}, nil
+}
+
+func (m *toolMockProvider) NewStreaming(ctx context.Context, req *blades.ModelRequest) blades.Generator[*blades.ModelResponse, error] {
+	return func(yield func(*blades.ModelResponse, error) bool) {
+		msg := &blades.Message{
+			Role:  blades.RoleAssistant,
+			Parts: m.toolCalls,
+		}
+		yield(&blades.ModelResponse{Message: msg}, nil)
 	}
 }

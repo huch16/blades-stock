@@ -180,6 +180,10 @@ func CleanFallbackModelName(name string) string {
 	return strings.TrimSpace(name)
 }
 
+// emptyOutputProbeCap 空答检测时最多累积的正文字节数。
+// 只需判断「有没有正文」，无需完整正文，故设上限避免长报告重复驻留内存。
+const emptyOutputProbeCap = 256 * 1024
+
 // FallbackModelProvider 实现多模型容灾降级
 // 当主模型执行失败、超时或限流时，自动无缝尝试备用模型列表
 // 具备“粘性提升”（Sticky Promotion）和“死锁黑名单”机制，避免在多步骤 Agent 循环中重复在已知失败模型上空等超时
@@ -312,6 +316,19 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 
 		notifier := GetFallbackNotifier(ctx)
 
+		// nextAlive 返回 from 起第一个未被永久隔离的下标；没有则返回 len(allProviders)。
+		nextAlive := func(from int) int {
+			for i := from; i < len(allProviders); i++ {
+				f.mu.RLock()
+				dead := f.permanentlyFailed[i]
+				f.mu.RUnlock()
+				if !dead {
+					return i
+				}
+			}
+			return len(allProviders)
+		}
+
 		for idx := startIdx; idx < len(allProviders); idx++ {
 			f.mu.RLock()
 			isDead := f.permanentlyFailed[idx]
@@ -330,20 +347,17 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 
 			yieldedAny := false
 			failed := false
+			// 空答检测所需的本地状态（只统计**本次尝试**）：
+			//   · contentBuf  累积正文，用于识别「推理模型把输出预算耗在思考上、
+			//     正文为空」这种**没有 error 的失败**；
+			//   · toolPartSeen 用于排除「合法的工具调用轮次」——工具调用本身没有
+			//     正文，绝不能因此判定为空答并触发降级。
+			var contentBuf strings.Builder
+			toolPartSeen := false
 
 			gen(func(resp *blades.ModelResponse, err error) bool {
 				if err != nil {
-					// 寻找下一个有效备选
-					nextIdx := idx + 1
-					for nextIdx < len(allProviders) {
-						f.mu.RLock()
-						nextDead := f.permanentlyFailed[nextIdx]
-						f.mu.RUnlock()
-						if !nextDead {
-							break
-						}
-						nextIdx++
-					}
+					nextIdx := nextAlive(idx + 1)
 
 					// 如果第一个 chunk 就报错（且还有备用模型），标记失败由外层切换
 					if !yieldedAny && nextIdx < len(allProviders) {
@@ -373,8 +387,62 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 				}
 
 				yieldedAny = true
+
+				// 统计正文与工具调用（供流结束后的空答判定使用）
+				if resp != nil && resp.Message != nil {
+					for _, part := range resp.Message.Parts {
+						switch p := part.(type) {
+						case blades.TextPart:
+							if contentBuf.Len() < emptyOutputProbeCap {
+								contentBuf.WriteString(p.Text)
+							}
+						case *blades.TextPart:
+							if p != nil && contentBuf.Len() < emptyOutputProbeCap {
+								contentBuf.WriteString(p.Text)
+							}
+						case blades.ToolPart:
+							toolPartSeen = true
+						case *blades.ToolPart:
+							toolPartSeen = true
+						}
+					}
+				}
+
 				return yield(resp, nil)
 			})
+
+			// ── 空答检测（关键修复）───────────────────────────────────────────
+			//
+			// 生产铁证：运行记录同时出现
+			//   「失败: 模型未产出正文（空响应）」与「备用链: nemotron-...」，
+			//   即**备用链配置完好却从未启用**。
+			//
+			// 根因：推理模型（如 MiniMax-M3）把输出预算整段耗在思考(reasoning)上，
+			// 流会**正常结束且没有任何 error**，只是正文为空。而这里原先只在
+			// `err != nil && !yieldedAny` 时降级 —— 空答走不到那一支，于是主模型
+			// 被粘性提升为活跃模型，后续每一步都继续空答。
+			//
+			// 现在：流正常结束、无正文（剔除 think/agent-action 后仍为空）、
+			// 且无工具调用 → 判定为空答，切换备用模型重跑本次调用。
+			if !failed && !toolPartSeen && strings.TrimSpace(cleanFinalContent(contentBuf.String())) == "" {
+				emptyNext := nextAlive(idx + 1)
+				if emptyNext < len(allProviders) {
+					nextName := names[emptyNext]
+					emptyErr := fmt.Errorf("模型返回空正文（空响应）")
+
+					logger.SugaredLogger.Warnf("⚠️ [FallbackModelProvider] 模型 [%s] 流式结束但正文为空（无错误），判定为空答，自动降级切换至 [%s]...", curName, nextName)
+
+					f.mu.Lock()
+					f.activeIdx = int32(emptyNext)
+					f.mu.Unlock()
+
+					if notifier != nil {
+						notifier(CleanFallbackModelName(curName), CleanFallbackModelName(nextName), emptyErr)
+					}
+					continue // 尝试下一个备用模型
+				}
+				logger.SugaredLogger.Warnf("⚠️ [FallbackModelProvider] 模型 [%s] 返回空正文且无可用备用模型，交由上层空答检测处理", curName)
+			}
 
 			// 成功吐出了内容，固定当前正常响应的模型作为后续步骤的活跃主模型
 			if yieldedAny && !failed {
