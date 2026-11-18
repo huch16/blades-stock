@@ -139,6 +139,17 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			Kind:        runKind,
 			RequestedID: aiConfigId,
 		}
+		// modelFinishReason 记录模型**真实**的结束原因（stop / length /
+		// content_filter）。blades 的 openai provider 会把上游
+		// choice.FinishReason 写到 Message 上并随 final response yield 出来。
+		//
+		// 为什么必须收集它（用户实证「盘后分析等经常运行一段，没有全部完成」）：
+		// 旧实现从不读取该字段，终态一律硬编码 FinishReason="stop"。于是模型因
+		// maxTokens 耗尽被截断（finish_reason=length）时，前后端都认为「正常
+		// 结束」，半份研报被当成完整研报保存并展示 —— 用户看到的就是
+		// 「生成到一半就停了，且没有任何说明」。
+		// 声明必须早于下面的终态兜底 defer（它会读取该变量）。
+		var modelFinishReason string
 		// finalizeRun 幂等落库。
 		//
 		// 关键：必须在 sendTerminal **关闭通道之前**调用 ——
@@ -195,8 +206,15 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if terminalSent {
 				return
 			}
-			// 兜底：任何忘了收尾的路径（含 panic）都在此补齐终态，杜绝前端卡死
-			sendTerminal(&StreamMessage{Role: "assistant", Content: "agent-DONE", FinishReason: "stop"})
+			// 兜底：任何忘了收尾的路径（含 panic）都在此补齐终态，杜绝前端卡死。
+			// 用模型**真实**的结束原因，而不是一律写 "stop"：
+			// 若模型是 length（maxTokens 耗尽）或 content_filter，
+			// 前端需要据此提示「内容不完整」，而不是当成正常结束。
+			fr := strings.TrimSpace(modelFinishReason)
+			if fr == "" {
+				fr = "stop"
+			}
+			sendTerminal(&StreamMessage{Role: "assistant", Content: "agent-DONE", FinishReason: fr})
 		}()
 
 		defer func() {
@@ -619,6 +637,23 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				}
 				firstChunkSeen = true
 
+				// 收集模型真实的结束原因。工具调用轮次的 finish_reason 是
+				// "tool_calls"，不代表最终结束，因此只在**非 tool_calls**
+				// 时记录，避免把中间轮次误当成终态。
+				if fr := strings.TrimSpace(msg.FinishReason); fr != "" && fr != "tool_calls" {
+					modelFinishReason = fr
+					// 截断/内容拦截必须让用户立刻知道：这两种情况下正文
+					// 是不完整的，静默保存会让用户拿到半份研报。
+					if fr == "length" || fr == "content_filter" {
+						logger.SugaredLogger.Warnf("⚠️ [Agent] 模型结束原因为 %q，输出可能不完整（finish_reason=%s）", fr, fr)
+						ch <- &StreamMessage{
+							Role:       "assistant",
+							Content:    "",
+							StatusText: fmt.Sprintf("⚠️ 模型输出因 %s 结束，内容可能不完整", finishReasonLabel(fr)),
+						}
+					}
+				}
+
 				if msg.Role == blades.RoleAssistant {
 					text := msg.Text()
 					if text != "" {
@@ -792,6 +827,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			finalStatus = "failed"
 		} else if retryCount > 0 {
 			finalStatus = "retry_success"
+		}
+		// 运行记录的 FinishReason 用模型真实值：
+		// 「最近运行记录」面板据此才能看出「stop」与「length(截断)」的区别。
+		if fr := strings.TrimSpace(modelFinishReason); fr != "" {
+			runRecord.FinishReason = fr
 		}
 		metrics := AgentRunMetrics{
 			TotalDuration:     totalDur,
@@ -1118,6 +1158,23 @@ func isRequestTimeoutError(err error) bool {
 
 // effectiveRequestTimeoutSec 返回某张卡片实际生效的"单次请求超时"秒数，
 // 供错误提示如实告知用户该改哪一项。
+// finishReasonLabel 把 OpenAI 的 finish_reason 翻译成用户能看懂的中文。
+// 用于截断/拦截时给出一句人话，而不是把 "length" 原样丢给用户。
+func finishReasonLabel(fr string) string {
+	switch strings.ToLower(strings.TrimSpace(fr)) {
+	case "length", "max_tokens":
+		return "输出长度达到上限"
+	case "content_filter":
+		return "内容安全策略拦截"
+	case "tool_calls", "function_call":
+		return "工具调用"
+	case "stop":
+		return "正常结束"
+	default:
+		return fr
+	}
+}
+
 func effectiveRequestTimeoutSec(aiConfigId int) int {
 	cfg := data.GetSettingConfig()
 	if cfg == nil {

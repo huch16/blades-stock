@@ -423,6 +423,58 @@ func cleanAndAssembleReport(reasoning, content string) (string, []types.AgentAct
 	return cleanedContent, actions
 }
 
+// reportStreamResult 汇总一次研报生成的流式结果。
+type reportStreamResult struct {
+	// Reasoning / Content 分别是思考链与正文（已剔除 ❌ 错误串）。
+	Reasoning string
+	Content   string
+	// StreamErr 非空表示流中捕获到底层错误消息。
+	StreamErr string
+	// FinishReason 是模型**真实**的结束原因（stop/length/content_filter）。
+	FinishReason string
+	// Truncated 为 true 表示模型因 length/max_tokens/content_filter 结束，
+	// 正文不完整。绝不是「正常生成完成」。
+	Truncated bool
+}
+
+// collectReportStream 消费 ChatWithContext 的流，汇总正文/思考并识别截断。
+//
+// 存在意义（用户实证「AI盘后分析等经常运行一段，没有全部完成」）：
+// 四个研报生成器原先各自内联同一个循环，且**完全不看 FinishReason**。
+// 模型因 maxTokens 耗尽结束（finish_reason=length）时，循环正常退出、
+// 半份正文被当成完整研报校验并落库展示 —— 用户看到「生成到一半就停了，
+// 且没有任何说明」。现在统一在这里识别截断，交由调用方给出可行动错误。
+func collectReportStream(ch chan *StreamMessage) reportStreamResult {
+	var res reportStreamResult
+	var reasoning, content strings.Builder
+	for msg := range ch {
+		if msg == nil {
+			continue
+		}
+		// 终态消息携带模型真实的结束原因（agent_api.go 现已下发真实值）。
+		if fr := strings.TrimSpace(msg.FinishReason); fr != "" && fr != "tool_calls" {
+			res.FinishReason = fr
+			switch strings.ToLower(fr) {
+			case "length", "max_tokens", "content_filter":
+				res.Truncated = true
+			}
+		}
+		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
+			reasoning.WriteString(msg.ReasoningContent)
+		}
+		if msg.Content != "" && msg.Content != "agent-DONE" {
+			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
+				res.StreamErr = msg.Content
+				continue
+			}
+			content.WriteString(msg.Content)
+		}
+	}
+	res.Reasoning = reasoning.String()
+	res.Content = content.String()
+	return res
+}
+
 // GeneratePreMarketBriefing 生成盘前前瞻/晨报 (09:10前或手动触发)
 // 包含：隔夜外盘/中概股动态、核心行业ETF动量排名与5视角加权打分、宏观要闻与开盘策略
 func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, aiConfigId int) (*MarketIntelligenceReport, error) {
@@ -528,22 +580,14 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	defer cancel()
 
 	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
-	for msg := range ch {
-		if msg == nil {
-			continue
-		}
-		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
-			reasoningBuilder.WriteString(msg.ReasoningContent)
-		}
-		if msg.Content != "" && msg.Content != "agent-DONE" {
-			// 若流中捕获到底层抛出的错误消息，绝不混入正文内容
-			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
-				streamErr = msg.Content
-				continue
-			}
-			contentBuilder.WriteString(msg.Content)
-		}
+	streamRes := collectReportStream(ch)
+	if streamRes.Truncated {
+		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
+			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
 	}
+	reasoningBuilder.WriteString(streamRes.Reasoning)
+	contentBuilder.WriteString(streamRes.Content)
+	streamErr = streamRes.StreamErr
 
 	if streamErr != "" {
 		return nil, fmt.Errorf("AI 盘前晨报生成中断: %s", streamErr)
@@ -739,21 +783,14 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	defer cancel()
 
 	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
-	for msg := range ch {
-		if msg == nil {
-			continue
-		}
-		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
-			reasoningBuilder.WriteString(msg.ReasoningContent)
-		}
-		if msg.Content != "" && msg.Content != "agent-DONE" {
-			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
-				streamErr = msg.Content
-				continue
-			}
-			contentBuilder.WriteString(msg.Content)
-		}
+	streamRes := collectReportStream(ch)
+	if streamRes.Truncated {
+		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
+			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
 	}
+	reasoningBuilder.WriteString(streamRes.Reasoning)
+	contentBuilder.WriteString(streamRes.Content)
+	streamErr = streamRes.StreamErr
 
 	if streamErr != "" {
 		return nil, fmt.Errorf("Serenity 产业链拆解生成中断: %s", streamErr)
@@ -938,21 +975,14 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	defer cancel()
 
 	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
-	for msg := range ch {
-		if msg == nil {
-			continue
-		}
-		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
-			reasoningBuilder.WriteString(msg.ReasoningContent)
-		}
-		if msg.Content != "" && msg.Content != "agent-DONE" {
-			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
-				streamErr = msg.Content
-				continue
-			}
-			contentBuilder.WriteString(msg.Content)
-		}
+	streamRes := collectReportStream(ch)
+	if streamRes.Truncated {
+		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
+			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
 	}
+	reasoningBuilder.WriteString(streamRes.Reasoning)
+	contentBuilder.WriteString(streamRes.Content)
+	streamErr = streamRes.StreamErr
 
 	if streamErr != "" {
 		return nil, fmt.Errorf("AI 生成收盘复盘中断: %s", streamErr)
@@ -1092,21 +1122,14 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	defer cancel()
 
 	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
-	for msg := range ch {
-		if msg == nil {
-			continue
-		}
-		if msg.ReasoningContent != "" && !strings.HasPrefix(msg.ReasoningContent, "[STATUS]") {
-			reasoningBuilder.WriteString(msg.ReasoningContent)
-		}
-		if msg.Content != "" && msg.Content != "agent-DONE" {
-			if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
-				streamErr = msg.Content
-				continue
-			}
-			contentBuilder.WriteString(msg.Content)
-		}
+	streamRes := collectReportStream(ch)
+	if streamRes.Truncated {
+		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
+			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
 	}
+	reasoningBuilder.WriteString(streamRes.Reasoning)
+	contentBuilder.WriteString(streamRes.Content)
+	streamErr = streamRes.StreamErr
 
 	if streamErr != "" {
 		return nil, fmt.Errorf("生成ETF轮动分析报告中断: %s", streamErr)
@@ -1364,3 +1387,5 @@ func PurgeCorruptedReports() int {
 	logger.SugaredLogger.Infof("[MarketLifecycle] 已物理清洗 %d 条历史网络中断或网关超时产生的脏研报记录", count)
 	return count
 }
+
+// ── 以下为 collectReportStream 的回归测试 ────────────────────────────────
