@@ -2,6 +2,7 @@ package data
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/duke-git/lancet/v2/convertor"
 )
@@ -68,4 +69,51 @@ func ThsResultToMarkdown(res map[string]any, title string) string {
 	jsonData, _ := json.Marshal(*table)
 	markdownTable, _ := JSONToMarkdownTable(jsonData)
 	return "\r\n### " + title + "：\r\n" + markdownTable + "\r\n"
+}
+
+// JSONToMarkdownTable 将 JSON 数组转换为 markdown 表格（R-18 自 stock_data_api.go 移入，与 ThsResultToMarkdown 同处）。
+// JSONToMarkdownTable 将JSON数据转换为Markdown表格
+func JSONToMarkdownTable(jsonData []byte) (string, error) {
+	var data []map[string]interface{}
+	err := json.Unmarshal(jsonData, &data)
+	if err != nil {
+		return "", err
+	}
+
+	if len(data) == 0 {
+		return "", nil
+	}
+
+	// 获取表头
+	headers := []string{}
+	for key := range data[0] {
+		headers = append(headers, key)
+	}
+
+	// 构建表头行
+	headerRow := "|"
+	for _, header := range headers {
+		headerRow += fmt.Sprintf(" %s |", header)
+	}
+	headerRow += "\n"
+
+	// 构建分隔行
+	separatorRow := "|"
+	for range headers {
+		separatorRow += " --- |"
+	}
+	separatorRow += "\n"
+
+	// 构建数据行
+	bodyRows := ""
+	for _, rowData := range data {
+		bodyRow := "|"
+		for _, header := range headers {
+			value := rowData[header]
+			bodyRow += fmt.Sprintf(" %v |", value)
+		}
+		bodyRows += bodyRow + "\n"
+	}
+
+	return headerRow + separatorRow + bodyRows, nil
 }

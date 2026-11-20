@@ -194,3 +194,18 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - `tools.go` 35 行：仅留 `toolSchemaStockCodes` 与聚合版 `Tools()`（依次调 9 个 `appendXxxTools` + `appendAgentParityTools` + `FilterToolsByApiKey`）；`strings` import 随之删除（新聚合不再使用）。
   - 各域函数均为 `appendXxxTools(tools []Tool) []Tool`，schema 字面量逐字搬家。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；数量对照（临时测试，跑完即删，未提交）：`len(data.Tools(nil))` 拆分前后均为 **111**，`dataToolGroupMap` 均为 **125 项**，关键词组 7 组/205 个关键词均一致。
+
+### R-18 拆 backend/data/stock_data_api.go（2,880 行、67 个函数 → 核心文件 + 5 个域文件）—— 已完成
+
+- 拆分前实测与方案出入（均已核对并记录）：
+  - 文件实际 2,880 行、67 个函数（方案 2,941 行/68 个函数为基线；R-12 已删 `GetHKStockInfo`，故 67 为当前正确总数）。
+  - 方案未列出的 11 个交易记录函数（`AddTradingRecord`、`GetTradingRecordList`、`GetTradingRecordStatistics`、`GetTradingRecordById`、`UpdateTradingRecord`、`DeleteTradingRecord`、`CheckFrequentTrading` + 私有 helper `fifoAvgUnitCost`、`normalizeTradingRecordAPI`、`resolveTradingRecordClosePrice`、`fillTradingRecordCloseSnapshot`）自成一域，新增 `stock_trading_record.go`（537 行）；未硬塞进核心文件。
+  - `GetStockRZRQInfo`（融资融券）归入 `stock_money.go`（资金/财务域），未留核心文件。
+  - 港股域：`GetHKStockInfo` 已在 R-12 删除，只剩 `getDCStockInfo`、`saveHKStockInfo` 两个小函数，按方案并入 `stock_realtime.go`，不单独建 `stock_hk.go`。
+  - 只拆方法：全部 struct 定义（含 `StockInfo`、`FollowedStock`、`TradingRecord`、`StockBasic`、`IndexBasic`、`KLineData`、`MinuteData`、`TradingRecordListQuery` 等）与全部 5 个 `TableName()` 留在原文件不动；常量与 `StockDataApi` 接收者 struct 亦留原文件。
+- 拆分结果（原文件 2,880 行 → 核心文件 629 行）：
+  - `stock_data_api.go` 629 行，18 个函数：13 个核心查询（`NewStockDataApi`、`GetIndexBasic`、`GetStockBaseInfo`、`GetStockList`、`GetAllStockInfoList`、`GetAllStockInfoById`、`AddAllStockInfo`、`DeleteAllStockInfo`、`BatchDeleteAllStockInfo`、`GetAllMarkets`、`GetAllIndustries`、`GetAllConcepts`、`GetStockInfoByCode`）+ 5 个 `TableName()`。
+  - `stock_follow.go` 233 行（9 个，自选/提醒域）、`stock_kline.go` 266 行（5 个，K 线域）、`stock_realtime.go` 806 行（14 个，实时行情解析域，含港股两个小函数）、`stock_money.go` 477 行（9 个，资金/财务/概念域）、`stock_trading_record.go` 537 行（11 个，交易记录域）。
+  - `JSONToMarkdownTable` 移入 `backend/data/ths_markdown.go`（+48 行，与 `ThsResultToMarkdown` 同处，`fmt` import 随之补上）。
+  - 各文件 import 按实际引用逐项计算生成；执行中修过一处误判：`stock_money.go` 的 `context` 只出现在被注释掉的 resty 配置行里，误删后构建通过。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 67（核心 18 + follow 9 + kline 5 + realtime 14 + money 9 + 交易记录 11 + `ths_markdown.go` 内 `JSONToMarkdownTable` 1），与拆分前一致。
