@@ -3,6 +3,7 @@ package agent
 import (
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/util"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -415,7 +416,7 @@ func buildRollingSummary(prevSummary string, pairs []string) string {
 			b.WriteString("...(更早对话要点已省略)\n")
 			break
 		}
-		b.WriteString(truncateString(p, 120) + "\n")
+		b.WriteString(util.TruncateString(p, 120, truncateSuffix) + "\n")
 		kept++
 	}
 	return b.String()
@@ -472,7 +473,7 @@ func (s *ChatMemoryService) summarizeHistoryAsync(sessionID string, pairs []stri
 	}
 	_ = (&db.ChatMemorySummary{
 		SessionID: sessionID,
-		Summary:   truncateString(strings.TrimSpace(resp), 2000),
+		Summary:   util.TruncateString(strings.TrimSpace(resp), 2000, truncateSuffix),
 		CreatedAt: time.Now(),
 	}).Save()
 	logger.SugaredLogger.Debugf("async LLM summary stored for session %s", sessionID)

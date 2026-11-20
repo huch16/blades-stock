@@ -229,18 +229,6 @@ func TestAssessCapitalNature(t *testing.T) {
 	}
 }
 
-func TestMaxInt(t *testing.T) {
-	if got := maxInt(5, 3); got != 5 {
-		t.Errorf("maxInt(5,3) = %v, want 5", got)
-	}
-	if got := maxInt(2, 7); got != 7 {
-		t.Errorf("maxInt(2,7) = %v, want 7", got)
-	}
-	if got := maxInt(4, 4); got != 4 {
-		t.Errorf("maxInt(4,4) = %v, want 4", got)
-	}
-}
-
 // ============ integration tests (require network + real API) ============
 
 func TestHandleAnalyzeHotMoneyActivity_EmptyCode(t *testing.T) {

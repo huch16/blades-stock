@@ -675,13 +675,6 @@ func (m *Matrix) Col(j int) *Vector {
 // 辅助函数
 // ============================================================================
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 // Quantile 分位数
 func (v *Vector) Quantile(q float64) float64 {
 	if v.Len == 0 {

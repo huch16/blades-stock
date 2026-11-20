@@ -11,6 +11,7 @@ import (
 	"blades-stock/backend/agent/types"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 
 	bladesTools "github.com/go-kratos/blades/tools"
 	"github.com/tidwall/gjson"
@@ -142,7 +143,7 @@ func GetETFMomentumRankingTool() bladesTools.Tool {
 					if rc == "" {
 						continue
 					}
-					cCode := CleanStockCode(rc)
+					cCode := models.CleanStockCode(rc)
 					cCode = GetStockCode(cCode)
 					pool = append(pool, struct {
 						Code string

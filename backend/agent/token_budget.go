@@ -13,6 +13,7 @@
 package agent
 
 import (
+	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -169,20 +170,5 @@ func joinLinesAndOmitted(kept []string, omitted int) string {
 	if omitted <= 0 {
 		return strings.Join(kept, "\n")
 	}
-	return strings.Join(kept, "\n") + "\n…(已省略 " + itoa(omitted) + " 行)"
-}
-
-// itoa 是轻量级 int→string，避免 strconv 引入开销。
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
+	return strings.Join(kept, "\n") + "\n…(已省略 " + strconv.Itoa(omitted) + " 行)"
 }

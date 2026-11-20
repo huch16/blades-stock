@@ -28,19 +28,6 @@ func SanitizeSensitiveInfo(raw string) string {
 	return out
 }
 
-// @Author spark
-// @Date 2025/8/5 17:20
-// @Desc
-//-----------------------------------------------------------------------------------
-
-func CleanStockCode(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	return models.CleanStockCode(raw)
-}
-
 func GetStockCode(dcCode string) string {
 	dcCode = strings.TrimSpace(dcCode)
 	if dcCode == "" {
@@ -50,7 +37,7 @@ func GetStockCode(dcCode string) string {
 		sp := strings.Split(dcCode, ".")
 		return strings.ToLower(sp[1] + sp[0])
 	}
-	pure := CleanStockCode(dcCode)
+	pure := models.CleanStockCode(dcCode)
 	if len(pure) == 6 {
 		dcCode = pure
 	}

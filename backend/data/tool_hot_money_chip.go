@@ -494,8 +494,8 @@ func assessCapitalNature(mainForce, retail float64, moneyMd string) string {
 			retailDays++
 		}
 	}
-	sb.WriteString(fmt.Sprintf("- 主力净流入天数占比：约 %d/%d 个交易日\n", mainDays, maxInt(len(lines)/5, 1)))
-	sb.WriteString(fmt.Sprintf("- 散户净流出天数占比：约 %d/%d 个交易日\n", retailDays, maxInt(len(lines)/5, 1)))
+	sb.WriteString(fmt.Sprintf("- 主力净流入天数占比：约 %d/%d 个交易日\n", mainDays, max(len(lines)/5, 1)))
+	sb.WriteString(fmt.Sprintf("- 散户净流出天数占比：约 %d/%d 个交易日\n", retailDays, max(len(lines)/5, 1)))
 
 	if mainForce > 0 && mainDays > 0 {
 		sb.WriteString("- 资金性质判断：**主力资金主导**，近期以机构/游资行为为主\n")
@@ -506,11 +506,4 @@ func assessCapitalNature(mainForce, retail float64, moneyMd string) string {
 	}
 
 	return sb.String()
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

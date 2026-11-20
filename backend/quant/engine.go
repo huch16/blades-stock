@@ -627,8 +627,8 @@ func PrintResult(r *BacktestResult) string {
 		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
 		"🎯 胜率: " + formatPct(s.WinRate),
 		"💎 盈亏比: " + formatFloat(s.ProfitFactor),
-		"📈 交易次数: " + itoa(s.TotalTrades),
-		"  ✅ 盈利: " + itoa(s.WinTrades) + "  ❌ 亏损: " + itoa(s.LoseTrades),
+		"📈 交易次数: " + strconv.Itoa(s.TotalTrades),
+		"  ✅ 盈利: " + strconv.Itoa(s.WinTrades) + "  ❌ 亏损: " + strconv.Itoa(s.LoseTrades),
 		"  📊 平均持仓: " + formatFloat(s.AvgHoldingDays) + " 天",
 		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
 		"💵 初始资金: " + formatMoney(s.InitCash),
@@ -643,7 +643,7 @@ func formatFloat(v any) string {
 	case float64:
 		return sprintf("%.4f", val)
 	case int:
-		return itoa(val)
+		return strconv.Itoa(val)
 	default:
 		return sprintf("%v", val)
 	}
@@ -655,10 +655,6 @@ func formatPct(v float64) string {
 
 func formatMoney(v float64) string {
 	return "¥" + sprintf("%.2f", v)
-}
-
-func itoa(i int) string {
-	return sprintf("%d", i)
 }
 
 func sprintf(format string, args ...any) string {

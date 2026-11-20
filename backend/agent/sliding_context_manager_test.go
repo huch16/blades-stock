@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -147,7 +148,7 @@ func TestSCManager_TenTurnsKeepsThree(t *testing.T) {
 
 	// 每次 AddTurn 加 2 turn（user + assistant）；10 次 = 20 turn
 	for i := 0; i < 10; i++ {
-		AddTurn(id, "用户问题 "+itoa(i), "助手回答 "+itoa(i), 3, false)
+		AddTurn(id, "用户问题 "+strconv.Itoa(i), "助手回答 "+strconv.Itoa(i), 3, false)
 	}
 
 	full, _, _, total, compressed, _ := SessionStats(id)

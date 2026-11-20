@@ -11,6 +11,7 @@ import (
 	"blades-stock/backend/agent/tools"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/util"
 
 	"github.com/go-kratos/blades"
 	bladesTools "github.com/go-kratos/blades/tools"
@@ -262,7 +263,7 @@ func buildParallelContext(data []PreFetchedData) string {
 		} else {
 			sb.WriteString("===== " + section.Group + " =====\n")
 		}
-		sb.WriteString(truncateString(section.Summary, 4000))
+		sb.WriteString(util.TruncateString(section.Summary, 4000, truncateSuffix))
 		sb.WriteString("\n\n")
 	}
 
@@ -467,10 +468,5 @@ func describeGroup(g tools.ToolGroup) string {
 	}
 }
 
-func truncateString(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	return string(runes[:maxLen]) + "\n\n...(数据过长，已截断)"
-}
+// truncateSuffix 是 agent 内截断提示的统一后缀。
+const truncateSuffix = "\n\n...(数据过长，已截断)"

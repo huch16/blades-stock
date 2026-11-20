@@ -1,6 +1,7 @@
 package quant
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -418,15 +419,6 @@ func TestFormatMoney(t *testing.T) {
 	}
 }
 
-func TestItoa(t *testing.T) {
-	if itoa(42) != "42" {
-		t.Fatalf("itoa(42) = %s", itoa(42))
-	}
-	if itoa(0) != "0" {
-		t.Fatalf("itoa(0) = %s", itoa(0))
-	}
-}
-
 func TestAnalyzeGridResults(t *testing.T) {
 	close := []float64{100, 102, 101, 105, 107, 106, 110}
 	entries := []bool{false, true, false, false, false, false, false}
@@ -497,7 +489,7 @@ func generateDates(n int) []string {
 
 func pad2(i int) string {
 	if i < 10 {
-		return "0" + itoa(i)
+		return "0" + strconv.Itoa(i)
 	}
-	return itoa(i)
+	return strconv.Itoa(i)
 }

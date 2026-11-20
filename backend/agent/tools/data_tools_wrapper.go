@@ -618,7 +618,7 @@ func GetAllDataTools() []bladesTools.Tool {
 				pageSize = 10
 			}
 			result := data.NewStockDataApi().GetMutualTop10Deal(mutualType, tradeDate, page, pageSize)
-			title := mutualTypeName(mutualType) + " " + tradeDate
+			title := data.MutualTypeName(mutualType) + " " + tradeDate
 			md := util.MarkdownTableWithTitle(title, result.Result.Data)
 			return md, nil
 		},
@@ -4270,21 +4270,4 @@ func getMarketDataContent() (string, error) {
 
 	logger.SugaredLogger.Debug("%s", content.String())
 	return content.String(), nil
-}
-
-// mutualTypeName 将 MUTUAL_TYPE 代码翻译为中文名称
-// 001=沪股通十大成交股, 002=港股通(沪)十大成交股, 003=深股通十大成交股, 004=港股通(深)十大成交股
-func mutualTypeName(code string) string {
-	switch code {
-	case "001":
-		return "沪股通十大成交股"
-	case "002":
-		return "港股通(沪)十大成交股"
-	case "003":
-		return "深股通十大成交股"
-	case "004":
-		return "港股通(深)十大成交股"
-	default:
-		return code
-	}
 }

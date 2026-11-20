@@ -11,9 +11,9 @@ func init() {
 	registerToolHandler("GetMutualTop10Deal", handleGetMutualTop10Deal)
 }
 
-// mutualTypeName 将 MUTUAL_TYPE 代码翻译为中文名称
+// MutualTypeName 将 MUTUAL_TYPE 代码翻译为中文名称
 // 001=沪股通十大成交股, 002=港股通(沪)十大成交股, 003=深股通十大成交股, 004=港股通(深)十大成交股
-func mutualTypeName(code string) string {
+func MutualTypeName(code string) string {
 	switch code {
 	case "001":
 		return "沪股通十大成交股"
@@ -67,7 +67,7 @@ func handleGetMutualTop10Deal(o *OpenAi, funcArguments string, ctx *ToolContext)
 		return nil
 	}
 
-	title := mutualTypeName(mutualType) + " " + tradeDate
+	title := MutualTypeName(mutualType) + " " + tradeDate
 	md := util.MarkdownTableWithTitle(title, res.Result.Data)
 	//logger.SugaredLogger.Infof("GetMutualTop10Deal page:%s pageSize:%s\n%s",
 	//	convertor.ToString(page),
