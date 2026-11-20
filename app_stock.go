@@ -120,7 +120,7 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 // 以 upsert 方式补充全量 JSON 未及时覆盖的新上市/改名/退市股票。
 func (a *App) syncStockBasicFromTdx() {
 	defer PanicHandler()
-	added, updated, err := data.NewTdxKLineApi().SyncStockBasicToDB()
+	added, updated, err := data.SyncStockBasicToDB(data.NewTdxKLineApi())
 	if err != nil {
 		logger.SugaredLogger.Warnf("通达信同步股票基础信息失败:%s", err.Error())
 		return
@@ -133,7 +133,7 @@ func (a *App) syncStockBasicFromTdx() {
 // syncHKUSStockBasicFromTdx 用通达信扩展行情即时数据对港股/美股基础信息做增量校准。
 func (a *App) syncHKUSStockBasicFromTdx() {
 	defer PanicHandler()
-	hkAdded, hkUpdated, usAdded, usUpdated, err := data.NewTdxKLineApi().SyncHKUSStockBasicToDB()
+	hkAdded, hkUpdated, usAdded, usUpdated, err := data.SyncHKUSStockBasicToDB(data.NewTdxKLineApi())
 	if err != nil {
 		logger.SugaredLogger.Warnf("通达信同步港美股基础信息失败:%s", err.Error())
 		return

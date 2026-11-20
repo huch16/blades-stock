@@ -50,3 +50,74 @@ func ParseFloatToFloat(s string) (float64, error) {
 	_, err := fmt.Sscanf(s, "%f", &f)
 	return f, err
 }
+
+// AggregateKLineEveryN 将连续 n 根 1 分钟 K 线合并为一根
+// （用于东方财富无原生 10 分钟周期时；假定 src 已按时间正序排列）。
+// R-25b 自 backend/data/eastmoney_kline_api.go 移入；data 侧留同名转发。
+// AggregateKLineEveryN 将连续 n 根 1 分钟 K 线合并为一根（用于东方财富无原生 10 分钟周期时）。
+// 假定 src 已按时间正序排列。
+func AggregateKLineEveryN(src *[]KLineData, n int) *[]KLineData {
+	if src == nil || n < 2 {
+		return src
+	}
+	arr := *src
+	if len(arr) == 0 {
+		return src
+	}
+	out := make([]KLineData, 0, len(arr)/n+1)
+	for i := 0; i < len(arr); {
+		end := i + n
+		if end > len(arr) {
+			end = len(arr)
+		}
+		chunk := arr[i:end]
+		first := chunk[0]
+		last := chunk[len(chunk)-1]
+		highF := -1e18
+		lowF := 1e18
+		volSum := 0.0
+		amtSum := 0.0
+		for _, c := range chunk {
+			h, _ := ParseFloatToFloat(c.High)
+			l, _ := ParseFloatToFloat(c.Low)
+			v, _ := ParseFloatToFloat(c.Volume)
+			a, _ := ParseFloatToFloat(c.Amount)
+			if h > highF {
+				highF = h
+			}
+			if l < lowF {
+				lowF = l
+			}
+			volSum += v
+			amtSum += a
+		}
+		openS := first.Open
+		closeS := last.Close
+		highS := fmt.Sprintf("%.4f", highF)
+		lowS := fmt.Sprintf("%.4f", lowF)
+		if highF <= -1e17 {
+			highS = first.High
+		}
+		if lowF >= 1e17 {
+			lowS = first.Low
+		}
+		out = append(out, KLineData{
+			Day:           last.Day,
+			Open:          openS,
+			Close:         closeS,
+			High:          highS,
+			Low:           lowS,
+			Volume:        fmt.Sprintf("%.0f", volSum),
+			Amount:        fmt.Sprintf("%.2f", amtSum),
+			ChangePercent: last.ChangePercent,
+			ChangeValue:   last.ChangeValue,
+			TurnoverRate:  last.TurnoverRate,
+			Amplitude:     last.Amplitude,
+		})
+		i = end
+		if len(chunk) < n {
+			break
+		}
+	}
+	return &out
+}

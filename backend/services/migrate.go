@@ -267,7 +267,7 @@ func SeedStockBasicsIfEmpty() {
 		// 后台启动通达信增量校准同步（自动补全最新 A 股新股）
 		go func() {
 			defer func() { _ = recover() }()
-			data.NewTdxKLineApi().SyncStockBasicToDB()
+			data.SyncStockBasicToDB(data.NewTdxKLineApi())
 		}()
 	}
 
@@ -318,7 +318,7 @@ func SeedStockBasicsIfEmpty() {
 		// 后台启动通达信增量校准同步（自动补全港美股）
 		go func() {
 			defer func() { _ = recover() }()
-			data.NewTdxKLineApi().SyncHKUSStockBasicToDB()
+			data.SyncHKUSStockBasicToDB(data.NewTdxKLineApi())
 		}()
 	}
 }

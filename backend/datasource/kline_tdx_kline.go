@@ -1,4 +1,4 @@
-package data
+package datasource
 
 import (
 	"blades-stock/backend/logger"

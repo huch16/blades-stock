@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"blades-stock/backend/datasource"
+
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/tidwall/gjson"
 )
@@ -294,21 +296,19 @@ func handleGetEastMoneyKLineWithMA(o *OpenAi, funcArguments string, ctx *ToolCon
 	return nil
 }
 
-// IsAStockCode 判断股票代码是否为A股（沪深京市场）
+// IsAStockCode 转发到 datasource.IsAStockCode（R-25b：实现已搬入 datasource）。
 func IsAStockCode(code string) bool {
-	return strings.HasSuffix(code, ".SZ") || strings.HasSuffix(code, ".SH") || strings.HasSuffix(code, ".BJ")
+	return datasource.IsAStockCode(code)
 }
 
-// IsHKStockCode 判断股票代码是否为港股
+// IsHKStockCode 转发到 datasource.IsHKStockCode（R-25b：实现已搬入 datasource）。
 func IsHKStockCode(code string) bool {
-	upper := strings.ToUpper(code)
-	return strings.HasSuffix(upper, ".HK") || strings.HasPrefix(upper, "HK")
+	return datasource.IsHKStockCode(code)
 }
 
-// IsUSStockCode 判断股票代码是否为美股
+// IsUSStockCode 转发到 datasource.IsUSStockCode（R-25b：实现已搬入 datasource）。
 func IsUSStockCode(code string) bool {
-	upper := strings.ToUpper(code)
-	return strings.HasSuffix(upper, ".US") || strings.HasPrefix(upper, "US") || strings.HasPrefix(upper, "GB_")
+	return datasource.IsUSStockCode(code)
 }
 
 // NormalizeKLineType 导出 normalizeKLineType 供外部包使用
