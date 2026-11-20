@@ -288,3 +288,15 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 已知的、设计认可的收敛差异（记入，非回退理由）：(1) 原 `main.AutoMigrate()` 带 30 秒超时保护（超时则 Fatal），`services.AutoMigrateAll()` 为同步执行、无超时保护——与 server 路径（`cmd/server/main.go:209` 早已直接调用它）一致；(2) 桌面启动路径现在也会执行 `AutoMigrateAll()` 的第 7–14 步幂等种子/自愈（默认 AI 配置、基准自选股及行情回填、认知账本洗洁、出厂基线备份等）——server 路径在同一共享库上早已执行这些步骤，库的终态不变，只是桌面启动时也会收敛一次。
 - `db/chat_memory.go:106` 的清单无需改动：`db.AutoMigrate()` 已在 `AutoMigrateAll()` 第 5 步执行，且桌面与 server 两条路径均经 `db.Init` 先行执行同一份清单（R-15 已核查）。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration -count=1 ./...` 全量 **15 个包通过、0 个失败**（与 R-02 后基线一致）。
+
+### R-22a 拆 StockLightweightKlineChart.vue（5,544 行 → 1,585 行）—— 已完成
+
+- 拆分结果（原文件 5,544 行 → 1,585 行：script 768 行、template 449 行、style 367 行不变）：
+  - `src/composables/useKlineIndicators.ts`（2,483 行）：49 个指标开关、指标序列缓存 `ind`、主/副图同步（`syncIndicators` 717 行 + `syncSubPaneIndicators` 896 行）、信号评估与汇总、系列清理 helper。49 个 `showXxx` ref 收敛为 `reactive` 的 `flags` 记录（key 与工具栏注册表一致）；闭包读取的 `chart`/`candleSeries`/`mergedRawRows` 改为 ctx 传入的 getter（组件仍持有图表与数据所有权）；`hoverRawRow`/`mergedRawRowsVersion` 以 ref 原样传入，保持 `indicatorSignalSummary` 的 computed 响应性；`disposeChart` 内的 `ind` 重置块（47 行）改为 `resetInd()`。
+  - `src/composables/useKlineLongPosition.ts`（517 行）：多单标注全部状态与函数（价位线、图上点击取价、拖动改价、输入框双向同步 watchers）；`disposeChart` 内的 4 行拖动状态复位改为 `resetLongDragState()`；图表点击处理器读取的 `longSuppressChartClick` 以 `isChartClickSuppressed()` getter 暴露（`let` 非 ref，不可直接解构）。
+  - `src/composables/useKlineChip.ts`（126 行）：筹码开关、Canvas 绘制与悬停联动更新。
+  - `src/components/kline/indicators/registry.ts`（105 行）：49 个指标的工具栏注册表（label/tip/分组/标题样式均由原模板逐字解析生成，非手写），模板侧边栏 5 个分组（趋势 12 / 波动 10 / 动量 13 / 量价 8 / 强度 6）改为 `v-for` 渲染；筹码按钮保留在强度分组末尾（`v-if="SHOW_CHIP_TOOLBAR_BUTTON"` 不变）。
+  - 组件只留：props/emit、图表生命周期（ensureChart/disposeChart/轮询/历史分页/数据加载）、十字光标面板与 6 个纯 helper；文件名、props、emits、CSS 类名全部不变，16 个引用方零改动。
+- 数量对照（脚本断言，全部通过）：49 个 flag 在 composable 内的 `flags.<key>` 引用次数与原 `showXxx.value` 次数逐项一致；模板 49 个 label、5 个分组标题、5 组标题样式逐字在 registry 中；NTooltip 49 → 1（v-for），NButton 55 → 7；`ind` 只在被搬代码与 dispose 重置块中使用（另 2 处为 `longLineByKind` 的误匹配）；60 个 calc 导入全部随指标代码搬走，组件侧 0 残留。
+- 注意：原文件 script 内有两处 mid-script import（281 行 `indicatorTips`、351 行 `calcChipDistribution`），提取时已剥离归位（前者回组件顶部供模板使用，后者归 chip composable）；提取脚本见 `/tmp/r22a_extract.py`（stage1～stage4），原文件备份见 `/tmp/r22a_backup.vue`。
+- 验证：`npx eslint` 5 个文件 0 errors、0 warnings；全量 `npm run lint` 0 errors、158 warnings（与基线一致，未增加）；`npm run build` 退出 0（1m22s），`StockLightweightKlineChart` chunk 120.84 kB（gzip 37.46 kB），`vendor-echarts` 706.14 kB；构建产物 grep 确认 `lw-kline`、`筹码`、`STrend`、`TRIX斜率`、`信号比`、`均幅`、`lw-kline-signal-summary`、`lw-kline-sidebar__section` 等关键标识均在。改前 chunk 对照见下条（stash 基线构建后补）。
