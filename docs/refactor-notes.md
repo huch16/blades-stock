@@ -271,3 +271,9 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - `tdx_company.go` 677 行（11 个，公司信息：F10 综合/分类列表/分类内容、所属板块、全市场股票列表及入库同步、港美股列表及入库同步）。
   - 只拆方法：全部 struct 定义（`TdxCallAuctionData`、`TdxCompanyInfoSection`、`TdxFinanceInfo`、`TdxXDXRItem`、`TdxCompanyInfoBundle`、`TdxCompanyCategory`、`MACBelongBoardItem`、`TdxStockBasic`、`TdxExStockBasic`）、单例 `var` 块与港美股分类 const 留在原文件不动。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 44（17+13+3+11），与拆分前一致。
+
+### R-20 小结：4 个必拆文件已完成（R-20a～R-20d），可选 3 文件记入收尾清单
+
+- 已完成：`fund_data_api.go`（2,324→831 行 + 4 域文件）、`settings_api.go`（1,608→396 行 + 3 域文件）、`market_news_api.go`（1,564→13 行 + 5 域文件）、`tdx_kline_api.go`（1,558→354 行 + 3 域文件）。每文件独立提交、独立验证，函数总数对照均与拆前一致。
+- 未做（按方案“若时间允许同批拆，否则记入收尾清单”）：`backend/services/market_service.go`（1,283 行、130 个函数，多为小函数）、`backend/agent/market_lifecycle.go`（1,391 行、22 个函数，多为长函数）、`backend/agent/agent.go`（1,224 行、49 个函数）。三者仍超 1,000 行，记入收尾清单，不在本步扩大范围。
+- 另：`backend/data/eastmoney_api.go`（1,350 行）仍超 1,000 行，但它在 R-25 搬家范围（整体进 `datasource`），不在 R-20 拆分范围；R-20 的“`backend/data` 再无超 1,000 行文件”预期待 R-25 后达成。
