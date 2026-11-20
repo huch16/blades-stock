@@ -423,8 +423,7 @@ func (s *AgentService) GetPromptTemplates(name, promptType string) []PromptTempl
 
 // CreateCronTask 创建定时任务
 func (s *AgentService) CreateCronTask(task *models.CronTask) string {
-	err := agent.NewCronTaskApi().Create(task)
-	if err != nil {
+	if err := s.CreateCronTaskRaw(task); err != nil {
 		return fmt.Sprintf("创建失败：%v", err)
 	}
 	return "创建成功"
@@ -432,8 +431,7 @@ func (s *AgentService) CreateCronTask(task *models.CronTask) string {
 
 // UpdateCronTask 更新定时任务
 func (s *AgentService) UpdateCronTask(task *models.CronTask) string {
-	err := agent.NewCronTaskApi().Update(task)
-	if err != nil {
+	if err := s.UpdateCronTaskRaw(task); err != nil {
 		return fmt.Sprintf("更新失败：%v", err)
 	}
 	return "更新成功"
@@ -441,8 +439,7 @@ func (s *AgentService) UpdateCronTask(task *models.CronTask) string {
 
 // DeleteCronTask 删除定时任务
 func (s *AgentService) DeleteCronTask(id uint) string {
-	err := agent.NewCronTaskApi().Delete(id)
-	if err != nil {
+	if err := s.DeleteCronTaskRaw(id); err != nil {
 		return fmt.Sprintf("删除失败：%v", err)
 	}
 	return "删除成功"
@@ -450,7 +447,7 @@ func (s *AgentService) DeleteCronTask(id uint) string {
 
 // GetCronTaskByID 根据 ID 获取定时任务
 func (s *AgentService) GetCronTaskByID(id uint) *models.CronTask {
-	task, err := agent.NewCronTaskApi().GetByID(id)
+	task, err := s.GetCronTaskRaw(id)
 	if err != nil {
 		return nil
 	}
@@ -459,16 +456,12 @@ func (s *AgentService) GetCronTaskByID(id uint) *models.CronTask {
 
 // GetCronTaskList 获取定时任务分页列表
 func (s *AgentService) GetCronTaskList(query *models.CronTaskQuery) *models.CronTaskPageResp {
-	if query == nil {
-		query = &models.CronTaskQuery{}
-	}
-	return agent.NewCronTaskApi().List(query)
+	return s.ListCronTasks(query)
 }
 
 // EnableCronTask 启用/禁用定时任务
 func (s *AgentService) EnableCronTask(id uint, enable bool) string {
-	err := agent.NewCronTaskApi().EnableTask(id, enable)
-	if err != nil {
+	if err := s.EnableCronTaskRaw(id, enable); err != nil {
 		return fmt.Sprintf("操作失败：%v", err)
 	}
 	return "操作成功"
@@ -476,7 +469,7 @@ func (s *AgentService) EnableCronTask(id uint, enable bool) string {
 
 // ExecuteCronTaskNow 立即执行定时任务
 func (s *AgentService) ExecuteCronTaskNow(id uint) string {
-	task, err := agent.NewCronTaskApi().GetByID(id)
+	task, err := s.GetCronTaskRaw(id)
 	if err != nil {
 		return fmt.Sprintf("任务不存在：%v", err)
 	}
@@ -486,7 +479,7 @@ func (s *AgentService) ExecuteCronTaskNow(id uint) string {
 				logger.SugaredLogger.Errorf("ExecuteCronTaskNow panic for task %d: %v", id, r)
 			}
 		}()
-		_ = agent.NewCronTaskApi().ExecuteTask(context.Background(), task)
+		_ = s.ExecuteCronTask(context.Background(), task)
 	}()
 	return "任务执行中"
 }
@@ -524,6 +517,67 @@ func (s *AgentService) CalculateNextRunTimes(cronExpr string, count int) []strin
 		result = append(result, t.Format("2006-01-02 15:04:05"))
 	}
 	return result
+}
+
+// -----------------------------------------------------------------------------
+// 定时任务 error 感知委托（R-27a 新增，供 App 的调度器编排使用）
+// -----------------------------------------------------------------------------
+// App 在 DB 操作成功后还需向自身 cron 调度器注册/移除执行入口，必须拿到
+// error 做分支；只返回字符串的 CreateCronTask 等方法无法满足，故新增本组
+// 返回 error 的方法。Api 构造收敛到 services 层，App 不再直接 NewCronTaskApi。
+
+// CreateCronTaskRaw 创建定时任务。
+func (s *AgentService) CreateCronTaskRaw(task *models.CronTask) error {
+	return agent.NewCronTaskApi().Create(task)
+}
+
+// UpdateCronTaskRaw 更新定时任务。
+func (s *AgentService) UpdateCronTaskRaw(task *models.CronTask) error {
+	return agent.NewCronTaskApi().Update(task)
+}
+
+// DeleteCronTaskRaw 删除定时任务。
+func (s *AgentService) DeleteCronTaskRaw(id uint) error {
+	return agent.NewCronTaskApi().Delete(id)
+}
+
+// GetCronTaskRaw 根据 ID 获取定时任务。
+func (s *AgentService) GetCronTaskRaw(id uint) (*models.CronTask, error) {
+	return agent.NewCronTaskApi().GetByID(id)
+}
+
+// ListCronTasks 获取定时任务分页列表。
+func (s *AgentService) ListCronTasks(query *models.CronTaskQuery) *models.CronTaskPageResp {
+	if query == nil {
+		query = &models.CronTaskQuery{}
+	}
+	return agent.NewCronTaskApi().List(query)
+}
+
+// EnableCronTaskRaw 启用/禁用定时任务。
+func (s *AgentService) EnableCronTaskRaw(id uint, enable bool) error {
+	return agent.NewCronTaskApi().EnableTask(id, enable)
+}
+
+// ExecuteCronTask 执行定时任务。
+func (s *AgentService) ExecuteCronTask(ctx context.Context, task *models.CronTask) error {
+	return agent.NewCronTaskApi().ExecuteTask(ctx, task)
+}
+
+// CronTaskExistsByType 判断指定任务类型是否已存在。
+func (s *AgentService) CronTaskExistsByType(taskType string) bool {
+	return agent.NewCronTaskApi().ExistsByTaskType(taskType)
+}
+
+// GetAllCronTasks 获取全部定时任务。
+func (s *AgentService) GetAllCronTasks() []models.CronTask {
+	return agent.NewCronTaskApi().GetAll()
+}
+
+// ChatWithAgentStream 返回 AI Agent 会话的消息流（R-27a 新增，供 App 的
+// 定时任务等需要自行消费消息流的调用方使用；推流式会话请用 ChatWithAgentCustom）。
+func (s *AgentService) ChatWithAgentStream(ctx context.Context, question string, aiConfigId int, sysPromptId *int, memoryMode bool, memoryCount int, thinkingMode bool, agentMode string, optsOverride ...string) chan *agent.StreamMessage {
+	return agent.NewStockAiAgentApi().ChatWithContext(ctx, question, aiConfigId, sysPromptId, memoryMode, memoryCount, thinkingMode, agentMode, optsOverride...)
 }
 
 // -----------------------------------------------------------------------------
