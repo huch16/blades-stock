@@ -209,42 +209,6 @@ func (c *SettingConfig) GetMcpTimeout() time.Duration {
 	return 8 * time.Second
 }
 
-func (c *SettingConfig) GetToolRunBudget() int64 {
-	if env := os.Getenv("AGENT_TOOL_RUN_BUDGET"); env != "" {
-		if v, err := strconv.ParseInt(env, 10, 64); err == nil && v > 0 {
-			return v
-		}
-	}
-	if c != nil && c.Settings != nil && c.ToolRunBudget > 0 {
-		return c.ToolRunBudget
-	}
-	return 15
-}
-
-func (c *SettingConfig) GetToolDailyBudget() int64 {
-	if env := os.Getenv("AGENT_TOOL_DAILY_BUDGET"); env != "" {
-		if v, err := strconv.ParseInt(env, 10, 64); err == nil && v > 0 {
-			return v
-		}
-	}
-	if c != nil && c.Settings != nil && c.ToolDailyBudget > 0 {
-		return c.ToolDailyBudget
-	}
-	return 200
-}
-
-func (c *SettingConfig) GetToolDailyCostUSD() float64 {
-	if env := os.Getenv("AGENT_TOOL_DAILY_COST_USD"); env != "" {
-		if v, err := strconv.ParseFloat(env, 64); err == nil && v > 0 {
-			return v
-		}
-	}
-	if c != nil && c.Settings != nil && c.ToolDailyCostUSD > 0 {
-		return c.ToolDailyCostUSD
-	}
-	return 2.0
-}
-
 type SettingsApi struct {
 	Config *SettingConfig
 }

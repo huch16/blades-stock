@@ -281,10 +281,6 @@ func (e *RetrieverError) Error() string {
 	return e.Message
 }
 
-func (e *RetrieverError) Unwrap() error {
-	return e.Err
-}
-
 // HashText creates a simple hash for text caching.
 func HashText(text string) string {
 	// Simple hash - in production use crypto/sha256

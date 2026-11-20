@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/samber/lo"
-	"golang.org/x/exp/slices"
 
 	"github.com/coocood/freecache"
 	"github.com/duke-git/lancet/v2/convertor"
@@ -110,19 +109,6 @@ func (a *App) QuitApp() {
 		}
 		runtime.Quit(a.ctx)
 	}
-}
-
-func GetSource(tags []string) string {
-	if slice.ContainAny(tags, []string{"外媒简讯", "外媒资讯", "外媒"}) {
-		return "外媒"
-	}
-	if slices.Contains(tags, "财联社电报") {
-		return "财联社电报"
-	}
-	if slices.Contains(tags, "新浪财经") {
-		return "新浪财经"
-	}
-	return ""
 }
 
 // domReady is called after front-end resources have been loaded

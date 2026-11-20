@@ -10,14 +10,6 @@ import (
 
 var ShanghaiTimezone = time.FixedZone("CST", 8*60*60)
 
-func GetShanghaiTime() time.Time {
-	return time.Now().In(ShanghaiTimezone)
-}
-
-func FormatShanghaiTime(t time.Time) string {
-	return t.In(ShanghaiTimezone).Format("2006-01-02 15:04:05")
-}
-
 func (a *App) GetTimezone() map[string]any {
 	return a.marketService.GetTimezone()
 }

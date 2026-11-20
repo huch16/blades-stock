@@ -46,3 +46,20 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 ### R-03 prometheus.yml 去留 —— 跳过（待用户确认，附录 C #1）
 
 - 无用户确认，不得自行选删除或保留+加固。`prometheus.yml` 原样保留，记入未做事项。
+
+### R-04 删最硬的一批零引用小函数 —— 已完成
+
+- 删除 16 个函数，共 84 行净删（`git diff --stat`：7 文件 +1/-85，含 gofmt 整理）：
+  - `backend/data/openai_api.go`：8 个 OpenAI 配置 getter（`GetAPIKey`/`GetBaseURL`/`GetModel`/`GetMaxTokens`/`GetTemperature`/`GetTimeout`/`GetHttpProxy`/`IsHttpProxyEnabled`）
+  - `backend/data/settings_api.go`：3 个预算 getter（`GetToolDailyBudget`/`GetToolDailyCostUSD`/`GetToolRunBudget`）
+  - 根包：`app.go` 的 `GetSource`、`app_common.go` 的 `GetShanghaiTime`/`FormatShanghaiTime`
+  - `backend/agent/retriever.go`：`RetrieverError.Unwrap`
+  - `backend/quant/vector.go`：`NewBoolOnes`
+  - `backend/data/tools.go`：`ToolsForQuestion`
+- 零引用证据：生产代码 grep 命中均为仅定义处 1 次；测试文件 0 命中；前端 `frontend/wailsjs/` 与 `frontend/src/` 对 `GetSource`/`GetShanghaiTime`/`FormatShanghaiTime` 0 命中（且三者是 main 包普通函数，不在 Wails 绑定面内）。附带清理：`GetSource` 是 app.go 里 `golang.org/x/exp/slices` 的唯一使用者，import 随之删除。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件（初版删除后留双空行，`gofmt -w` 修后复核通过）；check-deps.sh 通过；`go test -skip integration` 根包 + data + quant + agent 四包全过。
+
+### R-05 删 12 个 Akshare 客户端方法 —— 跳过（待用户确认，附录 C #2）
+
+- 零引用证据已核查：12 个方法（`BoardConcept`、`BoardIndustry`、`ConvertibleBondSpot`、`ETFHistorical`、`ETFSpot`、`FuturesSpot`、`LongHuToday`、`MacroCPI`、`MacroGDP`、`MacroMoneySupply`、`MacroPMI`、`OpenFundNetValue`）在 Go 代码中无任何直接调用点；`Call()` 是通用远端分发，不调用它们；`capability_registry.go` / `tool_groups.go` 里的同名项只是工具分组字符串标签；`cmd/insert_etf_skill/main.go` 的提及只是技能文本（注明 akshare 系 ETF 接口当前 HTTP 500 不可用）。
+- 但方案附录 C #2 要求先确认“Akshare 数据源是否已整体改走其他客户端”，无用户确认则整步跳过，不自行决定。记入未做事项。

@@ -2445,12 +2445,6 @@ var dataToolGroupKeywordsList = []dataToolGroupKeywords{
 	}},
 }
 
-func ToolsForQuestion(question string) []Tool {
-	allTools := Tools(nil)
-	groups := classifyDataToolGroups(question)
-	return filterDataToolsByGroups(allTools, groups)
-}
-
 func classifyDataToolGroups(question string) map[dataToolGroup]bool {
 	matched := map[dataToolGroup]bool{
 		dataToolGroupBase: true,

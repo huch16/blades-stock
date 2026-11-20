@@ -552,14 +552,6 @@ func NewBoolZeros(n int) *BoolVector {
 	return &BoolVector{Values: make([]bool, n), Len: n}
 }
 
-func NewBoolOnes(n int) *BoolVector {
-	v := make([]bool, n)
-	for i := range v {
-		v[i] = true
-	}
-	return &BoolVector{Values: v, Len: n}
-}
-
 // And 逻辑与
 func (a *BoolVector) And(b *BoolVector) *BoolVector {
 	n := min(a.Len, b.Len)

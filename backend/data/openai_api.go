@@ -32,15 +32,7 @@ type OpenAi struct {
 	ChatSource       string  `json:"-"`
 }
 
-func (o *OpenAi) Ctx() context.Context     { return o.ctx }
-func (o *OpenAi) GetBaseURL() string       { return o.BaseUrl }
-func (o *OpenAi) GetAPIKey() string        { return o.ApiKey }
-func (o *OpenAi) GetModel() string         { return o.Model }
-func (o *OpenAi) GetMaxTokens() int        { return o.MaxTokens }
-func (o *OpenAi) GetTemperature() float64  { return o.Temperature }
-func (o *OpenAi) GetTimeout() int          { return o.TimeOut }
-func (o *OpenAi) IsHttpProxyEnabled() bool { return o.HttpProxyEnabled }
-func (o *OpenAi) GetHttpProxy() string     { return o.HttpProxy }
+func (o *OpenAi) Ctx() context.Context { return o.ctx }
 
 func (o OpenAi) String() string {
 	return fmt.Sprintf("OpenAi{BaseUrl: %s, Model: %s, MaxTokens: %d, Temperature: %.2f, Prompt: %s, TimeOut: %d, QuestionTemplate: %s, CrawlTimeOut: %d, KDays: %d, BrowserPath: %s, ApiKey: [MASKED]}",
