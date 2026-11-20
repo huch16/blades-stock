@@ -1,7 +1,10 @@
+<!-- 板块 / 概念资金流向图（二合一，R-22d）：mode='bk' | 'concept' 区分后端 Api 与文案；
+     concept 模式无「产业链全景拆解」按钮，与旧 conceptFundFlowChart.vue 一致。-->
 <script setup lang="ts">
 import {onBeforeUnmount, onMounted, ref, watch, computed} from "vue";
-import {GetConceptFundFlowListByDate, GetConceptFundFlowTopListByDate, GetAllConceptCodes} from "../../wailsjs/go/main/App";
-import * as echarts from "../utils/echarts";
+import {GetBKFundFlowListByDate, GetBKFundFlowTopListByDate, GetAllBKCodes, GetConceptFundFlowListByDate, GetConceptFundFlowTopListByDate, GetAllConceptCodes} from "../../../wailsjs/go/main/App";
+import {EventsEmit} from "../../../wailsjs/runtime/runtime";
+import * as echarts from "../../utils/echarts";
 
 const props = defineProps({
   darkTheme: {
@@ -11,8 +14,19 @@ const props = defineProps({
   chartHeight: {
     type: Number,
     default: 600
+  },
+  mode: {
+    type: String,
+    default: 'bk',
+    validator: (v: string) => v === 'bk' || v === 'concept'
   }
 })
+
+// 板块/概念 / 概念两种模式共用同一份实现，仅后端 Api 与文案不同
+const kindLabel = computed(() => (props.mode === 'concept' ? '概念' : '板块'))
+const flowApi = computed(() => (props.mode === 'concept'
+  ? { listByDate: GetConceptFundFlowListByDate, topListByDate: GetConceptFundFlowTopListByDate, allCodes: GetAllConceptCodes }
+  : { listByDate: GetBKFundFlowListByDate, topListByDate: GetBKFundFlowTopListByDate, allCodes: GetAllBKCodes }))
 
 interface FlowItem {
   code: string
@@ -20,7 +34,7 @@ interface FlowItem {
   netInflow: number
 }
 
-interface ConceptCodeItem {
+interface CodeItem {
   code: string
   name: string
 }
@@ -31,17 +45,17 @@ const loading = ref(false)
 const refreshInterval = ref<ReturnType<typeof setInterval> | null>(null)
 let chart: echarts.ECharts | null = null
 
-// 临时添加的概念
+// 临时添加的板块/概念
 const extraSectors = ref<FlowItem[]>([])
 const addCodeInput = ref('')
-const allConceptCodes = ref<ConceptCodeItem[]>([])
+const allCodes = ref<CodeItem[]>([])
 const addCodeOptions = computed(() => {
   const existCodes = new Set([
     ...inflowList.value.map((i: any) => i.code),
     ...outflowList.value.map((i: any) => i.code),
     ...extraSectors.value.map((i: any) => i.code)
   ])
-  return allConceptCodes.value
+  return allCodes.value
     .filter((i: any) => !existCodes.has(i.code))
     .map((i: any) => ({label: `${i.name} (${i.code})`, value: i.code, name: i.name}))
 })
@@ -72,9 +86,9 @@ const cachedTimes = ref<string[]>([]) // 缓存全量时间轴
 
 onMounted(async () => {
   try {
-    // 加载所有概念代码（供临时添加使用）
-    const codes = await GetAllConceptCodes()
-    if (codes && Array.isArray(codes)) allConceptCodes.value = codes
+    // 加载所有板块/概念代码（供临时添加使用）
+    const codes = await flowApi.value.allCodes()
+    if (codes && Array.isArray(codes)) allCodes.value = codes
 
     await loadAllData()
     // 交易时间每分钟刷新（仅当天）
@@ -133,8 +147,8 @@ async function loadAllData() {
   loading.value = true
   try {
     const date = selectedDate.value
-    // 按日期获取概念排名
-    const res = await GetConceptFundFlowTopListByDate(date, 500)
+    // 按日期获取板块/概念排名
+    const res = await flowApi.value.topListByDate(date, 500)
     if (!res || !Array.isArray(res) || res.length === 0) {
       topList.value = []
       return
@@ -148,7 +162,7 @@ async function loadAllData() {
 
     const allData = await Promise.all(
       sectors.map(async (item: any) => {
-        const points = await GetConceptFundFlowListByDate(item.code, date)
+        const points = await flowApi.value.listByDate(item.code, date)
         return {
           code: item.code,
           name: item.name,
@@ -203,11 +217,11 @@ function renderChart(allData: { code: string; name: string; isInflow: boolean; p
     playIndex.value = times.length
   }
 
-  // 分别统计流入/流出概念的索引，用于配色
+  // 分别统计流入/流出板块/概念的索引，用于配色
   let inflowIdx = 0
   let outflowIdx = 0
 
-  // 构建每个概念的 series 数据，对齐到统一时间轴
+  // 构建每个板块/概念的 series 数据，对齐到统一时间轴
   const seriesList: any[] = []
   for (let i = 0; i < allData.length; i++) {
     const sector = allData[i]
@@ -263,7 +277,7 @@ function renderChart(allData: { code: string; name: string; isInflow: boolean; p
   const option: echarts.EChartsOption = {
     backgroundColor: bgColor,
     title: {
-      text: `${dateLabel} 概念资金流向 - 多概念对比`,
+      text: `${dateLabel} ${kindLabel.value}资金流向 - 多${kindLabel.value}对比`,
       left: '20px',
       textStyle: {color: props.darkTheme ? '#ccc' : '#456', fontSize: 16}
     },
@@ -490,7 +504,7 @@ function onSliderChange(val: number) {
 
 function addExtraSector(code: string) {
   if (!code) return
-  const found = allConceptCodes.value.find((i: any) => i.code === code)
+  const found = allCodes.value.find((i: any) => i.code === code)
   if (!found) return
   if (extraSectors.value.some((i: any) => i.code === code)) return
   const displayCodes = new Set([
@@ -509,6 +523,15 @@ function addExtraSector(code: string) {
 function removeExtraSector(code: string) {
   extraSectors.value = extraSectors.value.filter((i: any) => i.code !== code)
   loadAllData()
+}
+
+function analyzeSector(item: FlowItem) {
+  try {
+    EventsEmit('show-market-intelligence-serenity', { name: item.name, code: item.code })
+  } catch (_e) {}
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('show-market-intelligence-serenity', { detail: { name: item.name, code: item.code } }))
+  }
 }
 
 function onDateChange() {
@@ -545,7 +568,7 @@ watch(() => props.chartHeight, () => {
           v-model:value="addCodeInput"
           :options="addCodeOptions"
           filterable
-          placeholder="添加概念"
+          :placeholder="'添加' + kindLabel"
           style="width: 180px"
           @update:value="addExtraSector"
       />
@@ -606,7 +629,7 @@ watch(() => props.chartHeight, () => {
     <!-- 折线图 -->
     <div ref="chartRef" style="width: 100%;" :style="{height: chartHeight + 'px'}"></div>
 
-    <!-- 概念资金排名表格 - 并排展示 -->
+    <!-- 板块/概念资金排名表格 - 并排展示 -->
     <div style="margin-top: 20px; display: flex; gap: 20px; align-items: flex-start;">
       <!-- 流入排名 -->
       <div style="flex: 1; min-width: 0;">
@@ -615,7 +638,7 @@ watch(() => props.chartHeight, () => {
           <n-thead>
             <n-tr>
               <n-th>排名</n-th>
-              <n-th>概念名称</n-th>
+              <n-th>{{ kindLabel }}名称</n-th>
               <n-th>净流入/亿元</n-th>
             </n-tr>
           </n-thead>
@@ -623,7 +646,13 @@ watch(() => props.chartHeight, () => {
             <n-tr v-for="(item, idx) in inflowList" :key="item.code">
               <n-td>{{ idx + 1 }}</n-td>
               <n-td>
-                <n-tag :bordered="false" type="error" size="small">{{ item.name }}</n-tag>
+                <div v-if="mode === 'bk'" style="display: flex; align-items: center; justify-content: space-between;">
+                  <n-tag :bordered="false" type="error" size="small">{{ item.name }}</n-tag>
+                  <n-button size="tiny" quaternary type="primary" title="产业链全景拆解" @click="analyzeSector(item)">
+                    🔬 拆解
+                  </n-button>
+                </div>
+                <n-tag v-else :bordered="false" type="error" size="small">{{ item.name }}</n-tag>
               </n-td>
               <n-td>
                 <n-text type="error">+{{ (item.netInflow / 100000000).toFixed(2) }}</n-text>
@@ -642,7 +671,7 @@ watch(() => props.chartHeight, () => {
           <n-thead>
             <n-tr>
               <n-th>排名</n-th>
-              <n-th>概念名称</n-th>
+              <n-th>{{ kindLabel }}名称</n-th>
               <n-th>净流入/亿元</n-th>
             </n-tr>
           </n-thead>
@@ -650,7 +679,13 @@ watch(() => props.chartHeight, () => {
             <n-tr v-for="(item, idx) in outflowList" :key="item.code">
               <n-td>{{ idx + 1 }}</n-td>
               <n-td>
-                <n-tag :bordered="false" type="success" size="small">{{ item.name }}</n-tag>
+                <div v-if="mode === 'bk'" style="display: flex; align-items: center; justify-content: space-between;">
+                  <n-tag :bordered="false" type="success" size="small">{{ item.name }}</n-tag>
+                  <n-button size="tiny" quaternary type="primary" title="产业链全景拆解" @click="analyzeSector(item)">
+                    🔬 拆解
+                  </n-button>
+                </div>
+                <n-tag v-else :bordered="false" type="success" size="small">{{ item.name }}</n-tag>
               </n-td>
               <n-td>
                 <n-text type="success">{{ (item.netInflow / 100000000).toFixed(2) }}</n-text>

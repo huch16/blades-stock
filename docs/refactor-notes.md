@@ -337,3 +337,14 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 数量对照（脚本断言 + 人工 diff，全部通过）：模板与样式与原文件逐字节一致；被搬定义在组件内零残留（解构调用除外）；`step4StockInput` 等内部 ref 去留均按实测。
 - 验证：`npx eslint` 4 个文件 0 errors、17 warnings（全部是被搬代码自带的 `no-explicit-any`，未新增）；全量 `npm run lint` 0 errors、158 warnings（与基线一致）；`npm run build` 退出 0（1m7s），`agent-chat-*.js` chunk 89,493 B，构建产物 grep 确认 `BUIS QUANTITATIVE INTELLIGENCE LADDER`、`进入 Step 3 · 运行多因子放量突破量化选股`、`存入买方认知账本`、`新对话`、`贵州茅台`、`5-Verdict` 均在；Go 侧无改动，`go build/vet` 通过、`gofmt -l` 0 文件、check-deps.sh 通过。
 - 提取脚本见 `/tmp/r22c_extract.py`（stage1 写 3 个 composable、stage2 重写组件），原文件备份见 `/tmp/r22c_backup.vue`。
+
+### R-22d 合并两个资金流图表为 components/market/FundFlowChart.vue —— 已完成
+
+- 合并结果（两文件 690 + 670 行 → 一个文件 705 行，省约 655 行重复代码）：
+  - 以 `bkFundFlowChart.vue`（超集，含 `analyzeSector`）为底，新建 `components/market/FundFlowChart.vue`，`mode: 'bk' | 'concept'` prop（validator 限两个值）区分；`kindLabel` computed（板块/概念）驱动全部文案（图表标题、添加占位符、表头、注释），`flowApi` computed 按 mode 分发三组后端 Api（`GetBKFundFlowListByDate`/`GetBKFundFlowTopListByDate`/`GetAllBKCodes` vs `GetConceptFundFlowListByDate`/`GetConceptFundFlowTopListByDate`/`GetAllConceptCodes`）；`BKCodeItem`/`allBKCodes` 改名 `CodeItem`/`allCodes`。
+  - 唯一行为差异保留：`analyzeSector`（`show-market-intelligence-serenity` 事件 + 自定义事件）与「🔬 拆解」按钮只在 bk 模式出现（模板 `v-if="mode === 'bk'"` / `v-else` 纯标签），concept 模式渲染结果与旧文件一致。
+  - `market.vue`：两个 import 合为一个 `FundFlowChart`，两处使用分别加 `mode="bk"` / `mode="concept"`，其余 props（`darkTheme`、`chartHeight`）不变；删除旧两文件；`frontend/components.d.ts` 由构建自动更新（2 删 1 增）。
+- 关键纠正（执行中发现）：新文件深了一层，三个相对 import 须加一级 `../`（wailsjs 两处、`../utils/echarts` 一处）——初版构建失败一次才发现，eslint 不校验 import 路径，下同类搬家步骤注意先核对相对路径。
+- 数量对照：两文件 diff 共 62 行，全部差异点（import、类型名、变量名、3 处调用点、5 处注释、标题、占位符、HTML 注释、2 处表头、analyzeSector 9 行、2 处按钮块）逐项映射进合并文件，无遗漏；旧组件名全仓 0 残留。
+- 验证：`npx eslint` 新文件 0 errors、29 warnings（两文件各 29 → 合并后 29）；全量 `npm run lint` 0 errors、129 warnings（基线 158 − 29，正好是合并省掉的一份）；`npm run build` 退出 0（1m3s），产物 market chunk 含两组 Api 名、`资金流向 - 多`动态标题与 `show-market-intelligence-serenity`；Go 侧无改动，`go build/vet` 通过、`gofmt -l` 0 文件、check-deps.sh 通过。
+- 合并脚本见 `/tmp/r22d_merge.py`，旧文件备份见 `/tmp/r22d_bk_backup.vue`、`/tmp/r22d_concept_backup.vue`。

@@ -38,8 +38,7 @@ import HotTopics from "./HotTopics.vue";
 import InvestCalendarTimeLine from "./InvestCalendarTimeLine.vue";
 import ClsCalendarTimeLine from "./ClsCalendarTimeLine.vue";
 import Stockhotmap from "./stockhotmap.vue";
-import BKFundFlowChart from "./bkFundFlowChart.vue";
-import ConceptFundFlowChart from "./conceptFundFlowChart.vue";
+import FundFlowChart from "./market/FundFlowChart.vue";
 
 const route = useRoute()
 const router = useRouter()
@@ -1272,7 +1271,8 @@ function goToIntelligence(type) {
         name="板块资金流向"
         tab="板块资金流向"
       >
-        <BKFundFlowChart
+        <FundFlowChart
+          mode="bk"
           :dark-theme="darkTheme"
           :chart-height="600"
         />
@@ -1281,7 +1281,8 @@ function goToIntelligence(type) {
         name="概念资金流向"
         tab="概念资金流向"
       >
-        <ConceptFundFlowChart
+        <FundFlowChart
+          mode="concept"
           :dark-theme="darkTheme"
           :chart-height="600"
         />
