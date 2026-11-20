@@ -339,12 +339,12 @@ func initGlobalStockIndexCacheTask() {
 
 }
 
-func updateBasicInfo() {
+func (a *App) updateBasicInfo() {
 	config := data.GetSettingConfig()
 	if config.UpdateBasicInfoOnStart {
 		//更新基本信息
-		go data.NewStockDataApi().GetStockBaseInfo()
-		go data.NewStockDataApi().GetIndexBasic()
+		go a.marketService.GetStockBaseInfo()
+		go a.marketService.GetIndexBasic()
 	}
 }
 

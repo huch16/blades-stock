@@ -22,13 +22,13 @@ func MonitorFundPrices(a *App) {
 	dest := &[]data.FollowedFund{}
 	db.Dao.Model(&data.FollowedFund{}).Find(dest)
 	for _, follow := range *dest {
-		_, err := data.NewFundApi().CrawlFundBasic(follow.Code)
+		_, err := a.marketService.CrawlFundBasic(follow.Code)
 		if err != nil {
 			logger.SugaredLogger.Errorf("获取基金基本信息失败，基金代码：%s，错误信息：%s", follow.Code, err.Error())
 			continue
 		}
-		data.NewFundApi().CrawlFundNetEstimatedUnit(follow.Code)
-		data.NewFundApi().CrawlFundNetUnitValue(follow.Code)
+		a.marketService.CrawlFundNetEstimatedUnit(follow.Code)
+		a.marketService.CrawlFundNetUnitValue(follow.Code)
 	}
 }
 

@@ -50,12 +50,12 @@ func (a *App) domReady(ctx context.Context) {
 		data.InitTradingCalendar()
 
 		// AData 健康检查
-		if err := data.NewAdataClient().Ping(); err != nil {
+		if err := a.marketService.PingAdata(); err != nil {
 			logger.SugaredLogger.Warnf("AData 服务连接失败: %v", err)
 		}
 
 		// AKShare 健康检查
-		if err := data.NewAkshareClient().Ping(); err != nil {
+		if err := a.marketService.PingAkshare(); err != nil {
 			logger.SugaredLogger.Warnf("AKShare 服务连接失败: %v", err)
 		}
 	}()
@@ -83,16 +83,16 @@ func (a *App) domReady(ctx context.Context) {
 	//	go runtime.EventsEmit(a.ctx, "loadingMsg", "检查美股基础信息...")
 	//	go initStockDataUS(a.ctx)
 	//}
-	updateBasicInfo()
+	a.updateBasicInfo()
 
 	// Add your action here
 	//定时更新数据
 	config := data.GetSettingConfig()
 	go func() {
 		defer PanicHandler()
-		go func() { defer PanicHandler(); data.NewMarketNewsApi().TelegraphList(30) }()
-		go func() { defer PanicHandler(); data.NewMarketNewsApi().GetSinaNews(30) }()
-		go func() { defer PanicHandler(); data.NewMarketNewsApi().TradingViewNews() }()
+		go func() { defer PanicHandler(); a.marketService.TelegraphList(30) }()
+		go func() { defer PanicHandler(); a.marketService.GetSinaNews(30) }()
+		go func() { defer PanicHandler(); a.marketService.TradingViewNews() }()
 
 		interval := config.RefreshInterval
 		// 工业级风控防雪崩约束：行情监控最小周期限制为 >=3 秒，彻底根除 1 秒短轮询堵死网络与引发浏览器卡顿
@@ -108,8 +108,7 @@ func (a *App) domReady(ctx context.Context) {
 			a.setCronEntry("MonitorStockPrices", id)
 		}
 		entryID, err := a.cron.AddFunc(fmt.Sprintf("@every %ds", interval+10), func() {
-			//news := data.NewMarketNewsApi().GetNewTelegraph(30)
-			news := data.NewMarketNewsApi().TelegraphList(30)
+			news := a.marketService.TelegraphList(30)
 			if data.GetSettingConfig().EnablePushNews {
 				go a.NewsPush(news)
 			}
@@ -122,7 +121,7 @@ func (a *App) domReady(ctx context.Context) {
 		}
 
 		entryIDSina, err := a.cron.AddFunc(fmt.Sprintf("@every %ds", interval+10), func() {
-			news := data.NewMarketNewsApi().GetSinaNews(30)
+			news := a.marketService.GetSinaNews(30)
 			if data.GetSettingConfig().EnablePushNews {
 				go a.NewsPush(news)
 			}
@@ -135,7 +134,7 @@ func (a *App) domReady(ctx context.Context) {
 		}
 
 		entryIDTradingViewNews, err := a.cron.AddFunc(fmt.Sprintf("@every %ds", interval+10), func() {
-			news := data.NewMarketNewsApi().TradingViewNews()
+			news := a.marketService.TradingViewNews()
 			if data.GetSettingConfig().EnablePushNews {
 				go a.NewsPush(news)
 			}
@@ -219,7 +218,7 @@ func (a *App) domReady(ctx context.Context) {
 	go MonitorStockPrices(a)
 	if config.EnableFund {
 		go MonitorFundPrices(a)
-		go data.NewFundApi().AllFund()
+		go a.marketService.AllFund()
 	}
 	// AI 推荐股票价格监控
 	go MonitorAiRecommendStockPrices(a)
@@ -241,10 +240,10 @@ func (a *App) domReady(ctx context.Context) {
 	// 板块资金流向数据采集（交易日每60秒）
 	go func() {
 		defer PanicHandler()
-		data.NewBKFundFlowApi().FetchAndSave()
+		a.marketService.FetchAndSaveBKFundFlow()
 		idBKFundFlow, err := a.cron.AddFunc("@every 60s", func() {
 			if a.IsTradingTime() {
-				data.NewBKFundFlowApi().FetchAndSave()
+				a.marketService.FetchAndSaveBKFundFlow()
 			}
 		})
 		if err != nil {
@@ -256,10 +255,10 @@ func (a *App) domReady(ctx context.Context) {
 	// 概念资金流向数据采集（交易日每60秒）
 	go func() {
 		defer PanicHandler()
-		data.NewConceptFundFlowApi().FetchAndSave()
+		a.marketService.FetchAndSaveConceptFundFlow()
 		idConceptFundFlow, err := a.cron.AddFunc("@every 60s", func() {
 			if a.IsTradingTime() {
-				data.NewConceptFundFlowApi().FetchAndSave()
+				a.marketService.FetchAndSaveConceptFundFlow()
 			}
 		})
 		if err != nil {
@@ -322,7 +321,7 @@ func (a *App) domReady(ctx context.Context) {
 	//		logger.SugaredLogger.Infof("Edge浏览器已安装，路径为: %s", path)
 	//	}
 	//}()
-	followList := data.NewStockDataApi().GetFollowList(0)
+	followList := a.marketService.GetFollowList(0)
 	for _, follow := range *followList {
 		if follow.Cron == nil || *follow.Cron == "" {
 			continue
@@ -455,7 +454,7 @@ func (a *App) GetAiConfigTemplates() []*data.AiConfigTemplate {
 }
 
 func (a *App) ExportConfig() string {
-	config := data.NewSettingsApi().Export()
+	config := a.settingsService.ExportConfig()
 	file, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
 		Title:                "导出配置文件",
 		CanCreateDirectories: true,

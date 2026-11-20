@@ -1326,3 +1326,68 @@ func (s *MarketService) GetStockValuationPercentileToMarkdown(stockCode string) 
 func (s *MarketService) GetStockPredictSummaryToMarkdown(stockCode string) string {
 	return data.NewStockDataApi().GetStockPredictSummaryToMarkdown(stockCode)
 }
+
+// CrawlFundBasic 爬取基金基本信息（R-27d 新增）。
+func (s *MarketService) CrawlFundBasic(fundCode string) (*data.FundBasic, error) {
+	return data.NewFundApi().CrawlFundBasic(fundCode)
+}
+
+// CrawlFundNetEstimatedUnit 爬取基金估算净值（R-27d 新增）。
+func (s *MarketService) CrawlFundNetEstimatedUnit(code string) {
+	data.NewFundApi().CrawlFundNetEstimatedUnit(code)
+}
+
+// CrawlFundNetUnitValue 爬取基金单位净值（R-27d 新增）。
+func (s *MarketService) CrawlFundNetUnitValue(code string) {
+	data.NewFundApi().CrawlFundNetUnitValue(code)
+}
+
+// AllFund 全量更新基金基础信息（R-27d 新增）。
+func (s *MarketService) AllFund() {
+	data.NewFundApi().AllFund()
+}
+
+// FetchAndSaveBKFundFlow 采集并保存板块资金流向（R-27d 新增）。
+func (s *MarketService) FetchAndSaveBKFundFlow() (int, error) {
+	return data.NewBKFundFlowApi().FetchAndSave()
+}
+
+// FetchAndSaveConceptFundFlow 采集并保存概念资金流向（R-27d 新增）。
+func (s *MarketService) FetchAndSaveConceptFundFlow() (int, error) {
+	return data.NewConceptFundFlowApi().FetchAndSave()
+}
+
+// TelegraphList 获取电报快讯列表（R-27d 新增）。
+func (s *MarketService) TelegraphList(crawlTimeOut int64) *[]models.Telegraph {
+	return data.NewMarketNewsApi().TelegraphList(crawlTimeOut)
+}
+
+// GetSinaNews 获取新浪新闻（R-27d 新增）。
+func (s *MarketService) GetSinaNews(crawlTimeOut uint) *[]models.Telegraph {
+	return data.NewMarketNewsApi().GetSinaNews(crawlTimeOut)
+}
+
+// TradingViewNews 获取 TradingView 新闻（R-27d 新增）。
+func (s *MarketService) TradingViewNews() *[]models.Telegraph {
+	return data.NewMarketNewsApi().TradingViewNews()
+}
+
+// PingAdata 检查 AData 数据服务连通性（R-27d 新增）。
+func (s *MarketService) PingAdata() error {
+	return data.NewAdataClient().Ping()
+}
+
+// PingAkshare 检查 AKShare 数据服务连通性（R-27d 新增）。
+func (s *MarketService) PingAkshare() error {
+	return data.NewAkshareClient().Ping()
+}
+
+// GetStockBaseInfo 更新股票基本信息（R-27d 新增）。
+func (s *MarketService) GetStockBaseInfo() {
+	data.NewStockDataApi().GetStockBaseInfo()
+}
+
+// GetIndexBasic 更新指数基本信息（R-27d 新增）。
+func (s *MarketService) GetIndexBasic() {
+	data.NewStockDataApi().GetIndexBasic()
+}
