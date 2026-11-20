@@ -428,3 +428,62 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 测试适配：`getSearXNGEndpoints`/`searchSearXNG`/`cleanText`/`randomSleep`/`parseBaiduResultsWithGoquery` 在 datasource 内导出，两测试文件改调。`TestParseBingResultsWithGoquery` 调用的 `parseBingResultsWithGoquery` 在搬家前就不存在（集成测试二进制在基线就无法编译，既有 10+ 处 undefined，与本次无关），未动。
 - 教训：并入目标文件时先 `git checkout` 恢复误删源文件再跑脚本，不要先 `rm`。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data/quant/agent-tools/services 包全过。
+
+### R-26 agent/tools/data 子包 —— 已完成
+
+- 9 个域文件 `git mv` 到 `backend/agent/tools/data/`（包名 `data`）：`data_tools_ai.go`、`data_tools_changes.go`、`data_tools_finance.go`、`data_tools_fund.go`、`data_tools_hot.go`、`data_tools_kline.go`、`data_tools_market.go`、`data_tools_screen.go`、`data_tools_wallstreetcn_tdx.go`；注册函数改导出名 `Register*Tools`，父包 `GetAllDataTools` 聚合子包（父包 import 别名 `datatools`，因同时 import `backend/data` 与 `backend/agent/tools/data`）。
+- `NewDataToolWrapper`/`truncateToolResult`/`maxToolResultLen`/`parseStockCodesFromArgs`/`parseInt` 的实现移入子包 `wrapper.go`（`TruncateToolResult` 与 `MaxToolResultLen` 导出），父包留同名转发（`NewDataToolWrapper` 供 adata/backtest/mcp_skill/tickflow 等调用，`truncateToolResult` 与 `maxToolResultLen` 供 `tool_result_truncate_test.go` 用），子包不反向 import 父包、不成环。子包内 `import "blades-stock/backend/data"` 无冲突（无名为 `data` 的局部变量遮蔽，经 grep 核查）。
+- `GetETFMomentumRankingTool` 留父包（`tool_etf_momentum.go` 依赖父包 `GetStockCode`，而 `GetStockCode` 定义在父包 `common.go` 且被 common.go 自身使用，迁出会连锁扩散），原在 `registerKlineTools` 内的聚合改为父包 `GetAllDataTools` 补回，工具总数不变。
+- 实地出入：方案写 8 个域文件（`data_tools_fund_hot.go`），实为 9 个（fund 与 hot 是两个文件）；方案写总数 81，实测过滤后为 **84**（搬家前基线 `TestGetAllDataTools` 输出 `Total tools count: 84`）。
+- 验证：build/vet/gofmt/check-deps 通过；`go test ./backend/agent/tools/` 全过；工具总数 84（与搬家前一致）；`TestEveryAssembledToolIsDeclared` 与 `TestAssembledToolsHaveNoDuplicates` 通过。父包 tools 目录现 45 个 .go 文件，子包 10 个。
+
+### R-27a app_cron.go 直接 NewXxxApi() 调用迁入 AgentService —— 已完成
+
+- AgentService 新增 error 感知 Raw 方法组（`CreateCronTaskRaw`/`UpdateCronTaskRaw`/`DeleteCronTaskRaw`/`GetCronTaskRaw`/`ListCronTasks`/`EnableCronTaskRaw`/`ExecuteCronTask`/`CronTaskExistsByType`/`GetAllCronTasks`）与 `ChatWithAgentStream`（返回 `chan *agent.StreamMessage`，供需自行消费消息流的调用方）；现有 7 个字符串版 cron 方法改委托 Raw 方法，行为不变、单一实现。
+- 决策：App 的 `Create/Update/Delete/EnableCronTask`、`InitCronTasks` 还管理 App 自身的 cron 调度器（`a.cron.AddFunc`/`Remove`/`setCronEntry`），这是 App 运行时状态，按方案属交付层职责（“启停 cron”），保留在 App；纯委托方法改为一行转发。只返回字符串的 service 方法拿不到 error 做分支，故新增 Raw 方法组，而非用字符串前缀判断。
+- app_cron.go 22 处直接构造（CronTaskApi 20、StockAiAgentApi 1、DeepSeekOpenAi 1）全部改调 `a.agentService`；删未用的 `backend/agent` import。
+- 验证：build/vet/gofmt/check-deps 通过；services、根包、agent 包测试全过。
+
+### R-27b app_market.go/app_stock.go 直接 NewXxxApi() 调用迁入 MarketService —— 已完成
+
+- MarketService 新增 5 个方法：`GetStockCodeRealTimeData`/`SetStockAICron`/`GetFollowedStockByStockCode`/`SyncStockBasicToDB`/`SyncHKUSStockBasicToDB`（TDX 同步经 `data.NewTdxKLineApi()` 转发构造，services 不直接 import datasource）。
+- `syncAllStockInfo` 改为 App 方法（非导出，不影响 Wails 绑定），app_settings.go 两处调用点改 `a.syncAllStockInfo(a.ctx)`；`GetStockInfos` 保持包级函数（导出，改 App 方法会新增 Wails 绑定），改为首参传 `*services.MarketService`，三平台文件（app_linux/darwin/windows.go）的 `MonitorStockPrices` 调用点改传 `a.marketService`。
+- 教训：`gofmt -l` 失败也会导致整条验证链退出码非零，验证命令无输出就失败时要分步重跑定位；往 import 组插行后须 `gofmt -w` 恢复排序。
+- 验证：build/vet/gofmt/check-deps 通过；services、根包测试全过；`GOOS=darwin`/`GOOS=windows` 交叉编译均通过（注意：`GOOS=windows go build .` 会在仓库根留下可执行文件，须删掉再提交）。
+
+### R-27c app_agent.go/app_analysis.go 直接 NewXxxApi() 调用迁入 services —— 已完成
+
+- MarketService 新增 4 个 Markdown 方法：`GetStockLatestFinanceToMarkdown`/`GetStockQtrMainFinanceToMarkdown`/`GetStockValuationPercentileToMarkdown`/`GetStockPredictSummaryToMarkdown`。
+- `preFetchStockAnalysisData`/`preFetchMarketSummaryData` 改为 App 方法（非导出，不影响 Wails 绑定），内部改调 `a.marketService`（`GlobalStockIndexesReadable()` 的 service 版内部即 `GlobalStockIndexesReadable(30)`，与原调用一致）；两处 `ChatWithContext` 改调 `a.agentService.ChatWithAgentStream`。
+- app_analysis.go 三处 `NewStockThesisApi` 改调 `a.agentService`（AgentService 已有 `GetStockThesis`/`GetStockThesisHistory`/`GetAllStockTheses`，agent_service.go:856-891）；删 app_analysis.go 未用的 `backend/data` import。
+- 范围外：带参构造 `NewAlertWindowsApi`/`NewDingDingAPI`/`NewDeepSeekOpenAi` 不在 R-27 的 56 处零参统计内（验收 grep `New.*Api()` 只匹配零参），本次不动。
+- 验证：build/vet/gofmt/check-deps 通过；services、根包、agent 包测试全过。
+
+### R-27d app_fund.go/app_settings.go/main.go 直接 NewXxxApi() 调用迁入 services —— 已完成
+
+- MarketService 新增 13 个方法：`CrawlFundBasic`/`CrawlFundNetEstimatedUnit`/`CrawlFundNetUnitValue`/`AllFund`/`FetchAndSaveBKFundFlow`/`FetchAndSaveConceptFundFlow`/`TelegraphList`/`GetSinaNews`/`TradingViewNews`/`PingAdata`/`PingAkshare`/`GetStockBaseInfo`/`GetIndexBasic`；app_settings.go 的 Export 改调已有的 `a.settingsService.ExportConfig()`（其内部即 `data.NewSettingsApi().Export()`）。
+- `updateBasicInfo` 改为 App 方法（非导出，不影响 Wails 绑定），app_settings.go 调用点改 `a.updateBasicInfo()`；删 app_settings.go 一行陈旧注释（已注释掉的 GetNewTelegraph 写法，data 层方法本身保留）。
+- 附带发现：main.go 另有 2 处 `NewStockDataApi` 不在原 56 处统计内（survey 只扫了 app_*.go），一并迁移，**R-27 实际共 58 处**；原 survey 对 app_settings.go 的计数含 1 行注释，实际代码调用 15 处。
+- 验收：`grep -rn 'New.*Api()' app*.go main.go` 只剩 `NewApp()` 内 service 构造；根包导出 `*App` 方法 AST 签名对照（R-26 提交 `243a538` 前后）：266 个方法、签名完全一致（`App.d.ts` 等价验收，沙箱内无 wails CLI）。
+- evaluator/evolver 字段去留：`App.evaluator`/`App.evolver` 仅在 `NewApp()` 构造、App 层无任何引用；因 R-06（附录 C #3）已跳过待用户确认，**字段保留、不代行决定**。
+- 验证：build/vet/gofmt/check-deps 通过；services、根包、agent 包测试全过。
+
+### R-28 收尾 —— 已完成
+
+- (a) `backend/service/akshare_service.py`：全仓 grep 无任何调用方（仅 `akshare_service_url` 设置项引用服务地址，不引用该文件）；按附录 C #8（未确认则移出 `backend/` 而不删除），`git mv` → `scripts/akshare_service.py`，`backend/service/` 目录随之消失。
+- (b) `backend/data/data/` **未删**：方案称其为空目录，实地核查 `dict/base.txt`（8,086 字节）正被 `backend/data/stock_sentiment_analysis.go:67` 的 `//go:embed data/dict/base.txt` 使用，且已入 git（d6201aa），不是空目录、不可删。
+- (c) `tools/sqlite_search_demo.go` 与 `tools/sqlite_search_demo/main.go` **二选一未做**：两者是不同的演示程序（前者独立 SQLite 搜索 demo，含小写 `bytesToFloat32sLE`；后者用 `backend/agent`+`data`+`db` 的 retriever demo），均带 `//go:build ignore`；须用户确认，记入未做事项。
+- (d) `backend/cmd/godtx` **保留**：未获退役确认；且 `gotdx` 依赖本就无法删除——`backend/datasource/kline_tdx.go` 的 TDX 客户端直接依赖 `github.com/bensema/gotdx`，`cmd/godtx` 只是其一的调用方。
+- (e) `go mod tidy`：仅把 `golang.org/x/exp` 从直接依赖改为间接依赖（版本未变，go.sum 无变化），其余零变化；`gofmt -w` 复核 0 未格式化文件；`go vet ./...` 通过。
+- (f) 全量验证：`go build ./...` 通过；`go vet ./...` 通过；`gofmt -l` 0 文件；`go test -skip integration -count=1 ./...` **15 个包通过、0 个包失败**（与 R-02 后基线一致；R-01 的 13 通过 / 2 失败是 5 个环境原因测试被标为 integration 之前的状态）；前端 `npm run lint` 0 errors、129 warnings（与 R-22d 基线一致），`npm run build` 通过；`scripts/check-deps.sh` 通过。
+- (g) `AGENTS.md` 已更新包结构与依赖规则章节；本文件已补全 R-26～R-28 记录；重构总结见 `~/workspace/blades-stock-review/REFACTOR_EXECUTION_LOG.md`。
+
+## 未做事项（待用户确认，附录 C）
+
+- R-03：`prometheus.yml` 去留（C#1）。
+- R-05：12 个 Akshare 零引用方法（C#2）。
+- R-06：5 个反思/进化方法（C#3）；`App.evaluator`/`App.evolver` 字段去留随其定（R-27d 核查：两字段仅在 `NewApp()` 构造、App 层无引用）。
+- R-13：3 个前端死组件（C#5）。
+- R-28(c)：`tools/sqlite_search_demo.go` 与 `tools/sqlite_search_demo/main.go` 二选一保留。
+- R-28(d)：`backend/cmd/godtx` 是否退役（`gotdx` 依赖因 `datasource/kline_tdx.go` 使用而无法删除）。
+- R-27 范围外：带参构造 `NewAlertWindowsApi`/`NewDingDingAPI`/`NewDeepSeekOpenAi`（app_agent.go 等处）未纳入 56 处零参统计，本次未迁移。

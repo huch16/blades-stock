@@ -29,6 +29,19 @@
 - **Entrypoint**: `main.go` → `NewApp()` → `wails.Run()` with `App` bound to frontend
 - **Vendored blades** in `vendor-blades/` — Wails `packages.Load` fails on it (Go 1.26.x regression); use `-skipbindings -skipembedcreate`
 
+## Clean Architecture (refactor/clean-architecture, 2026-11-21)
+
+Layers, top to bottom (enforced by `scripts/check-deps.sh`, run it after every change):
+
+- **Delivery** — root package (`main.go`, `app_*.go`): Wails bindings + startup + cron scheduling only. `App` methods are thin forwards to services; **never construct `*Api`/`*Client` directly in `app_*.go`/`main.go`** (only `NewApp()` constructs the four services). `App` owns the cron scheduler entries (`a.cron.AddFunc`/`Remove`); business cron operations live in `AgentService`.
+- **Services** (`backend/services/`) — `marketService` / `quantService` / `agentService` / `settingsService` (+ `evaluator`/`evolver` fields on `App`, kept pending user confirmation). Services own all `NewXxxApi()` construction; they may import `agent`, `evaluator`, `data` — never `datasource`.
+- **Agent** (`backend/agent/`, tools in `backend/agent/tools/`, data tools in `backend/agent/tools/data/` subpackage) — tools must not import `agent/services`, `evaluator`, or `datasource`.
+- **Data** (`backend/data/`) — DB access + orchestration (K-line fallback chain, TDX sync). The **only** package allowed to import `datasource`. Forwards: datasource constructors that need settings are wrapped here (e.g. `NewTdxKLineApi()`, `NewAkshareClient()`).
+- **Datasource** (`backend/datasource/`) — leaf: pure vendor clients (Sina/Tencent/TDX/EastMoney/Akshare/Baostock/TickFlow/WallStreetCN/search). Only depends on base packages (`models`/`util`/`paths`/`circuitbreaker`/`machineid`/`types`/`logger`); never reads settings/DB — settings come in as constructor params or provider funcs.
+- **Base** (`backend/models`, `backend/util`, `backend/paths`, `backend/circuitbreaker`, `backend/machineid`, `backend/types`, `backend/logger`, `backend/db`) — never depend on business packages (`logger → paths` is the only exception).
+- **Quant** (`backend/quant/`, `backend/strategy/`) — takes data via `data`'s public Api, never imports `datasource` directly.
+- `backend/service/akshare_service.py` (FastAPI wrapper) now lives at `scripts/akshare_service.py` (no in-repo callers; moved out of `backend/`, not deleted).
+
 ## Agent Pipeline (backend/agent/)
 1. `ChatWithContext()` (`agent_api.go:80`) receives question
 2. `buildSkillPrompt()` (`agent.go:223`) loads matched Skills from DB by keyword
