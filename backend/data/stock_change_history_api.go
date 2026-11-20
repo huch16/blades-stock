@@ -198,40 +198,6 @@ func (s *StockChangeHistoryService) DeleteOldData(days int) error {
 	return db.Dao.Where("change_date < ?", cutoffDate).Delete(&models.StockChangeHistory{}).Error
 }
 
-func (s *StockChangeHistoryService) GetStockChangeStats(startDate, endDate string) (map[string]interface{}, error) {
-	dbQuery := db.Dao.Model(&models.StockChangeHistory{})
-	if startDate != "" {
-		dbQuery = dbQuery.Where("change_date >= ?", startDate)
-	}
-	if endDate != "" {
-		dbQuery = dbQuery.Where("change_date <= ?", endDate)
-	}
-
-	var totalCount int64
-	if err := dbQuery.Count(&totalCount).Error; err != nil {
-		return nil, err
-	}
-
-	type TypeCount struct {
-		TypeName string
-		Count    int64
-	}
-	var typeCounts []TypeCount
-	if err := db.Dao.Model(&models.StockChangeHistory{}).
-		Select("type_name, count(*) as count").
-		Where("change_date >= ? AND change_date <= ?", startDate, endDate).
-		Group("type_name").
-		Order("count DESC").
-		Find(&typeCounts).Error; err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"totalCount": totalCount,
-		"typeCounts": typeCounts,
-	}, nil
-}
-
 type DailyChangeStats struct {
 	ChangeDate string `json:"changeDate"`
 	TotalCount int64  `json:"totalCount"`

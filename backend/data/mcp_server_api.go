@@ -157,21 +157,6 @@ func (a *MCPServerApi) UpdateStatus(id uint, status string, testResult string) e
 	}).Error
 }
 
-func (a *MCPServerApi) SearchServers(keyword string) []models.MCPServer {
-	servers := make([]models.MCPServer, 0)
-	if db.Dao == nil {
-		return servers
-	}
-	query := db.Dao.Model(&models.MCPServer{})
-	if keyword != "" {
-		keyword = strings.TrimSpace(keyword)
-		query = query.Where("name LIKE ? OR description LIKE ? OR command LIKE ?",
-			"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
-	}
-	query.Order("created_at DESC").Limit(20).Find(&servers)
-	return servers
-}
-
 func ParseMCPHeaders(headersStr string) map[string]string {
 	if headersStr == "" {
 		return nil

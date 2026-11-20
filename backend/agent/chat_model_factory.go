@@ -43,14 +43,6 @@ func providerCacheKey(cfg data.AIConfig) string {
 	return b.String()
 }
 
-func InvalidateModelProviderCache() {
-	modelProviderCache.Range(func(k, _ interface{}) bool {
-		modelProviderCache.Delete(k)
-		return true
-	})
-	logger.SugaredLogger.Info("model provider cache cleared")
-}
-
 type chatModelProvider int
 
 const (

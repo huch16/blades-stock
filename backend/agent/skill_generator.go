@@ -224,46 +224,6 @@ func uniqueStrings(input []string) []string {
 	return result
 }
 
-func (sg *SkillGenerator) GetProjectSkills(projectID uint) (*models.Skill, error) {
-	var skills []models.Skill
-	if err := db.Dao.Where("category = ?", "project").Find(&skills).Error; err != nil {
-		return nil, err
-	}
-
-	var analysis models.ProjectAnalysis
-	if err := db.Dao.First(&analysis, projectID).Error; err != nil {
-		return nil, err
-	}
-
-	if analysis.SkillID == 0 {
-		return nil, nil
-	}
-
-	var skill models.Skill
-	if err := db.Dao.First(&skill, analysis.SkillID).Error; err != nil {
-		return nil, err
-	}
-
-	return &skill, nil
-}
-
-func (sg *SkillGenerator) DeleteSkillForProject(projectID uint) error {
-	var analysis models.ProjectAnalysis
-	if err := db.Dao.First(&analysis, projectID).Error; err != nil {
-		return err
-	}
-
-	if analysis.SkillID > 0 {
-		if err := db.Dao.Delete(&models.Skill{}, analysis.SkillID).Error; err != nil {
-			return err
-		}
-	}
-
-	analysis.SkillID = 0
-	analysis.Status = "indexed"
-	return db.Dao.Save(&analysis).Error
-}
-
 func (sg *SkillGenerator) ImportProject(sourceURL string, name string) (*models.ProjectAnalysis, error) {
 	var analysis models.ProjectAnalysis
 	if sourceURL != "" {

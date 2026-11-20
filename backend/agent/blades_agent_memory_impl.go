@@ -181,62 +181,6 @@ func (m *MemoryManager) WorkingPrompt(sessionID string) string {
 	return b.String()
 }
 
-func (m *MemoryManager) SummarizeAndArchive(sessionID string) (string, error) {
-	m.mu.Lock()
-	// Only summarize this session's working memory; other sessions keep theirs.
-	var entries []workingEntry
-	remaining := make([]workingEntry, 0, len(m.workingMem))
-	for _, e := range m.workingMem {
-		if e.SessionID == sessionID {
-			entries = append(entries, e)
-		} else {
-			remaining = append(remaining, e)
-		}
-	}
-	m.workingMem = remaining
-	m.mu.Unlock()
-
-	if len(entries) == 0 {
-		return "", nil
-	}
-
-	var lines []string
-	for _, e := range entries {
-		label := "U"
-		if e.Role == "assistant" {
-			label = "A"
-		}
-		lines = append(lines, fmt.Sprintf("%s: %s", label, e.Content))
-	}
-	raw := strings.Join(lines, "\n")
-
-	summary := raw
-	if len(summary) > 1000 {
-		summary = summary[:1000] + "...(已压缩)"
-	}
-
-	summary = fmt.Sprintf("会话摘要 (%d 轮):\n%s", len(entries)/2+1, summary)
-
-	var session AgentSession
-	err := db.Dao.Where("session_id = ?", sessionID).First(&session).Error
-	if err != nil {
-		session = AgentSession{
-			SessionID: sessionID,
-			Title:     "会话 " + time.Now().Format("2006-01-02 15:04"),
-			Summary:   summary,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-		db.Dao.Create(&session)
-	} else {
-		db.Dao.Model(&session).Updates(map[string]interface{}{
-			"summary":    summary,
-			"updated_at": time.Now(),
-		})
-	}
-	return summary, nil
-}
-
 type Fact struct {
 	ID        uint      `json:"id"`
 	SessionID string    `json:"sessionId"`

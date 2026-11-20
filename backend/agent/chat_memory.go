@@ -283,21 +283,6 @@ func (s *ChatMemoryService) GetHistory() ([]string, error) {
 	return history, nil
 }
 
-func (s *ChatMemoryService) GetFormattedHistory() (string, error) {
-	history, err := s.GetHistory()
-	if err != nil {
-		return "", err
-	}
-	if len(history) == 0 {
-		return "", nil
-	}
-	result := "【对话历史】\n"
-	for _, h := range history {
-		result += h + "\n"
-	}
-	return result, nil
-}
-
 func (s *ChatMemoryService) GetSummary() (string, error) {
 	summary, err := db.GetChatMemorySummary(s.sessionID)
 	if err != nil {

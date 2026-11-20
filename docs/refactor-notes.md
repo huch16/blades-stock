@@ -71,3 +71,13 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - `agent.NewEvaluator()` 返回空 `&Evaluator{}` 是关键词评分 Evaluator 的**正常构造**，不是 golden-case 评估器的 stub；`GenerateSkillFromTraces`（经 `RunSkillExtractionPass`，每日 02:30 cron 在 `app.go:368` 与 `cmd/server/main.go:377,381` 调度，链路在跑）内部调用 `NewEvaluator().GetHighQualityTraces(10)`。因此方案 (b)“只删 stub，NewEvaluator 改为调用真构造”无法按字面执行——改调 `evaluator.NewEvaluator(goldenPath, threshold)` 会改变返回类型，调用点全部无法编译，属于架构合并而非重构删除。
   - 5 个方法零调用点核查：`DefaultEvaluator`、`GetLowQualityTraces`、`RecordFeedback`、`CleanupToolRanks`、`ProposeEvolutionPlan` 在生产代码与测试中均无调用点（`GetHighQualityTraces` 除外，有 1 处 live 调用）；`App` 的 `evaluator`/`evolver` 字段除 `NewApp()` 赋值外全仓无读取点（字段去留按方案留待 R-27）；`GenerateReflection` 本身无生产调用点（仅测试 `evolution_wiring_test.go:185` 调用），其注释自述为 DORMANT。
   - 结论：(a) 删 5 个方法需用户确认“评估/进化链路是否还在跑”（附录 C #3），拿不到确认不做；(b) 按字面不可执行，需用户或方案先定夺两个 Evaluator 的合并方式。本步零改动，记入未做事项。
+
+### R-07 删其余零引用函数 —— 已完成
+
+- 删除 15 个函数，共 387 行（`git diff --stat`：11 文件 -387）：
+  - data 侧 6 个：`AggregateSinaMonthKLine`（67 行）、`GetLivesAsTelegraph`（52 行）、`GetTelegraphListWithPaging`（23 行）、`GetStockChangeStats`（33 行）、`GetCallAuctionLatest`（8 行）、`SearchServers`（14 行）
+  - agent 侧 8 个：`GetFormattedHistory`（14 行）、`GetProjectSkills`（22 行）、`GetProjectSummary`（7 行）、`ListProjects`（7 行）、`DeleteProjectAnalysis`（6 行）、`DeleteSkillForProject`（16 行）、`SearchCodeChunks`（56 行）、`SummarizeAndArchive`（55 行）
+  - `chat_model_factory.go`：`InvalidateModelProviderCache`（7 行）
+- 零引用证据：生产代码、测试文件、技能 prompt 与工具名字符串注册中均 0 命中（逐个 grep，命中均为仅定义处 1 次）；前端 `frontend/wailsjs/` 与 `frontend/src/` 0 命中；定义均为 Api/服务层方法，非 Wails 绑定方法。附带清理：`wallstreetcn_api.go` 删 `GetLivesAsTelegraph` 后 `db`/`models` import 变多余，随之删除。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 与 agent 两包全过。
+- 说明：R-07 验证命令中途被运行时 SIGTERM 中断一次（build/vet/gofmt/check-deps 均已输出通过，测试未出结果），重跑 data + agent 测试通过后才提交；至此 51 个零引用函数中已删 31 个（R-04 16 个 + R-07 15 个），R-05 的 12 个 Akshare 方法与 R-06 的 5 个反思/进化方法因待确认未删，另有 3 个口径重叠（审计基线 59 个，审计已删 8 个）。

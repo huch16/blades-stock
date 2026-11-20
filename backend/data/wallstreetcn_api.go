@@ -1,9 +1,7 @@
 package data
 
 import (
-	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
-	"blades-stock/backend/models"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -206,59 +204,6 @@ func (w WallstreetcnApi) GetLives(channel string, limit int, cursor string) *WSC
 		return nil
 	}
 	return result
-}
-
-func (w WallstreetcnApi) GetLivesAsTelegraph(channel string, limit int) *[]models.Telegraph {
-	resp := w.GetLives(channel, limit, "")
-	if resp == nil {
-		return &[]models.Telegraph{}
-	}
-
-	var telegraphs []models.Telegraph
-	channelName := WSCNChannels[channel]
-	if channelName == "" {
-		channelName = "华尔街见闻"
-	}
-	source := "华尔街见闻-" + channelName
-
-	for _, item := range resp.Data.Items {
-		dataTime := time.Unix(item.DisplayTime, 0).Local()
-		content := item.ContentText
-		if content == "" {
-			content = strings.ReplaceAll(item.Content, "<p>", "")
-			content = strings.ReplaceAll(content, "</p>", "\n")
-			content = strings.ReplaceAll(content, "<strong>", "")
-			content = strings.ReplaceAll(content, "</strong>", "")
-			content = strings.TrimSpace(content)
-		}
-		if content == "" {
-			continue
-		}
-
-		telegraph := models.Telegraph{
-			Title:           item.Title,
-			Content:         content,
-			Time:            dataTime.Format("15:04:05"),
-			DataTime:        &dataTime,
-			Url:             item.Uri,
-			Source:          source,
-			IsRed:           item.Score > 1 || item.IsCalendar,
-			SentimentResult: AnalyzeSentiment(content).Description,
-		}
-
-		cnt := int64(0)
-		if telegraph.Title == "" {
-			db.Dao.Model(telegraph).Where("content=?", telegraph.Content).Count(&cnt)
-		} else {
-			db.Dao.Model(telegraph).Where("title=?", telegraph.Title).Count(&cnt)
-		}
-		if cnt > 0 {
-			continue
-		}
-		telegraphs = append(telegraphs, telegraph)
-		db.Dao.Model(&models.Telegraph{}).Create(&telegraph)
-	}
-	return &telegraphs
 }
 
 func (w WallstreetcnApi) GetLivesReadable(channel string, limit int) string {

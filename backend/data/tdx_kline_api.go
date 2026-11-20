@@ -321,15 +321,6 @@ func convertAuctionData(list []proto.AuctionData) []TdxCallAuctionData {
 	return result
 }
 
-func (t *TdxKLineApi) GetCallAuctionLatest(stockCode string) *TdxCallAuctionData {
-	data := t.GetCallAuction(stockCode, 0, 500)
-	if data == nil || len(*data) == 0 {
-		return nil
-	}
-	last := &(*data)[len(*data)-1]
-	return last
-}
-
 func (t *TdxKLineApi) GetKLineData(stockCode string, klt string, limit int) *[]KLineData {
 	result := &[]KLineData{}
 	if err := t.ensureClient(); err != nil {
