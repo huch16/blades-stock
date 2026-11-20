@@ -2,6 +2,8 @@ package data
 
 import (
 	"testing"
+
+	"blades-stock/backend/datasource"
 )
 
 func TestNormalizeBaostockCode(t *testing.T) {
@@ -21,7 +23,7 @@ func TestNormalizeBaostockCode(t *testing.T) {
 		{"ab", "ab"},
 	}
 	for _, c := range cases {
-		if got := normalizeBaostockCode(c.in); got != c.want {
+		if got := datasource.NormalizeBaostockCode(c.in); got != c.want {
 			t.Errorf("normalizeBaostockCode(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
