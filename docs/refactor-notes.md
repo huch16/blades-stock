@@ -261,3 +261,13 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - 与设计出入：设计称 4 个域（资讯列表/舆情/日历/快讯），6 个全球指数及缓存函数无处安放（既非快讯也非舆情），故单独立为 `market_news_indexes.go`，避免舆情域膨胀到 800 行以上。
   - 只搬家不改逻辑：R-14 遗留的 `EMDictCode` 缓存读取处裸 `json.Unmarshal` 原样保留在 `market_news_sentiment.go` 内，未顺手改动。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 40（1+6+4+16+7+6），与拆分前一致。
+
+### R-20d 拆 backend/data/tdx_kline_api.go（1,558 行、44 个函数 → 核心文件 + 3 个域文件）—— 已完成
+
+- 拆分结果（原文件 1,558 行 → 核心文件 354 行）：
+  - `tdx_kline_api.go` 354 行，17 个函数：两个 `init()`（其一为 gotdx 日志屏蔽，其二为 `_ = time.DateTime` 空操作，均留原文件）+ `TdxKLineApi` 客户端管理（`NewTdxKLineApi`、`newClient`/`newMACClient`/`newMACExClient`、`ensure*`/`reconnect*`、`tdxRetryDelay`）+ 市场映射 helper（`tdxMarketFromStockCode`、`TdxMarketFromStockCode`、`macExMarketFromStockCode`、`hkCategoryFromCode`）。
+  - `tdx_kline.go` 546 行（13 个，K 线查询：集合竞价、普通/MAC/扩展 K 线及全部转换 helper）。
+  - `tdx_finance.go` 34 行（3 个，财务：`GetFinanceInfo`、`GetXDXRInfo`、`tdxDateToString`，三者均为小函数）。
+  - `tdx_company.go` 677 行（11 个，公司信息：F10 综合/分类列表/分类内容、所属板块、全市场股票列表及入库同步、港美股列表及入库同步）。
+  - 只拆方法：全部 struct 定义（`TdxCallAuctionData`、`TdxCompanyInfoSection`、`TdxFinanceInfo`、`TdxXDXRItem`、`TdxCompanyInfoBundle`、`TdxCompanyCategory`、`MACBelongBoardItem`、`TdxStockBasic`、`TdxExStockBasic`）、单例 `var` 块与港美股分类 const 留在原文件不动。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 44（17+13+3+11），与拆分前一致。
