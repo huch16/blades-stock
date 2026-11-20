@@ -12,8 +12,8 @@ import (
 // @Date 2026/3/15
 // @Desc 东方财富 K 线数据 API 使用示例
 
-// Example_GetDayKLine 获取日 K 线数据示例
-func Example_GetDayKLine() {
+// demoGetDayKLine 获取日 K 线数据示例
+func demoGetDayKLine() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -38,8 +38,8 @@ func Example_GetDayKLine() {
 	}
 }
 
-// Example_GetWeekKLine 获取周 K 线数据示例
-func Example_GetWeekKLine() {
+// demoGetWeekKLine 获取周 K 线数据示例
+func demoGetWeekKLine() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -64,8 +64,8 @@ func Example_GetWeekKLine() {
 	}
 }
 
-// Example_GetAdjustedKLine 获取复权 K 线数据示例
-func Example_GetAdjustedKLine() {
+// demoGetAdjustedKLine 获取复权 K 线数据示例
+func demoGetAdjustedKLine() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -96,8 +96,8 @@ func Example_GetAdjustedKLine() {
 	}
 }
 
-// Example_GetMinuteKLine 获取分钟 K 线数据示例
-func Example_GetMinuteKLine() {
+// demoGetMinuteKLine 获取分钟 K 线数据示例
+func demoGetMinuteKLine() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -114,8 +114,8 @@ func Example_GetMinuteKLine() {
 	fmt.Printf("获取到 %d 条 15 分钟 K 线数据\n", len(*kLines15Min))
 }
 
-// Example_BatchGetKLine 批量获取 K 线数据示例
-func Example_BatchGetKLine() {
+// demoBatchGetKLine 批量获取 K 线数据示例
+func demoBatchGetKLine() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -140,8 +140,8 @@ func Example_BatchGetKLine() {
 	}
 }
 
-// Example_AnalyzeKLine 分析 K 线数据示例
-func Example_AnalyzeKLine() {
+// demoAnalyzeKLine 分析 K 线数据示例
+func demoAnalyzeKLine() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -212,8 +212,8 @@ func Example_AnalyzeKLine() {
 	}
 }
 
-// Example_ExportKLineToJSON 导出 K 线数据为 JSON 示例
-func Example_ExportKLineToJSON() {
+// demoExportKLineToJSON 导出 K 线数据为 JSON 示例
+func demoExportKLineToJSON() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -231,8 +231,8 @@ func Example_ExportKLineToJSON() {
 	fmt.Println(string(jsonData))
 }
 
-// Example_GetLatestMarketInfo 获取最新行情信息示例
-func Example_GetLatestMarketInfo() {
+// demoGetLatestMarketInfo 获取最新行情信息示例
+func demoGetLatestMarketInfo() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -270,8 +270,8 @@ func calculateChangePercent(open, close string) float64 {
 	return (c - o) / o * 100
 }
 
-// Example_ValidateStockCodes 批量验证股票代码示例
-func Example_ValidateStockCodes() {
+// demoValidateStockCodes 批量验证股票代码示例
+func demoValidateStockCodes() {
 	config := GetSettingConfig()
 	api := NewEastMoneyKLineApi(config)
 
@@ -300,15 +300,15 @@ func RunAllExamples() {
 	fmt.Println("东方财富 K 线数据 API 使用示例")
 	fmt.Println(strings.Repeat("=", 80))
 
-	Example_GetDayKLine()
-	Example_GetWeekKLine()
-	Example_GetAdjustedKLine()
-	Example_GetMinuteKLine()
-	Example_BatchGetKLine()
-	Example_AnalyzeKLine()
-	Example_ExportKLineToJSON()
-	Example_GetLatestMarketInfo()
-	Example_ValidateStockCodes()
+	demoGetDayKLine()
+	demoGetWeekKLine()
+	demoGetAdjustedKLine()
+	demoGetMinuteKLine()
+	demoBatchGetKLine()
+	demoAnalyzeKLine()
+	demoExportKLineToJSON()
+	demoGetLatestMarketInfo()
+	demoValidateStockCodes()
 
 	fmt.Println("\n" + strings.Repeat("=", 80))
 	fmt.Println("所有示例运行完成")

@@ -1,3 +1,6 @@
+//go:build ignore
+
+// 独立演示程序（SQLite 搜索 demo），不参与 go build ./...。
 package main
 
 import (
