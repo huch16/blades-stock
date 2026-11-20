@@ -108,3 +108,10 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 执行：先写空输入单测（新建 `backend/models/knowledge_crystal_test.go`，断言空输入返回长度 0 的非 nil 切片 + 非法长度返回 nil + 往返一致），**先跑通过、后删**；删 `backend/agent/blades_agent_memory_models.go` 的 agent 版两函数（`binary`/`math` import 随之清理）；agent 调用点改调 `models.Float32sToBytesLE` / `models.BytesToFloat32sLE`（`semantic_distiller.go:447`、测试文件两处，均已 import models）。
 - 全仓只剩 1 处定义（models 版）；`tools/sqlite_search_demo.go:19` 的小写副本按方案留待 R-28。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` models 与 agent 两包全过（含新增 3 个单测）。
+
+### R-11 D8 去重：SeedDefaultSkills 合并 —— 已完成（选 b 方案：services 改用 //go:embed）
+
+- 核查结论（附录 C #6）：发布包**不含** `cmd/*.txt` 运行时文件——`build.ps1` 只向 `build/bin/` 复制 `data/stock.db`，不复制 `cmd/`；两个 txt 文件此前只通过 `main.go` 的 `//go:embed` 进入桌面二进制（编译期），services 版则在运行时用相对路径读文件，发布包/非仓库目录下会静默回退到两行占位常量（`defaultETFDirective`/`defaultSerenityDirective`）。因此方案 (a)（删 main 版、改调 services 版）不安全：桌面 seed 会降级为占位提示词，属于行为变化。
+- 执行 b 方案：services 版改用 `//go:embed`。Go 的 embed 模式禁止 `..`，`backend/services` 不能直接 embed `../../cmd/...`，故把两个 txt 文件 `git mv` 到 `backend/services/seeddata/`（内容 0 改动），services 以 `//go:embed seeddata/*.txt` 嵌入；`cmd/insert_etf_skill/main.go` 与 `cmd/insert_serenity_skill/main.go` 的读取路径同步改为 `backend/services/seeddata/*.txt`（二者均在仓库根运行，相对路径仍成立）；删除 main 版 `SeedDefaultSkills()`（90 行）与两个 embed 变量，`main.AutoMigrate()` 改调 `services.SeedDefaultSkills()`；删除两个占位常量。
+- 两份技能字面量逐行比对：除 SystemPrompt 来源、日志别名（`log` vs `logger`）与失败日志级别（Errorf vs Warnf）外完全一致；统一后以 services 版为准（Warnf）。
+- 验证：临时测试（跑完即删，不提交）在临时库中验证合并后 seed 出 2 个技能、SystemPrompt 与 txt 文件逐字一致、长度 >1000、二次播种幂等——通过；`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` 根包与 services 包全过。分支说明：走的是 embed 分支（编译期嵌入），不再有“无 DB 时走 const 默认值”分支。

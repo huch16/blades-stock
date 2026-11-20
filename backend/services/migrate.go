@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -322,6 +323,17 @@ func SeedStockBasicsIfEmpty() {
 	}
 }
 
+// defaultETFPrompt / defaultSerenityPrompt 是编译期嵌入的默认技能提示词
+// （与 cmd/insert_*_skill/*.txt 同源）。此前 services 版在运行时用相对
+// 路径读文件，发布包里没有 cmd/ 目录时会静默回退到两行占位常量；
+// main 版则一直用 //go:embed。R-11 统一为 embed，两端行为一致。
+//
+//go:embed seeddata/etf_prompt.txt
+var defaultETFPrompt string
+
+//go:embed seeddata/serenity_prompt.txt
+var defaultSerenityPrompt string
+
 // SeedDefaultSkills 初始化默认的专家技能
 func SeedDefaultSkills() {
 	if db.Dao == nil {
@@ -333,15 +345,8 @@ func SeedDefaultSkills() {
 		return
 	}
 
-	etfPrompt := defaultETFDirective
-	if b, err := os.ReadFile("cmd/insert_etf_skill/etf_prompt.txt"); err == nil && len(b) > 0 {
-		etfPrompt = string(b)
-	}
-
-	serenityPrompt := defaultSerenityDirective
-	if b, err := os.ReadFile("cmd/insert_serenity_skill/serenity_prompt.txt"); err == nil && len(b) > 0 {
-		serenityPrompt = string(b)
-	}
+	etfPrompt := defaultETFPrompt
+	serenityPrompt := defaultSerenityPrompt
 
 	skills := []models.Skill{
 		{
@@ -430,12 +435,6 @@ func SeedDefaultSkills() {
 		}
 	}
 }
-
-const defaultETFDirective = `===== Multi-Agent ETF 轮动分析流水线 =====
-你是专业的量化投资专家。在收到 ETF 分析请求时，请按动量排序和多视角打分执行分析。`
-
-const defaultSerenityDirective = `===== Serenity 产业深度研究流水线 =====
-你是专业的行业与产业链研究专家。请从产业链上下游、稀缺层识别、竞争壁垒和证伪条件展开分析。`
 
 // SeedDefaultKnowledgeCrystalsIfEmpty 播种平台默认的经典量化与交易经验结晶库
 func SeedDefaultKnowledgeCrystalsIfEmpty() {

@@ -18,6 +18,7 @@ import (
 	"blades-stock/backend/models"
 	"blades-stock/backend/paths"
 	"blades-stock/backend/quant"
+	"blades-stock/backend/services"
 
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/wailsapp/wails/v2"
@@ -69,12 +70,6 @@ var wxpay []byte
 
 //go:embed docs/blades-stock使用手册.md
 var userManual []byte
-
-//go:embed cmd/insert_etf_skill/etf_prompt.txt
-var defaultETFBackup string
-
-//go:embed cmd/insert_serenity_skill/serenity_prompt.txt
-var defaultSerenityBackup string
 
 //go:generate cp -R ./data ./build/bin
 
@@ -358,7 +353,7 @@ func AutoMigrate() {
 		db.Dao.AutoMigrate(&models.Skill{})
 		db.Dao.AutoMigrate(&agent.PlanTrace{})
 		db.Dao.AutoMigrate(&evaluator.EvaluatorReport{})
-		SeedDefaultSkills()
+		services.SeedDefaultSkills()
 		db.Dao.AutoMigrate(&models.CustomStrategy{})
 		db.Dao.AutoMigrate(&models.BKFundFlow{})
 		db.Dao.AutoMigrate(&models.ConceptFundFlow{})
@@ -404,97 +399,6 @@ func initGlobalStockIndexCacheTask() {
 		}
 	}
 
-}
-
-func SeedDefaultSkills() {
-	var count int64
-	db.Dao.Model(&models.Skill{}).Count(&count)
-	if count > 0 {
-		return
-	}
-	skills := []models.Skill{
-		{
-			Name:         "ETF轮动多Agent分析",
-			Description:  "执行完整的多Agent ETF轮动分析流程：21日加权动量筛选→6路因子并发分析(fan-out)→投委会5视角加权融合→输出开盘前交易决策",
-			Category:     "量化策略",
-			SystemPrompt: defaultETFBackup,
-			Directive: `# ETF轮动多Agent分析 — 强制执行规则
-
-你必须严格按以下流程执行ETF开盘前分析：
-
-## 第1步：动量筛选
-用 SearchStockByIndicators 获取ETF池，按21日加权动量排序，剔除回撤>冷却阈值或盈亏比<1的标的。
-
-## 第2步：6路因子并发分析
-对前5只候选ETF，用工具fan-out并行分析以下维度：
-- 技术面（均线/KDJ/MACD/布林带）
-- 资金面（主力/北向资金流向）
-- 消息面（新闻/公告）
-- 海外联动（隔夜外围表现）
-- 宏观/行业周期
-- 申赎/溢价率
-
-## 第3步：投委会5视角加权融合
-从趋势、风控、价值、筹码、情绪5个视角评分，加权输出综合得分和决策建议。
-
-## 输出格式
-必须包含：ETF池概览→动量排名→各维度分析摘要→投委会评分表→最终交易决策（买入/持有/卖出/观望+仓位建议）`,
-			TriggerKeywords: "ETF,轮动,动量,板块轮动,资金流向,北向资金,技术面,消息面,开盘前决策,集合竞价,ETF池,动量轮动,因子分析,投委会,持仓评审,海外联动,宏观,资金流,申赎,主力资金,溢价率,双动量,回撤冷却,盈亏比,仓位管理,集合竞价复核,投委会精选",
-			Examples:        "用户：今天ETF开盘前有什么建议？我持有159915和512660\n助手：必须输出完整的ETF轮动分析报告结构，从动量筛选开始逐步分析到最终决策，包含持仓评审。",
-			Enable:          true, SortOrder: 1,
-			ToolGroups:   "money_flow,news_research,stock_analysis,market",
-			Version:      "1.0.0",
-			Status:       "active",
-			InputSchema:  "{}",
-			OutputSchema: "{}",
-		},
-		{
-			Name:         "Serenity式产业分析",
-			Description:  "强制使用Serenity产业分析框架：产业链拆解→稀缺层识别→优先级排序→证据验证→证伪条件",
-			Category:     "资讯研究",
-			SystemPrompt: defaultSerenityBackup,
-			Directive: `# Serenity式产业分析 — 强制执行规则
-
-你必须严格按Serenity研究框架执行产业分析：
-
-## 第1步：产业链全景拆解
-识别目标公司在产业链中的位置（上游/中游/下游），列出关键环节和参与方。
-
-## 第2步：稀缺层识别
-找出产业链中技术壁垒最高、替代难度最大的环节。关注：国产替代率<30%、市占率集中度CR5>60%、毛利率>40%的环节。
-
-## 第3步：定性优先级排序（严禁综合打分）
-用文字清晰解释相对差异；严禁计算综合分数！仅输出定性优先级：P0（控制稀缺层）、P1（供应稀缺层）、P2（需求受益但控制力有限）、P3（有故事缺证据）。
-
-## 第4步：证据天梯（Evidence Ladder）验证与研究缺口
-严格按证据等级验证：第一级（官方公告与申报）、第二级（定期报告财务）、第三级（行业快讯）。
-必须注明财务数据背后的报告期与公告出处锚点；严禁凭空编造无事实来源的百分比。
-查不到公开披露或缺少公告验证的关键细节，必须诚实声明为【研究缺口 (Research Gaps)】，严禁用臆测填补！
-严格区分商业化六阶段：研发中、送样中、产线验证中、量产试制、在手订单、已确认收入。
-
-## 第5步：证伪条件与结构化 Thesis
-明确列出什么情况下分析结论会失效（技术路线颠覆、竞争对手提前扩产、关键客户流失等）。
-在报告末尾提炼结构化 thesis 代码块，直通存入买方认知账本。
-
-## 输出格式
-必须包含：产业链全景图→稀缺层识别→定性优先级排序 (P0~P3)→证据链溯源→研究缺口→证伪条件→结构化 Thesis`,
-			TriggerKeywords: "产业分析,产业链,稀缺性,瓶颈,行业研究,赛道分析,上下游,供需格局,渗透率,国产替代,市场份额,竞争格局,华阳集团,投资机会,细分龙头",
-			Examples:        "用户：分析华阳集团在汽车电子产业链中的位置\n助手：必须输出Serenity报告结构：产业链全景图→稀缺层识别→定性优先级排序→证据链与研究缺口→证伪条件",
-			Enable:          true, SortOrder: 2,
-			ToolGroups:   "stock_analysis,market,news_research,screening",
-			Version:      "1.0.0",
-			Status:       "active",
-			InputSchema:  "{}",
-			OutputSchema: "{}",
-		},
-	}
-	for _, s := range skills {
-		if err := db.Dao.Create(&s).Error; err != nil {
-			log.SugaredLogger.Errorf("seed skill <%s> failed: %v", s.Name, err)
-		} else {
-			log.SugaredLogger.Infof("seed skill <%s> ID=%d", s.Name, s.ID)
-		}
-	}
 }
 
 func updateBasicInfo() {

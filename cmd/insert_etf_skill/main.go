@@ -11,7 +11,7 @@ func main() {
 	db.Init("data/stock.db?_busy_timeout=10000&_journal_mode=WAL&_synchronous=NORMAL&_cache_size=-524288")
 	db.Dao.AutoMigrate(&models.Skill{})
 
-	promptBytes, err := os.ReadFile("cmd/insert_etf_skill/etf_prompt.txt")
+	promptBytes, err := os.ReadFile("backend/services/seeddata/etf_prompt.txt")
 	if err != nil {
 		panic(fmt.Sprintf("读取 prompt 文件失败: %v", err))
 	}
