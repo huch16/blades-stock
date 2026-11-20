@@ -25,6 +25,7 @@ declare module 'vue' {
     CronTaskManager: typeof import('./src/components/cron-task-manager.vue')['default']
     EmbeddedUrl: typeof import('./src/components/EmbeddedUrl.vue')['default']
     ErrorBoundary: typeof import('./src/components/common/ErrorBoundary.vue')['default']
+    FollowedStockGrid: typeof import('./src/components/FollowedStockGrid.vue')['default']
     Fund: typeof import('./src/components/fund.vue')['default']
     FundFollow: typeof import('./src/components/FundFollow.vue')['default']
     FundKlineChart: typeof import('./src/components/FundKlineChart.vue')['default']

@@ -1,46 +1,31 @@
 <script setup lang="ts">
-import {computed, defineAsyncComponent, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
+import { computed, defineAsyncComponent, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import * as echarts from '../utils/echarts';
 import {
   AddGroup,
   AddStockGroup,
   Follow,
-  GetAIResponseResult,
   GetConfig,
   GetFollowList,
   GetGroupList,
   GetPromptTemplates,
-  GetStockKLine,
   GetStockList,
-  GetStockMinutePriceLineData,
   GetVersionInfo,
   Greet,
   InitializeGroupSort,
-  NewChatStream,
   RemoveGroup,
   RemoveStockGroup,
   SaveAIResponseResult,
-  SaveAsMarkdown,
-  SaveImage,
-  SaveWordFile,
-  SendDingDingMessageByType,
-  SetAlarmChangePercent,
-  SetCostPriceAndVolume,
-  SetStockAICron,
-  SetStockSort,
-  SetTradingPrice,
   UnFollow,
   UpdateGroup,
-  UpdateGroupSort,
   BatchGreet,
-  GetStockThesis,
   GetStockThesisHistory,
   GetAllStockTheses,
   // 修复：openCenteredWindow() 在非 windows 平台分支调用 OpenURL()，但此前从未导入，
   // 一旦走到 default 分支即抛 `ReferenceError: OpenURL is not defined`（与 NSpace 同类缺陷）。
   OpenURL,
 } from '../../wailsjs/go/main/App'
-import StockCard from './StockCard.vue'
+import FollowedStockGrid from './FollowedStockGrid.vue'
 import StockDiagnosisDrawer from './StockDiagnosisDrawer.vue'
 import { useAiConfigStore } from '../stores/aiConfig'
 import { cleanFinalContent } from '../utils/cleanText'
@@ -60,17 +45,21 @@ import {
   NTimelineItem,
   useDialog,
   useMessage,
-  useNotification
+  useNotification,
 } from 'naive-ui'
 import {
   Environment,
   EventsEmit,
   EventsOff,
   EventsOn,
-  WindowReload
+  WindowReload,
 } from '../../wailsjs/runtime'
 import {Add, CreateOutline} from '@vicons/ionicons5'
 import { sanitizeMarkdownHtml } from '../utils/sanitize';
+import { useStockTabs } from '../composables/useStockTabs'
+import { useStockEcharts } from '../composables/useStockEcharts'
+import { useStockAi } from '../composables/useStockAi'
+import { useStockAlerts } from '../composables/useStockAlerts'
 
 // 异步按需懒加载重型 Markdown、CodeMirror、PDF 及 Word 导出库，避免首页冷启动全量加载 ~1MB JS
 const MdEditor = defineAsyncComponent(() => import('md-editor-v3').then(m => {
@@ -105,8 +94,6 @@ const aiConfigStore = useAiConfigStore()
 const dialog = useDialog()
 const toolbars = [0];
 
-const upColor = '#ec0000';
-const downColor = '#00da3c';
 const kLineChartRef = ref(null);
 const kLineChartRef2 = ref(null);
 
@@ -216,18 +203,6 @@ function loadAllTheses() {
   }).catch(() => {})
 }
 
-async function fetchActiveThesis(code: string) {
-  if (!code) {
-    activeThesis.value = null
-    return
-  }
-  try {
-    const res = await GetStockThesis(code)
-    activeThesis.value = res || null
-  } catch {
-    activeThesis.value = null
-  }
-}
 
 async function viewThesisHistory(code: string) {
   if (!code) return
@@ -272,114 +247,22 @@ const groupResults = computed(() => {
   }
   return group
 })
+
+// 逻辑抽至 composables（R-22b）：拖拽标签 / ECharts / AI 分析 / 成本报警
+const { initDraggableTabs, cleanupDraggableTabs } = useStockTabs({ groupList, message })
+const { handleKLine, handleFeishi, clearFeishi } = useStockEcharts({ data, feishiInterval, kLineChartRef, kLineChartRef2 })
+const { triggerAiWatchlistScreening, aiCheckStock, aiReCheckStock, saveAsImage, saveAsMarkdown, saveAsWord } = useStockAi({ activeThesis, aiAnalysisTimeout, aiConfigStore, currentGroupId, data, enableTools, groupList, groupResults, mdEditorRef, mdPreviewRef, message, modalShow4, sortedResults, thinkingMode, tipsRef })
+const { checkPriceLineAlerts, updateCostPriceAndVolumeNew, saveTradingPriceToBackend, setStock } = useStockAlerts({ currentGroupId, currentStockTradingPrice, followList, formModel, fromEastMoneyCode, message, modalShow, monitor, stocks })
 const showPopover = ref(false)
 // 拖拽相关变量
-const dragSourceIndex = ref(null)
-const dragTargetIndex = ref(null)
 
 // 拖拽处理函数
-function handleTabDragStart(event, name) {
-  // "全部"标签（name=0）不应该触发拖拽
-  if (name === 0) {
-    event.preventDefault();
-    return;
-  }
-  dragSourceIndex.value = name;
-  event.dataTransfer.effectAllowed = 'move';
-  event.target.classList.add('tab-dragging');
-}
 
 
-function handleTabDragOver(event) {
-  event.preventDefault()
-  event.dataTransfer.dropEffect = 'move'
-}
 
-function handleTabDragEnter(event, name) {
-  event.preventDefault();
-  // "全部"标签（name=0）不应该作为拖拽目标
-  if (name > 0) {
-    dragTargetIndex.value = name;
-    if (event.target.classList) {
-      // 查找最近的标签元素并添加高亮样式
-      const tabElement = event.target.closest('.n-tabs-tab');
-      if (tabElement) {
-        tabElement.classList.add('tab-drag-over');
-      }
-    }
-  }
-}
 
-function handleTabDragLeave(event) {
-  // 查找最近的标签元素并移除高亮样式
-  const tabElement = event.target.closest('.n-tabs-tab')
-  if (tabElement && tabElement.classList) {
-    tabElement.classList.remove('tab-drag-over')
-  }
-  // 不要重置 dragTargetIndex，因为可能会在元素间快速移动
-}
 
-function handleTabDrop(event) {
-  event.preventDefault();
 
-  // 移除所有高亮样式
-  const tabs = document.querySelectorAll('.n-tabs-tab');
-  if(!tabs || tabs.length === 0){
-    return
-  }
-  tabs.forEach(tab => {
-    tab.classList.remove('tab-drag-over');
-  });
-
-  if (dragSourceIndex.value !== null && dragTargetIndex.value !== null &&
-      dragSourceIndex.value !== dragTargetIndex.value) {
-
-    // 确保索引有效（排除"全部"选项卡）
-    if (dragSourceIndex.value > 0 && dragTargetIndex.value > 0) {
-      // 查找源分组和目标分组
-      const sourceGroup = groupList.value.find(g => g.ID === dragSourceIndex.value);
-      const targetGroup = groupList.value.find(g => g.ID === dragTargetIndex.value);
-
-      if (sourceGroup && targetGroup) {
-        // 计算新的位置序号（使用目标分组的sort值）
-        const newSortPosition = targetGroup.sort;
-
-        // 调用后端API更新组排序
-        UpdateGroupSort(sourceGroup.ID, newSortPosition).then(result => {
-          if (result) {
-            message.success('分组排序更新成功');
-            // 重新获取分组列表以更新界面
-            GetGroupList().then(result => {
-              groupList.value = result;
-            });
-          } else {
-            message.error('分组排序更新失败');
-          }
-        }).catch(error => {
-          message.error('分组排序更新失败: ' + error.message);
-        });
-      }
-    }
-  }
-
-  // 重置状态
-  dragSourceIndex.value = null;
-  dragTargetIndex.value = null;
-}
-
-function handleTabDragEnd(_event) {
-  // 移除所有高亮样式
-  const tabs = document.querySelectorAll('.n-tabs-tab')
-  if(!tabs || tabs.length === 0){
-    return
-  }
-  tabs.forEach(tab => {
-    tab.classList.remove('tab-drag-over', 'tab-dragging')
-  })
-
-  dragSourceIndex.value = null
-  dragTargetIndex.value = null
-}
 
 onBeforeMount(() => {
   GetGroupList().then(result => {
@@ -600,52 +483,8 @@ onMounted(() => {
 })
 // 清理拖拽事件监听器
 // 清理拖拽事件监听器
-function cleanupDraggableTabs() {
-  const tabs = document.querySelectorAll('.n-tabs-tab');
-  if(!tabs || tabs.length === 0){
-    return
-  }
-  tabs.forEach((tab) => {
-    // 移除所有可能的拖拽事件监听器
-    tab.removeEventListener('dragstart', handleTabDragStart);
-    tab.removeEventListener('dragover', handleTabDragOver);
-    tab.removeEventListener('dragenter', handleTabDragEnter);
-    tab.removeEventListener('dragleave', handleTabDragLeave);
-    tab.removeEventListener('drop', handleTabDrop);
-    tab.removeEventListener('dragend', handleTabDragEnd);
-    // 移除draggable属性
-    tab.removeAttribute('draggable');
-  });
-}
 
 // 初始化可拖拽选项卡
-function initDraggableTabs() {
-  // 移除之前可能添加的事件监听器
-  cleanupDraggableTabs();
-
-  // 添加拖拽事件监听器到选项卡元素
-  setTimeout(() => {
-    const tabs = document.querySelectorAll('.n-tabs-tab');
-    if(!tabs || tabs.length === 0){
-      return
-    }
-    tabs.forEach((tab, _index) => {
-      const dataIndex = tab.getAttribute('data-name');
-      const name = parseInt(dataIndex);
-
-      // 只为分组标签（name > 0）添加拖拽功能
-      if (name > 0) {
-        tab.setAttribute('draggable', 'true');
-        tab.addEventListener('dragstart', (e) => handleTabDragStart(e, name));
-        tab.addEventListener('dragover', handleTabDragOver);
-        tab.addEventListener('dragenter', (e) => handleTabDragEnter(e, name));
-        tab.addEventListener('dragleave', handleTabDragLeave);
-        tab.addEventListener('drop', handleTabDrop);
-        tab.addEventListener('dragend', handleTabDragEnd);
-      }
-    });
-  }, 100);
-}
 
 onBeforeUnmount(() => {
   // //console.log(`the component is now unmounted.`)
@@ -1032,291 +871,8 @@ function handleCostPriceUpdate(newPrice) {
   saveTradingPriceToBackend()
 }
 
-function saveTradingPriceToBackend() {
-  if (!currentStockTradingPrice.value.stockCode) {
-    return
-  }
-  const emCode = currentStockTradingPrice.value.stockCode
-  const code = fromEastMoneyCode(emCode)
-  if (!code) {
-    console.warn('无法转换股票代码:', emCode)
-    return
-  }
-  const entryPrice = Number(currentStockTradingPrice.value.entryPrice) || 0
-  const takeProfitPrice = Number(currentStockTradingPrice.value.takeProfitPrice) || 0
-  const stopLossPrice = Number(currentStockTradingPrice.value.stopLossPrice) || 0
-  const costPrice = Number(currentStockTradingPrice.value.costPrice) || 0
-  SetTradingPrice(
-    code,
-    entryPrice,
-    takeProfitPrice,
-    stopLossPrice,
-    costPrice
-  ).then(result => {
-    if (result === '设置成功') {
-      const emCode = currentStockTradingPrice.value.stockCode
-      const internalCode = code
-      const followItem = followList.value.find(item => item.StockCode === internalCode || item.StockCode === emCode)
-      if (followItem) {
-        followItem.EntryPrice = entryPrice
-        followItem.TakeProfitPrice = takeProfitPrice
-        followItem.StopLossPrice = stopLossPrice
-      }
-    }
-  }).catch(err => {
-    console.error('SetTradingPrice error:', err)
-  })
-}
 
-function setStock(code, name) {
-  const res = followList.value.filter(item => item.StockCode === code)
-  ////console.log("res:",res)
-  formModel.value.name = name
-  formModel.value.code = code
-  formModel.value.volume = res[0].Volume ? res[0].Volume : 0
-  formModel.value.costPrice = res[0].CostPrice
-  formModel.value.alarm = res[0].AlarmChangePercent
-  formModel.value.alarmPrice = res[0].AlarmPrice
-  formModel.value.sort = res[0].Sort
-  formModel.value.cron = res[0].Cron
-  formModel.value.entryPrice = res[0].EntryPrice || 0
-  formModel.value.takeProfitPrice = res[0].TakeProfitPrice || 0
-  formModel.value.stopLossPrice = res[0].StopLossPrice || 0
-  modalShow.value = true
-}
 
-function clearFeishi() {
-  //console.log("clearFeishi")
-  clearInterval(feishiInterval.value)
-}
-
-function showFsChart(code, name) {
-  data.name = name
-  data.code = code
-  const chart = echarts.getInstanceByDom(kLineChartRef2.value) || echarts.init(kLineChartRef2.value);
-  GetStockMinutePriceLineData(code, name).then(result => {
-    // console.log("GetStockMinutePriceLineData", result)
-    const priceData = result.priceData
-    const category = []
-    const price = []
-    // 说明（no-useless-assignment / prefer-const）：二者仅由行情数据赋值一次，
-    // 此前先声明为 let 并赋初值 0，初值从未被读取，现直接以 const 就地初始化。
-    const openprice = priceData[0].price
-    const closeprice = priceData[priceData.length - 1].price
-    const volume = []
-    const volumeRate = []
-    let min = 0
-    let max = 0
-    for (let i = 0; i < priceData.length; i++) {
-      category.push(priceData[i].time)
-      price.push(priceData[i].price)
-      if (min === 0 || min > priceData[i].price) {
-        min = priceData[i].price
-      }
-      if (max < priceData[i].price) {
-        max = priceData[i].price
-      }
-      if (i > 0) {
-        const b = priceData[i].volume - priceData[i - 1].volume
-        volumeRate.push(((b - volume[i - 1]) / volume[i - 1] * 100).toFixed(2))
-        volume.push(b)
-      } else {
-        volume.push(priceData[i].volume)
-        volumeRate.push(0)
-      }
-    }
-
-    const option = {
-      title: {
-        subtext: "[" + result.date + "] 开盘:" + openprice + " 最新:" + closeprice + " 最高:" + max + " 最低:" + min,
-        left: 'center',
-        top: '10',
-        textStyle: {
-          color: data.darkTheme ? '#ccc' : '#456'
-        }
-      },
-      legend: {
-        data: ['股价', '成交量'],
-        //orient: 'vertical',
-        textStyle: {
-          color: data.darkTheme ? '#ccc' : '#456'
-        },
-        right: 50,
-      },
-      darkMode: data.darkTheme,
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: {
-          type: 'cross',
-          animation: false,
-          label: {
-            backgroundColor: '#505765'
-          }
-        }
-      },
-      axisPointer: {
-        link: [
-          {
-            xAxisIndex: 'all'
-          }
-        ],
-        label: {
-          backgroundColor: '#888'
-        }
-      },
-      xAxis: [
-        {
-          type: 'category',
-          data: category,
-          axisLabel: {
-            show: false
-          }
-        },
-        {
-          gridIndex: 1,
-          type: 'category',
-          data: category,
-        },
-      ],
-      grid: [
-        {
-          left: '8%',
-          right: '8%',
-          height: '50%',
-        },
-        {
-          left: '8%',
-          right: '8%',
-          top: '70%',
-          height: '15%'
-        },
-      ],
-      yAxis: [
-        {
-          axisLine: {
-            show: true
-          },
-          splitLine: {
-            show: false
-          },
-          name: "股价",
-          min: (min - min * 0.01).toFixed(2),
-          max: (max + max * 0.01).toFixed(2),
-          minInterval: 0.01,
-          type: 'value'
-        },
-        {
-          gridIndex: 1,
-          axisLine: {
-            show: true
-          },
-          splitLine: {
-            show: false
-          },
-          name: "成交量",
-          type: 'value',
-        },
-      ],
-      visualMap: {
-        type: 'piecewise',
-        seriesIndex: 0,
-        top: 0,
-        left: 10,
-        orient: 'horizontal',
-        textStyle: {
-          color: data.darkTheme ? '#fff' : '#456'
-        },
-        pieces: [
-          {
-            text: '低于开盘价',
-            gt: 0,
-            lte: openprice,
-            color: '#31F113',
-            textStyle: {
-              color: data.darkTheme ? '#fff' : '#456'
-            },
-          },
-          {
-            text: '大于开盘价小于收盘价',
-            gt: openprice,
-            lte: closeprice,
-            color: '#1651EF',
-            textStyle: {
-              color: data.darkTheme ? '#fff' : '#456'
-            },
-          },
-          {
-            text: '大于收盘价',
-            gt: closeprice,
-            color: '#AC3B2A',
-            textStyle: {
-              color: data.darkTheme ? '#fff' : '#456'
-            },
-          }
-        ],
-      },
-      series: [
-        {
-          name: "股价",
-          data: price,
-          type: 'line',
-          smooth: false,
-          showSymbol: false,
-          lineStyle: {
-            width: 3
-          },
-          markPoint: {
-            symbol: 'arrow',
-            symbolRotate: 90,
-            symbolSize: [10, 20],
-            symbolOffset: [10, 0],
-            itemStyle: {
-              color: '#FC290D'
-            },
-            label: {
-              position: 'right',
-            },
-            data: [
-              {type: 'max', name: 'Max'},
-              {type: 'min', name: 'Min'}
-            ]
-          },
-          markLine: {
-            symbol: 'none',
-            data: [
-              {type: 'average', name: 'Average'},
-              {
-                lineStyle: {
-                  color: '#FFCB00',
-                  width: 0.5
-                },
-                yAxis: openprice,
-                name: '开盘价'
-              },
-              {
-                yAxis: closeprice,
-                symbol: 'none',
-                lineStyle: {
-                  color: 'red',
-                  width: 0.5
-                },
-              }
-            ]
-          },
-        },
-        {
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          name: "成交量",
-          data: volume,
-          type: 'bar',
-        },
-
-      ]
-    };
-    chart.setOption(option);
-  })
-}
 
 function showFenshi(code, name, changePercent) {
   data.code = code
@@ -1337,354 +893,7 @@ function showFenshi(code, name, changePercent) {
   modalShow2.value = true
 }
 
-function handleFeishi() {
-  showFsChart(data.code, data.name);
-  feishiInterval.value = setInterval(() => {
-    showFsChart(data.code, data.name);
-  }, 1000 * 10)
-}
 
-function calculateMA(dayCount, values) {
-  const result = [];
-  for (let i = 0, len = values.length; i < len; i++) {
-    if (i < dayCount) {
-      result.push('-');
-      continue;
-    }
-    let sum = 0;
-    for (let j = 0; j < dayCount; j++) {
-      sum += +values[i - j][1];
-    }
-    result.push((sum / dayCount).toFixed(2));
-  }
-  return result;
-}
-
-function handleKLine() {
-  GetStockKLine(data.code, data.name, 365).then(result => {
-    //console.log("GetStockKLine",result)
-    const chart = echarts.getInstanceByDom(kLineChartRef.value) || echarts.init(kLineChartRef.value);
-    const categoryData = [];
-    const values = [];
-    const volumns = [];
-    for (let i = 0; i < result.length; i++) {
-      const resultElement = result[i]
-      //console.log("resultElement:{}",resultElement)
-      categoryData.push(resultElement.day)
-      const flag = resultElement.close > resultElement.open ? 1 : -1
-      values.push([
-        resultElement.open,
-        resultElement.close,
-        resultElement.low,
-        resultElement.high
-      ])
-      volumns.push([i, resultElement.volume / 10000, flag])
-    }
-    ////console.log("categoryData",categoryData)
-    ////console.log("values",values)
-    const option = {
-      darkMode: data.darkTheme,
-      //backgroundColor: '#1c1c1c',
-      // color:['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc'],
-      animation: false,
-      legend: {
-        bottom: 10,
-        left: 'center',
-        data: ['日K', 'MA5', 'MA10', 'MA20', 'MA30'],
-        textStyle: {
-          color: data.darkTheme ? '#ccc' : '#456'
-        },
-      },
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: {
-          type: 'cross',
-          lineStyle: {
-            color: '#376df4',
-            width: 1,
-            opacity: 1
-          }
-        },
-        borderWidth: 2,
-        borderColor: data.darkTheme ? '#456' : '#ccc',
-        backgroundColor: data.darkTheme ? '#456' : '#fff',
-        padding: 10,
-        textStyle: {
-          color: data.darkTheme ? '#ccc' : '#456'
-        },
-        formatter: function (params) {//修改鼠标划过显示为中文
-          //console.log("params",params)
-          const volum = params[5].data;//ma5的值
-          const ma5 = params[1].data;//ma5的值
-          const ma10 = params[2].data;//ma10的值
-          const ma20 = params[3].data;//ma20的值
-          const ma30 = params[4].data;//ma30的值
-          params = params[0];//开盘收盘最低最高数据汇总
-          const currentItemData = params.data;
-
-          return params.name + '<br>' +
-              '开盘:' + currentItemData[1] + '<br>' +
-              '收盘:' + currentItemData[2] + '<br>' +
-              '最低:' + currentItemData[3] + '<br>' +
-              '最高:' + currentItemData[4] + '<br>' +
-              '成交量(万手):' + volum[1] + '<br>' +
-              'MA5日均线:' + ma5 + '<br>' +
-              'MA10日均线:' + ma10 + '<br>' +
-              'MA20日均线:' + ma20 + '<br>' +
-              'MA30日均线:' + ma30
-        }
-        // position: function (pos, params, el, elRect, size) {
-        //   const obj = {
-        //     top: 10
-        //   };
-        //   obj[['left', 'right'][+(pos[0] < size.viewSize[0] / 2)]] = 30;
-        //   return obj;
-        // }
-        // extraCssText: 'width: 170px'
-      },
-      axisPointer: {
-        link: [
-          {
-            xAxisIndex: 'all'
-          }
-        ],
-        label: {
-          backgroundColor: '#888'
-        }
-      },
-      visualMap: {
-        show: false,
-        seriesIndex: 5,
-        dimension: 2,
-        pieces: [
-          {
-            value: -1,
-            color: downColor
-          },
-          {
-            value: 1,
-            color: upColor
-          }
-        ]
-      },
-      grid: [
-        {
-          left: '10%',
-          right: '8%',
-          height: '50%',
-        },
-        {
-          left: '10%',
-          right: '8%',
-          top: '63%',
-          height: '16%'
-        }
-      ],
-      xAxis: [
-        {
-          type: 'category',
-          data: categoryData,
-          boundaryGap: false,
-          axisLine: {onZero: false},
-          splitLine: {show: false},
-          min: 'dataMin',
-          max: 'dataMax',
-          axisPointer: {
-            z: 100
-          }
-        },
-        {
-          type: 'category',
-          gridIndex: 1,
-          data: categoryData,
-          boundaryGap: false,
-          axisLine: {onZero: false},
-          axisTick: {show: false},
-          splitLine: {show: false},
-          axisLabel: {show: false},
-          min: 'dataMin',
-          max: 'dataMax'
-        }
-      ],
-      yAxis: [
-        {
-          scale: true,
-          splitArea: {
-            show: true
-          }
-        },
-        {
-          scale: true,
-          gridIndex: 1,
-          splitNumber: 2,
-          axisLabel: {show: false},
-          axisLine: {show: false},
-          axisTick: {show: false},
-          splitLine: {show: false}
-        }
-      ],
-      dataZoom: [
-        {
-          type: 'inside',
-          xAxisIndex: [0, 1],
-          start: 86,
-          end: 100
-        },
-        {
-          show: true,
-          xAxisIndex: [0, 1],
-          type: 'slider',
-          top: '85%',
-          start: 86,
-          end: 100
-        }
-      ],
-
-      series: [
-        {
-          name: '日K',
-          type: 'candlestick',
-          data: values,
-          itemStyle: {
-            color: upColor,
-            color0: downColor,
-            // borderColor: upBorderColor,
-            // borderColor0: downBorderColor
-          },
-          markPoint: {
-            label: {
-              formatter: function (param) {
-                return param != null ? param.value + '' : '';
-              }
-            },
-            data: [
-              {
-                name: '最高',
-                type: 'max',
-                valueDim: 'highest'
-              },
-              {
-                name: '最低',
-                type: 'min',
-                valueDim: 'lowest'
-              },
-              {
-                name: '平均收盘价',
-                type: 'average',
-                valueDim: 'close'
-              }
-            ],
-            tooltip: {
-              formatter: function (param) {
-                return param.name + '<br>' + (param.data.coord || '');
-              }
-            }
-          },
-          markLine: {
-            symbol: ['none', 'none'],
-            data: [
-              [
-                {
-                  name: 'from lowest to highest',
-                  type: 'min',
-                  valueDim: 'lowest',
-                  symbol: 'circle',
-                  symbolSize: 10,
-                  label: {
-                    show: false
-                  },
-                  emphasis: {
-                    label: {
-                      show: false
-                    }
-                  }
-                },
-                {
-                  type: 'max',
-                  valueDim: 'highest',
-                  symbol: 'circle',
-                  symbolSize: 10,
-                  label: {
-                    show: false
-                  },
-                  emphasis: {
-                    label: {
-                      show: false
-                    }
-                  }
-                }
-              ],
-              {
-                name: 'min line on close',
-                type: 'min',
-                valueDim: 'close'
-              },
-              {
-                name: 'max line on close',
-                type: 'max',
-                valueDim: 'close'
-              }
-            ]
-          }
-        },
-        {
-          name: 'MA5',
-          type: 'line',
-          data: calculateMA(5, values),
-          smooth: true,
-          showSymbol: false,
-          lineStyle: {
-            opacity: 0.6
-          }
-        },
-        {
-          name: 'MA10',
-          type: 'line',
-          data: calculateMA(10, values),
-          smooth: true,
-          showSymbol: false,
-          lineStyle: {
-            opacity: 0.6
-          }
-        },
-        {
-          name: 'MA20',
-          type: 'line',
-          data: calculateMA(20, values),
-          smooth: true,
-          showSymbol: false,
-          lineStyle: {
-            opacity: 0.6
-          }
-        },
-        {
-          name: 'MA30',
-          type: 'line',
-          data: calculateMA(30, values),
-          smooth: true,
-          showSymbol: false,
-          lineStyle: {
-            opacity: 0.6
-          }
-        },
-        {
-          name: '成交量(手)',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          itemStyle: {
-            color: '#7fbe9e'
-          },
-          data: volumns
-        }
-      ]
-    };
-    chart.setOption(option);
-    chart.on('click', {seriesName: '日K'}, function (_params) {
-      //console.log("click:",params);
-    });
-  })
-}
 
 function showMoney(code, name) {
   data.code = code
@@ -1739,64 +948,6 @@ function handleDiagnoseStock(code, name) {
   showDiagnosis.value = true
 }
 
-function triggerAiWatchlistScreening() {
-  const currentGroupObj = groupList.value.find(g => g.ID === currentGroupId.value)
-  const groupTitle = currentGroupId.value === 0 ? '全部自选股' : (currentGroupObj ? currentGroupObj.name : '当前分组')
-  const targetResults = currentGroupId.value === 0 ? sortedResults.value : groupResults.value
-  const targetList = Object.values(targetResults || {})
-
-  if (!targetList.length) {
-    message.warning('当前自选分组无标的，请先添加自选股')
-    return
-  }
-
-  const holdings = []
-  const watchlist = []
-
-  for (const item of targetList) {
-    const code = item['股票代码'] || ''
-    const name = item['股票名称'] || ''
-    const price = item['当前价格'] || item['上次当前价格'] || '-'
-    const change = item.changePercent !== undefined ? (item.changePercent >= 0 ? `+${item.changePercent}%` : `${item.changePercent}%`) : '-'
-    const cost = Number(item.costPrice || 0)
-    const volume = Number(item.costVolume || 0)
-    const profitRate = item.profitRate !== undefined ? Number(item.profitRate) : 0
-
-    if (volume > 0 && cost > 0) {
-      const profitStr = profitRate >= 0 ? `+${profitRate.toFixed(2)}%` : `${profitRate.toFixed(2)}%`
-      holdings.push(`${name}(${code}): 现价${price}元, 涨幅${change}, 持仓成本${cost.toFixed(2)}元(${profitStr})`)
-    } else {
-      watchlist.push(`${name}(${code}): 现价${price}元, 涨幅${change}`)
-    }
-  }
-
-  const summary = []
-  if (holdings.length > 0) {
-    summary.push(`【真实持仓 (${holdings.length}只)】:\n` + holdings.slice(0, 50).join(';\n'))
-  }
-  if (watchlist.length > 0) {
-    summary.push(`【自选观察池 (${watchlist.length}只)】:\n` + watchlist.slice(0, 50).join(';\n'))
-  }
-
-  const prompt = `【盘前持仓风控扫描与防守边界审计】
-自选分组：${groupTitle}（共 ${targetList.length} 只标的）
-标的与持仓详情：
-${summary.join('\n\n')}
-
-请以买方投资总监与风控合规视角，对上述自选与持仓标的进行盘前多维度持仓风控扫描并给出今日实操防守策略（250字以内）：
-1. 【持仓与自选风险分级清单】：
-   - 🟢【多头企稳/进攻跟踪】：具备多头均线排列、主线共振、或持仓浮盈具备防守垫的标的；
-   - 🟡【均线压制/防守观望】：运行在MA20均线下方、逼近上方阻力位、或缩量滞涨的标的；
-   - 🔴【破位预警/果断止损】：有效跌破关键趋势支撑、浮亏扩大或存在解禁商誉风险的标的；
-2. 【今日盘中盯盘主线与红线】：今日操作重点聚焦哪只标的？绝对禁止逆势冲动追高哪只？`
-
-  consultAgent({
-    question: prompt,
-    mode: 'plan_execute',
-    autoSend: true,
-  })
-  message.success(`已发起 [${groupTitle}] 盘前持仓风控扫描！`)
-}
 
 async function showLightweightKline(code, name) {
   const em = toEastMoneyCode(code)
@@ -1861,120 +1012,8 @@ function showK(code, name) {
 }
 
 
-function updateCostPriceAndVolumeNew(code, price, volume, alarm, formModel) {
-  if (formModel.sort) {
-    SetStockSort(formModel.sort, code).then(_result => {
-      //message.success(result)
-    })
-  }
-  if (formModel.cron) {
-    SetStockAICron(formModel.cron, code).then(_result => {
-      //message.success(result)
-    })
-  }
 
-  if (alarm || formModel.alarmPrice) {
-    SetAlarmChangePercent(alarm, formModel.alarmPrice, code).then(_result => {
-      //message.success(result)
-    })
-  }
-  
-  // 保存交易价格（开仓价、止盈价、止损价、成本价）
-  if (formModel.entryPrice || formModel.takeProfitPrice || formModel.stopLossPrice || formModel.costPrice) {
-    SetTradingPrice(code, formModel.entryPrice || 0, formModel.takeProfitPrice || 0, formModel.stopLossPrice || 0, formModel.costPrice || 0).then(_result => {
-      //message.success(result)
-    })
-  }
-  
-  SetCostPriceAndVolume(code, price, volume).then(result => {
-    modalShow.value = false
-    message.success(result)
-    GetFollowList(currentGroupId.value).then(result => {
-      followList.value = result
-      stocks.value = []
-      for (const followedStock of result) {
-        if (!stocks.value.includes(followedStock.StockCode)) {
-          stocks.value.push(followedStock.StockCode)
-        }
-      }
-      monitor()
-      message.destroyAll()
-    })
-  })
-}
 
-const priceLineAlertCache = new Map()
-
-function checkPriceLineAlerts(result) {
-  const code = result["股票代码"]
-  const price = result["当前价格"]
-  if (!price || price <= 0) return
-
-  const followedStock = followList.value.find(s => {
-    const sCode = s.StockCode || ''
-    return sCode === code || sCode === 'sh' + code || sCode === 'sz' + code ||
-           sCode === code.replace('sh', '').replace('sz', '') ||
-           (sCode.length > 2 && code.length > 2 && sCode.includes(code.slice(2)))
-  })
-
-  if (!followedStock) return
-
-  const alerts = []
-  let triggeredType = 0
-  if (followedStock.EntryPrice > 0) {
-    const diff = ((price - followedStock.EntryPrice) / followedStock.EntryPrice * 100).toFixed(2)
-    alerts.push(`开仓价: ${followedStock.EntryPrice} (${diff >= 0 ? '+' : ''}${diff}%)`)
-  }
-  if (followedStock.TakeProfitPrice > 0) {
-    if (price >= followedStock.TakeProfitPrice) {
-      alerts.push(`止盈价: ${followedStock.TakeProfitPrice} ⚠️ 已触及`)
-      triggeredType = 4
-    } else {
-      const diff = ((followedStock.TakeProfitPrice - price) / followedStock.TakeProfitPrice * 100).toFixed(2)
-      alerts.push(`止盈价: ${followedStock.TakeProfitPrice} (距离 ${diff}%)`)
-    }
-  }
-  if (followedStock.StopLossPrice > 0) {
-    if (price <= followedStock.StopLossPrice) {
-      alerts.push(`止损价: ${followedStock.StopLossPrice} ⚠️ 已触及`)
-      triggeredType = 5
-    } else {
-      const diff = ((price - followedStock.StopLossPrice) / followedStock.StopLossPrice * 100).toFixed(2)
-      alerts.push(`止损价: ${followedStock.StopLossPrice} (+${diff}%)`)
-    }
-  }
-
-  if (alerts.length === 0) return
-
-  const cacheKey = `${code}_${price}`
-  if (priceLineAlertCache.get(cacheKey)) return
-
-  const notifyKey = `${code}_notify`
-  const lastNotify = priceLineAlertCache.get(notifyKey) || 0
-  const now = Date.now()
-  if (now - lastNotify < 60000) return
-
-  priceLineAlertCache.set(cacheKey, true)
-  priceLineAlertCache.set(notifyKey, now)
-
-  const stockName = followedStock.Name || followedStock.StockName || result["股票名称"] || code
-  const stockCodeDisplay = code.length > 6 ? code : code.toUpperCase()
-
-  // notify.info({
-  //   avatar: () => h(NAvatar, { size: 'small', round: false, src: icon.value }),
-  //   title: `📈 ${stockName} (${stockCodeDisplay})`,
-  //   duration: 5000,
-  //   meta: `当前价: ${price}`,
-  //   content: () => h('div', { style: { 'text-align': 'left', 'font-size': '13px' } },
-  //     alerts.map(a => h('div', { style: { 'margin-bottom': '4px' } }, a))
-  //   ),
-  // })
-
-  if (triggeredType > 0) {
-    const msg = `### 📈 价位线预警\n\n### ${stockName} (${stockCodeDisplay})\n\n- 当前价格: ${price}\n- 预警类型: ${triggeredType === 4 ? '止盈触及' : '止损触及'}\n- 开仓价: ${followedStock.EntryPrice || '-'}\n- 止盈价: ${followedStock.TakeProfitPrice || '-'}\n- 止损价: ${followedStock.StopLossPrice || '-'}`;
-    SendDingDingMessageByType(msg, code, triggeredType)
-  }
-}
 
 // 呼叫全屏 Agent 带着当前个股与买方认知档案进行深度量化推演
 function callAgentForDeepStockAnalysis(stockName: string, stockCode: string) {
@@ -1998,99 +1037,7 @@ function callAgentForDeepStockAnalysis(stockName: string, stockCode: string) {
   })
 }
 
-function aiReCheckStock(stock, stockCode) {
-  if (data.loading) {
-    message.warning("AI分析正在进行中，请稍候")
-    return
-  }
-  if (!aiConfigStore.activeConfigId) {
-    message.error("请先选择AI模型配置")
-    return
-  }
-  // 清除之前的超时定时器
-  if (aiAnalysisTimeout.value) {
-    clearTimeout(aiAnalysisTimeout.value)
-    aiAnalysisTimeout.value = null
-  }
-  data.modelName = ""
-  data.airesult = ""
-  data.time = ""
-  data.name = stock
-  data.code = stockCode
-  data.loading = true
-  modalShow4.value = true
-  fetchActiveThesis(stockCode)
-  data.analysisStatus = "正在连接AI服务..."
-  data.analysisAborted = false
-  message.loading("ai检测中...", {
-    duration: 0,
-  })
-  //
 
-  //message.info("sysPromptId:"+data.sysPromptId)
-  NewChatStream(stock, stockCode, data.question, aiConfigStore.activeConfigId, data.sysPromptId, enableTools.value,thinkingMode.value)
-    .catch(err => {
-      if (data.analysisAborted) return
-      data.loading = false
-      data.analysisStatus = ""
-      message.destroyAll()
-      const errMsg = err?.message || err || "未知错误"
-      message.error("AI分析请求失败: " + errMsg)
-      data.airesult = "❌ AI分析请求失败: " + errMsg
-    })
-
-  // 设置超时兜底（5分钟）
-  aiAnalysisTimeout.value = setTimeout(() => {
-    if (data.loading) {
-      data.loading = false
-      data.analysisStatus = ""
-      data.analysisAborted = true
-      message.destroyAll()
-      message.error("AI分析超时，请检查网络连接或AI服务配置")
-      if (!data.airesult) {
-        data.airesult = "❌ AI分析超时，请检查网络连接或AI服务配置是否正确。"
-      }
-    }
-    aiAnalysisTimeout.value = null
-  }, 5 * 60 * 1000)
-}
-
-function aiCheckStock(stock, stockCode) {
-  fetchActiveThesis(stockCode)
-  GetAIResponseResult(stockCode).then(result => {
-    if (result.content) {
-      data.modelName = result.modelName
-      data.chatId = result.chatId
-      data.question = result.question
-      data.name = stock
-      data.code = stockCode
-      data.loading = false
-      modalShow4.value = true
-      data.airesult = result.content
-      const date = new Date(result.CreatedAt);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      const seconds = String(date.getSeconds()).padStart(2, '0');
-      data.time = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
-    } else {
-      data.modelName = ""
-      data.question = ""
-      data.airesult = ""
-      data.time = ""
-      data.name = stock
-      data.code = stockCode
-      data.loading = false
-      modalShow4.value = true
-      // message.loading("ai检测中...", {
-      //   duration: 0,
-      // })
-      // NewChatStream(stock, stockCode, "", data.sysPromptId)
-    }
-  })
-}
 
 window.onerror = function (msg, source, lineno, colno, error) {
   if (typeof msg === 'string' && msg.includes('ResizeObserver')) return true
@@ -2111,78 +1058,6 @@ window.onerror = function (msg, source, lineno, colno, error) {
   return true;
 };
 
-function saveAsImage(name, code) {
-  const previewEl = mdPreviewRef.value?.$el || mdEditorRef.value?.$el
-  const element = previewEl?.querySelector('.md-editor-preview-wrapper') ||
-                  previewEl?.querySelector('.md-editor-preview') ||
-                  document.querySelector('.md-editor-preview')
-  if (!element) {
-    message.error('无法找到分析结果元素')
-    return
-  }
-  const savedStyles = []
-  let el = element.parentElement
-  while (el && el !== document.body) {
-    const style = getComputedStyle(el)
-    if (style.overflow === 'hidden' || style.overflowY === 'hidden' || style.overflowY === 'auto' || style.overflowY === 'scroll') {
-      savedStyles.push({ el, overflow: el.style.overflow, overflowY: el.style.overflowY, height: el.style.height, maxHeight: el.style.maxHeight })
-      el.style.overflow = 'visible'
-      el.style.overflowY = 'visible'
-      el.style.height = 'auto'
-      el.style.maxHeight = 'none'
-    }
-    el = el.parentElement
-  }
-  const savedTargetStyle = { height: element.style.height, maxHeight: element.style.maxHeight, overflow: element.style.overflow, overflowY: element.style.overflowY }
-  element.style.height = 'auto'
-  element.style.maxHeight = 'none'
-  element.style.overflow = 'visible'
-  element.style.overflowY = 'visible'
-  nextTick(async () => {
-    const isDark = document.documentElement.getAttribute('theme-mode') === 'dark'
-    try {
-      const html2canvasModule = await import('html2canvas')
-      const html2canvas = html2canvasModule.default || html2canvasModule
-      const canvas = await html2canvas(element, {
-        useCORS: true,
-        scale: 2,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: isDark ? '#1e1e1e' : '#ffffff'
-      })
-      element.style.height = savedTargetStyle.height
-      element.style.maxHeight = savedTargetStyle.maxHeight
-      element.style.overflow = savedTargetStyle.overflow
-      element.style.overflowY = savedTargetStyle.overflowY
-      savedStyles.forEach(({ el, overflow, overflowY, height, maxHeight }) => {
-        el.style.overflow = overflow
-        el.style.overflowY = overflowY
-        el.style.height = height
-        el.style.maxHeight = maxHeight
-      })
-      const dataUrl = canvas.toDataURL('image/png')
-      const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
-      const result = await SaveImage(name + '[' + code + ']AI分析', base64)
-      if (result && !result.includes('异常') && !result.includes('无法')) {
-        message.success('已导出为 PNG 图片：' + result)
-      } else {
-        message.info(result || '导出取消')
-      }
-    } catch (e) {
-      element.style.height = savedTargetStyle.height
-      element.style.maxHeight = savedTargetStyle.maxHeight
-      element.style.overflow = savedTargetStyle.overflow
-      element.style.overflowY = savedTargetStyle.overflowY
-      savedStyles.forEach(({ el, overflow, overflowY, height, maxHeight }) => {
-        el.style.overflow = overflow
-        el.style.overflowY = overflowY
-        el.style.height = height
-        el.style.maxHeight = maxHeight
-      })
-      message.error('导出图片失败: ' + (e?.message ?? e))
-    }
-  })
-}
 
 async function copyToClipboard() {
   try {
@@ -2204,94 +1079,9 @@ function scrollToAiResultBottom() {
   })
 }
 
-function saveAsMarkdown() {
-  SaveAsMarkdown(data.code, data.name).then(result => {
-    if (!result || result === '取消保存') {
-      message.info(result || '已取消保存')
-      return
-    }
-    if (result.startsWith('保存失败') || result.startsWith('分析结果异常')) {
-      message.error(result)
-      return
-    }
-    if (result.startsWith('已保存至：')) {
-      message.success(result)
-      return
-    }
-    // Web 模式下后端返回 Markdown 正文，触发浏览器下载
-    const blob = new Blob([result], { type: 'text/markdown;charset=utf-8' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `${data.name || '个股'}[${data.code || ''}]-AI分析结果.md`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(link.href)
-    message.success('已导出为 Markdown 文件并开始下载')
-  }).catch(err => {
-    message.error('导出 Markdown 失败: ' + (err?.message || err))
-  })
-}
 
-function getHtml(ref) {
-  if (ref.value) {
-    // 获取 MdPreview 组件的根元素
-    const rootElement = ref.value.$el;
-    // 获取 HTML 内容
-    return rootElement.innerHTML;
-  } else {
-    console.error('mdPreviewRef is not yet available');
-    return "";
-  }
-}
 
 // 导出文档
-async function saveAsWord() {
-  // 将富文本内容拼接为一个完整的html
-  const html = getHtml(mdPreviewRef)
-  const tipsHtml = getHtml(tipsRef)
-  const value = `
-         ${html}
-         <hr>
-         <div style="font-size: 12px;color: red">
-         ${tipsHtml}
-          </div>
-<br>
-本报告由Blades Stock项目生成：
-<p>
-<a href="https://github.com/huch16/blades-stock">
-AI赋能股票分析：自选股行情获取，成本盈亏展示，涨跌报警推送，市场整体/个股情绪分析，K线技术指标分析等。数据全部保留在本地。支持DeepSeek，OpenAI， Ollama，LMStudio，AnythingLLM，硅基流动，火山方舟，阿里云百炼等平台或模型。
-</a></p>
-`
-  // landscape就是横着的，portrait是竖着的，默认是竖屏portrait。
-  const { asBlob } = await import('html-docx-js-typescript')
-  const blob = await asBlob(value, {orientation: 'portrait'})
-  const {platform} = await Environment()
-  // 修复（no-case-declarations）：case 分支内使用 const/let 必须包块，
-  // 否则词法声明会提升到整个 switch 作用域，既易与相邻 case 重名冲突，
-  // 也会在严格模式下抛出 ReferenceError（TDZ）。
-  switch (platform) {
-    case 'windows': {
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `${data.name}[${data.code}]-ai-analysis-result.docx`;
-      a.click()
-      // 下载后将标签移除
-      URL.revokeObjectURL(a.href);
-      a.remove()
-      break
-    }
-    default: {
-      const arrayBuffer = await blob.arrayBuffer()
-      const uint8Array = new Uint8Array(arrayBuffer)
-      const binary = uint8Array.reduce((data, byte) => data + String.fromCharCode(byte), '')
-      const base64 = btoa(binary)
-      await SaveWordFile(`${data.name}[${data.code}]-ai-analysis-result.docx`, base64).then(result => {
-        message.success(result)
-      })
-    }
-  }
-}
 
 const addTabModel = ref({
   name: '',
@@ -2468,46 +1258,38 @@ watch(modalShow6, (newVal) => {
     </template>
 
     <n-tab-pane closable name="0" :tab="'全部'">
-      <n-grid :x-gap="8" cols="1 s:1 m:2 l:3 xl:3" responsive="screen" :y-gap="8">
-        <n-gi :id="result['股票代码']+'_gi'" v-for="result in sortedResults" :key="result.key" style="margin-left: 2px;">
-          <StockCard :result="result" :open-ai-enable="data.openAiEnable" :group-list="groupList"
-            :thesis="thesesMap[result['股票代码']] || thesesMap[result.key] || thesesMap[result.StockCode]"
-            @remove-monitor="removeMonitor"
-            @ai-check-stock="aiCheckStock"
-            @set-cost="setStock"
-            @show-fenshi="showFenshi"
-            @show-k="showK"
-            @show-money="showMoney"
-            @search-detail="search"
-            @search-notice="searchNotice"
-            @search-stock-report="searchStockReport"
-            @add-stock-group="AddStockGroupInfo"
-            @del-stock-group="delStockGroup"
-            @show-lightweight-kline="showLightweightKline"
-            @diagnose-stock="handleDiagnoseStock" />
-        </n-gi>
-      </n-grid>
+    <FollowedStockGrid :results="sortedResults" :open-ai-enable="data.openAiEnable" :group-list="groupList" :theses-map="thesesMap"
+      @remove-monitor="removeMonitor"
+      @ai-check-stock="aiCheckStock"
+      @set-cost="setStock"
+      @show-fenshi="showFenshi"
+      @show-k="showK"
+      @show-money="showMoney"
+      @search-detail="search"
+      @search-notice="searchNotice"
+      @search-stock-report="searchStockReport"
+      @add-stock-group="AddStockGroupInfo"
+      @del-stock-group="delStockGroup"
+      @show-lightweight-kline="showLightweightKline"
+      @diagnose-stock="handleDiagnoseStock" />
+    />
     </n-tab-pane>
     <n-tab-pane closable v-for="group in groupList" :key="'group-' + group.ID" :group-id="group.ID" :name="String(group.ID)" :tab="group.name">
-      <n-grid :x-gap="8" cols="1 s:1 m:2 l:3 xl:3" responsive="screen" :y-gap="8">
-        <n-gi :id="result['股票代码']+'_gi'" v-for="result in groupResults" :key="result.key" style="margin-left: 2px;">
-          <StockCard :result="result" :show-spark-line="true" :group-id="group.ID" :open-ai-enable="data.openAiEnable" :group-list="groupList"
-            :thesis="thesesMap[result['股票代码']] || thesesMap[result.key] || thesesMap[result.StockCode]"
-            @remove-monitor="removeMonitor"
-            @ai-check-stock="aiCheckStock"
-            @set-cost="setStock"
-            @show-fenshi="showFenshi"
-            @show-k="showK"
-            @show-money="showMoney"
-            @search-detail="search"
-            @search-notice="searchNotice"
-            @search-stock-report="searchStockReport"
-            @add-stock-group="AddStockGroupInfo"
-            @del-stock-group="delStockGroup"
-            @show-lightweight-kline="showLightweightKline"
-            @diagnose-stock="handleDiagnoseStock" />
-        </n-gi>
-      </n-grid>
+    <FollowedStockGrid :results="groupResults" :show-spark-line="true" :group-id="group.ID" :open-ai-enable="data.openAiEnable" :group-list="groupList" :theses-map="thesesMap"
+      @remove-monitor="removeMonitor"
+      @ai-check-stock="aiCheckStock"
+      @set-cost="setStock"
+      @show-fenshi="showFenshi"
+      @show-k="showK"
+      @show-money="showMoney"
+      @search-detail="search"
+      @search-notice="searchNotice"
+      @search-stock-report="searchStockReport"
+      @add-stock-group="AddStockGroupInfo"
+      @del-stock-group="delStockGroup"
+      @show-lightweight-kline="showLightweightKline"
+      @diagnose-stock="handleDiagnoseStock" />
+    />
     </n-tab-pane>
   </n-tabs>
 

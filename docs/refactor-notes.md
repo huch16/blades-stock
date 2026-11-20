@@ -300,3 +300,24 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 数量对照（脚本断言，全部通过）：49 个 flag 在 composable 内的 `flags.<key>` 引用次数与原 `showXxx.value` 次数逐项一致；模板 49 个 label、5 个分组标题、5 组标题样式逐字在 registry 中；NTooltip 49 → 1（v-for），NButton 55 → 7；`ind` 只在被搬代码与 dispose 重置块中使用（另 2 处为 `longLineByKind` 的误匹配）；60 个 calc 导入全部随指标代码搬走，组件侧 0 残留。
 - 注意：原文件 script 内有两处 mid-script import（281 行 `indicatorTips`、351 行 `calcChipDistribution`），提取时已剥离归位（前者回组件顶部供模板使用，后者归 chip composable）；提取脚本见 `/tmp/r22a_extract.py`（stage1～stage4），原文件备份见 `/tmp/r22a_backup.vue`。
 - 验证：`npx eslint` 5 个文件 0 errors、0 warnings；全量 `npm run lint` 0 errors、158 warnings（与基线一致，未增加）；`npm run build` 退出 0（1m22s），`StockLightweightKlineChart` chunk 120.84 kB（gzip 37.46 kB），`vendor-echarts` 706.14 kB；构建产物 grep 确认 `lw-kline`、`筹码`、`STrend`、`TRIX斜率`、`信号比`、`均幅`、`lw-kline-signal-summary`、`lw-kline-sidebar__section` 等关键标识均在。改前 chunk 对照（HEAD~1 原文件临时回退构建，构建后已恢复提交状态）：`StockLightweightKlineChart` chunk 134.95 kB（gzip 38.10）→ 120.84 kB（gzip 37.46），缩小 14.11 kB（模板 v-for 去重所致）；`vendor-echarts` 706.14 kB、`vendor-naive` 1,268.00 kB、`vendor-markdown` 1,204.17 kB 及两个 index chunk 与改前逐字节一致，无异常膨胀。
+
+### R-22b 拆 stock.vue（2,970 行 → 1,752 行）—— 已完成
+
+- 拆分结果（原文件 2,970 行 → 1,752 行：template/style 基本不变，script 大幅缩减）：
+  - `src/composables/useStockTabs.ts`（153 行）：拖拽标签系统（drag refs + 9 个拖拽处理函数 + init/cleanup）；外部依赖仅 `groupList`/`message`。
+  - `src/composables/useStockEcharts.ts`（600 行）：分时/日 K 的 ECharts 绘制（`showFsChart` 227 行、`handleKLine` 325 行、`calculateMA`、颜色常量 `upColor`/`downColor`、`handleFeishi`/`clearFeishi`）；`feishiInterval` 的声明仍在组件（`onBeforeUnmount` 里也要清它），作 ctx ref 传入。
+  - `src/composables/useStockAi.ts`（353 行）：AI 分析与报告导出（`triggerAiWatchlistScreening`、`aiCheckStock`/`aiReCheckStock`、`fetchActiveThesis`、`saveAsImage`/`saveAsMarkdown`/`saveAsWord`/`getHtml`）；`theme` 不需要（`saveAsImage` 读的是 `document.documentElement` 的 `theme-mode` 属性，旧分析把字符串里的 `theme` 误算为引用）。
+  - `src/composables/useStockAlerts.ts`（189 行）：成本/报警（`priceLineAlertCache`、`checkPriceLineAlerts`、`updateCostPriceAndVolumeNew`、`saveTradingPriceToBackend`、`setStock`）；`monitor`/`fromEastMoneyCode` 作 ctx 函数传入（函数声明可提升）。
+  - `src/components/FollowedStockGrid.vue`（24 行）：两 pane 的 StockCard 网格抽为子组件（`results`/`showSparkLine`/`groupId`/`openAiEnable`/`groupList`/`thesesMap` 六个 props，13 个 StockCard 事件用 `v-on="$attrs"` + `inheritAttrs: false` 转发；grid 属性与 `:thesis` 表达式按原文件逐字保留）；`frontend/components.d.ts` 由构建自动补注册一行。
+  - 组件只留 4 个 composable 调用（252–255 行，紧接 `groupResults` 计算属性之后插入——全部 ctx 输入至此均已声明，`monitor`/`fromEastMoneyCode` 为提升的函数声明）：15 个函数被解构使用；`showFsChart` 只被 composable 内部的 `handleFeishi` 调用，组件不解构。
+- 关键纠正（执行中发现，旧分析/方案前提有出入）：
+  - 按首行正则算 span 会虚增：`handleTabDragEnd` 实际仅 13 行（非 181 行），`priceLineAlertCache` 仅为 `const … = new Map()` 一行；全部跨度改用花括号匹配重算，存入 `/tmp/r22b_spans.json`。
+  - 提取脚本的依赖分析 bug：参数名全局遮蔽——`updateCostPriceAndVolumeNew` 的 `formModel` 参数曾遮蔽 `setStock` 用的顶层 `formModel` ref，导致 alerts composable 漏传 ctx；已改为“全局去重（任意 span 内定义即内部）+ 参数/局部仅遮蔽本函数”，重生成后其余 3 个 composable 字节一致，仅 alerts 补一行 `const formModel = ctx.formModel`。
+  - `consultAgent` 仍需留在组件：保留函数 `callAgentForDeepStockAnalysis`（1991 行）也调用它，import 不删；`echarts` 命名空间 import 同理保留（681/684 行的保留清理函数仍用 `echarts.getInstanceByDom`）。
+  - import 使用分析必须排除原 import 块本身（R-22a 的教训，初版误把 15 个已搬走的 wailsjs 函数算成“仍在使用”）；模板扫描不能用代码扫描器（会把属性值当字符串剥掉），改用正则取标识符，并剥离 HTML 注释（1458 行注释提到 `showFsChart`，曾误判为组件仍用它）。
+  - 导入路径：组件在 `src/components/`，composable 在 `src/composables/`，须用 `../composables/…`（初版 `./composables/…` 导致 Vite 无法解析，构建失败一次）。
+  - 唯一非逐字搬运处：`checkPriceLineAlerts` 内 9 行已停用的 `notify.info` 注释代码——构建前检查 `scripts/check_vue_imports.js` 不豁免注释，会把其中的 `h(NAvatar, …)` 误判为未导入渲染标识符而拦截构建（而 eslint 又不允许为注释导入 `NAvatar`）；已改为两行文字说明（原注释代码删除，行为零变化，信息保留）。连同说明文字里又出现 `h(NAvatar` 字样导致二次拦截的教训一并记录。
+  - 子组件 props 初版用 TS `any` 类型引入 3 处新增 lint 警告，已改为与 StockCard 同款运行时 props 写法消除。
+- 数量对照（脚本断言，全部通过）：两 pane 除 `sortedResults`/`groupResults`、`show-spark-line`/`group-id` 三处外逐字相同；被搬函数名在新文件中的残留为零（已解构的除外）；wailsjs App import 35 → 20（15 个已搬走的函数随 composable 走）；`StockCard`/`consultAgent`/`echarts` 的去留均按实测保留/删除。
+- 验证：`npx eslint` 6 个文件 0 errors；全量 `npm run lint` 0 errors、158 warnings（与基线一致，未增加）；`npm run build` 退出 0（1m17s），三项 prebuild 检查均通过；`stock.vue` 打进 `index-*.js`（195,838 B），构建产物 grep 确认 `开始AI分析`、`全部`、`分时`、`价位线`、`认知档案`、`盘前`、`AI分析报告`、`持仓`、`自选`、`StockCard`、`_gi` 等关键标识均在（`轻量K线` 0 命中属正常：该词只出现在源码注释中，注释不进产物）；`StockLightweightKlineChart` chunk 120.84 kB 与 R-22a 后一致。Go 侧无改动（本步纯前端），未跑 Go 验证。
+- 提取脚本见 `/tmp/r22b_extract.py`（stageA～stageF：A tabs、B echarts、C AI、D alerts、E 子组件、F stock.vue 重写）。
