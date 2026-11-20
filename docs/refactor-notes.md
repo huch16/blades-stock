@@ -152,3 +152,24 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - `isTradingTime`（cron 版）：`backend/agent/cron_task_api.go:500` 只判断周末 + 时段，节假日会误判为交易时间 → 改名 `isTradingTimeNow`，并复用交易日历 `data.IsTradingDay`（`backend/data/trading_day.go:122`，AData/Baostock 交易日历；缓存未初始化时降级为周末判断，与旧逻辑一致；`InitTradingCalendar` 在 `main.go:144` 与 `app.go:122` 启动时已调用）。冗余的周末判断块随之删除（`IsTradingDay` 两分支均已覆盖周末）。调用点 1 处（`executeStockChangeSave`，`:402`）同步改名。根包 `app.go:691` 的 `isTradingTime(date time.Time)`（带 timor.tech 交易日历）语义不同、不重名冲突，保留不动。**行为变化（方案已明示）：法定节假日的交易时段内，`executeStockChangeSave` 从“误判为交易时间而执行”变为“正确跳过”。**
 - `AutoMigrate` 清单收敛（以 `services.AutoMigrateAll()` 为准）：脚本逐项对照三份清单——`main.AutoMigrate()` 39 个模型（去重后）**全部**在 `services.AutoMigrateAll()` 的 50 个直接迁移项内（`main ⊆ services-direct`，差集为空）；`db.AutoMigrate()`（`chat_memory.go:106`，11 项固定 + `AutoMigrateList` 注册的 `ToolRank`、`KnowledgeCrystal`、`AgentMemory`、`AgentSession`、`AgentTrace`）在桌面与 server 两条路径上均经 `db.Init`（`backend/db/db.go:86,97`）先行执行，与 `services.AutoMigrateAll()` 内 `:91` 的 `db.AutoMigrate()` 调用是同一份清单。唯一实际去重：`main.go` 内 `data.FollowedStock` 出现 2 次（`:319` 与 `:328`），删除第 2 次（`AutoMigrate` 本就幂等，纯去重）。收敛后 main 清单 39 项 / 39 唯一；三路合计去重后 58 个模型。删除与调用点迁移留待 R-21（本步只做清单收敛 + 证据留存）。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration -count=1` data、quant、agent、agent/tools、services、db、根包 7 个包全过。
+
+### R-16 拆 data_tools_wrapper.go（4,214 行 → 9 个域文件 + 聚合文件）—— 已完成
+
+- 拆分前实测与方案出入（均已核对并记录）：
+  - 文件实际 4,214 行（方案 4,273 行为 `75450ae` 基线行号，后续步骤已移动行号）；以工具名分段为准拆分，不按旧行号。
+  - 方案验收口径“`grep -c 'NewDataToolWrapper('` 各域之和 = 81”实为旧文件单文件计数，其中含 **1 处定义 + 2 处注释掉的死注册**（`WebSearch`、`SearchParams`，原 `:2484`、`:2514`，共 68 行注释）；活注册 append 只有 **78 处**（77 个单工具 + 1 处 F10 动态循环注册 10 个工具）。拆分后活 append 78 处 + 定义 1 处 = 79，全包计数 112 → 110（恰好减去 2 处已删注释注册）。真正的工具数以 `TestGetAllDataTools` 为准：拆分前后均为 **84 个**（过滤后），无重名。
+  - `GetAllDataTools()` 内除 78 处 `NewDataToolWrapper` append 外，还有 6 处其他 append：`GetETFMomentumRankingTool()`（`:1200`，随 K 线域走）、尾部 5 处跨文件聚合（`GetHotMoneyChipTools`/`GetAkshareTools`/`GetAdataTools`/`GetTickFlowToolWrappers`/`GetStrategyScreenTool`，连同 `IsToolKeyConfigured` 过滤循环留在聚合文件）。
+  - `GetAllDataTools()` 体内非空行逐行对账：除上述 68 行注释注册（按方案删除）与函数自身结构行外，全部行均已落入域文件或聚合文件尾部，无遗漏、无多余。
+- 拆分结果（原文件 4,214 行 → 聚合文件 111 行；各域文件行数）：
+  - `data_tools_screen.go` 406 行（筛选/搜索域，5 个工具：FilterStocks、SearchStockByIndicators、SearchBk、SearchETF、InteractiveAnswer）
+  - `data_tools_finance.go` 237 行（资金/财务/研报域，10 个工具）
+  - `data_tools_market.go` 416 行（行情/资讯/推荐域，7 个工具）+ `getMarketDataContent` 与其专用的 `APIResponse`/`APIData`/`APIIndexQuote`/`APIUpDownDis`/`APIPurchase` 类型（全仓仅此处使用）
+  - `data_tools_ai.go` 249 行（AI 分析/消息域，5 个工具）
+  - `data_tools_kline.go` 468 行（K 线/自选写操作域，6 个工具 + `GetETFMomentumRankingTool()`）
+  - `data_tools_fund.go` 321 行（基金域，5 个工具）与 `data_tools_hot.go` 621 行（热门/日历域，11 个工具）：原 `fund_hot` 域文件 924 行，按方案“超 800 行再按基金与热门拆两个文件”的条件拆分
+  - `data_tools_changes.go` 1,146 行（异动/公告/研报/F10/涨停域，20 处 append：19 个单工具 + F10 循环 10 个工具）+ 涨停专用 helper（`fetchUplimitData`、`floatOrDefault`、`getPlatesStr`、`getStockNameFromPlateStocks`，仅涨停工具调用）
+  - `data_tools_wallstreetcn_tdx.go` 359 行（见闻/通达信域，9 个工具：4 个见闻 + 5 个 TDX）
+  - `data_tools_wrapper.go` 111 行（聚合文件）：仅留 `NewDataToolWrapper`、`truncateToolResult`、聚合版 `GetAllDataTools()`（依次聚合 9 个域注册函数 + 尾部 5 处跨文件聚合 + 过滤循环）与跨域共享 helper `parseStockCodesFromArgs`（K 线/热门域共用）、`parseInt`（财务/行情/K 线域共用）；跨域 helper 不硬塞进某一域，留在聚合文件。
+  - 注册块原文逐字搬家（缩进不变：原在 `GetAllDataTools` 内 1 tab，新注册函数内同样 1 tab）；各文件 import 按实际引用逐项计算生成，无多余 import。
+  - 执行中修过一次生成脚本 bug：helper 一度被拼进注册函数体内导致语法错误，已纠正为“helper 放在注册函数之后”，随后 `go build/vet` 通过。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` tools 包与 agent 包全过；`TestGetAllDataTools` 工具总数 84（与基线一致）、`TestEveryAssembledToolIsDeclared`、`TestAssembledToolsHaveNoDuplicates`、`TestGroupCapsAreRespected` 全部通过。
