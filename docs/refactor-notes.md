@@ -239,3 +239,13 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - 只拆方法：全部 struct 定义（`FollowedFund`、`FundBasic`、`FundNetUnitValue`、`FundHistoryNetValue`、`FundHoldingStock`、`FundRankingItem` 等）与两个 `TableName()`、两个 `var` 正则块留在原文件不动。
   - 文件名说明：设计称第二域为“基金 K 线”，实际内容是净值/估值/历史净值（真正的 K 线逻辑在既有 `fund_kline_api.go` 的 `FundKLineApi` 内），故命名为 `fund_data_netvalue.go` 以免与 `fund_kline_api.go` 混淆；其余三域按设计命名（加 `fund_data_` 前缀）。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 45（14+8+11+3+9），与拆分前一致。
+
+### R-20b 拆 backend/data/settings_api.go（1,608 行、53 个函数 → 核心文件 + 3 个域文件）—— 已完成
+
+- 拆分结果（原文件 1,608 行 → 核心文件 396 行，含全部 struct/const 定义）：
+  - `settings_api.go` 396 行，10 个函数：模型与配置类型方法（2 个 `TableName()`、`SetDefaults`、`UnmarshalJSON`、`fieldSubmitted`、`GetAIConfigThinking`、`GetMcpTimeout`）+ `NewSettingsApi` + 设置读取（`GetSettingConfig`、`GetMaskedSettingConfig`）。
+  - `settings_config.go` 346 行（2 个，设置读写域）：`UpdateConfig`（314 行，含工具预算 `ToolRunBudget`/`ToolDailyBudget` 字段处理——预算逻辑嵌在写入路径内，故不单独成文件）与 `Export`（配置导出）。
+  - `settings_aiconfig.go` 329 行（7 个，模型配置域）：`GetAiConfigTemplates`、`validateAIConfig`、`MaskSecret`、`MaskWebhook`、`IsMaskedSecret`、`resolveDefaultAiConfigID`、`updateAiConfigsTx`。
+  - `settings_backup.go` 605 行（34 个，备份/清理域）：清理、备份/恢复、导入导出 CSV 等全部备份相关函数。
+  - 只拆方法：全部 struct 定义（`Settings`、`AIConfig`、`SettingConfig`、`SettingsApi`、`AiConfigTemplate`）与两个 `TableName()`、两组 const（`Backup*`、`Cleanup*`）留在原文件不动。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 53（10+2+7+34），与拆分前一致。
