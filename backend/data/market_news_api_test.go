@@ -273,16 +273,6 @@ func TestInteractiveAnswer(t *testing.T) {
 	logger.SugaredLogger.Debugf(md)
 
 }
-func TestGetNewsList2(t *testing.T) {
-	db.Init("../../data/stock.db")
-	news := NewMarketNewsApi().GetNewsList2("财联社电报", random.RandInt(100, 500))
-	messageText := strings.Builder{}
-	for _, telegraph := range *news {
-		messageText.WriteString("## " + telegraph.Time + ":" + "\n")
-		messageText.WriteString("### " + telegraph.Content + "\n")
-	}
-	logger.SugaredLogger.Debugf("value: %s", messageText.String())
-}
 
 func TestTelegraphList(t *testing.T) {
 	db.Init("../../data/stock.db")

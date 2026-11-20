@@ -323,21 +323,21 @@ func TestRSISignal(t *testing.T) {
 }
 
 func TestTrendFilter(t *testing.T) {
-	entries := NewBoolVector([]bool{true, true, true, true})
+	entries := &BoolVector{Values: []bool{true, true, true, true}, Len: 4}
 	trend := NewVec(-1, 1, 0, 1)
-	e, _ := TrendFilter(entries, NewBoolVector([]bool{false, false, false, false}), trend, true)
+	e, _ := TrendFilter(entries, &BoolVector{Values: []bool{false, false, false, false}, Len: 4}, trend, true)
 	if e.Values[0] || !e.Values[1] || e.Values[2] || !e.Values[3] {
 		t.Fatal("TrendFilter(requireUptrend) failed")
 	}
-	e, _ = TrendFilter(entries, NewBoolVector([]bool{false, false, false, false}), trend, false)
+	e, _ = TrendFilter(entries, &BoolVector{Values: []bool{false, false, false, false}, Len: 4}, trend, false)
 	if !e.Values[0] || e.Values[1] || e.Values[2] || e.Values[3] {
 		t.Fatal("TrendFilter(!requireUptrend) failed")
 	}
 }
 
 func TestVolatilityFilter(t *testing.T) {
-	entries := NewBoolVector([]bool{true, true, true})
-	exits := NewBoolVector([]bool{false, false, false})
+	entries := &BoolVector{Values: []bool{true, true, true}, Len: 3}
+	exits := &BoolVector{Values: []bool{false, false, false}, Len: 3}
 	atr := NewVec(0.5, 2.0, 1.4)
 	e, _ := VolatilityFilter(entries, exits, atr, 0.8, 1.5)
 	if e.Values[0] || e.Values[1] || !e.Values[2] {

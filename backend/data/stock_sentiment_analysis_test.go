@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-
-	"github.com/duke-git/lancet/v2/random"
 )
 
 // @Author spark
@@ -21,7 +19,7 @@ func TestAnalyzeSentiment(t *testing.T) {
 	InitAnalyzeSentiment()
 
 	messageText := strings.Builder{}
-	news := NewMarketNewsApi().GetNewsList2("", random.RandInt(500, 1000))
+	news := NewMarketNewsApi().GetTelegraphList("")
 	for _, telegraph := range *news {
 		messageText.WriteString(telegraph.Content + "\n")
 	}

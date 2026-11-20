@@ -76,22 +76,6 @@ func TestSmartContentCompressDedupeAndTail(t *testing.T) {
 	}
 }
 
-func TestCompressExecutedStepResult(t *testing.T) {
-	var b strings.Builder
-	for i := 0; i < 100; i++ {
-		_, _ = fmt.Fprintf(&b, "第%03d段 ROE=%.1f%% 营收同比说明文字占位\n", i, float64(i%13)+0.5)
-	}
-	line := b.String()
-	old := compressExecutedStepResult(line, 0, 8, false)
-	recent := compressExecutedStepResult(line, 7, 8, false)
-	if len(old) >= len(recent) {
-		t.Fatalf("expected older step (smaller byte budget) more compressed: old=%d recent=%d", len(old), len(recent))
-	}
-	if len(recent) < 200 {
-		t.Fatalf("expected recent step to retain meaningful content: len=%d", len(recent))
-	}
-}
-
 func TestClassifyComplexity(t *testing.T) {
 	tests := []struct {
 		question string

@@ -544,10 +544,6 @@ type BoolVector struct {
 	Len    int
 }
 
-func NewBoolVector(values []bool) *BoolVector {
-	return &BoolVector{Values: values, Len: len(values)}
-}
-
 func NewBoolZeros(n int) *BoolVector {
 	return &BoolVector{Values: make([]bool, n), Len: n}
 }
@@ -628,21 +624,6 @@ func NewMatrix(rows, cols int) *Matrix {
 		Cols:   cols,
 		Values: make([]float64, rows*cols),
 	}
-}
-
-func NewMatrixFromVecs(vecs ...*Vector) *Matrix {
-	if len(vecs) == 0 {
-		return NewMatrix(0, 0)
-	}
-	rows := vecs[0].Len
-	cols := len(vecs)
-	m := NewMatrix(rows, cols)
-	for j, vec := range vecs {
-		for i := 0; i < rows && i < vec.Len; i++ {
-			m.Values[i*cols+j] = vec.Values[i]
-		}
-	}
-	return m
 }
 
 // Row 获取第 i 行

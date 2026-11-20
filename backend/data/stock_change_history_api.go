@@ -91,24 +91,6 @@ func (s *StockChangeHistoryService) SaveStockChangesWithDedup(items []StockChang
 	return int(result.RowsAffected), nil
 }
 
-func (s *StockChangeHistoryService) SaveStockChange(item StockChangeItem) error {
-	today := time.Now().Format("2006-01-02")
-	history := models.StockChangeHistory{
-		ChangeTime: item.Time,
-		ChangeDate: today,
-		StockCode:  item.Code,
-		StockName:  item.Name,
-		Market:     item.Market,
-		ChangeType: item.ChangeType,
-		TypeName:   item.TypeName,
-		Volume:     item.Volume,
-		Price:      item.Price,
-		ChangeRate: item.ChangeRate,
-		Amount:     item.Amount,
-	}
-	return db.Dao.Create(&history).Error
-}
-
 func (s *StockChangeHistoryService) GetHistoryList(query models.StockChangeHistoryQuery) (*models.StockChangeHistoryPageData, error) {
 	if query.Page <= 0 {
 		query.Page = 1

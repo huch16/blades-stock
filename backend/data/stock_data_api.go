@@ -1640,67 +1640,6 @@ func DCToTsCode(dcCode string) string {
 	return ""
 }
 
-func (receiver StockDataApi) GetHKStockInfo(pageSize int) {
-	url := "https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=price&pageSize=%d&reqPage=1&order=desc&var_name=list_data"
-	resp, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
-		SetHeader("Host", "stock.gtimg.cn").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
-		Get(fmt.Sprintf(url, pageSize))
-	if err != nil {
-		//logger.SugaredLogger.Errorf("err:%s", err.Error())
-		return
-	}
-	js := "var " + string(resp.Body())
-	vm := otto.New()
-	vm.Run(js)
-	_, err = vm.Run("var data = JSON.stringify(list_data);")
-	if err != nil {
-		return
-	}
-	value, _ := vm.Get("data")
-	data := make(map[string]any)
-	json.Unmarshal([]byte(value.String()), &data)
-	if data["code"] != nil && data["code"].(float64) == 0 {
-		d := data["data"].(map[string]any)
-		saveHKStockInfo(d)
-
-		page_count := int64(d["page_count"].(float64))
-		//logger.SugaredLogger.Infof("page_count:%d", page_count)
-		page := int64(1)
-		for page > page_count {
-			urlx := fmt.Sprintf("https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=price&pageSize=%d&reqPage=%d&order=desc&var_name=list_data", pageSize, page)
-			//logger.SugaredLogger.Infof("url:%s", urlx)
-			resp, err = receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
-				SetHeader("Host", "stock.gtimg.cn").
-				SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
-				Get(urlx)
-			if err != nil {
-				//logger.SugaredLogger.Errorf("err:%s", err.Error())
-				break
-			}
-			js = "var " + string(resp.Body())
-			vm.Run(js)
-			_, err = vm.Run("var data = JSON.stringify(list_data);")
-			if err != nil {
-				return
-			}
-			value, _ = vm.Get("data")
-			data = make(map[string]any)
-			json.Unmarshal([]byte(value.String()), &data)
-			//logger.SugaredLogger.Infof("resp:%s", data)
-			if data != nil && data["code"] != nil && data["code"].(float64) == 0 {
-				if data["data"] != nil {
-					d = data["data"].(map[string]any)
-					saveHKStockInfo(d)
-				}
-			}
-			page++
-		}
-		//
-	}
-
-}
-
 func saveHKStockInfo(d map[string]any) {
 	for _, v := range d["page_data"].([]any) {
 		vv := v.(string)

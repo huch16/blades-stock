@@ -47,7 +47,7 @@ func TestWebSearchApi_SearchToMarkdown(t *testing.T) {
 	}
 }
 
-func TestWebSearchApi_SearchToJson(t *testing.T) {
+func TestWebSearchApi_SearchResults(t *testing.T) {
 	defer GetBrowserManager().ResetBrowser()
 
 	path := GetSettingConfig().BrowserPath
@@ -56,10 +56,10 @@ func TestWebSearchApi_SearchToJson(t *testing.T) {
 	}
 
 	api := NewWebSearchApi(30)
-	json := api.SearchToJson("KDJ指标", 3)
-	t.Logf("JSON result:\n%s", json)
-	if json == "" || json == "未找到相关搜索结果" {
-		t.Error("Expected search results in JSON format")
+	results := api.Search("KDJ指标", 3)
+	t.Logf("Search results: %+v", results)
+	if len(results) == 0 {
+		t.Error("Expected non-empty search results")
 	}
 }
 

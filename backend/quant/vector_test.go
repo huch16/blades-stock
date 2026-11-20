@@ -484,8 +484,8 @@ func TestNanToNum(t *testing.T) {
 }
 
 func TestBoolVectorAnd(t *testing.T) {
-	a := NewBoolVector([]bool{true, false, true})
-	b := NewBoolVector([]bool{true, true, false})
+	a := &BoolVector{Values: []bool{true, false, true}, Len: 3}
+	b := &BoolVector{Values: []bool{true, true, false}, Len: 3}
 	c := a.And(b)
 	if !c.Values[0] || c.Values[1] || c.Values[2] {
 		t.Fatal("And failed")
@@ -493,8 +493,8 @@ func TestBoolVectorAnd(t *testing.T) {
 }
 
 func TestBoolVectorOr(t *testing.T) {
-	a := NewBoolVector([]bool{true, false, false})
-	b := NewBoolVector([]bool{false, true, false})
+	a := &BoolVector{Values: []bool{true, false, false}, Len: 3}
+	b := &BoolVector{Values: []bool{false, true, false}, Len: 3}
 	c := a.Or(b)
 	if !c.Values[0] || !c.Values[1] || c.Values[2] {
 		t.Fatal("Or failed")
@@ -502,7 +502,7 @@ func TestBoolVectorOr(t *testing.T) {
 }
 
 func TestBoolVectorNot(t *testing.T) {
-	a := NewBoolVector([]bool{true, false, true})
+	a := &BoolVector{Values: []bool{true, false, true}, Len: 3}
 	b := a.Not()
 	if b.Values[0] || !b.Values[1] || b.Values[2] {
 		t.Fatal("Not failed")
@@ -510,29 +510,29 @@ func TestBoolVectorNot(t *testing.T) {
 }
 
 func TestBoolVectorSum(t *testing.T) {
-	a := NewBoolVector([]bool{true, false, true, false, true})
+	a := &BoolVector{Values: []bool{true, false, true, false, true}, Len: 5}
 	if a.Sum() != 3 {
 		t.Fatalf("Sum should be 3, got %d", a.Sum())
 	}
 }
 
 func TestBoolVectorAny(t *testing.T) {
-	a := NewBoolVector([]bool{false, false})
+	a := &BoolVector{Values: []bool{false, false}, Len: 2}
 	if a.Any() {
 		t.Fatal("Any should be false")
 	}
-	b := NewBoolVector([]bool{false, true})
+	b := &BoolVector{Values: []bool{false, true}, Len: 2}
 	if !b.Any() {
 		t.Fatal("Any should be true")
 	}
 }
 
 func TestBoolVectorAll(t *testing.T) {
-	a := NewBoolVector([]bool{true, true})
+	a := &BoolVector{Values: []bool{true, true}, Len: 2}
 	if !a.All() {
 		t.Fatal("All should be true")
 	}
-	b := NewBoolVector([]bool{true, false})
+	b := &BoolVector{Values: []bool{true, false}, Len: 2}
 	if b.All() {
 		t.Fatal("All should be false")
 	}
@@ -545,26 +545,8 @@ func TestNewMatrix(t *testing.T) {
 	}
 }
 
-func TestNewMatrixFromVecs(t *testing.T) {
-	a := NewVec(1, 2, 3)
-	b := NewVec(4, 5, 6)
-	m := NewMatrixFromVecs(a, b)
-	if m.Rows != 3 || m.Cols != 2 {
-		t.Fatalf("expected 3x2, got %dx%d", m.Rows, m.Cols)
-	}
-	// row 0: [1, 4]
-	// row 1: [2, 5]
-	// row 2: [3, 6]
-	if m.Values[0] != 1 || m.Values[1] != 4 {
-		t.Fatalf("Row 0 failed, got %f %f", m.Values[0], m.Values[1])
-	}
-	if m.Values[2] != 2 || m.Values[3] != 5 {
-		t.Fatalf("Row 1 failed, got %f %f", m.Values[2], m.Values[3])
-	}
-}
-
 func TestMatrixRow(t *testing.T) {
-	m := NewMatrixFromVecs(NewVec(1, 2), NewVec(3, 4))
+	m := &Matrix{Rows: 2, Cols: 2, Values: []float64{1, 3, 2, 4}}
 	r := m.Row(1)
 	if r.Values[0] != 2 || r.Values[1] != 4 {
 		t.Fatalf("Row 1 got %v", r.Values)
@@ -572,7 +554,7 @@ func TestMatrixRow(t *testing.T) {
 }
 
 func TestMatrixCol(t *testing.T) {
-	m := NewMatrixFromVecs(NewVec(1, 2), NewVec(3, 4))
+	m := &Matrix{Rows: 2, Cols: 2, Values: []float64{1, 3, 2, 4}}
 	c := m.Col(1)
 	if c.Values[0] != 3 || c.Values[1] != 4 {
 		t.Fatalf("Col 1 got %v", c.Values)

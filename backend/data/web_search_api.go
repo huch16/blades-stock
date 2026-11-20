@@ -569,18 +569,6 @@ func randomSleep(minMs, maxMs int) time.Duration {
 	return time.Duration(minMs+delta) * time.Millisecond
 }
 
-func (s *WebSearchApi) SearchToJson(query string, maxResults int) string {
-	results := s.Search(query, maxResults)
-	if len(results) == 0 {
-		return "未找到相关搜索结果"
-	}
-	jsonData, err := json.MarshalIndent(results, "", "  ")
-	if err != nil {
-		return fmt.Sprintf("搜索结果序列化失败: %v", err)
-	}
-	return string(jsonData)
-}
-
 func (s *WebSearchApi) SearchToMarkdown(query string, maxResults int) string {
 	results := s.Search(query, maxResults)
 	if len(results) == 0 {

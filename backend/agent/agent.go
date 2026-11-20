@@ -1097,39 +1097,6 @@ func smartContentCompress(content string, maxTokens int) string {
 	return finalContent
 }
 
-func compressExecutedStepResult(result string, stepIndex, totalSteps int, forReplanner bool) string {
-	// P2.1: 预算单位从 byte 改为 token
-	// 旧的 byte 预算（execRecent=1400）≈ 350 token（中文为主时）。新 token 预算统一到合理量级。
-	const (
-		execRecent     = 800
-		execOlder      = 400
-		replanRecent   = 500
-		replanOlder    = 250
-		minTokenBudget = 200
-		recentTail     = 2
-	)
-	recent := totalSteps <= recentTail || stepIndex >= totalSteps-recentTail
-
-	var budget int
-	if forReplanner {
-		if recent {
-			budget = replanRecent
-		} else {
-			budget = replanOlder
-		}
-	} else {
-		if recent {
-			budget = execRecent
-		} else {
-			budget = execOlder
-		}
-	}
-	if budget < minTokenBudget {
-		budget = minTokenBudget
-	}
-	return smartContentCompress(result, budget)
-}
-
 func isHeaderLine(line string) bool {
 	headerKeywords := []string{
 		"分析", "结论", "建议", "总结", "评估", "预测", "风险", "机会",

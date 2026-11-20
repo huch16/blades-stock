@@ -115,3 +115,18 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 执行 b 方案：services 版改用 `//go:embed`。Go 的 embed 模式禁止 `..`，`backend/services` 不能直接 embed `../../cmd/...`，故把两个 txt 文件 `git mv` 到 `backend/services/seeddata/`（内容 0 改动），services 以 `//go:embed seeddata/*.txt` 嵌入；`cmd/insert_etf_skill/main.go` 与 `cmd/insert_serenity_skill/main.go` 的读取路径同步改为 `backend/services/seeddata/*.txt`（二者均在仓库根运行，相对路径仍成立）；删除 main 版 `SeedDefaultSkills()`（90 行）与两个 embed 变量，`main.AutoMigrate()` 改调 `services.SeedDefaultSkills()`；删除两个占位常量。
 - 两份技能字面量逐行比对：除 SystemPrompt 来源、日志别名（`log` vs `logger`）与失败日志级别（Errorf vs Warnf）外完全一致；统一后以 services 版为准（Warnf）。
 - 验证：临时测试（跑完即删，不提交）在临时库中验证合并后 seed 出 2 个技能、SystemPrompt 与 txt 文件逐字一致、长度 >1000、二次播种幂等——通过；`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` 根包与 services 包全过。分支说明：走的是 embed 分支（编译期嵌入），不再有“无 DB 时走 const 默认值”分支。
+
+### R-12 删 9 个仅测试引用函数 —— 已完成 8 个，跳过 1 个
+
+- 已删 8 个函数（生产代码约 330 行 + 对应测试）：
+  - `GetHKStockInfo`（60 行）：仅存一处注释掉的调用（`stock_data_api_test.go:151`）；其测试 `TestGetHKStockInfo` 实际调用的是 `getDCStockInfo` 循环，不动该测试。
+  - `GetNewsList`（20 行）：全仓词法精确匹配 0 引用，直接删。
+  - `GetNewsList2`（21 行）：两个测试引用。`TestGetNewsList2`（integration 文件，无断言的纯探针）随函数一起删；`TestAnalyzeSentiment`（默认套件，测生产函数 `AnalyzeSentimentWithFreqWeight`）改调生产函数 `GetTelegraphList("")`（`market_service.go:469,485` 与 `app.go:2029` 在用），并清理随之多余的 `random` import。注：`GetNewsList2` 与 `GetNewsList` 近乎相同，前者多一次 `TelegraphList(30)` 刷新调用，改写后该刷新不再发生（测试只需新闻文本，无影响）。
+  - `NewBoolVector`（3 行）：16 处测试夹具调用全部改结构体字面量（`&BoolVector{Values: ..., Len: N}`），断言未改；覆盖的测试（BoolVector And/Or/Not/Sum/Any/All、`TrendFilter`、`VolatilityFilter`）测的都是生产方法，保留。
+  - `NewMatrixFromVecs`（14 行）：`TestNewMatrixFromVecs` 纯测该构造，随函数删；`TestMatrixRow`/`TestMatrixCol`（测生产方法 Row/Col）改结构体字面量（`&Matrix{Rows: 2, Cols: 2, Values: []float64{1, 3, 2, 4}}`）。
+  - `SaveStockChange`（17 行）：词法精确匹配 0 引用（方案提到的 `cmd/server/server_test.go` 引用实际是 `SaveStockChangesWithDedup`，不同函数），直接删。
+  - `SearchToJson`（11 行）：测试改调生产函数 `Search`（改名 `TestWebSearchApi_SearchResults`，保留“返回非空”断言）；`SearchToMarkdown` 仍在生产中使用（`web_search_tool.go:44`），不动。
+  - `compressExecutedStepResult`（32 行）：唯一调用点是 `TestCompressExecutedStepResult`，纯测死代码，函数与测试一起删。注：删后 `smartContentCompress` 在生产中也无调用点（仅其自身测试调用），不在本次删除清单内，留待后续确认。
+- 跳过 1 个：`NewSummaryStockNewsStreamWithTools`（151 行）。它是资讯总结 + 股票推荐的流式生产管线，唯一的调用点是两个 integration 测试（`openai_api_test.go:37`、`app_integration_test.go:107` 的 `TestSummaryStockNews`，全 App→AI 端到端）；其同胞 `NewSummaryStockNewsStream` 同样全仓 0 生产调用点。按方案“相关测试未确认过时则该函数跳过，不准先删函数、后补测试”，本步不删，记入未做事项。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data、quant、agent 三包全过（含改写后的 `TestAnalyzeSentiment` 与 BoolVector/Matrix 测试）。
+- 发现的既有问题（非本步造成，不修）：`go vet -tags=integration ./backend/data/` 在基线即失败，integration 测试文件至少有 4 处未定义引用——`markdownToImage`（`gen_test_images_test.go:391`、`markdown_to_image_e2e_test.go:36,78`）、`GetTopNewsList`（`openai_api_test.go:50`）、`SearchStockInfoByCode`（`stock_data_api_test.go:103`）、`parseBingResultsWithGoquery`（`web_search_api_test.go:204`）。已用排除法确认：除这 4 处既有错误外，本步改过的 integration 测试文件无 vet 错误。
