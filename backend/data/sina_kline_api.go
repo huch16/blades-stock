@@ -5,6 +5,8 @@ import (
 	"blades-stock/backend/datasource"
 	"blades-stock/backend/logger"
 
+	"github.com/go-resty/resty/v2"
+
 	"fmt"
 	"strconv"
 	"strings"
@@ -87,36 +89,9 @@ type KLineSourceResult struct {
 	Source string       `json:"source"`
 }
 
+// cleanCodeOnly 转发到 datasource.CleanCodeOnly（R-25c：实现已搬入 datasource）。
 func cleanCodeOnly(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	// 如果包含 - 或空格，例如 "天目药业 - 600671.SH" 或 "天目药业 600671"
-	for _, sep := range []string{"-", "—", " "} {
-		if strings.Contains(raw, sep) {
-			parts := strings.Split(raw, sep)
-			for i := len(parts) - 1; i >= 0; i-- {
-				p := strings.TrimSpace(parts[i])
-				if p != "" {
-					raw = p
-					break
-				}
-			}
-		}
-	}
-	// 处理纯数字但长度不足 6 位的情况（如 JSON 解析丢失前导零，002906 变成 2906）
-	isDigits := true
-	for _, c := range raw {
-		if c < '0' || c > '9' {
-			isDigits = false
-			break
-		}
-	}
-	if isDigits && len(raw) > 0 && len(raw) < 6 {
-		raw = fmt.Sprintf("%06s", raw)
-	}
-	return raw
+	return datasource.CleanCodeOnly(raw)
 }
 
 // FetchKLineWithFallback 返回带短时缓存的 K 线降级链结果：同标的同周期在
@@ -394,4 +369,43 @@ func truncateStr(s string, maxLen int) string {
 // sinaSymbolFromStockCode 转发到 datasource.SinaSymbolFromStockCode（R-25a）。
 func sinaSymbolFromStockCode(stockCode string) string {
 	return datasource.SinaSymbolFromStockCode(stockCode)
+}
+
+// getRandomUA 转发到 datasource.GetRandomUA（R-25a：实现已搬入 datasource；
+// 本转发原在 eastmoney_kline_api.go，R-25c 该文件搬走后迁至此处，
+// fund_data_* 等 25 处调用点不动）。
+func getRandomUA() string {
+	return datasource.GetRandomUA()
+}
+
+// parseFloatToFloat 转发到 datasource.ParseFloatToFloat（R-25a：实现已搬入 datasource；
+// 本转发原在 eastmoney_kline_api.go，R-25c 该文件搬走后迁至此处，
+// tushare_data_api.go 与 pure_helpers_test.go 的调用点不动）。
+func parseFloatToFloat(s string) (float64, error) {
+	return datasource.ParseFloatToFloat(s)
+}
+
+// AggregateKLineEveryN 转发到 datasource.AggregateKLineEveryN（R-25b：实现已搬入 datasource；
+// 本转发原在 eastmoney_kline_api.go，R-25c 该文件搬走后迁至此处，
+// pure_helpers_test.go 的调用点不动）。
+func AggregateKLineEveryN(src *[]KLineData, n int) *[]KLineData {
+	return datasource.AggregateKLineEveryN(src, n)
+}
+
+// setEastMoneyKlineBrowserHeaders 转发到 datasource.SetEastMoneyKlineBrowserHeaders
+// （R-25c：实现随 eastmoney_kline_api.go 搬入 datasource；stock_money.go 在用）。
+func setEastMoneyKlineBrowserHeaders(r *resty.Request, referer string) {
+	datasource.SetEastMoneyKlineBrowserHeaders(r, referer)
+}
+
+// computeSMA 转发到 datasource.ComputeSMA（R-25c：实现随 eastmoney_kline_api.go
+// 搬入 datasource；pure_helpers_test.go 在用）。
+func computeSMA(closes []float64, idx, period int) float64 {
+	return datasource.ComputeSMA(closes, idx, period)
+}
+
+// getMaxPeriod 转发到 datasource.GetMaxPeriod（R-25c：实现随 eastmoney_kline_api.go
+// 搬入 datasource；pure_helpers_test.go 在用）。
+func getMaxPeriod(periods []int) int {
+	return datasource.GetMaxPeriod(periods)
 }

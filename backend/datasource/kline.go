@@ -121,3 +121,37 @@ func AggregateKLineEveryN(src *[]KLineData, n int) *[]KLineData {
 	}
 	return &out
 }
+
+// CleanCodeOnly 从“名称 - 代码”或“名称 代码”混合文本中提取纯股票代码。
+// R-25c 自 backend/data/sina_kline_api.go 移入；data 侧留同名小写转发。
+func CleanCodeOnly(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	// 如果包含 - 或空格，例如 "天目药业 - 600671.SH" 或 "天目药业 600671"
+	for _, sep := range []string{"-", "—", " "} {
+		if strings.Contains(raw, sep) {
+			parts := strings.Split(raw, sep)
+			for i := len(parts) - 1; i >= 0; i-- {
+				p := strings.TrimSpace(parts[i])
+				if p != "" {
+					raw = p
+					break
+				}
+			}
+		}
+	}
+	// 处理纯数字但长度不足 6 位的情况（如 JSON 解析丢失前导零，002906 变成 2906）
+	isDigits := true
+	for _, c := range raw {
+		if c < '0' || c > '9' {
+			isDigits = false
+			break
+		}
+	}
+	if isDigits && len(raw) > 0 && len(raw) < 6 {
+		raw = fmt.Sprintf("%06s", raw)
+	}
+	return raw
+}

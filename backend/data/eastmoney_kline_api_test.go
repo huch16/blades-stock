@@ -163,7 +163,7 @@ func TestEastMoneyKLineApi_ConvertStockCode(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		result := api.convertStockCode(tc.input)
+		result := api.ConvertStockCode(tc.input)
 		if result != tc.expected {
 			t.Errorf("convertStockCode(%s) = %s, expected %s", tc.input, result, tc.expected)
 		} else {
