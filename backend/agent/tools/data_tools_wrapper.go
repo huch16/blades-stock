@@ -51,65 +51,6 @@ func truncateToolResult(name, result string) string {
 	return headText + "\n...(工具 " + name + " 返回过长，中间已截断，保留最新数据)...\n" + tailText
 }
 
-func thsResultToMarkdown(res map[string]any, title string) string {
-	if convertor.ToString(res["code"]) != "100" {
-		return "无符合条件的数据"
-	}
-
-	resData, ok := res["data"].(map[string]any)
-	if !ok {
-		return "无符合条件的数据"
-	}
-	result, ok := resData["result"].(map[string]any)
-	if !ok {
-		return "无符合条件的数据"
-	}
-
-	dataList, ok := result["dataList"].([]any)
-	if !ok {
-		return "无符合条件的数据"
-	}
-	columns, ok := result["columns"].([]any)
-	if !ok {
-		return "无符合条件的数据"
-	}
-
-	headers := map[string]string{}
-	for _, v := range columns {
-		d, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		colTitle := convertor.ToString(d["title"])
-		if dm := convertor.ToString(d["dateMsg"]); dm != "" {
-			colTitle += "[" + dm + "]"
-		}
-		if u := convertor.ToString(d["unit"]); u != "" {
-			colTitle += "(" + u + ")"
-		}
-		if keyStr, ok := d["key"].(string); ok {
-			headers[keyStr] = colTitle
-		}
-	}
-
-	table := &[]map[string]any{}
-	for _, v := range dataList {
-		d, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		row := map[string]any{}
-		for key, colTitle := range headers {
-			row[colTitle] = convertor.ToString(d[key])
-		}
-		*table = append(*table, row)
-	}
-
-	jsonData, _ := json.Marshal(*table)
-	markdownTable, _ := data.JSONToMarkdownTable(jsonData)
-	return "\r\n### " + title + "：\r\n" + markdownTable + "\r\n"
-}
-
 func GetAllDataTools() []bladesTools.Tool {
 	var result []bladesTools.Tool
 
@@ -412,7 +353,7 @@ func GetAllDataTools() []bladesTools.Tool {
 		func(args string) (string, error) {
 			words := gjson.Get(args, "words").String()
 			res := data.NewSearchStockApi(words).SearchStock(random.RandInt(50, 120))
-			content := thsResultToMarkdown(res, "工具筛选出的相关股票数据")
+			content := data.ThsResultToMarkdown(res, "工具筛选出的相关股票数据")
 			if strings.Contains(content, "无符合条件") || strings.Contains(content, "请先获取东财用户标识") {
 				if fb, ok := data.FallbackScreenByIndicators(words); ok && fb != "" {
 					return fb, nil
@@ -435,7 +376,7 @@ func GetAllDataTools() []bladesTools.Tool {
 		func(args string) (string, error) {
 			words := gjson.Get(args, "words").String()
 			res := data.NewSearchStockApi(words).SearchBk(random.RandInt(50, 120))
-			content := thsResultToMarkdown(res, "工具筛选出的相关板块/概念数据")
+			content := data.ThsResultToMarkdown(res, "工具筛选出的相关板块/概念数据")
 			return content, nil
 		},
 	))
@@ -453,7 +394,7 @@ func GetAllDataTools() []bladesTools.Tool {
 		func(args string) (string, error) {
 			words := gjson.Get(args, "words").String()
 			res := data.NewSearchStockApi(words).SearchETF(random.RandInt(50, 120))
-			content := thsResultToMarkdown(res, "工具筛选出的相关ETF数据")
+			content := data.ThsResultToMarkdown(res, "工具筛选出的相关ETF数据")
 			return content, nil
 		},
 	))

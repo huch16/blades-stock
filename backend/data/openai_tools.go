@@ -14,7 +14,6 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 
-	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/strutil"
 	"github.com/go-resty/resty/v2"
 )
@@ -113,58 +112,6 @@ func appendToolMessages(
 		"content":      toolContent,
 		"tool_call_id": callID,
 	})
-}
-
-// thsResultToMarkdown 将通联/同花顺搜索结果统一转换为 markdown 表格
-func thsResultToMarkdown(res map[string]any, title string) string {
-	if convertor.ToString(res["code"]) != "100" {
-		return "无符合条件的数据"
-	}
-
-	resData, ok := res["data"].(map[string]any)
-	if !ok {
-		return "无符合条件的数据"
-	}
-	result, ok := resData["result"].(map[string]any)
-	if !ok {
-		return "无符合条件的数据"
-	}
-
-	dataList, ok := result["dataList"].([]any)
-	if !ok {
-		return "无符合条件的数据"
-	}
-	columns, ok := result["columns"].([]any)
-	if !ok {
-		return "无符合条件的数据"
-	}
-
-	headers := map[string]string{}
-	for _, v := range columns {
-		d := v.(map[string]any)
-		colTitle := convertor.ToString(d["title"])
-		if dm := convertor.ToString(d["dateMsg"]); dm != "" {
-			colTitle += "[" + dm + "]"
-		}
-		if u := convertor.ToString(d["unit"]); u != "" {
-			colTitle += "(" + u + ")"
-		}
-		headers[d["key"].(string)] = colTitle
-	}
-
-	table := &[]map[string]any{}
-	for _, v := range dataList {
-		d := v.(map[string]any)
-		row := map[string]any{}
-		for key, colTitle := range headers {
-			row[colTitle] = convertor.ToString(d[key])
-		}
-		*table = append(*table, row)
-	}
-
-	jsonData, _ := json.Marshal(*table)
-	markdownTable, _ := JSONToMarkdownTable(jsonData)
-	return "\r\n### " + title + "：\r\n" + markdownTable + "\r\n"
 }
 
 func stripReasoningContent(messages []map[string]interface{}) []map[string]interface{} {

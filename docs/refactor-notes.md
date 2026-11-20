@@ -89,3 +89,10 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - data 侧测试 `tool_hot_money_chip_test.go` 仅调用点改名（小写→导出名），断言一字未改。
 - 数量对照：data 文件 19 个函数（init + 3 个 handler + 15 个共享 helper）；tools 文件 4 个函数（`GetHotMoneyChipTools` + 3 个工具构造器），`grep -c '^func '` 之和与拆前一致；净删 219 行。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 与 agent/tools 两包全过。
+
+### R-09 D5 去重：thsResultToMarkdown 收敛到 backend/data —— 已完成
+
+- 逐行 diff 结果：两版逻辑与输出格式完全一致（标题、空值、表格列顺序、返回格式均相同），唯一差异是 tools 版多处 `ok` 安全判断、openai_tools 版是直接断言（脏数据会 panic）。以 tools 版为准。
+- 落点：新建 `backend/data/ths_markdown.go`，导出 `ThsResultToMarkdown`（与同包 `JSONToMarkdownTable` 同处）；删除 `backend/data/openai_tools.go:119` 的旧版与 `backend/agent/tools/data_tools_wrapper.go:54` 的 tools 版；6 处调用点不动逻辑，只改调用名（tools 内 3 处改调 `data.ThsResultToMarkdown`，data 内 3 处改调同包 `ThsResultToMarkdown`：`tool_search_bk.go:29`、`tool_search_etf_stock.go:37,66`）。
+- 全仓只剩 1 处定义；附带清理 `openai_tools.go` 多余的 convertor import。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 与 agent/tools 两包全过；`grep -rn 'func thsResultToMarkdown'` 全仓只剩 1 处定义（导出名）。
