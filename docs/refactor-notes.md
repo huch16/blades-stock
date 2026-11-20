@@ -384,3 +384,47 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - `IsTradingDay`/`IsTodayTradingDay`/`GetLatestTradingDay`/`GetTradingDaysBetween`/`GetNextTradingDay` 在 data 侧留转发（agent/tools/根包不得直接 import datasource，规则 3），全部外部调用点零改动；`backend/data/trading_day_test.go` 的测试调转发函数，断言未改。
 - 与方案出入：方案称 trading_day.go 为“交易日历纯函数”，实地核查 `InitTradingCalendar` 并不纯（读设置 + AData/Baostock 两路取数），故用依赖注入而非整体直搬；纯查询函数与缓存仍完整在 datasource 内。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包、agent/tools 包与根包全过。
+
+### R-25a 拆 sina_kline_api.go，Sina/Tencent 客户端进 datasource —— 已完成
+
+- 962 行文件一分为二：SinaKLineApi/TencentKLineApi 及解析/转换 helper（88–658 行）搬入 `backend/datasource/kline_sina.go`，构造器改传 `crawlTimeoutSec int64`（`config` 字段只写不用，删除）；降级链编排器（`FetchKLineWithFallback`、缓存、`tryKLineSource`、`fetchFrom*`）留 data，`fetchFromSina`/`fetchFromTencent` 改调 datasource 构造器，全部外部调用点零改动。
+- 搬家前提——`KLineData` 是纯 DTO（无 TableName、无入库），定义移入 `backend/datasource/kline.go`，data 侧 stock_data_api.go 留 `type KLineData = datasource.KLineData` 别名，全仓 30 处引用零改动。`getRandomUA`、`ParseFloatToFloat`、`GB18030ToUTF8` 实现移入 datasource（`kline.go`/`encoding.go`），data 侧各留同名转发；`truncateStr`、`sinaSymbolFromStockCode` 在 datasource 内导出，data 侧留转发。
+- 教训：共享 helper 的外部引用要逐个 grep（`GB18030ToUTF8`、`parseFloatToFloat`、`truncateStr`、`sinaSymbolFromStockCode` 都是构建失败后才发现）；`CrawlTimeOut` 是 int64，构造器参数类型须一致；`gofmt -l` 失败也会导致整条验证链退出码非零，分步跑先定位。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data/quant/agent-tools 包全过；integration 标签下无新增错误。
+
+### R-25b TDX 四文件进 datasource，Sync*ToDB 留 data —— 已完成
+
+- `tdx_kline_api.go`/`tdx_kline.go`/`tdx_finance.go`/`tdx_company.go` → `backend/datasource/kline_tdx*.go`；构造器改为超时提供函数 `NewTdxKLineApi(crawlTimeout func() int64)`（每次新建连接读最新设置，单例保留），data 侧留无参转发；`IsAStockCode`/`IsHKStockCode`/`IsUSStockCode` 与 `AggregateKLineEveryN` 实现移入 datasource，data 侧留转发；TDX 导出类型在 data 侧留 alias（services/根包的 `data.Tdx...` 引用零改动）。
+- `SyncStockBasicToDB`/`SyncHKUSStockBasicToDB` 是 DB 写入且是 `*TdxKLineApi` 的方法——类型搬走后 data 无法再定义其方法，改为 data 包级函数收 `*datasource.TdxKLineApi` 参数，`migrate.go` 与 `app_stock.go` 的 4 处调用点相应改。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data/quant/agent-tools/services 包全过。
+
+### R-25c 搬 eastmoney_kline_api.go 进 datasource —— 已完成
+
+- `git mv` → `backend/datasource/kline_eastmoney.go`；构造器改传 `crawlTimeoutSec int64` + `browserPath string`（两处 config 使用点均有 nil 保护，改为值字段 + 默认值语义），data 侧留同名转发函数（config 为 nil 时取默认值），tools/services/data 的全部调用点零改动；类型与 `KLineType*` 常量在 data 侧留别名。
+- 共享 helper 清理：R-25a/R-25b 留在文件内的 3 个转发函数（`getRandomUA`/`parseFloatToFloat`/`AggregateKLineEveryN`）随文件搬走后，其定义改在 data/sina_kline_api.go 集中保留（`fund_data_*`、tushare、pure_helpers_test 仍在用——初版漏了这一点，构建失败后补回）；`cleanCodeOnly` 实现移入 datasource（导出 `CleanCodeOnly`），data 留转发；`setEastMoneyKlineBrowserHeaders`、`computeSMA`、`getMaxPeriod` 在 datasource 内导出，data 侧留转发（stock_money.go 与测试在用）；集成测试调的未导出方法 `convertStockCode` 在 datasource 内导出为 `ConvertStockCode`（已 amend 进本提交）。
+- 教训：删转发函数前必须全仓 grep 其调用点，转发是其他文件的唯一定义时要先迁走，不能直接删。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data/quant/agent-tools/services 包全过；integration 标签下无新增错误。
+
+### R-25d 搬 eastmoney_api.go 进 datasource —— 已完成
+
+- `git mv` → `backend/datasource/eastmoney.go`；EmAPI 构造器改传 apiKey 参数（datasource 不读设置表），data 侧留同名转发函数（从设置读 EmApiKey，nil 保护与原 `getApiKey` 一致），tools/data 的全部 `data.NewEmAPI()` 调用点零改动；EmAPI 类型留别名。
+- 实地核查：本文件无模型解析、无 DB 写入交织，纯 AI 助手客户端，可整文件搬家。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data/quant/agent-tools 包全过。
+
+### R-25e 搬 wallstreetcn_api.go 进 datasource —— 已完成
+
+- `git mv` → `backend/datasource/wallstreetcn.go`；纯客户端，无设置/DB/模型依赖，构造器无参数，整文件直搬；data 侧留 `NewWallstreetcnApi` 转发 + 响应类型别名，tools/data 的全部调用点零改动。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data/quant/agent-tools 包全过。
+
+### R-25f 搬 search_stock_api.go 进 datasource —— 已完成
+
+- `git mv` → `backend/datasource/search.go`；构造器改传 qgqpBId 参数（东财用户标识，由 data 侧转发函数从设置传入），data 侧留同名转发 + 类型别名，tools/data 的全部调用点零改动。
+- 实地核查：`HotStrategyTable` 用的 `models.HotStrategy` 与 `util.MarkdownTableWithTitle` 均为基础包，check-deps 允许 datasource 引用，故整文件搬家。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data/quant/agent-tools 包全过。
+
+### R-25g web_search_api.go 内容并入 datasource/search.go —— 已完成
+
+- `WebSearchApi` + `BrowserManager` 整组并入 search.go（与 R-25f 同文件）；`GetOrCreateBrowser` 改传 `browserPath`/`crawlTimeoutSec` 参数，`WebSearchApi` 构造器改传三个设置提供函数（每次搜索读最新设置，与原每次调 `GetSettingConfig()` 的行为一致）；data 侧留 `NewWebSearchApi`/`GetBrowserManager` 转发 + 类型别名，tools/services 的调用点零改动。
+- 测试适配：`getSearXNGEndpoints`/`searchSearXNG`/`cleanText`/`randomSleep`/`parseBaiduResultsWithGoquery` 在 datasource 内导出，两测试文件改调。`TestParseBingResultsWithGoquery` 调用的 `parseBingResultsWithGoquery` 在搬家前就不存在（集成测试二进制在基线就无法编译，既有 10+ 处 undefined，与本次无关），未动。
+- 教训：并入目标文件时先 `git checkout` 恢复误删源文件再跑脚本，不要先 `rm`。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data/quant/agent-tools/services 包全过。
