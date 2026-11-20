@@ -321,3 +321,19 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 数量对照（脚本断言，全部通过）：两 pane 除 `sortedResults`/`groupResults`、`show-spark-line`/`group-id` 三处外逐字相同；被搬函数名在新文件中的残留为零（已解构的除外）；wailsjs App import 35 → 20（15 个已搬走的函数随 composable 走）；`StockCard`/`consultAgent`/`echarts` 的去留均按实测保留/删除。
 - 验证：`npx eslint` 6 个文件 0 errors；全量 `npm run lint` 0 errors、158 warnings（与基线一致，未增加）；`npm run build` 退出 0（1m17s），三项 prebuild 检查均通过；`stock.vue` 打进 `index-*.js`（195,838 B），构建产物 grep 确认 `开始AI分析`、`全部`、`分时`、`价位线`、`认知档案`、`盘前`、`AI分析报告`、`持仓`、`自选`、`StockCard`、`_gi` 等关键标识均在（`轻量K线` 0 命中属正常：该词只出现在源码注释中，注释不进产物）；`StockLightweightKlineChart` chunk 120.84 kB 与 R-22a 后一致。Go 侧无改动（本步纯前端），未跑 Go 验证。
 - 提取脚本见 `/tmp/r22b_extract.py`（stageA～stageF：A tabs、B echarts、C AI、D alerts、E 子组件、F stock.vue 重写）。
+
+### R-22c 拆 agent-chat.vue（3,695 行 → 2,943 行）—— 已完成
+
+- 拆分结果（原文件 3,695 行 → 2,943 行：模板 773 行、样式 1,282 行逐字不动，只动 script 1,638 行 → 约 890 行）：
+  - `src/composables/useAgentChatSessions.ts`（121 行）：会话持久化域——`ChatSession` 接口（移至模块顶层 export）、`STORAGE_KEY`/`ACTIVE_SESSION_KEY`、sessions/currentSessionId、`messages` 计算属性（含 setter 回写 + 自动保存）、`currentSessionTitle`、load/save/create/switch/delete/formatSessionTime。ctx：`showSessionDrawer`、`scrollToBottom`。
+  - `src/composables/useAgentChatPipeline.ts`（442 行）：BUIS 五阶流水线域——`welcomeViewMode`、5 个标的输入 ref（`step4StockInput` 等）、`hotStocks`、`stockDict` + `initStockDict`（含 `onMounted` 注册）、标的填装弹窗（状态 + `setModalPK`/`openStockActionModal`/`submitModalStockAction`）、`pipelineContext`、`setPipelineStock`/`onPipelineStockCodeChange`/`onPipelineStockCodeEnter`、`extractStockFromAssistantText`、executeStep1～5、`viewVerdictStandards`、executeDirectDiag/Risk/PK、`applyPresetPK`、`handleQuickChipClick`、`pipelineNextStep`。ctx：`applyScenario`、`fillInput`、`inputValue`、`messages`、`perceptionSnapshot`、`getTrafficText`（态势感知定时器与生命周期仍留组件）。
+  - `src/composables/useAgentChatThesis.ts`（300 行）：买方认知账本域——`lastConsultStock`（归 thesis 所有，组件的 `handleAgentConsult` 用解构出的 ref）、`extractThesisFromText`（147 行）、`handleSaveThesisFromMsg`、`handleExportImage`。ctx：`messages`、`notifyWarning`/`notifySuccess`/`notifyError`；`dialog` 与 `aiConfigStore` 在 composable 内自取（同属 setup 上下文）。
+  - 组件只留 3 个 composable 调用（插在 `getTrafficText` 之后、`quickChips` 之前——该位置之后全部 ctx 输入均已声明，`applyScenario`/`fillInput`/`scrollToBottom`/`notify*` 为提升的函数声明，调用时可用）；wailsjs App import 8 → 5（`SaveStockThesis`/`SaveImage`/`GetStockList` 随 composable 走）；`reactive` 与 `h` 的 import 随之删除（仅被搬代码使用）。
+- 关键纠正（执行中发现）：
+  - `export interface ChatSession` 不能放在函数体内——初版构建失败一次，已移至 sessions composable 模块顶层。
+  - `step4StockInput` 无模板使用、只在 pipeline composable 内部用——组件解构多余，eslint 报 unused，已从解构中删除（仍由 pipeline composable 持有并返回清单之外）。
+  - `genMsgId` 仍被保留的 `handleSend` 使用（1720/1729 行），组件与 sessions composable 各自 import，初版断言误判已修正。
+  - 提取脚本的依赖分析沿用 R-22b 的 `code_idents`（跳过字符串/模板字面量/注释）与“import 使用面排除原 import 块、模板用正则取标识符并剥离 HTML 注释”的做法；composable 体逐字搬运不重缩进（模板字面量内的提示词前导空白零变化）。
+- 数量对照（脚本断言 + 人工 diff，全部通过）：模板与样式与原文件逐字节一致；被搬定义在组件内零残留（解构调用除外）；`step4StockInput` 等内部 ref 去留均按实测。
+- 验证：`npx eslint` 4 个文件 0 errors、17 warnings（全部是被搬代码自带的 `no-explicit-any`，未新增）；全量 `npm run lint` 0 errors、158 warnings（与基线一致）；`npm run build` 退出 0（1m7s），`agent-chat-*.js` chunk 89,493 B，构建产物 grep 确认 `BUIS QUANTITATIVE INTELLIGENCE LADDER`、`进入 Step 3 · 运行多因子放量突破量化选股`、`存入买方认知账本`、`新对话`、`贵州茅台`、`5-Verdict` 均在；Go 侧无改动，`go build/vet` 通过、`gofmt -l` 0 文件、check-deps.sh 通过。
+- 提取脚本见 `/tmp/r22c_extract.py`（stage1 写 3 个 composable、stage2 重写组件），原文件备份见 `/tmp/r22c_backup.vue`。
