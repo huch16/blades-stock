@@ -1,11 +1,12 @@
 package data
 
 import (
+	"blades-stock/backend/datasource"
 	"testing"
 )
 
 func TestGetSearXNGEndpoints(t *testing.T) {
-	endpoints := getSearXNGEndpoints()
+	endpoints := datasource.GetSearXNGEndpoints()
 	if len(endpoints) == 0 {
 		t.Fatal("expected at least one SearXNG endpoint")
 	}
@@ -25,7 +26,7 @@ func TestGetSearXNGEndpoints(t *testing.T) {
 
 func TestSearXNGOnlineSearch(t *testing.T) {
 	api := NewWebSearchApi(10)
-	results := api.searchSearXNG("贵州茅台", 3)
+	results := api.SearchSearXNG("贵州茅台", 3)
 	if len(results) == 0 {
 		t.Log("Warning: No results returned or network unavailable (skip hard fail in offline environment)")
 		return

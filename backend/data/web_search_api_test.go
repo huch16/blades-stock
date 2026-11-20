@@ -3,6 +3,7 @@
 package data
 
 import (
+	"blades-stock/backend/datasource"
 	"blades-stock/backend/db"
 	"testing"
 	"time"
@@ -164,9 +165,9 @@ func TestCleanText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := cleanText(tt.input)
+			result := datasource.CleanText(tt.input)
 			if result != tt.expected {
-				t.Errorf("cleanText(%q) = %q, expected %q", tt.input, result, tt.expected)
+				t.Errorf("datasource.CleanText(%q) = %q, expected %q", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -174,15 +175,15 @@ func TestCleanText(t *testing.T) {
 
 func TestRandomSleep(t *testing.T) {
 	for i := 0; i < 10; i++ {
-		duration := randomSleep(100, 200)
+		duration := datasource.RandomSleep(100, 200)
 		if duration < 100*time.Millisecond || duration >= 200*time.Millisecond {
-			t.Errorf("randomSleep(100, 200) returned %v, expected between 100ms and 199ms", duration)
+			t.Errorf("datasource.RandomSleep(100, 200) returned %v, expected between 100ms and 199ms", duration)
 		}
 	}
 
-	duration := randomSleep(100, 100)
+	duration := datasource.RandomSleep(100, 100)
 	if duration != 100*time.Millisecond {
-		t.Errorf("randomSleep(100, 100) should return 100ms, got %v", duration)
+		t.Errorf("datasource.RandomSleep(100, 100) should return 100ms, got %v", duration)
 	}
 }
 
@@ -236,7 +237,7 @@ func TestParseBaiduResultsWithGoquery(t *testing.T) {
 	`
 
 	api := NewWebSearchApi(30)
-	results := api.parseBaiduResultsWithGoquery(html, 5)
+	results := api.ParseBaiduResultsWithGoquery(html, 5)
 
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results, got %d", len(results))
