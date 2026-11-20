@@ -10,6 +10,11 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+// FirefoxUserAgent 是 market_news_api.go 内 19 处共用的 UA 字面量。
+// 注意：该文件另有 12 处 UA 是各端点专用的 Chrome/Edge/Firefox 字面量
+// （版本号不同），刻意不同，不得统一成这一个常量。
+const FirefoxUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
+
 var (
 	sharedTransport  *http.Transport
 	sharedHTTPClient *http.Client

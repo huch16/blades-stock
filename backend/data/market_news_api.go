@@ -700,7 +700,7 @@ func (m MarketNewsApi) LongTiger(date string) *[]models.LongTigerRankData {
 	resp, err := SharedHTTPClient.SetTimeout(time.Duration(15)*time.Second).R().
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/stock/tradedetail.html").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		SetQueryParams(params).
 		Get(url)
 	if err != nil {
@@ -767,7 +767,7 @@ func (m MarketNewsApi) IndustryResearchReport(industryCode string, days int) []a
 		SetHeader("Host", "reportapi.eastmoney.com").
 		SetHeader("Origin", "https://data.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/report/stock.jshtml").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		SetHeader("Content-Type", "application/json").
 		SetQueryParams(params).Get(url)
 	respMap := map[string]any{}
@@ -775,7 +775,10 @@ func (m MarketNewsApi) IndustryResearchReport(industryCode string, days int) []a
 	if err != nil {
 		return []any{}
 	}
-	json.Unmarshal(resp.Body(), &respMap)
+	if err := json.Unmarshal(resp.Body(), &respMap); err != nil {
+		logger.SugaredLogger.Errorf("IndustryResearchReport json unmarshal err: %v", err)
+		return []any{}
+	}
 	//logger.SugaredLogger.Infof("resp:%+v", respMap["data"])
 	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
 		return dataList
@@ -824,7 +827,7 @@ func (m MarketNewsApi) StockResearchReport(stockCode string, days int) []any {
 		SetHeader("Host", "reportapi.eastmoney.com").
 		SetHeader("Origin", "https://data.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/report/stock.jshtml").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		SetHeader("Content-Type", "application/json").
 		SetBody(&Req{
 			Code:         stockCode,
@@ -842,7 +845,10 @@ func (m MarketNewsApi) StockResearchReport(stockCode string, days int) []any {
 	if err != nil {
 		return []any{}
 	}
-	json.Unmarshal(resp.Body(), &respMap)
+	if err := json.Unmarshal(resp.Body(), &respMap); err != nil {
+		logger.SugaredLogger.Errorf("StockResearchReport json unmarshal err: %v", err)
+		return []any{}
+	}
 	//logger.SugaredLogger.Infof("resp:%+v", respMap["data"])
 	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
 		return dataList
@@ -872,14 +878,17 @@ func (m MarketNewsApi) StockNotice(stock_list string) []any {
 	resp, err := SharedHTTPClient.SetTimeout(time.Duration(15)*time.Second).R().
 		SetHeader("Host", "np-anotice-stock.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/notices/hsa/5.html").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	respMap := map[string]any{}
 
 	if err != nil {
 		return []any{}
 	}
-	json.Unmarshal(resp.Body(), &respMap)
+	if err := json.Unmarshal(resp.Body(), &respMap); err != nil {
+		logger.SugaredLogger.Errorf("StockNotice json unmarshal err: %v", err)
+		return []any{}
+	}
 	//logger.SugaredLogger.Infof("resp:%+v", respMap["data"])
 	if dataMap, ok := respMap["data"].(map[string]any); ok {
 		if list, ok := dataMap["list"].([]any); ok {
@@ -909,14 +918,17 @@ func (m MarketNewsApi) EMDictCode(code string, cache *freecache.Cache) []any {
 		SetHeader("Host", "reportapi.eastmoney.com").
 		SetHeader("Origin", "https://data.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/report/industry.jshtml").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		SetHeader("Content-Type", "application/json").
 		SetQueryParams(params).Get(url)
 
 	if err != nil {
 		return []any{}
 	}
-	json.Unmarshal(resp.Body(), &respMap)
+	if err := json.Unmarshal(resp.Body(), &respMap); err != nil {
+		logger.SugaredLogger.Errorf("EMDictCode json unmarshal err: %v", err)
+		return []any{}
+	}
 	//logger.SugaredLogger.Infof("resp:%+v", respMap["data"])
 	cache.Set([]byte(code), resp.Body(), 60*60*24)
 	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
@@ -941,7 +953,7 @@ func (m MarketNewsApi) TradingViewNews() *[]models.Telegraph {
 		SetHeader("Host", "news-mediator.tradingview.com").
 		SetHeader("Origin", "https://cn.tradingview.com").
 		SetHeader("Referer", "https://cn.tradingview.com/").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		//logger.SugaredLogger.Errorf("TradingViewNews err:%s", err.Error())
@@ -956,7 +968,10 @@ func (m MarketNewsApi) TradingViewNews() *[]models.Telegraph {
 	if err != nil {
 		return news
 	}
-	json.Unmarshal(items, TVNews)
+	if err := json.Unmarshal(items, TVNews); err != nil {
+		logger.SugaredLogger.Errorf("TradingViewNews json unmarshal err: %v", err)
+		return news
+	}
 
 	for i, a := range *TVNews {
 		if i > 10 {
@@ -1035,7 +1050,7 @@ func (m MarketNewsApi) XUEQIUHotStock(size int, marketType string) *[]models.Hot
 	request.SetHeader("Host", "stock.xueqiu.com").
 		SetHeader("Origin", "https://xueqiu.com").
 		SetHeader("Referer", "https://xueqiu.com/").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
+		SetHeader("User-Agent", FirefoxUserAgent)
 	_, err := request.SetResult(res).Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("XUEQIUHotStock err:%s", err.Error())
@@ -1054,7 +1069,7 @@ func (m MarketNewsApi) HotEvent(size int) *[]models.HotEvent {
 	request := SharedHTTPClient.SetTimeout(time.Duration(30) * time.Second).R()
 	request.SetHeader("Host", "xueqiu.com").
 		SetHeader("Referer", "https://xueqiu.com/").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
+		SetHeader("User-Agent", FirefoxUserAgent)
 	resp, err := request.Get(sprintf)
 	if err != nil {
 		logger.SugaredLogger.Errorf("HotEvent err:%s", err.Error())
@@ -1070,7 +1085,10 @@ func (m MarketNewsApi) HotEvent(size int) *[]models.HotEvent {
 	if err != nil {
 		return events
 	}
-	json.Unmarshal(items, events)
+	if err := json.Unmarshal(items, events); err != nil {
+		logger.SugaredLogger.Errorf("HotEvent json unmarshal err: %v", err)
+		return events
+	}
 	return events
 }
 
@@ -1080,7 +1098,7 @@ func (m MarketNewsApi) HotTopic(size int) []any {
 		SetHeader("Host", "gubatopic.eastmoney.com").
 		SetHeader("Origin", "https://gubatopic.eastmoney.com").
 		SetHeader("Referer", "https://gubatopic.eastmoney.com/").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		SetFormData(map[string]string{
 			"param": fmt.Sprintf("ps=%d&p=1&type=0", size),
 			"path":  "newtopic/api/Topic/HomePageListRead",
@@ -1093,7 +1111,10 @@ func (m MarketNewsApi) HotTopic(size int) []any {
 	}
 	//logger.SugaredLogger.Infof("HotTopic:%s", resp.Body())
 	respMap := map[string]any{}
-	json.Unmarshal(resp.Body(), &respMap)
+	if err := json.Unmarshal(resp.Body(), &respMap); err != nil {
+		logger.SugaredLogger.Errorf("HotTopic json unmarshal err: %v", err)
+		return []any{}
+	}
 	if reList, ok := respMap["re"].([]any); ok && reList != nil {
 		return reList
 	}
@@ -1121,7 +1142,7 @@ func (m MarketNewsApi) InvestCalendar(yearMonth string) []any {
 		SetHeader("Host", "app.jiuyangongshe.com").
 		SetHeader("Origin", "https://www.jiuyangongshe.com").
 		SetHeader("Referer", "https://www.jiuyangongshe.com/").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		SetHeader("Content-Type", "application/json").
 		SetHeader("token", token).
 		SetHeader("platform", "3").
@@ -1138,7 +1159,10 @@ func (m MarketNewsApi) InvestCalendar(yearMonth string) []any {
 	}
 	//logger.SugaredLogger.Infof("InvestCalendar:%s", resp.Body())
 	respMap := map[string]any{}
-	json.Unmarshal(resp.Body(), &respMap)
+	if err := json.Unmarshal(resp.Body(), &respMap); err != nil {
+		logger.SugaredLogger.Errorf("InvestCalendar json unmarshal err: %v", err)
+		return []any{}
+	}
 	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
 		return dataList
 	}
@@ -1151,14 +1175,17 @@ func (m MarketNewsApi) ClsCalendar() []any {
 		SetHeader("Host", "www.cls.cn").
 		SetHeader("Origin", "https://www.cls.cn").
 		SetHeader("Referer", "https://www.cls.cn/").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("ClsCalendar err:%s", err.Error())
 		return []any{}
 	}
 	respMap := map[string]any{}
-	json.Unmarshal(resp.Body(), &respMap)
+	if err := json.Unmarshal(resp.Body(), &respMap); err != nil {
+		logger.SugaredLogger.Errorf("ClsCalendar json unmarshal err: %v", err)
+		return []any{}
+	}
 	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
 		return dataList
 	}
@@ -1173,7 +1200,7 @@ func (m MarketNewsApi) GetGDP() *models.GDPResp {
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Origin", "https://datacenter.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/cjsj/gdp.html").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GDP err:%s", err.Error())
@@ -1195,7 +1222,9 @@ func (m MarketNewsApi) GetGDP() *models.GDPResp {
 	if err != nil {
 		return res
 	}
-	json.Unmarshal(marshal, &res)
+	if err := json.Unmarshal(marshal, &res); err != nil {
+		logger.SugaredLogger.Errorf("GetGDP json unmarshal err: %v", err)
+	}
 	//logger.SugaredLogger.Infof("GDP:%+v", res)
 	return res
 }
@@ -1208,7 +1237,7 @@ func (m MarketNewsApi) GetCPI() *models.CPIResp {
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Origin", "https://datacenter.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/cjsj/gdp.html").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetCPI err:%s", err.Error())
@@ -1230,7 +1259,9 @@ func (m MarketNewsApi) GetCPI() *models.CPIResp {
 	if err != nil {
 		return res
 	}
-	json.Unmarshal(marshal, &res)
+	if err := json.Unmarshal(marshal, &res); err != nil {
+		logger.SugaredLogger.Errorf("GetCPI json unmarshal err: %v", err)
+	}
 	//logger.SugaredLogger.Infof("GetCPI:%+v", res)
 	return res
 }
@@ -1243,7 +1274,7 @@ func (m MarketNewsApi) GetPPI() *models.PPIResp {
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Origin", "https://datacenter.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/cjsj/gdp.html").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetPPI err:%s", err.Error())
@@ -1262,7 +1293,9 @@ func (m MarketNewsApi) GetPPI() *models.PPIResp {
 	if err != nil {
 		return res
 	}
-	json.Unmarshal(marshal, &res)
+	if err := json.Unmarshal(marshal, &res); err != nil {
+		logger.SugaredLogger.Errorf("GetPPI json unmarshal err: %v", err)
+	}
 	return res
 }
 
@@ -1273,7 +1306,7 @@ func (m MarketNewsApi) GetPMI() *models.PMIResp {
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Origin", "https://datacenter.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/cjsj/gdp.html").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		return res
@@ -1291,7 +1324,9 @@ func (m MarketNewsApi) GetPMI() *models.PMIResp {
 	if err != nil {
 		return res
 	}
-	json.Unmarshal(marshal, &res)
+	if err := json.Unmarshal(marshal, &res); err != nil {
+		logger.SugaredLogger.Errorf("GetPMI json unmarshal err: %v", err)
+	}
 	return res
 
 }
@@ -1301,7 +1336,7 @@ func (m MarketNewsApi) GetIndustryReportInfo(infoCode string) string {
 		SetHeader("Host", "data.eastmoney.com").
 		SetHeader("Origin", "https://data.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/report/industry.jshtml").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetIndustryReportInfo err:%s", err.Error())
@@ -1326,7 +1361,7 @@ func (receiver MarketNewsApi) GetSecuritiesCompanyOpinion(startDate string, endD
 	url := fmt.Sprintf("https://reportapi.eastmoney.com/report/jg?cb=data&pageSize=50&beginTime=%s&endTime=%s&pageNo=1&fields=&qType=4&orgCode=&author=&p=1&pageNum=1&pageNumber=1&_=%d", startDate, endDate, time.Now().Unix())
 	resp, err := SharedHTTPClient.SetTimeout(time.Duration(30)*time.Second).R().
 		SetHeader("Host", "reportapi.eastmoney.com").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetSecuritiesCompanyOpinion err:%s", err.Error())
@@ -1341,7 +1376,9 @@ func (receiver MarketNewsApi) GetSecuritiesCompanyOpinion(startDate string, endD
 	data, _ := val.Object().Value().Export()
 	marshal, _ := json.Marshal(data)
 
-	json.Unmarshal(marshal, &res)
+	if err := json.Unmarshal(marshal, &res); err != nil {
+		logger.SugaredLogger.Errorf("GetIndustryReportInfo json unmarshal err: %v", err)
+	}
 
 	for _, d := range (&res).Data {
 		//logger.SugaredLogger.Debugf("PublishDate: %s,OrgSName: %s,Title: %s,EncodeUrl: %s", d.PublishDate, d.OrgSName, d.Title, d.EncodeUrl)
@@ -1355,7 +1392,7 @@ func (m MarketNewsApi) GetSecuritiesCompanyOpinionContent(OrgSName, encodeUrl st
 	url := "https://data.eastmoney.com/report/zw_brokerreport.jshtml?encodeUrl=" + encodeUrl
 	resp, _ := SharedHTTPClient.R().
 		SetHeader("Host", "data.eastmoney.com").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		Get(url)
 	body := resp.Body()
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(string(body)))
@@ -1378,7 +1415,7 @@ func (m MarketNewsApi) ReutersNew() *models.ReutersNews {
 		SetHeader("Host", "www.reuters.com").
 		SetHeader("Origin", "https://www.reuters.com").
 		SetHeader("Referer", "https://www.reuters.com/world/china/").
-		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0").
+		SetHeader("User-Agent", FirefoxUserAgent).
 		SetResult(news).
 		Get(url)
 	if err != nil {

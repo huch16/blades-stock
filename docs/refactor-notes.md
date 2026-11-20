@@ -134,3 +134,13 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 ### R-13 删 3 个前端死组件 —— 跳过（待用户确认，附录 C #5）
 
 - 无用户确认“不是未完成的功能入口”，整步跳过。`aiRecommendStocksList.vue`、`mcp-server-manager.vue`、`skill-manager.vue` 及 `vue-json-pretty` 依赖原样保留，记入未做事项。
+
+### R-14 L3 样板去重第一期 —— 已完成（安全子集；统一请求 helper 未做，见原因）
+
+- 实测纠正方案前提：`market_news_api.go` 的 31 处 UA 并非同一字面量，而是 **5 种不同 UA**（19× Firefox/140、7× Chrome/117 Edg/117、2× Chrome/120 Edg/120、1× Firefox/146、1× Firefox/142、1× Chrome/117 无 Edg），且超时有 7 种取值（5s/10s/15s/30s/crawlTimeOut 等）、请求分 GET/POST、带 SetBody 结构体/SetFormData/SetQueryParams/各端点 token 与 Cookie、响应键各异（`data`/`re` 等）。因此“1 个 UA 常量替代 31 处”与“1 个 helper 收敛全部请求段”均不可行——统一 UA 会改变 12 处实际发出的 UA（行为变化），helper 会藏起各端点差异头（设计自身提示的回归风险，测试发现不了）。
+- 已做的安全子集：
+  - `backend/data/httpclient.go` 新增 `FirefoxUserAgent` 常量；`market_news_api.go` 内 19 处完全相同的 Firefox/140 字面量改调常量（其余 12 处各端点专用 UA 保持字面量原样）；`grep -c FirefoxUserAgent`：market_news_api.go 19 处、httpclient.go 定义 1 处。
+  - L1 裸 `json.Unmarshal`：修 14 处——7 处 `return []any{}` 模式（IndustryResearchReport、StockResearchReport、StockNotice、EMDictCode、HotTopic、InvestCalendar、ClsCalendar）改为接 error、记日志、返回 `[]any{}`（失败时 respMap 本就为空，后续 ok 判断同样返回 `[]any{}`，行为不变）；TradingViewNews 与 HotEvent 的 `json.Unmarshal(items, ...)` 改为接 error、记日志、返回空结果（items 是刚 Marshal 的值，失败时目标为空，行为不变）；GetGDP/GetCPI/GetPPI/GetPMI/GetIndustryReportInfo 的 5 处 marshal 往返改为接 error、只记日志（res 保持原值返回，行为不变）。
+  - 未修 1 处：`EMDictCode` 的缓存读取 `json.Unmarshal(d, &respMap)`（现 906 行）——失败时必须落入网络拉取分支，提前返回会改变行为，故保留。
+- 未做统一请求 helper：请求点超时/方法/头/体/后续处理全部异构，helper 需 6 个以上参数且省不了几行，反而藏起端点差异；记入未做事项（后续如需，先按端点分组再抽 helper）。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过。
