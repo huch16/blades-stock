@@ -1,6 +1,7 @@
 package data
 
 import (
+	"blades-stock/backend/datasource"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
@@ -27,7 +28,7 @@ func (m MarketNewsApi) TradingViewNews() *[]models.Telegraph {
 		SetHeader("Host", "news-mediator.tradingview.com").
 		SetHeader("Origin", "https://cn.tradingview.com").
 		SetHeader("Referer", "https://cn.tradingview.com/").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		//logger.SugaredLogger.Errorf("TradingViewNews err:%s", err.Error())
@@ -129,7 +130,7 @@ func (m MarketNewsApi) ReutersNew() *models.ReutersNews {
 		SetHeader("Host", "www.reuters.com").
 		SetHeader("Origin", "https://www.reuters.com").
 		SetHeader("Referer", "https://www.reuters.com/world/china/").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		SetResult(news).
 		Get(url)
 	if err != nil {

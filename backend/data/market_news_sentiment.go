@@ -1,6 +1,7 @@
 package data
 
 import (
+	"blades-stock/backend/datasource"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
@@ -112,7 +113,7 @@ func (m MarketNewsApi) LongTiger(date string) *[]models.LongTigerRankData {
 	resp, err := SharedHTTPClient.SetTimeout(time.Duration(15)*time.Second).R().
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/stock/tradedetail.html").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		SetQueryParams(params).
 		Get(url)
 	if err != nil {
@@ -179,7 +180,7 @@ func (m MarketNewsApi) IndustryResearchReport(industryCode string, days int) []a
 		SetHeader("Host", "reportapi.eastmoney.com").
 		SetHeader("Origin", "https://data.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/report/stock.jshtml").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		SetHeader("Content-Type", "application/json").
 		SetQueryParams(params).Get(url)
 	respMap := map[string]any{}
@@ -240,7 +241,7 @@ func (m MarketNewsApi) StockResearchReport(stockCode string, days int) []any {
 		SetHeader("Host", "reportapi.eastmoney.com").
 		SetHeader("Origin", "https://data.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/report/stock.jshtml").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		SetHeader("Content-Type", "application/json").
 		SetBody(&Req{
 			Code:         stockCode,
@@ -291,7 +292,7 @@ func (m MarketNewsApi) StockNotice(stock_list string) []any {
 	resp, err := SharedHTTPClient.SetTimeout(time.Duration(15)*time.Second).R().
 		SetHeader("Host", "np-anotice-stock.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/notices/hsa/5.html").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	respMap := map[string]any{}
 
@@ -331,7 +332,7 @@ func (m MarketNewsApi) EMDictCode(code string, cache *freecache.Cache) []any {
 		SetHeader("Host", "reportapi.eastmoney.com").
 		SetHeader("Origin", "https://data.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/report/industry.jshtml").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		SetHeader("Content-Type", "application/json").
 		SetQueryParams(params).Get(url)
 
@@ -359,7 +360,7 @@ func (m MarketNewsApi) XUEQIUHotStock(size int, marketType string) *[]models.Hot
 	request.SetHeader("Host", "stock.xueqiu.com").
 		SetHeader("Origin", "https://xueqiu.com").
 		SetHeader("Referer", "https://xueqiu.com/").
-		SetHeader("User-Agent", FirefoxUserAgent)
+		SetHeader("User-Agent", datasource.FirefoxUserAgent)
 	_, err := request.SetResult(res).Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("XUEQIUHotStock err:%s", err.Error())
@@ -378,7 +379,7 @@ func (m MarketNewsApi) HotEvent(size int) *[]models.HotEvent {
 	request := SharedHTTPClient.SetTimeout(time.Duration(30) * time.Second).R()
 	request.SetHeader("Host", "xueqiu.com").
 		SetHeader("Referer", "https://xueqiu.com/").
-		SetHeader("User-Agent", FirefoxUserAgent)
+		SetHeader("User-Agent", datasource.FirefoxUserAgent)
 	resp, err := request.Get(sprintf)
 	if err != nil {
 		logger.SugaredLogger.Errorf("HotEvent err:%s", err.Error())
@@ -407,7 +408,7 @@ func (m MarketNewsApi) HotTopic(size int) []any {
 		SetHeader("Host", "gubatopic.eastmoney.com").
 		SetHeader("Origin", "https://gubatopic.eastmoney.com").
 		SetHeader("Referer", "https://gubatopic.eastmoney.com/").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		SetFormData(map[string]string{
 			"param": fmt.Sprintf("ps=%d&p=1&type=0", size),
 			"path":  "newtopic/api/Topic/HomePageListRead",
@@ -437,7 +438,7 @@ func (receiver MarketNewsApi) GetSecuritiesCompanyOpinion(startDate string, endD
 	url := fmt.Sprintf("https://reportapi.eastmoney.com/report/jg?cb=data&pageSize=50&beginTime=%s&endTime=%s&pageNo=1&fields=&qType=4&orgCode=&author=&p=1&pageNum=1&pageNumber=1&_=%d", startDate, endDate, time.Now().Unix())
 	resp, err := SharedHTTPClient.SetTimeout(time.Duration(30)*time.Second).R().
 		SetHeader("Host", "reportapi.eastmoney.com").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetSecuritiesCompanyOpinion err:%s", err.Error())
@@ -468,7 +469,7 @@ func (m MarketNewsApi) GetSecuritiesCompanyOpinionContent(OrgSName, encodeUrl st
 	url := "https://data.eastmoney.com/report/zw_brokerreport.jshtml?encodeUrl=" + encodeUrl
 	resp, _ := SharedHTTPClient.R().
 		SetHeader("Host", "data.eastmoney.com").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	body := resp.Body()
 	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(string(body)))

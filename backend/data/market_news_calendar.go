@@ -1,6 +1,7 @@
 package data
 
 import (
+	"blades-stock/backend/datasource"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/util"
@@ -35,7 +36,7 @@ func (m MarketNewsApi) InvestCalendar(yearMonth string) []any {
 		SetHeader("Host", "app.jiuyangongshe.com").
 		SetHeader("Origin", "https://www.jiuyangongshe.com").
 		SetHeader("Referer", "https://www.jiuyangongshe.com/").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		SetHeader("Content-Type", "application/json").
 		SetHeader("token", token).
 		SetHeader("platform", "3").
@@ -68,7 +69,7 @@ func (m MarketNewsApi) ClsCalendar() []any {
 		SetHeader("Host", "www.cls.cn").
 		SetHeader("Origin", "https://www.cls.cn").
 		SetHeader("Referer", "https://www.cls.cn/").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("ClsCalendar err:%s", err.Error())
@@ -93,7 +94,7 @@ func (m MarketNewsApi) GetGDP() *models.GDPResp {
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Origin", "https://datacenter.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/cjsj/gdp.html").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GDP err:%s", err.Error())
@@ -130,7 +131,7 @@ func (m MarketNewsApi) GetCPI() *models.CPIResp {
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Origin", "https://datacenter.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/cjsj/gdp.html").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetCPI err:%s", err.Error())
@@ -169,7 +170,7 @@ func (m MarketNewsApi) GetPPI() *models.PPIResp {
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Origin", "https://datacenter.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/cjsj/gdp.html").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetPPI err:%s", err.Error())
@@ -201,7 +202,7 @@ func (m MarketNewsApi) GetPMI() *models.PMIResp {
 		SetHeader("Host", "datacenter-web.eastmoney.com").
 		SetHeader("Origin", "https://datacenter.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/cjsj/gdp.html").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		return res
@@ -232,7 +233,7 @@ func (m MarketNewsApi) GetIndustryReportInfo(infoCode string) string {
 		SetHeader("Host", "data.eastmoney.com").
 		SetHeader("Origin", "https://data.eastmoney.com").
 		SetHeader("Referer", "https://data.eastmoney.com/report/industry.jshtml").
-		SetHeader("User-Agent", FirefoxUserAgent).
+		SetHeader("User-Agent", datasource.FirefoxUserAgent).
 		Get(url)
 	if err != nil {
 		logger.SugaredLogger.Errorf("GetIndustryReportInfo err:%s", err.Error())
