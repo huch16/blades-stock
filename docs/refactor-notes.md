@@ -209,3 +209,24 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - `JSONToMarkdownTable` 移入 `backend/data/ths_markdown.go`（+48 行，与 `ThsResultToMarkdown` 同处，`fmt` import 随之补上）。
   - 各文件 import 按实际引用逐项计算生成；执行中修过一处误判：`stock_money.go` 的 `context` 只出现在被注释掉的 resty 配置行里，误删后构建通过。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 67（核心 18 + follow 9 + kline 5 + realtime 14 + money 9 + 交易记录 11 + `ths_markdown.go` 内 `JSONToMarkdownTable` 1），与拆分前一致。
+
+### R-19 拆 app.go（3,058 行 → 65 行 + 8 个域文件）—— 已完成
+
+- 拆分前实测与方案出入（均已核对并记录）：
+  - 文件实际 3,058 行（方案 3,072 行为基线行号）；`^func (.*App)` 计数 208 与方案一致（含 3 个以 `*App` 为普通参数的包级函数 `MonitorFundPrices`、`MonitorAiRecommendStockPrices`、`MonitorFollowedStockCostPrices`）。
+  - `app.go` 只留 `App` 结构体 + `NewApp()`（AiTools 组装在 `NewApp` 内：`data.Tools(tools)`），65 行。
+  - 8 个域文件按方法名前缀与调用的 Api/服务归属划分（共 233 个函数 + `tradingDayCache` 变量 + 3 个类型别名/结构体）：
+    - `app_stock.go` 489 行（38 个）：自选/股票基础 + 交易记录 + 分组 + 提醒价监控 helper 链（`syncAllStockInfo`、`CheckStockBaseInfo`、`GetStockInfos`、`addStockFollowData`、`MonitorFollowedStockCostPrices` 等）。
+    - `app_market.go` 402 行（36 个）：行情/市场 + K 线/TDX + 电报/指数/资金排行/市场统计 + `MonitorAiRecommendStockPrices` 与告警节流 helper（`canSendAlert` 等 4 个，主调方在该监控函数内，按调用量归属）。
+    - `app_agent.go` 811 行（62 个）：Agent 对话/消息/MCP/技能/市场情报报告 + 类型别名 `AiModelInfo`、`PromptTemplateItem`；`GenNotificationMsg`/`getMsgTypeTTL`/`getMsgTypeName` 随调用方 `SendDingDingMessageByType` 走本域；`preFetchMarketSummaryData` 随调用方 `SummaryStockNews` 走本域。
+    - `app_fund.go` 79 行（12 个）：基金域（含 `MonitorFundPrices`）。
+    - `app_settings.go` 744 行（32 个）：设置/系统/备份/文件操作 + `domReady`（约 300 行启动逻辑，含 `syncAllStockInfo`、`refreshTelegraphList`、`NewsPush` 等跨域调用，同包无影响）+ `Greet`/`BatchGreet` + `GetImageBase`（随调用方 `GetVersionInfo` 走本域）。
+    - `app_cron.go` 384 行（16 个）：定时任务域（含 `setCronEntry`/`getCronEntry`）。
+    - `app_analysis.go` 230 行（26 个）：诊断/论点/持仓风险/回测/审计/向量回测/纸面交易/复盘/Alpha 挖掘 + 类型 `VectorBTResult`。
+    - `app_trading_time.go` 269 行（10 个函数 + `tradingDayCache` 变量）：交易日历/时间域。
+  - 两个域文件超方案“200–500 行”预期（agent 811 行、settings 744 行）：系方法分布本身所致（agent 62 个方法、settings 含约 300 行 `domReady`），未再强行细分——再拆会偏离方案的 8 文件划分。
+  - 执行中修过两处 import 误判：`a.cron.AddFunc` 是字段访问不是包引用，`app_settings.go` 的 `encoding/json` 与 `cron`、`app_stock.go` 的 `cron` 均属误判导入，已删除（import 判定正则把 `a.cron.` 当成包引用，下同类步骤注意）。
+- 验证（硬性验收）：
+  - `go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration -count=1 ./...` 全量 **15 个包通过、0 个失败**（与 R-02 后基线一致）。
+  - `grep -c '^func (.*App)'`：新文件之和 = 208（agent 55 + analysis 26 + cron 16 + fund 11 + market 34 + settings 32 + stock 34），与拆分前一致。
+  - Wails 绑定：沙箱内无 `wails` CLI（`build.ps1` 本身也用 `-skipbindings -skipembedcreate`，即本项目构建默认不重新生成绑定），无法实际执行生成。改用等价验收：AST 提取根包全部导出 `*App` 方法签名（266 个，含 `app_common.go` 等既有文件）拆分前后 diff 为零；`frontend/wailsjs/go/main/App.d.ts` 未动（sha256 `997b7efe…0908e`，`export function` 245 个，与基线一致）。方法签名、接收者、绑定名一字未动，重新生成后 diff 为零是其直接推论；最终仍需在有 wails 的机器上跑一次生成复核。
