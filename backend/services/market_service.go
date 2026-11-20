@@ -1281,3 +1281,28 @@ func (s *MarketService) WebSearch(query string, maxResults int) map[string]any {
 		"data": results,
 	}
 }
+
+// GetStockCodeRealTimeData 批量获取股票实时行情（R-27b 新增）。
+func (s *MarketService) GetStockCodeRealTimeData(stockCodes ...string) (*[]data.StockInfo, error) {
+	return data.NewStockDataApi().GetStockCodeRealTimeData(stockCodes...)
+}
+
+// SetStockAICron 设置自选股 AI 分析定时任务表达式（R-27b 新增）。
+func (s *MarketService) SetStockAICron(cronText, stockCode string) {
+	data.NewStockDataApi().SetStockAICron(cronText, stockCode)
+}
+
+// GetFollowedStockByStockCode 按代码获取自选股（R-27b 新增）。
+func (s *MarketService) GetFollowedStockByStockCode(stockCode string) data.FollowedStock {
+	return data.NewStockDataApi().GetFollowedStockByStockCode(stockCode)
+}
+
+// SyncStockBasicToDB 用通达信即时数据同步 A 股基础信息（R-27b 新增）。
+func (s *MarketService) SyncStockBasicToDB() (added, updated int, err error) {
+	return data.SyncStockBasicToDB(data.NewTdxKLineApi())
+}
+
+// SyncHKUSStockBasicToDB 用通达信扩展行情同步港股/美股基础信息（R-27b 新增）。
+func (s *MarketService) SyncHKUSStockBasicToDB() (hkAdded, hkUpdated, usAdded, usUpdated int, err error) {
+	return data.SyncHKUSStockBasicToDB(data.NewTdxKLineApi())
+}

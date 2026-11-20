@@ -142,7 +142,7 @@ func MonitorStockPrices(a *App) {
 	total := float64(0)
 
 	// 股票信息处理逻辑
-	stockInfos := GetStockInfos(*dest...)
+	stockInfos := GetStockInfos(a.marketService, *dest...)
 	for _, stockInfo := range *stockInfos {
 		if strutil.HasPrefixAny(stockInfo.Code, []string{"SZ", "SH", "sh", "sz"}) && (!isTradingTime(time.Now())) {
 			continue

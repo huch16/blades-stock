@@ -6,6 +6,7 @@ import (
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
+	"blades-stock/backend/services"
 
 	"context"
 	"fmt"
@@ -20,14 +21,14 @@ import (
 	"gorm.io/gorm"
 )
 
-func syncAllStockInfo(ctx context.Context) {
+func (a *App) syncAllStockInfo(ctx context.Context) {
 	defer PanicHandler()
 	defer func() {
 		go runtime.EventsEmit(ctx, "loadingMsg", "done")
 	}()
 	var datas []models.AllStockInfo
 	for page := 1; page < 3; page++ {
-		res := data.NewStockDataApi().GetAllStocks(page, 3000, "", models.TechnicalIndicators{})
+		res := a.marketService.GetAllStocks(page, 3000, "", models.TechnicalIndicators{})
 		if res != nil && (*res).Result.Data != nil {
 			for _, d := range (*res).Result.Data {
 				datas = append(datas, d.ToAllStockInfo())
@@ -120,7 +121,7 @@ func (a *App) CheckStockBaseInfo(ctx context.Context) {
 // 以 upsert 方式补充全量 JSON 未及时覆盖的新上市/改名/退市股票。
 func (a *App) syncStockBasicFromTdx() {
 	defer PanicHandler()
-	added, updated, err := data.SyncStockBasicToDB(data.NewTdxKLineApi())
+	added, updated, err := a.marketService.SyncStockBasicToDB()
 	if err != nil {
 		logger.SugaredLogger.Warnf("通达信同步股票基础信息失败:%s", err.Error())
 		return
@@ -133,7 +134,7 @@ func (a *App) syncStockBasicFromTdx() {
 // syncHKUSStockBasicFromTdx 用通达信扩展行情即时数据对港股/美股基础信息做增量校准。
 func (a *App) syncHKUSStockBasicFromTdx() {
 	defer PanicHandler()
-	hkAdded, hkUpdated, usAdded, usUpdated, err := data.SyncHKUSStockBasicToDB(data.NewTdxKLineApi())
+	hkAdded, hkUpdated, usAdded, usUpdated, err := a.marketService.SyncHKUSStockBasicToDB()
 	if err != nil {
 		logger.SugaredLogger.Warnf("通达信同步港美股基础信息失败:%s", err.Error())
 		return
@@ -170,7 +171,7 @@ func MonitorFollowedStockCostPrices(a *App) {
 		stockMap[tools.GetStockCode(stock.StockCode)] = stock
 	}
 
-	stockData, err := data.NewStockDataApi().GetStockCodeRealTimeData(stockCodes...)
+	stockData, err := a.marketService.GetStockCodeRealTimeData(stockCodes...)
 	if err != nil || stockData == nil || len(*stockData) == 0 {
 		logger.SugaredLogger.Errorf("获取自选股实时数据失败: %v", err)
 		return
@@ -233,7 +234,7 @@ func MonitorFollowedStockCostPrices(a *App) {
 // interval: 发送间隔
 // 返回 true 表示可以发送，false 表示需要在间隔后才能发送
 
-func GetStockInfos(follows ...data.FollowedStock) *[]data.StockInfo {
+func GetStockInfos(ms *services.MarketService, follows ...data.FollowedStock) *[]data.StockInfo {
 	stockInfos := make([]data.StockInfo, 0)
 	stockCodes := make([]string, 0)
 	for _, follow := range follows {
@@ -248,7 +249,7 @@ func GetStockInfos(follows ...data.FollowedStock) *[]data.StockInfo {
 		}
 		stockCodes = append(stockCodes, follow.StockCode)
 	}
-	stockData, err := data.NewStockDataApi().GetStockCodeRealTimeData(stockCodes...)
+	stockData, err := ms.GetStockCodeRealTimeData(stockCodes...)
 	if err != nil || stockData == nil {
 		return &stockInfos
 	}
@@ -402,7 +403,7 @@ func (a *App) FilterStocks(filter map[string]any) map[string]any {
 }
 
 func (a *App) SetStockAICron(cronText, stockCode string) {
-	data.NewStockDataApi().SetStockAICron(cronText, stockCode)
+	a.marketService.SetStockAICron(cronText, stockCode)
 	if strutil.HasPrefixAny(stockCode, []string{"gb_"}) {
 		stockCode = strings.ToUpper(stockCode)
 		stockCode = strings.Replace(stockCode, "gb_", "us", 1)
@@ -411,7 +412,7 @@ func (a *App) SetStockAICron(cronText, stockCode string) {
 	if entryID, exists := a.getCronEntry(stockCode); exists {
 		a.cron.Remove(entryID)
 	}
-	follow := data.NewStockDataApi().GetFollowedStockByStockCode(stockCode)
+	follow := a.marketService.GetFollowedStockByStockCode(stockCode)
 	id, _ := a.cron.AddFunc(cronText, a.AddCronTask(follow))
 	a.setCronEntry(stockCode, id)
 

@@ -19,7 +19,7 @@ import (
 
 func (a *App) NewsPush(news *[]models.Telegraph) {
 
-	follows := data.NewStockDataApi().GetFollowList(0)
+	follows := a.marketService.GetFollowList(0)
 	stockNames := slice.Map(*follows, func(index int, item data.FollowedStock) string {
 		return item.Name
 	})
@@ -116,7 +116,7 @@ func MonitorAiRecommendStockPrices(a *App) {
 		return
 	}
 
-	stockData, err := data.NewStockDataApi().GetStockCodeRealTimeData(stockCodes...)
+	stockData, err := a.marketService.GetStockCodeRealTimeData(stockCodes...)
 	if err != nil || stockData == nil || len(*stockData) == 0 {
 		logger.SugaredLogger.Errorf("获取 AI 推荐股票实时数据失败: %v", err)
 		return

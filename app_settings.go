@@ -280,7 +280,7 @@ func (a *App) domReady(ctx context.Context) {
 			logger.SugaredLogger.Infof("启动期按策略同步全市场标的基础数据 (count=%d, updateOnStart=%v)...", count, cfg != nil && cfg.UpdateBasicInfoOnStart)
 			// 串行执行，杜绝多个后台协程同时执行全量清空与批量写入引发 SQLite BUSY 死锁
 			a.CheckStockBaseInfo(a.ctx)
-			syncAllStockInfo(a.ctx)
+			a.syncAllStockInfo(a.ctx)
 		} else {
 			logger.SugaredLogger.Infof("本地已有股票基础数据 (%d 条)，跳过启动期重复全量同步", count)
 		}
@@ -290,7 +290,7 @@ func (a *App) domReady(ctx context.Context) {
 			a.CheckStockBaseInfo(a.ctx)
 		})
 		a.cron.AddFunc("30 05 8,12,20 * * *", func() {
-			syncAllStockInfo(a.ctx)
+			a.syncAllStockInfo(a.ctx)
 		})
 		// 进化闭环：每日从高质量轨迹提取技能草稿（7 天限频，仅记录供人工审阅）。
 		a.cron.AddFunc("30 2 * * *", agent.RunSkillExtractionPass)
