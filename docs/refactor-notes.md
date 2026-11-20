@@ -63,3 +63,11 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 
 - 零引用证据已核查：12 个方法（`BoardConcept`、`BoardIndustry`、`ConvertibleBondSpot`、`ETFHistorical`、`ETFSpot`、`FuturesSpot`、`LongHuToday`、`MacroCPI`、`MacroGDP`、`MacroMoneySupply`、`MacroPMI`、`OpenFundNetValue`）在 Go 代码中无任何直接调用点；`Call()` 是通用远端分发，不调用它们；`capability_registry.go` / `tool_groups.go` 里的同名项只是工具分组字符串标签；`cmd/insert_etf_skill/main.go` 的提及只是技能文本（注明 akshare 系 ETF 接口当前 HTTP 500 不可用）。
 - 但方案附录 C #2 要求先确认“Akshare 数据源是否已整体改走其他客户端”，无用户确认则整步跳过，不自行决定。记入未做事项。
+
+### R-06 反思/进化 5 个方法 + NewEvaluator 双构造 —— 跳过（待用户确认，附录 C #3；且方案 (b) 无法按字面执行）
+
+- 实地核查结果（`75450ae` 基础上复核，与方案 §1.5 的“双构造”表述有出入，记录如下）：
+  - 两个 `Evaluator` 是**不同类型、方法集不相交**，并非同一构造的 stub/真身之分：`agent.Evaluator`（`blades_agent_reflection_impl.go`，空结构体，关键词评分 + `GenerateReflection`/`ScoreResult`/`RecordFeedback`/`GetHighQualityTraces`/`GetLowQualityTraces` 等 DB 方法）；`evaluator.Evaluator`（`backend/agent/evaluator/evaluator.go`，golden-case 批量评估器，方法为 `Run`/`loadTraces`/`evaluateCase`/`saveCSVReport`，无上述任何方法）。`services` 与 `main.go` 对 evaluator 包的唯一使用是 `AutoMigrate(&evaluator.EvaluatorReport{})`；`evaluator.AutoRun` 全仓无调用点。
+  - `agent.NewEvaluator()` 返回空 `&Evaluator{}` 是关键词评分 Evaluator 的**正常构造**，不是 golden-case 评估器的 stub；`GenerateSkillFromTraces`（经 `RunSkillExtractionPass`，每日 02:30 cron 在 `app.go:368` 与 `cmd/server/main.go:377,381` 调度，链路在跑）内部调用 `NewEvaluator().GetHighQualityTraces(10)`。因此方案 (b)“只删 stub，NewEvaluator 改为调用真构造”无法按字面执行——改调 `evaluator.NewEvaluator(goldenPath, threshold)` 会改变返回类型，调用点全部无法编译，属于架构合并而非重构删除。
+  - 5 个方法零调用点核查：`DefaultEvaluator`、`GetLowQualityTraces`、`RecordFeedback`、`CleanupToolRanks`、`ProposeEvolutionPlan` 在生产代码与测试中均无调用点（`GetHighQualityTraces` 除外，有 1 处 live 调用）；`App` 的 `evaluator`/`evolver` 字段除 `NewApp()` 赋值外全仓无读取点（字段去留按方案留待 R-27）；`GenerateReflection` 本身无生产调用点（仅测试 `evolution_wiring_test.go:185` 调用），其注释自述为 DORMANT。
+  - 结论：(a) 删 5 个方法需用户确认“评估/进化链路是否还在跑”（附录 C #3），拿不到确认不做；(b) 按字面不可执行，需用户或方案先定夺两个 Evaluator 的合并方式。本步零改动，记入未做事项。
