@@ -130,3 +130,7 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 跳过 1 个：`NewSummaryStockNewsStreamWithTools`（151 行）。它是资讯总结 + 股票推荐的流式生产管线，唯一的调用点是两个 integration 测试（`openai_api_test.go:37`、`app_integration_test.go:107` 的 `TestSummaryStockNews`，全 App→AI 端到端）；其同胞 `NewSummaryStockNewsStream` 同样全仓 0 生产调用点。按方案“相关测试未确认过时则该函数跳过，不准先删函数、后补测试”，本步不删，记入未做事项。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data、quant、agent 三包全过（含改写后的 `TestAnalyzeSentiment` 与 BoolVector/Matrix 测试）。
 - 发现的既有问题（非本步造成，不修）：`go vet -tags=integration ./backend/data/` 在基线即失败，integration 测试文件至少有 4 处未定义引用——`markdownToImage`（`gen_test_images_test.go:391`、`markdown_to_image_e2e_test.go:36,78`）、`GetTopNewsList`（`openai_api_test.go:50`）、`SearchStockInfoByCode`（`stock_data_api_test.go:103`）、`parseBingResultsWithGoquery`（`web_search_api_test.go:204`）。已用排除法确认：除这 4 处既有错误外，本步改过的 integration 测试文件无 vet 错误。
+
+### R-13 删 3 个前端死组件 —— 跳过（待用户确认，附录 C #5）
+
+- 无用户确认“不是未完成的功能入口”，整步跳过。`aiRecommendStocksList.vue`、`mcp-server-manager.vue`、`skill-manager.vue` 及 `vue-json-pretty` 依赖原样保留，记入未做事项。
