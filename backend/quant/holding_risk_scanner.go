@@ -476,6 +476,13 @@ func calcPeriodSMA(closes []float64, period int) float64 {
 }
 
 func fallbackItem(it HoldingScanItem) HoldingRiskItem {
+	// 无 K 线数据时也必须给出有效防守位（结构性不变量：DefensePrice > 0），
+	// 否则下游按防守位减仓的逻辑会拿到 0 值。无均线可用时以现价下 5% 作为
+	// 保守防守线；现价未知时无法推导，保持 0 并由调用方按缺失处理。
+	defensePrice := 0.0
+	if it.CurrentPrice > 0 {
+		defensePrice = math.Round(it.CurrentPrice*0.95*100) / 100
+	}
 	return HoldingRiskItem{
 		StockCode:     it.StockCode,
 		StockName:     it.StockName,
@@ -484,6 +491,7 @@ func fallbackItem(it HoldingScanItem) HoldingRiskItem {
 		RiskTier:      "YELLOW",
 		TierPrefix:    "🟡",
 		TierTitle:     "🟡【防守观望】",
+		DefensePrice:  defensePrice,
 		ActionAdvice:  "历史K线样本不足，维持中性观望与仓位控制。",
 	}
 }

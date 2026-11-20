@@ -567,11 +567,19 @@ func (m *BackupManager) RestoreBackupFile(fileName string) (string, error) {
 			return "", fmt.Errorf("快照完整性校验未通过，拒绝执行恢复: %w", err)
 		}
 
-		// 2. 灾备安全防护：在恢复前自动对当前活跃库创建恢复前保护快照
+		// 2. 灾备安全防护：在恢复前自动对当前活跃库创建恢复前保护快照。
+		//    快照失败必须直接报错拒绝继续：否则用户会在没有保护快照的
+		//    情况下按指引覆盖 data/stock.db。
 		safetyName := fmt.Sprintf("stock_prerestore_safety_%s.db", time.Now().Format("20060102_150405"))
 		safetyPath := filepath.Join(EnsureBackupDir(), safetyName)
-		_ = db.Dao.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error
-		_ = db.Dao.Exec(fmt.Sprintf("VACUUM INTO '%s'", filepath.ToSlash(safetyPath))).Error
+		if err := db.Dao.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error; err != nil {
+			return "", fmt.Errorf("创建恢复前安全副本失败（wal_checkpoint）: %w", err)
+		}
+		// VACUUM INTO 不支持绑定参数，路径里的单引号需手动翻倍转义。
+		safetyPathEscaped := strings.ReplaceAll(filepath.ToSlash(safetyPath), "'", "''")
+		if err := db.Dao.Exec(fmt.Sprintf("VACUUM INTO '%s'", safetyPathEscaped)).Error; err != nil {
+			return "", fmt.Errorf("创建恢复前安全副本失败（VACUUM INTO）: %w", err)
+		}
 
 		return fmt.Sprintf("✅ 目标数据库物理快照 [%s] 已通过完整性与表结构校验！\n🛡️ 系统已自动为您创建当前数据库的安全副本: %s\n\n【灾备恢复指引】：\n由于当前 SQLite 连接处于活跃读写状态，为了保障底层存储一致性，请：\n1. 停止当前服务 (若为终端直接退出，若为服务运行 systemctl stop 或 docker compose stop)\n2. 将备份文件 %s 复制并重命名覆盖 data/stock.db\n3. 重新启动服务，即可完成 100%% 无损瞬时恢复。", cleanName, safetyName, filepath.ToSlash(filePath)), nil
 

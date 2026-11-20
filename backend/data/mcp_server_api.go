@@ -172,7 +172,7 @@ func (a *MCPServerApi) SearchServers(keyword string) []models.MCPServer {
 	return servers
 }
 
-func parseMCPHeaders(headersStr string) map[string]string {
+func ParseMCPHeaders(headersStr string) map[string]string {
 	if headersStr == "" {
 		return nil
 	}
@@ -185,7 +185,7 @@ func parseMCPHeaders(headersStr string) map[string]string {
 }
 
 func CreateMCPClient(server *models.MCPServer) (*client.Client, error) {
-	headers := parseMCPHeaders(server.Headers)
+	headers := ParseMCPHeaders(server.Headers)
 
 	switch server.Type {
 	case "sse":

@@ -46,7 +46,10 @@ func GetReadProjectFileTool() bladesTools.Tool {
 				return "缺少 path 参数", nil
 			}
 
-			fullPath := resolvePath(path)
+			fullPath, err := resolvePath(path)
+			if err != nil {
+				return "路径不合法: " + err.Error(), nil
+			}
 			info, err := os.Stat(fullPath)
 			if err != nil {
 				return "文件不存在: " + path, nil
@@ -93,7 +96,10 @@ func GetListProjectDirTool() bladesTools.Tool {
 				}
 			}
 
-			fullPath := resolvePath(path)
+			fullPath, err := resolvePath(path)
+			if err != nil {
+				return "路径不合法: " + err.Error(), nil
+			}
 			info, err := os.Stat(fullPath)
 			if err != nil {
 				return "目录不存在: " + path, nil
@@ -131,16 +137,27 @@ func GetSearchProjectFilesTool() bladesTools.Tool {
 				searchRoot = root
 			}
 
-			fullRoot := resolvePath(searchRoot)
+			fullRoot, err := resolvePath(searchRoot)
+			if err != nil {
+				return "搜索根目录不合法: " + err.Error(), nil
+			}
 			matches, err := filepath.Glob(filepath.Join(fullRoot, pattern))
 			if err != nil {
 				return "搜索模式无效: " + err.Error(), nil
 			}
+			// Glob 模式里的 ".." 仍可能把匹配结果带出根目录，逐个过滤。
+			kept := matches[:0]
+			for _, m := range matches {
+				if rel, rerr := filepath.Rel(fullRoot, m); rerr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					kept = append(kept, m)
+				}
+			}
+			matches = kept
 
 			var result strings.Builder
 			result.WriteString(fmt.Sprintf("找到 %d 个匹配文件:\n", len(matches)))
 			for _, m := range matches {
-				rel, _ := filepath.Rel(resolvePath("."), m)
+				rel, _ := filepath.Rel(projectRoot(), m)
 				result.WriteString("  - " + rel + "\n")
 				if result.Len() > 4000 {
 					result.WriteString("  ... 结果过多，已截断\n")
@@ -168,9 +185,13 @@ func GetGitOperationTool() bladesTools.Tool {
 			gitArgs, _ := params["args"].(string)
 			path, _ := params["path"].(string)
 
-			workDir := resolvePath(".")
+			workDir := projectRoot()
 			if path != "" {
-				workDir = resolvePath(path)
+				var err error
+				workDir, err = resolvePath(path)
+				if err != nil {
+					return "路径不合法: " + err.Error(), nil
+				}
 			}
 
 			if op == "" {
@@ -249,7 +270,10 @@ func GetWriteProjectFileTool() bladesTools.Tool {
 				return "内容过大（超过1MB），无法写入", nil
 			}
 
-			fullPath := resolvePath(path)
+			fullPath, err := resolvePath(path)
+			if err != nil {
+				return "路径不合法: " + err.Error(), nil
+			}
 			dir := filepath.Dir(fullPath)
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				return "创建目录失败: " + err.Error(), nil
@@ -288,7 +312,7 @@ func GetRunCommandTool() bladesTools.Tool {
 				timeoutSec = int(t)
 			}
 
-			workDir := resolvePath(".")
+			workDir := projectRoot()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 			defer cancel()
 
@@ -327,15 +351,30 @@ func GetProjectTools() []bladesTools.Tool {
 	}
 }
 
-func resolvePath(path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
+// projectRoot 返回项目根目录的绝对路径。
+func projectRoot() string {
 	absRoot, err := filepath.Abs(AllowedProjectRoot)
 	if err != nil {
-		return path
+		return AllowedProjectRoot
 	}
-	return filepath.Join(absRoot, path)
+	return absRoot
+}
+
+// resolvePath 把调用方给出的路径解析为项目根目录内的绝对路径。
+// 绝对路径与含 ".." 的相对路径一律做越界校验，逃出项目根目录时返回错误，
+// 防止经 ReadProjectFile/WriteProjectFile 等工具读写根目录外的任意文件。
+func resolvePath(path string) (string, error) {
+	absRoot := projectRoot()
+	var abs string
+	if filepath.IsAbs(path) {
+		abs = filepath.Clean(path)
+	} else {
+		abs = filepath.Join(absRoot, path)
+	}
+	if abs != absRoot && !strings.HasPrefix(abs, absRoot+string(filepath.Separator)) {
+		return "", fmt.Errorf("路径 %q 超出项目根目录", path)
+	}
+	return abs, nil
 }
 
 func walkDir(path, prefix string, depth int, result *strings.Builder) {

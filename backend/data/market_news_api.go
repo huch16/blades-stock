@@ -841,7 +841,10 @@ func (m MarketNewsApi) IndustryResearchReport(industryCode string, days int) []a
 	}
 	json.Unmarshal(resp.Body(), &respMap)
 	//logger.SugaredLogger.Infof("resp:%+v", respMap["data"])
-	return respMap["data"].([]any)
+	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
+		return dataList
+	}
+	return []any{}
 }
 func (m MarketNewsApi) StockResearchReport(stockCode string, days int) []any {
 	endDate := time.Now().Format("2006-01-02")
@@ -905,7 +908,10 @@ func (m MarketNewsApi) StockResearchReport(stockCode string, days int) []any {
 	}
 	json.Unmarshal(resp.Body(), &respMap)
 	//logger.SugaredLogger.Infof("resp:%+v", respMap["data"])
-	return respMap["data"].([]any)
+	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
+		return dataList
+	}
+	return []any{}
 }
 
 func (m MarketNewsApi) StockNotice(stock_list string) []any {
@@ -939,7 +945,12 @@ func (m MarketNewsApi) StockNotice(stock_list string) []any {
 	}
 	json.Unmarshal(resp.Body(), &respMap)
 	//logger.SugaredLogger.Infof("resp:%+v", respMap["data"])
-	return (respMap["data"].(map[string]any))["list"].([]any)
+	if dataMap, ok := respMap["data"].(map[string]any); ok {
+		if list, ok := dataMap["list"].([]any); ok {
+			return list
+		}
+	}
+	return []any{}
 }
 
 func (m MarketNewsApi) EMDictCode(code string, cache *freecache.Cache) []any {
@@ -948,7 +959,9 @@ func (m MarketNewsApi) EMDictCode(code string, cache *freecache.Cache) []any {
 	d, _ := cache.Get([]byte(code))
 	if d != nil {
 		json.Unmarshal(d, &respMap)
-		return respMap["data"].([]any)
+		if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
+			return dataList
+		}
 	}
 
 	url := "https://reportapi.eastmoney.com/report/bk"
@@ -970,7 +983,10 @@ func (m MarketNewsApi) EMDictCode(code string, cache *freecache.Cache) []any {
 	json.Unmarshal(resp.Body(), &respMap)
 	//logger.SugaredLogger.Infof("resp:%+v", respMap["data"])
 	cache.Set([]byte(code), resp.Body(), 60*60*24)
-	return respMap["data"].([]any)
+	if dataList, ok := respMap["data"].([]any); ok && dataList != nil {
+		return dataList
+	}
+	return []any{}
 }
 
 func (m MarketNewsApi) TradingViewNews() *[]models.Telegraph {
@@ -1142,7 +1158,10 @@ func (m MarketNewsApi) HotTopic(size int) []any {
 	//logger.SugaredLogger.Infof("HotTopic:%s", resp.Body())
 	respMap := map[string]any{}
 	json.Unmarshal(resp.Body(), &respMap)
-	return respMap["re"].([]any)
+	if reList, ok := respMap["re"].([]any); ok && reList != nil {
+		return reList
+	}
+	return []any{}
 
 }
 
@@ -1154,11 +1173,13 @@ func (m MarketNewsApi) InvestCalendar(yearMonth string) []any {
 	url := "https://app.jiuyangongshe.com/jystock-app/api/v1/timeline/list"
 	token := os.Getenv("JYGS_TOKEN")
 	if token == "" {
-		token = "1cc6380a05c652b922b3d85124c85473"
+		logger.SugaredLogger.Errorf("InvestCalendar: 未配置 JYGS_TOKEN 环境变量，无法获取投资日历")
+		return []any{}
 	}
 	session := os.Getenv("JYGS_SESSION")
 	if session == "" {
-		session = "SESSION=NDZkNDU2ODYtODEwYi00ZGZkLWEyY2ItNjgxYzY4ZWMzZDEy"
+		logger.SugaredLogger.Errorf("InvestCalendar: 未配置 JYGS_SESSION 环境变量，无法获取投资日历")
+		return []any{}
 	}
 	resp, err := SharedHTTPClient.SetTimeout(time.Duration(30)*time.Second).R().
 		SetHeader("Host", "app.jiuyangongshe.com").

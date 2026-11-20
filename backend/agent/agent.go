@@ -829,16 +829,9 @@ func parseMCPEnv(envStr string) map[string]string {
 	return env
 }
 
+// parseMCPHeaders 是 data.ParseMCPHeaders 的薄代理（本包调用点与测试仍用此名）。
 func parseMCPHeaders(headersStr string) map[string]string {
-	if headersStr == "" {
-		return nil
-	}
-	var headers map[string]string
-	if err := sonic.Unmarshal([]byte(headersStr), &headers); err != nil {
-		logger.SugaredLogger.Warnf("解析MCP Headers失败: %v", err)
-		return nil
-	}
-	return headers
+	return data.ParseMCPHeaders(headersStr)
 }
 
 func getSkillMCPServerIDs() []uint {
@@ -1254,5 +1247,11 @@ func redactAIConfig(cfg data.AIConfig) data.AIConfig {
 func resolveProjectPath(source, name string) string {
 	base := filepath.Join(os.TempDir(), "blades-stock-learned-projects")
 	os.MkdirAll(base, 0755)
+	// name 来自用户输入或 URL 尾段，必须清洗：filepath.Base("..") 仍是 ".."，
+	// 直接 Join 会逃出 base 目录。
+	name = filepath.Base(strings.TrimSpace(name))
+	if name == "." || name == ".." || name == "" {
+		name = "unnamed-project"
+	}
 	return filepath.Join(base, name)
 }
