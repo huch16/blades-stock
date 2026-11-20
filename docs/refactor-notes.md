@@ -249,3 +249,15 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - `settings_backup.go` 605 行（34 个，备份/清理域）：清理、备份/恢复、导入导出 CSV 等全部备份相关函数。
   - 只拆方法：全部 struct 定义（`Settings`、`AIConfig`、`SettingConfig`、`SettingsApi`、`AiConfigTemplate`）与两个 `TableName()`、两组 const（`Backup*`、`Cleanup*`）留在原文件不动。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 53（10+2+7+34），与拆分前一致。
+
+### R-20c 拆 backend/data/market_news_api.go（1,564 行、40 个函数 → 核心文件 + 5 个域文件）—— 已完成
+
+- 拆分结果（原文件 1,564 行 → 核心文件 13 行，仅 `MarketNewsApi` struct + `NewMarketNewsApi`）：
+  - `market_news_list.go` 391 行（6 个，资讯列表：电报列表/新电报/按源列表/新浪新闻/24 小时列表/新闻数据查询）
+  - `market_news_flash.go` 160 行（4 个，快讯：TradingView 新闻及详情、路透、财联社）
+  - `market_news_sentiment.go` 536 行（16 个，舆情：研报/公告/字典码/券商观点/互动问答/热门股/热点/话题/龙虎榜/涨停热门 + 行业排行/资金排行/资金趋势）
+  - `market_news_calendar.go` 252 行（7 个，日历：投资日历、财联社日历、GDP/CPI/PPI/PMI/行业报告信息）
+  - `market_news_indexes.go` 294 行（6 个，指数：全球指数及可读化、指数缓存读写）
+  - 与设计出入：设计称 4 个域（资讯列表/舆情/日历/快讯），6 个全球指数及缓存函数无处安放（既非快讯也非舆情），故单独立为 `market_news_indexes.go`，避免舆情域膨胀到 800 行以上。
+  - 只搬家不改逻辑：R-14 遗留的 `EMDictCode` 缓存读取处裸 `json.Unmarshal` 原样保留在 `market_news_sentiment.go` 内，未顺手改动。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 40（1+6+4+16+7+6），与拆分前一致。
