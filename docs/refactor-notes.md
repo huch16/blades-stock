@@ -173,3 +173,24 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - 注册块原文逐字搬家（缩进不变：原在 `GetAllDataTools` 内 1 tab，新注册函数内同样 1 tab）；各文件 import 按实际引用逐项计算生成，无多余 import。
   - 执行中修过一次生成脚本 bug：helper 一度被拼进注册函数体内导致语法错误，已纠正为“helper 放在注册函数之后”，随后 `go build/vet` 通过。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` tools 包与 agent 包全过；`TestGetAllDataTools` 工具总数 84（与基线一致）、`TestEveryAssembledToolIsDeclared`、`TestAssembledToolsHaveNoDuplicates`、`TestGroupCapsAreRespected` 全部通过。
+
+### R-17 拆 backend/data/tools.go（2,698 行 → 9 个域文件 + 分类/查询文件 + 聚合文件）—— 已完成
+
+- 拆分前实测与方案出入（均已核对并记录）：
+  - 文件实际 2,698 行（方案 2,704 行为基线行号）；以工具名分段为准拆分，不按旧行号。
+  - `Tools()` 内除 94 个具名 schema append 外，还有 1 处 FinGenius 循环注册（`:2210–2241`，`AnalyzeHotMoneyActivity`、`AnalyzeChipConcentration`、`AnalyzeCapitalGame` 3 个工具，游资/筹码/资金博弈分析），随 changes 域走；另有 3 处注释掉的死 schema（`QueryBKDictInfo`、`GetIndustryResearchReport`，`:185–209`；`CailianpressWeb`，`:521–540`）——与 R-16 不同，本步方案未授意删除，故原文保留（前两处随 finance 域、后一处随 market 域，仍为注释状态，零行为变化）；另有 2 处单行注释（`//CreateAiRecommendStocks`、 `//BatchCreateAiRecommendStocks`）随所属工具块走。
+  - `Tools()` 体内非空行逐行对账：除函数自身结构行外全部落入域文件、聚合尾部或上述保留的注释/循环单元，无遗漏。
+  - `toolSchemaStockCodes`：8 处使用横跨 kline、finance、hot 三个域，按方案“随第一个 schema 文件走或留在原文件”留在了聚合文件 `tools.go`（同包，无需移动）。
+- 拆分结果（原文件 2,698 行 → 聚合文件 35 行）：
+  - `tools_screen.go` 340 行（12 个：SearchStockByIndicators、SearchBk、SearchETF、InteractiveAnswer、FilterStocks、QueryStockCodeInfo、QueryIwencai、SelectAStock、SelectSector、QueryMacro、QueryZhishu、QueryEvent）
+  - `tools_finance.go` 486 行（24 个：研报/资金/财务 10 个 + F10 10 个 + ComparableCompanyAnalysis、SearchInvestor、SearchReport、QueryInsResearch）+ 2 处保留的注释 schema
+  - `tools_market.go` 194 行（9 个）+ 1 处保留的注释 schema
+  - `tools_ai.go` 104 行（4 个）、`tools_kline.go` 318 行（6 个）、`tools_fund.go` 119 行（5 个）
+  - `tools_hot.go` 267 行（14 个：热门/日历域 + GetHolidayInfo、IsTradingDay、GetNextTradingDay）
+  - `tools_changes.go` 258 行（11 个 + FinGenius 循环 3 个）
+  - `tools_wallstreetcn_tdx.go` 185 行（9 个：5 个 TDX + 4 个见闻）
+  - `tool_groups.go` 198 行：`dataToolGroup` 类型 + 常量 + `dataToolGroupMap` + `dataToolGroupKeywordsList`（原文搬运）
+  - `tools_query.go` 255 行：`classifyDataToolGroups`、`filterDataToolsByGroups`、`appendAgentParityTools`（含 SendDingDingMessage、GetHolidayYear/Batch、16×`newQueryTool`、5×`newSimpleQueryTool`、GetDailyDimensionStats、GetTypeStatsByDate、GetUplimitPlateStocks）、`newQueryTool`、`newSimpleQueryTool`
+  - `tools.go` 35 行：仅留 `toolSchemaStockCodes` 与聚合版 `Tools()`（依次调 9 个 `appendXxxTools` + `appendAgentParityTools` + `FilterToolsByApiKey`）；`strings` import 随之删除（新聚合不再使用）。
+  - 各域函数均为 `appendXxxTools(tools []Tool) []Tool`，schema 字面量逐字搬家。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；数量对照（临时测试，跑完即删，未提交）：`len(data.Tools(nil))` 拆分前后均为 **111**，`dataToolGroupMap` 均为 **125 项**，关键词组 7 组/205 个关键词均一致。
