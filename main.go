@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"blades-stock/backend/agent"
-	"blades-stock/backend/agent/evaluator"
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	log "blades-stock/backend/logger"
@@ -142,7 +141,9 @@ func main() {
 	// Initialize embedding service for semantic memory search
 	agent.InitEmbeddingService()
 	go data.InitTradingCalendar()
-	AutoMigrate()
+	services.AutoMigrateAll()
+	// 初始化 global_stock_index_cache 定时任务（原 main.AutoMigrate() 末尾调用）
+	initGlobalStockIndexCacheTask()
 	if err := db.RunVersionedMigrations(db.Dao); err != nil {
 		log.SugaredLogger.Fatalf("版本化数据库迁移失败: %v", err)
 	}
@@ -311,68 +312,6 @@ func main() {
 		log.SugaredLogger.Fatal(err)
 	}
 
-}
-
-func AutoMigrate() {
-	db.Dao.AutoMigrate(&data.StockInfo{})
-	db.Dao.AutoMigrate(&data.StockBasic{})
-	db.Dao.AutoMigrate(&data.FollowedStock{})
-	db.Dao.AutoMigrate(&data.IndexBasic{})
-	db.Dao.AutoMigrate(&data.Settings{})
-	db.Dao.AutoMigrate(&models.AIResponseResult{})
-	// Agent 运行记录：把“请求的模型 vs 实际使用的模型”固化为可查询事实
-	db.Dao.AutoMigrate(&models.AgentRunRecord{})
-	db.Dao.AutoMigrate(&models.StockInfoHK{})
-	db.Dao.AutoMigrate(&models.StockInfoUS{})
-	db.Dao.AutoMigrate(&data.FollowedFund{})
-	db.Dao.AutoMigrate(&data.FundBasic{})
-	// AutoMigrate with timeout guard. GORM's AutoMigrate does not accept a
-	// context, so we run it in a goroutine and abort on timeout to prevent the
-	// app from hanging on a locked or corrupted database.
-	migrateDone := make(chan struct{}, 1)
-	go func() {
-		db.Dao.AutoMigrate(&data.Group{})
-		db.Dao.AutoMigrate(&data.GroupStock{})
-		db.Dao.AutoMigrate(&models.Tags{})
-		db.Dao.AutoMigrate(&models.Telegraph{})
-		db.Dao.AutoMigrate(&models.TelegraphTags{})
-		db.Dao.AutoMigrate(&models.LongTigerRankData{})
-		db.Dao.AutoMigrate(&data.AIConfig{})
-		db.Dao.AutoMigrate(&models.BKDict{})
-		db.Dao.AutoMigrate(&models.WordAnalyze{})
-		db.Dao.AutoMigrate(&models.SentimentResultAnalyze{})
-		db.Dao.AutoMigrate(&models.AiRecommendStocks{})
-		db.Dao.AutoMigrate(&models.AllStockInfo{})
-		db.Dao.AutoMigrate(&models.CronTask{})
-		db.Dao.AutoMigrate(&models.AiAssistantSession{})
-		db.Dao.AutoMigrate(&models.GlobalStockIndex{})
-		db.Dao.AutoMigrate(&data.TradingRecord{})
-		db.Dao.AutoMigrate(&models.MCPServer{})
-		db.Dao.AutoMigrate(&models.MCPServerTool{})
-		db.Dao.AutoMigrate(&models.Skill{})
-		db.Dao.AutoMigrate(&agent.PlanTrace{})
-		db.Dao.AutoMigrate(&evaluator.EvaluatorReport{})
-		services.SeedDefaultSkills()
-		db.Dao.AutoMigrate(&models.CustomStrategy{})
-		db.Dao.AutoMigrate(&models.BKFundFlow{})
-		db.Dao.AutoMigrate(&models.ConceptFundFlow{})
-		db.Dao.AutoMigrate(&models.ProjectAnalysis{})
-		db.Dao.AutoMigrate(&models.CodeChunk{})
-		db.Dao.AutoMigrate(&models.BacktestResult{})
-		db.Dao.AutoMigrate(&models.AuditLog{})
-		migrateDone <- struct{}{}
-	}()
-	select {
-	case <-migrateDone:
-		log.SugaredLogger.Info("数据库迁移完成")
-	case <-time.After(30 * time.Second):
-		log.SugaredLogger.Fatal("数据库迁移超时（30秒），请检查数据库文件是否损坏或已被锁定")
-	}
-
-	//updateMultipleModel()
-
-	// 初始化 global_stock_index_cache 定时任务
-	initGlobalStockIndexCacheTask()
 }
 
 // initGlobalStockIndexCacheTask 检查并创建 global_stock_index_cache 定时任务

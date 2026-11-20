@@ -277,3 +277,14 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 已完成：`fund_data_api.go`（2,324→831 行 + 4 域文件）、`settings_api.go`（1,608→396 行 + 3 域文件）、`market_news_api.go`（1,564→13 行 + 5 域文件）、`tdx_kline_api.go`（1,558→354 行 + 3 域文件）。每文件独立提交、独立验证，函数总数对照均与拆前一致。
 - 未做（按方案“若时间允许同批拆，否则记入收尾清单”）：`backend/services/market_service.go`（1,283 行、130 个函数，多为小函数）、`backend/agent/market_lifecycle.go`（1,391 行、22 个函数，多为长函数）、`backend/agent/agent.go`（1,224 行、49 个函数）。三者仍超 1,000 行，记入收尾清单，不在本步扩大范围。
 - 另：`backend/data/eastmoney_api.go`（1,350 行）仍超 1,000 行，但它在 R-25 搬家范围（整体进 `datasource`），不在 R-20 拆分范围；R-20 的“`backend/data` 再无超 1,000 行文件”预期待 R-25 后达成。
+
+### R-21 main.go 收尾：AutoMigrate 收敛 + SeedDefaultSkills 确认 —— 已完成
+
+- 删除根包 `main.AutoMigrate()`（62 行，39 个模型去重后），`main.go` 由 430 行 → 369 行，仅剩方案要求的 6 个函数：`main()`、`setupCrashOutput()`、`PanicHandler()`、`initGlobalStockIndexCacheTask()`、`updateBasicInfo()`、`checkDir()`。
+- 调用点改调：`main()` 内 `AutoMigrate()` → `services.AutoMigrateAll()`；原 `AutoMigrate()` 末尾调用的 `initGlobalStockIndexCacheTask()` 改为在 `main()` 内直接调用（行为不变）；`testing_init_test.go` 的 `TestMain` 同样改调 `services.AutoMigrateAll()`（根包测试无计数断言受种子数据影响，实测通过）。
+- 清单等价核对（脚本 `/tmp/r21check.py`，旧清单取自 HEAD 版 main.go）：旧 main 清单 39 个模型**全部**在 `services.AutoMigrateAll()` 的 50 个直接迁移项内（`main ⊆ services-direct`，差集为空，R-15 结论复核一致）；services 另多 11 个模型（`StockThesisLedger`/`StockVerdictHistory`/`KnowledgeCrystal`/`PostMortemAuditRecord`/`PaperPortfolio` 等 5 个纸面交易与自进化模型 + `IndustryNode`/`IndustryEdge` + `AutoAlphaProposal` 等），`db.AutoMigrate()` 的清单经 `AutoMigrateAll()` 第 5 步同样执行。
+- `SeedDefaultSkills` 确认：R-11 已合并进 services（`//go:embed`），`main.go` 内已无任何 seed 逻辑；`AutoMigrateAll()` 第 6 步即调用它。
+- 空库冒烟（临时程序 `/tmp/r21smoke/main.go`，跑完即删，未提交）：临时空库上 `db.Init` + `services.AutoMigrateAll()`，54 张表逐一核对（旧 39 + services 新增 11 + db 独有 4）全部存在，缺失 0；技能种子数为 2，与预期一致。**SMOKE PASS**。
+- 已知的、设计认可的收敛差异（记入，非回退理由）：(1) 原 `main.AutoMigrate()` 带 30 秒超时保护（超时则 Fatal），`services.AutoMigrateAll()` 为同步执行、无超时保护——与 server 路径（`cmd/server/main.go:209` 早已直接调用它）一致；(2) 桌面启动路径现在也会执行 `AutoMigrateAll()` 的第 7–14 步幂等种子/自愈（默认 AI 配置、基准自选股及行情回填、认知账本洗洁、出厂基线备份等）——server 路径在同一共享库上早已执行这些步骤，库的终态不变，只是桌面启动时也会收敛一次。
+- `db/chat_memory.go:106` 的清单无需改动：`db.AutoMigrate()` 已在 `AutoMigrateAll()` 第 5 步执行，且桌面与 server 两条路径均经 `db.Init` 先行执行同一份清单（R-15 已核查）。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration -count=1 ./...` 全量 **15 个包通过、0 个失败**（与 R-02 后基线一致）。

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"blades-stock/backend/db"
+	"blades-stock/backend/services"
 )
 
 // TestMain initializes a temp SQLite database for the root package tests so
@@ -23,7 +24,7 @@ func TestMain(m *testing.M) {
 
 	dbPath := filepath.Join(tmpDir, "stock.db")
 	db.Init(dbPath)
-	AutoMigrate()
+	services.AutoMigrateAll()
 
 	os.Exit(m.Run())
 }
