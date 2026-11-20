@@ -1,4 +1,4 @@
-package tools
+package data
 
 import (
 	"strings"
@@ -12,7 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func registerFinanceTools() []bladesTools.Tool {
+func RegisterFinanceTools() []bladesTools.Tool {
 	var result []bladesTools.Tool
 
 	result = append(result, NewDataToolWrapper(

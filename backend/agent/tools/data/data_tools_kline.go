@@ -1,4 +1,4 @@
-package tools
+package data
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func registerKlineTools() []bladesTools.Tool {
+func RegisterKlineTools() []bladesTools.Tool {
 	var result []bladesTools.Tool
 
 	result = append(result, NewDataToolWrapper(
@@ -81,8 +81,6 @@ func registerKlineTools() []bladesTools.Tool {
 			return markdownTable, nil
 		},
 	))
-
-	result = append(result, GetETFMomentumRankingTool())
 
 	result = append(result, NewDataToolWrapper(
 		"GetEastMoneyKLine",

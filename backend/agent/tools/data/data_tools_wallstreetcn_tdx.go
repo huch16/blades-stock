@@ -1,4 +1,4 @@
-package tools
+package data
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func registerWallstreetcnTdxTools() []bladesTools.Tool {
+func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 	var result []bladesTools.Tool
 
 	result = append(result, NewDataToolWrapper(

@@ -1,4 +1,4 @@
-package tools
+package data
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-func registerAITools() []bladesTools.Tool {
+func RegisterAITools() []bladesTools.Tool {
 	var result []bladesTools.Tool
 
 	result = append(result, NewDataToolWrapper(
