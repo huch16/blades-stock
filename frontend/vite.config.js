@@ -78,7 +78,7 @@ export default defineConfig({
           }
           
           // 4. PDF 与截图导出工具
-          if (id.includes('html2canvas') || id.includes('file-saver')) return 'vendor-export'
+          if (id.includes('html2canvas')) return 'vendor-export'
           
           // 5. 图标库 (独立分包，避免膨胀核心 UI)
           if (id.includes('@vicons') || id.includes('tdesign-icons')) return 'vendor-icons'
