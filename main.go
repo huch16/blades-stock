@@ -325,7 +325,6 @@ func AutoMigrate() {
 	db.Dao.AutoMigrate(&models.StockInfoHK{})
 	db.Dao.AutoMigrate(&models.StockInfoUS{})
 	db.Dao.AutoMigrate(&data.FollowedFund{})
-	db.Dao.AutoMigrate(&data.FollowedStock{})
 	db.Dao.AutoMigrate(&data.FundBasic{})
 	// AutoMigrate with timeout guard. GORM's AutoMigrate does not accept a
 	// context, so we run it in a goroutine and abort on timeout to prevent the

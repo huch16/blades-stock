@@ -122,7 +122,7 @@ func (a *StockChangesApi) GetStockChanges(changeTypes []int, pageIndex, pageSize
 		return nil
 	}
 
-	jsonStr := extractJSON(string(body))
+	jsonStr := stripJSONP(string(body))
 	if jsonStr == "" {
 		logger.SugaredLogger.Error("解析JSON失败")
 		return nil
@@ -241,7 +241,7 @@ func (a *StockChangesApi) GetAllStockChangesWithPaging(pageSize int) *StockChang
 	}
 }
 
-func extractJSON(jsonp string) string {
+func stripJSONP(jsonp string) string {
 	re := regexp.MustCompile(`^\w+\((.*)\)$`)
 	matches := re.FindStringSubmatch(jsonp)
 	if len(matches) > 1 {

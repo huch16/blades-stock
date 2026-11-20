@@ -610,7 +610,7 @@ func PrintResult(r *BacktestResult) string {
 	params := r.Params
 	var paramsStr []string
 	for k, v := range params {
-		paramsStr = append(paramsStr, k+"="+formatFloat(v))
+		paramsStr = append(paramsStr, k+"="+formatFloatAny(v))
 	}
 
 	return strings.Join([]string{
@@ -618,18 +618,18 @@ func PrintResult(r *BacktestResult) string {
 		"📊 策略: " + r.StrategyName,
 		"⚙️  参数: " + strings.Join(paramsStr, ", "),
 		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-		"💰 总收益率: " + formatPct(s.TotalReturn),
-		"📅 年化收益率: " + formatPct(s.AnnualReturn),
-		"📉 最大回撤: " + formatPct(s.MaxDrawdownPct),
-		"⚡ 夏普比率: " + formatFloat(s.SharpeRatio),
-		"📐 索提诺比率: " + formatFloat(s.SortinoRatio),
-		"🔥 卡玛比率: " + formatFloat(s.CalmarRatio),
+		"💰 总收益率: " + formatPctRatio(s.TotalReturn),
+		"📅 年化收益率: " + formatPctRatio(s.AnnualReturn),
+		"📉 最大回撤: " + formatPctRatio(s.MaxDrawdownPct),
+		"⚡ 夏普比率: " + formatFloatAny(s.SharpeRatio),
+		"📐 索提诺比率: " + formatFloatAny(s.SortinoRatio),
+		"🔥 卡玛比率: " + formatFloatAny(s.CalmarRatio),
 		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-		"🎯 胜率: " + formatPct(s.WinRate),
-		"💎 盈亏比: " + formatFloat(s.ProfitFactor),
+		"🎯 胜率: " + formatPctRatio(s.WinRate),
+		"💎 盈亏比: " + formatFloatAny(s.ProfitFactor),
 		"📈 交易次数: " + strconv.Itoa(s.TotalTrades),
 		"  ✅ 盈利: " + strconv.Itoa(s.WinTrades) + "  ❌ 亏损: " + strconv.Itoa(s.LoseTrades),
-		"  📊 平均持仓: " + formatFloat(s.AvgHoldingDays) + " 天",
+		"  📊 平均持仓: " + formatFloatAny(s.AvgHoldingDays) + " 天",
 		"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
 		"💵 初始资金: " + formatMoney(s.InitCash),
 		"💵 最终资金: " + formatMoney(s.FinalValue),
@@ -638,7 +638,7 @@ func PrintResult(r *BacktestResult) string {
 	}, "\n")
 }
 
-func formatFloat(v any) string {
+func formatFloatAny(v any) string {
 	switch val := v.(type) {
 	case float64:
 		return sprintf("%.4f", val)
@@ -649,7 +649,7 @@ func formatFloat(v any) string {
 	}
 }
 
-func formatPct(v float64) string {
+func formatPctRatio(v float64) string {
 	return sprintf("%.2f", v*100) + "%"
 }
 

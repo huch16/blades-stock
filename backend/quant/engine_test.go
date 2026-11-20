@@ -387,28 +387,28 @@ func TestSprintfInt(t *testing.T) {
 }
 
 func TestFormatFloat(t *testing.T) {
-	if formatFloat(3.14159) != "3.1416" {
-		t.Fatalf("formatFloat(3.14159) = %s", formatFloat(3.14159))
+	if formatFloatAny(3.14159) != "3.1416" {
+		t.Fatalf("formatFloatAny(3.14159) = %s", formatFloatAny(3.14159))
 	}
-	if formatFloat(42) != "42" {
-		t.Fatalf("formatFloat(42) = %s", formatFloat(42))
+	if formatFloatAny(42) != "42" {
+		t.Fatalf("formatFloatAny(42) = %s", formatFloatAny(42))
 	}
 }
 
 func TestFormatPct(t *testing.T) {
-	s := formatPct(0.0567)
+	s := formatPctRatio(0.0567)
 	if s != "5.67%" {
-		t.Fatalf("formatPct(0.0567) = %s, want 5.67%%", s)
+		t.Fatalf("formatPctRatio(0.0567) = %s, want 5.67%%", s)
 	}
-	s = formatPct(-0.05)
+	s = formatPctRatio(-0.05)
 	if s != "-5.00%" {
-		t.Fatalf("formatPct(-0.05) = %s, want -5.00%%", s)
+		t.Fatalf("formatPctRatio(-0.05) = %s, want -5.00%%", s)
 	}
 	// Test negative float formatting with sprintfFloat fix
 	f := -0.05
-	s = formatPct(f)
+	s = formatPctRatio(f)
 	if s != "-5.00%" {
-		t.Fatalf("formatPct(-0.05) = %s, want -5.00%%", s)
+		t.Fatalf("formatPctRatio(-0.05) = %s, want -5.00%%", s)
 	}
 }
 

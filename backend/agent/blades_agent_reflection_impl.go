@@ -216,7 +216,7 @@ func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durat
 				Insight      string `json:"insight"`
 				Improvement  string `json:"improvement"`
 			}
-			raw = extractJSON(raw)
+			raw = extractJSONBraces(raw)
 			if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
 				result.Score = parsed.Score
 				result.Accuracy = parsed.Accuracy
@@ -420,7 +420,7 @@ func (e *Evaluator) defaultImprovement(score int) string {
 	return "无明显改进方向，建议观察后续表现"
 }
 
-func extractJSON(raw string) string {
+func extractJSONBraces(raw string) string {
 	start := strings.Index(raw, "{")
 	if start == -1 {
 		return raw

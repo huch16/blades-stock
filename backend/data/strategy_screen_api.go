@@ -137,8 +137,8 @@ func ScreenByStrategy(strategyName string, codes []string, limit int) (*Strategy
 			Name:        name,
 			Score:       j.score.Clamped,
 			Close:       formatPrice(j.ind.LastClose),
-			ChangePct:   formatPct(j.ind.ChangePct),
-			VolumeRatio: formatFloat(j.ind.VolumeRatio5),
+			ChangePct:   formatPctRaw(j.ind.ChangePct),
+			VolumeRatio: formatFloat2dp(j.ind.VolumeRatio5),
 			Matched:     matched,
 			Reason:      strings.Join(reasons, "；"),
 		})
@@ -265,11 +265,11 @@ func formatPrice(v float64) string {
 	return strconv.FormatFloat(v, 'f', 2, 64)
 }
 
-func formatPct(v float64) string {
+func formatPctRaw(v float64) string {
 	return strconv.FormatFloat(v, 'f', 2, 64) + "%"
 }
 
-func formatFloat(v float64) string {
+func formatFloat2dp(v float64) string {
 	return strconv.FormatFloat(v, 'f', 2, 64)
 }
 

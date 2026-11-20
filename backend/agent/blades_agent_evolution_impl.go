@@ -88,7 +88,7 @@ func (ev *Evolver) OptimizePrompt(trace *AgentTrace, llm LLMOptimizerFunc) (stri
 	if err != nil {
 		return "", fmt.Errorf("llm optimize failed: %w", err)
 	}
-	raw = extractJSON(raw)
+	raw = extractJSONBraces(raw)
 	var result struct {
 		Analysis        string `json:"analysis"`
 		OptimizedPrompt string `json:"optimizedPrompt"`
@@ -139,7 +139,7 @@ func (ev *Evolver) GenerateSkillFromTraces(llm LLMOptimizerFunc) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("llm skill generation failed: %w", err)
 	}
-	return extractJSON(raw), nil
+	return extractJSONBraces(raw), nil
 }
 
 func (ev *Evolver) RankTools() []ToolRank {
@@ -251,7 +251,7 @@ func (ev *Evolver) LearnFromProject(projectName, analysis string, llm LLMOptimiz
 	if err != nil {
 		return nil, fmt.Errorf("llm learn failed: %w", err)
 	}
-	raw = extractJSON(raw)
+	raw = extractJSONBraces(raw)
 
 	var skill LearnedSkill
 	if err := json.Unmarshal([]byte(raw), &skill); err != nil {

@@ -399,7 +399,7 @@ func (a *CronTaskApi) executeGlobalStockIndexCache(ctx context.Context, task *mo
 func (a *CronTaskApi) executeStockChangeSave(ctx context.Context, task *models.CronTask) error {
 	logger.SugaredLogger.Infof("执行异动数据保存任务：%s", task.Name)
 
-	if !isTradingTime() {
+	if !isTradingTimeNow() {
 		logger.SugaredLogger.Debug("当前不在A股交易时间，跳过异动数据保存")
 		return nil
 	}
@@ -497,10 +497,12 @@ func (a *CronTaskApi) executePostMarketReview(ctx context.Context, task *models.
 	return err
 }
 
-func isTradingTime() bool {
+// isTradingTimeNow 判断当前是否在 A 股交易时间内。
+// 交易日复用 data.IsTradingDay（AData/Baostock 交易日历，缓存未初始化时降级为周末判断，
+// 与旧逻辑一致）：法定节假日不再被误判为交易时间。
+func isTradingTimeNow() bool {
 	now := time.Now()
-	weekday := now.Weekday()
-	if weekday == time.Saturday || weekday == time.Sunday {
+	if !data.IsTradingDay(now.Format("2006-01-02")) {
 		return false
 	}
 
