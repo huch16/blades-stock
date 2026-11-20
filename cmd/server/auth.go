@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,8 +17,16 @@ import (
 	"blades-stock/backend/logger"
 )
 
-// DefaultAdminPassword 工业级系统统一预设/恢复管理员口令
-const DefaultAdminPassword = "2266762"
+// generateRandomToken 生成一个 256 位随机访问口令（32 字节，hex 编码后 64 字符）。
+// 仅在既无环境变量又无持久化口令的首次启动时调用一次，调用方负责持久化并
+// 在启动日志里打印一次，之后重启均从持久化文件读取，不再重新生成。
+func generateRandomToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
 
 // AuthConfig 访问鉴权配置
 type AuthConfig struct {
@@ -56,13 +66,25 @@ func initAuth(dataDir string) {
 		}
 	}
 
-	// 3. 工业级默认规则：自动启用统一预设管理员密码 (2266762) 并固化到存储
-	globalAuth.Token = DefaultAdminPassword
+	// 3. 既无环境变量又无持久化口令：生成一个随机口令并固化到存储，
+	//    仅在启动日志里打印一次。仓库与脚本中不得再出现任何硬编码默认口令：
+	//    公开的默认口令等于没有口令。
+	token, err := generateRandomToken()
+	if err != nil {
+		logger.SugaredLogger.Errorf("[Auth] Failed to generate random access token: %v", err)
+		return
+	}
+	globalAuth.Token = token
 	if dataDir != "" {
 		tokenFile := filepath.Join(dataDir, "auth.token")
-		_ = os.WriteFile(tokenFile, []byte(DefaultAdminPassword), 0o600)
+		if err := os.WriteFile(tokenFile, []byte(token), 0o600); err != nil {
+			logger.SugaredLogger.Errorf("[Auth] Failed to persist generated access token: %v", err)
+		}
 	}
-	logger.SugaredLogger.Info("[Auth] Access token protection is ENABLED with unified admin password (2266762).")
+	// 口令只在本次启动日志里打印一次：请立即妥善保存，之后请改用环境变量
+	// BLADES_AUTH_TOKEN 或首次登录后修改口令；日志本身也应妥善保管。
+	logger.SugaredLogger.Info("[Auth] Access token protection is ENABLED (random token generated for first boot, printed once below).")
+	logger.SugaredLogger.Infof("[Auth] Generated access token (first boot only, save it now): %s", token)
 }
 
 func getAuthToken() string {
@@ -231,8 +253,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			clientToken = strings.TrimSpace(r.URL.Query().Get("token"))
 		}
 
-		if subtle.ConstantTimeCompare([]byte(clientToken), []byte(serverToken)) != 1 &&
-			subtle.ConstantTimeCompare([]byte(clientToken), []byte(DefaultAdminPassword)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(clientToken), []byte(serverToken)) != 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]any{
@@ -271,7 +292,7 @@ func HandleInitPassword(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	current := getAuthToken()
-	if current != "" && current != DefaultAdminPassword {
+	if current != "" {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{
 			"code":  400,
@@ -396,13 +417,19 @@ func HandleLogin(w http.ResponseWriter, r *http.Request) {
 
 	serverToken := getAuthToken()
 	if serverToken == "" {
-		serverToken = DefaultAdminPassword
-		_ = setAuthToken(serverToken)
+		// 未配置任何口令：不设任何默认口令，直接引导走首次初始化流程。
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]any{
+			"code":     401,
+			"needInit": true,
+			"error":    "系统尚未初始化访问密码，请在首次访问界面设置密码",
+		})
+		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 
-	if subtle.ConstantTimeCompare([]byte(clientPwd), []byte(serverToken)) == 1 ||
-		subtle.ConstantTimeCompare([]byte(clientPwd), []byte(DefaultAdminPassword)) == 1 {
+	if subtle.ConstantTimeCompare([]byte(clientPwd), []byte(serverToken)) == 1 {
 
 		// 登录成功：清除此 IP 的失败计数
 		loginTracker.mu.Lock()

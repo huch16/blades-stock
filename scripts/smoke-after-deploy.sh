@@ -20,7 +20,11 @@ TOKEN="${BLADES_AUTH_TOKEN:-}"
 if [ -z "$TOKEN" ] && [ -f .env ]; then
     TOKEN="$(grep '^BLADES_AUTH_TOKEN=' .env 2>/dev/null | cut -d '=' -f2- | tr -d ' "')"
 fi
-TOKEN="${TOKEN:-2266762}"
+if [ -z "$TOKEN" ]; then
+    echo -e "${RED}[错误] 未找到访问口令：请设置环境变量 BLADES_AUTH_TOKEN 再运行，${NC}"
+    echo -e "${RED}       或在部署目录的 .env 中配置 BLADES_AUTH_TOKEN。本脚本不再内置任何默认口令。${NC}"
+    exit 1
+fi
 
 GREEN="\033[0;32m"; RED="\033[0;31m"; YELLOW="\033[1;33m"; BLUE="\033[0;34m"; NC="\033[0m"
 PASS=0; FAIL=0

@@ -17,12 +17,18 @@ Web 模式下前端通过 `frontend/src/api/bridge.ts` 把 Wails 调用透明代
 
 ### 登录
 
-Web 模式的统一访问口令为 **`2266762`**，可在 `.env` 的 `BLADES_AUTH_TOKEN` 覆盖：
+Web 模式的访问口令**没有默认值**，必须自行设定（推荐写入 `.env` 的 `BLADES_AUTH_TOKEN`）：
 
 ```bash
 # .env
-BLADES_AUTH_TOKEN=your-own-password
+BLADES_AUTH_TOKEN=<your-token>
 ```
+
+未设定时，服务端首次启动会随机生成一个口令并固化到 `data/auth.token`（0600），
+同时在启动日志里打印一次，请及时保存。部署脚本（`scripts/deploy-vps.sh` /
+`scripts/deploy-docker.sh`）会在你未设定时自动生成一个随机口令并在部署成功后
+打印一次。**旧的公开默认口令已废除**：任何已部署的旧服务请立即更换口令并删除
+旧的 `data/auth.token`（见 `SECURITY.md`）。
 
 登录成功后服务端下发 **HttpOnly** Cookie `blades_token`（30 天），
 SSE 事件流与 RPC 均可凭该 Cookie 鉴权，无需在 URL 中暴露 Token。

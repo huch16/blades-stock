@@ -23,8 +23,10 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PORT=${PORT:-8000}
-      # 公网访问安全口令（默认统一为 2266762，亦可在 .env 中自定义覆盖）
-      - BLADES_AUTH_TOKEN=${BLADES_AUTH_TOKEN:-2266762}
+      # 公网访问口令：必须在 .env 或环境中设定 BLADES_AUTH_TOKEN（无默认值）。
+      # 未设定时服务端首次启动会随机生成一个口令并固化到 data/auth.token，
+      # 同时在启动日志里打印一次（docker compose logs blades-stock）。
+      - BLADES_AUTH_TOKEN=${BLADES_AUTH_TOKEN:-}
       # 默认 SearXNG 聚合搜索端点
       - SEARXNG_URL=${SEARXNG_URL:-https://search.woha.men}
       # 可选外部 API Key 注入

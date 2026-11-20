@@ -11,6 +11,11 @@
 .idea
 .vscode
 
+# 本地凭据（绝不能进入构建上下文，即使当前 Dockerfile 是选择性 COPY；
+# 一旦将来有人改成 COPY .，没有这行就会把口令烘进镜像层）
+.env
+.env.*
+
 # 前端依赖与产物（构建阶段会在容器内重新 npm install 与 npm run build）
 # 注意：frontend/wailsjs 是 src 代码的运行时依赖（Wails 绑定桩），**不得**排除。
 frontend/node_modules

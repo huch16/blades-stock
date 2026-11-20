@@ -73,6 +73,12 @@ typings/
 # dotenv environment variables file
 .env
 .env.test
+.env.*
+!.env.example
+# 通用密钥文件兜底（私钥、凭据一律不得入库）
+*.pem
+*.key
+credentials*.json
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache

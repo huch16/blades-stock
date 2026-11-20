@@ -196,7 +196,8 @@ systemctl restart blades-stock     # 重启
 
 > 可选环境变量覆盖：`BLADES_DIR`（安装目录，默认 `/opt/blades-stock`）、
 > `BLADES_PORT`（默认 `8000`）、`BLADES_BRANCH`（Git 引用，默认 `v3.1.3`）、
-> `BLADES_TOKEN`（访问口令，默认 `2266762`）。
+> `BLADES_TOKEN`（访问口令，**必须自行设定，无默认值**；未设定时部署脚本会
+> 随机生成一个并打印一次，请妥善保存）。
 
 ### 方式二：Docker 容器化部署
 
@@ -207,13 +208,14 @@ sudo bash scripts/deploy-docker.sh
 # 或手动构建运行
 docker build -t blades-stock:latest .
 docker run -d --name blades-stock -p 8000:8000 \
-  -e BLADES_AUTH_TOKEN=2266762 \
+  -e BLADES_AUTH_TOKEN=<your-token> \
   -e BLADES_DATA_DIR=/app/data \
   blades-stock:latest
 docker logs -f blades-stock
 ```
 
-浏览器访问 `http://<服务器IP>:8000`，输入访问口令 `2266762` 即可使用。
+浏览器访问 `http://<服务器IP>:8000`，输入你设定的访问口令即可使用。
+首次部署若未设定口令，服务端会在启动日志里打印一次随机生成的口令，请及时保存。
 
 ### 推荐硬件配置
 | 规格 | CPU | 内存 | 磁盘 | 适用场景 |
@@ -231,7 +233,7 @@ docker logs -f blades-stock
 
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
-| `BLADES_AUTH_TOKEN` | `2266762` | Web 端访问口令 |
+| `BLADES_AUTH_TOKEN` | （无默认值，必须设定或由服务端首次启动随机生成） | Web 端访问口令 |
 | `BLADES_DATA_DIR` | `./data` | 数据目录路径 |
 | `BLADES_STOCK_DATA_DIR` | `./data` | 数据目录（备用） |
 | `MCP_TIMEOUT_SECONDS` | `8` | MCP 请求超时（秒） |

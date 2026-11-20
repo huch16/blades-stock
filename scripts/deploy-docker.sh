@@ -5,7 +5,8 @@
 #   - 甲骨文云 (Oracle Cloud): 2核 CPU / 12G 内存
 #   - Instabox 云沙箱: 4核 CPU / 8G 内存
 #   - 通用 Ubuntu VPS: 1~8核 / 2~16G 内存
-# 统一访问口令：2266762
+# 访问口令没有默认值：未设定时本脚本随机生成一个写入 .env 并在部署成功后打印一次。
+# 绝不在脚本、文档或代码里写死口令。
 # ==============================================================================
 
 set -e
@@ -115,13 +116,30 @@ if [ ! -f "data/stock.db" ] && [ -f "build/bin/data/stock.db" ]; then
     cp "build/bin/data/stock.db" "data/stock.db"
 fi
 
-# 4.2 配置安全访问凭据与统一密码 (2266762)
-UNIFIED_DEFAULT_PWD="2266762"
+# 4.2 配置安全访问凭据：口令没有默认值。优先使用环境变量 BLADES_AUTH_TOKEN，
+# 其次复用已有 .env 中的口令，都没有时随机生成一个并写入 .env。
+gen_random_token() {
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 16
+    else
+        head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'
+    fi
+}
+
+if [ -n "${BLADES_AUTH_TOKEN:-}" ]; then
+    AUTH_TOKEN_FROM_ENV="${BLADES_AUTH_TOKEN}"
+    TOKEN_GENERATED=0
+else
+    AUTH_TOKEN_FROM_ENV=""
+    TOKEN_GENERATED=0
+fi
 
 if [ ! -f ".env" ]; then
+    NEW_TOKEN="${AUTH_TOKEN_FROM_ENV:-$(gen_random_token)}"
+    [ -z "$AUTH_TOKEN_FROM_ENV" ] && TOKEN_GENERATED=1
     cat <<EOF > .env
 # Blades Stock 云端运行环境变量 (v3.0.0 统一标准)
-BLADES_AUTH_TOKEN=${UNIFIED_DEFAULT_PWD}
+BLADES_AUTH_TOKEN=${NEW_TOKEN}
 PORT=8000
 TZ=Asia/Shanghai
 SEARXNG_URL=https://search.woha.men
@@ -129,11 +147,17 @@ BLADES_CPU_LIMIT=${BLADES_CPU_LIMIT}
 BLADES_MEM_LIMIT=${BLADES_MEM_LIMIT}
 GOMEMLIMIT=${GOMEMLIMIT}
 EOF
-    echo -e "${GREEN}--> 已自动为您配置工业级统一管理员密码: ${YELLOW}${UNIFIED_DEFAULT_PWD}${NC}"
+    if [ "${TOKEN_GENERATED}" = "1" ]; then
+        echo -e "${GREEN}--> 已生成随机访问口令并写入 .env，部署成功后会打印一次，请妥善保存${NC}"
+    else
+        echo -e "${GREEN}--> 已使用环境变量 BLADES_AUTH_TOKEN 写入 .env${NC}"
+    fi
 else
     # 检查现有 .env，确保必要参数就绪
     if ! grep -q '^BLADES_AUTH_TOKEN=' .env; then
-        echo "BLADES_AUTH_TOKEN=${UNIFIED_DEFAULT_PWD}" >> .env
+        NEW_TOKEN="${AUTH_TOKEN_FROM_ENV:-$(gen_random_token)}"
+        [ -z "$AUTH_TOKEN_FROM_ENV" ] && TOKEN_GENERATED=1
+        echo "BLADES_AUTH_TOKEN=${NEW_TOKEN}" >> .env
     fi
     if grep -q '^PORT=8080' .env; then
         sed -i 's/^PORT=8080/PORT=8000/' .env
@@ -149,12 +173,6 @@ else
         echo "GOMEMLIMIT=${GOMEMLIMIT}" >> .env
     fi
     echo -e "${GREEN}--> 已自动融合并更新 .env 硬件参数配置${NC}"
-fi
-
-# 同步持久化 auth.token
-if [ -d "data" ] && [ ! -f "data/auth.token" ]; then
-    echo -n "${UNIFIED_DEFAULT_PWD}" > "data/auth.token"
-    chmod 600 "data/auth.token" 2>/dev/null || true
 fi
 
 AUTH_TOKEN=$(grep '^BLADES_AUTH_TOKEN=' .env | cut -d '=' -f2- | tr -d ' "')
@@ -311,7 +329,11 @@ if [ "$HEALTHY" = true ]; then
     echo -e "${GREEN}==================================================================${NC}"
     echo -e " 🌐 服务监听端口:       ${YELLOW}${APP_PORT}${NC}"
     echo -e " 🌐 网页直连访问:       ${YELLOW}http://${PUBLIC_IP}:${APP_PORT}${NC}"
-    echo -e " 🔐 统一管理员登录密码: ${GREEN}${UNIFIED_DEFAULT_PWD}${NC}"
+    if [ "${TOKEN_GENERATED}" = "1" ]; then
+        echo -e " 🔐 访问口令（本次随机生成，请立即妥善保存）: ${GREEN}${AUTH_TOKEN}${NC}"
+    else
+        echo -e " 🔐 访问口令: 使用你设定的 BLADES_AUTH_TOKEN（见 .env）"
+    fi
     echo -e " 🖥️ 硬件性能画像:       ${CYAN}${HW_PROFILE}${NC}"
     echo -e " ⚙️ 容器算力配额:       ${CYAN}CPU ${BLADES_CPU_LIMIT}核 / 内存 ${BLADES_MEM_LIMIT}${NC}"
     echo -e "${BLUE}------------------------------------------------------------------${NC}"

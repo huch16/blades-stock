@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"blades-stock/backend/db"
@@ -188,7 +190,8 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 	})
 	handler := AuthMiddleware(mux)
 
-	// 1. 初始状态：工业级统一规则下，服务预设 DefaultAdminPassword (2266762)
+	// 1. 初始状态：既无环境变量又无持久化口令时，服务生成随机口令并固化到
+	//    data/auth.token（0600），仓库与代码中不再存在任何默认口令。
 	reqStatus := httptest.NewRequest(http.MethodGet, "/api/auth/status", nil)
 	wStatus := httptest.NewRecorder()
 	handler.ServeHTTP(wStatus, reqStatus)
@@ -209,17 +212,43 @@ func TestAuthEndpoints_StatusInitLogin(t *testing.T) {
 	if !resStatus.Data.AuthRequired {
 		t.Fatalf("expected authRequired=true")
 	}
-
-	// 1.1 开箱即用验证：直接使用统一密码 2266762 登录成功
-	bodyDefault := bytes.NewBufferString(`{"password":"2266762"}`)
-	reqDefault := httptest.NewRequest(http.MethodPost, "/api/auth/login", bodyDefault)
-	wDefault := httptest.NewRecorder()
-	handler.ServeHTTP(wDefault, reqDefault)
-	if wDefault.Code != http.StatusOK {
-		t.Fatalf("expected 200 for unified default password login, got %d: %s", wDefault.Code, wDefault.Body.String())
+	if resStatus.Data.NeedInit {
+		t.Fatalf("expected needInit=false: first boot must generate and persist a random token")
+	}
+	tokenBytes, err := os.ReadFile(filepath.Join(tempDir, "auth.token"))
+	if err != nil {
+		t.Fatalf("expected generated auth.token to be persisted: %v", err)
+	}
+	generatedToken := strings.TrimSpace(string(tokenBytes))
+	if len(generatedToken) < 32 {
+		t.Fatalf("expected generated token to be at least 32 chars, got %d", len(generatedToken))
+	}
+	if generatedToken != getAuthToken() {
+		t.Fatalf("persisted token does not match in-memory token")
 	}
 
-	// 2. 初始化/修改密码：设置新密码为 test-suite-pass-2026
+	// 1.1 生成的随机口令登录成功；任何固定“默认口令”都不再被接受
+	bodyGenerated := bytes.NewBufferString(fmt.Sprintf(`{"password":%q}`, generatedToken))
+	reqGenerated := httptest.NewRequest(http.MethodPost, "/api/auth/login", bodyGenerated)
+	wGenerated := httptest.NewRecorder()
+	handler.ServeHTTP(wGenerated, reqGenerated)
+	if wGenerated.Code != http.StatusOK {
+		t.Fatalf("expected 200 for generated first-boot token login, got %d: %s", wGenerated.Code, wGenerated.Body.String())
+	}
+
+	// 1.2 口令已设定时 /api/auth/init 应拒绝（400），不得覆盖已有口令
+	bodyInitRejected := bytes.NewBufferString(`{"password":"test-suite-pass-2026"}`)
+	reqInitRejected := httptest.NewRequest(http.MethodPost, "/api/auth/init", bodyInitRejected)
+	wInitRejected := httptest.NewRecorder()
+	handler.ServeHTTP(wInitRejected, reqInitRejected)
+	if wInitRejected.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for /api/auth/init when token already set, got %d: %s", wInitRejected.Code, wInitRejected.Body.String())
+	}
+
+	// 2. 初始化流程：先清空口令模拟“未初始化”状态，再设置新密码
+	if err := setAuthToken(""); err != nil {
+		t.Fatalf("failed to clear auth token: %v", err)
+	}
 	bodyInit := bytes.NewBufferString(`{"password":"test-suite-pass-2026"}`)
 	reqInit := httptest.NewRequest(http.MethodPost, "/api/auth/init", bodyInit)
 	wInit := httptest.NewRecorder()

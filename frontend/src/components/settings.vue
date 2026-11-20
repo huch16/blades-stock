@@ -1435,7 +1435,7 @@ onBeforeUnmount(() => {
             <div class="auth-row-bar">
               <div class="auth-info-desc">
                 <span class="badge-dot success"></span>
-                <span>统一安全认证：当前公网环境已受管理员凭证 (<strong>2266762</strong>) 严密防护</span>
+                <span>统一安全认证：当前公网环境已启用访问口令防护</span>
               </div>
               <n-space>
                 <n-button size="tiny" quaternary @click="handleOpenAuthManage">修改口令凭据</n-button>

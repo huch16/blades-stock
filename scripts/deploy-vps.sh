@@ -12,7 +12,8 @@
 #     BLADES_DIR=/opt/blades-stock   安装目录（默认 /opt/blades-stock）
 #     BLADES_PORT=8000               监听端口
 #     BLADES_BRANCH=v3.1.3           部署的 Git 引用（分支或 tag）
-#     BLADES_TOKEN=2266762           Web 访问口令
+#     BLADES_TOKEN=<your-token>      Web 访问口令（无默认值；未设定时脚本会
+#                                    随机生成一个并在部署成功后打印一次，请妥善保存）
 # =============================================================================
 
 set -euo pipefail
@@ -22,7 +23,19 @@ INSTALL_DIR="${BLADES_DIR:-/opt/blades-stock}"
 APP_PORT="${BLADES_PORT:-8000}"
 APP_HOST="${BLADES_HOST:-0.0.0.0}"
 GIT_REF="${BLADES_BRANCH:-v3.1.3}"
-ACCESS_TOKEN="${BLADES_TOKEN:-2266762}"
+# 访问口令没有默认值：未设定时随机生成（openssl 不可用则用 /dev/urandom），
+# 部署成功后打印一次。绝不在脚本或文档里写死口令。
+if [ -n "${BLADES_TOKEN:-}" ]; then
+    ACCESS_TOKEN="${BLADES_TOKEN}"
+    ACCESS_TOKEN_GENERATED=0
+else
+    if command -v openssl >/dev/null 2>&1; then
+        ACCESS_TOKEN="$(openssl rand -hex 16)"
+    else
+        ACCESS_TOKEN="$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    fi
+    ACCESS_TOKEN_GENERATED=1
+fi
 SERVICE_NAME="blades-stock"
 GO_VERSION_WANT="1.26.0"
 REPO_URL="https://github.com/huch16/blades-stock.git"
@@ -271,7 +284,11 @@ if [ "$healthy" -eq 1 ]; then
     echo "   部署成功！"
     echo "==============================================================="
     echo -e "${NC}   访问地址 : http://${PUB_IP}:${APP_PORT}"
-    echo "   访问口令 : ${ACCESS_TOKEN}"
+    if [ "${ACCESS_TOKEN_GENERATED}" = "1" ]; then
+        echo "   访问口令 : ${ACCESS_TOKEN}（本次随机生成，请立即妥善保存）"
+    else
+        echo "   访问口令 : （使用你设定的 BLADES_TOKEN）"
+    fi
     echo "   服务状态 : systemctl status ${SERVICE_NAME}"
     echo "   实时日志 : journalctl -u ${SERVICE_NAME} -f"
     echo -e "${GREEN}===============================================================${NC}"
