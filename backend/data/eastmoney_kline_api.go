@@ -1,6 +1,7 @@
 package data
 
 import (
+	"blades-stock/backend/datasource"
 	"blades-stock/backend/logger"
 	"bytes"
 	"compress/gzip"
@@ -15,21 +16,13 @@ import (
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/validator"
 	"github.com/go-resty/resty/v2"
-	uaFake "github.com/lib4u/fake-useragent"
 )
 
 // 模拟 Windows 上 Chrome 从 quote.eastmoney.com 请求 push2his 行情接口（与 DevTools Network 常见字段对齐）。
 // 不显式设置 Accept-Encoding：由 net/http 默认协商 gzip 并自动解压；若声明 br/zstd 而 Transport 不解压会导致乱码/失败。
-// getRandomUA 随机返回一个 User-Agent（使用 fake-useragent 库）
+// getRandomUA 转发到 datasource.GetRandomUA（R-25a：实现已搬入 datasource）。
 func getRandomUA() string {
-	ua, _ := uaFake.New()
-	if ua != nil {
-		randomUA := ua.Filter().Platform("desktop").Get()
-		//logger.SugaredLogger.Infof("User-Agent: %s", randomUA)
-		return randomUA
-	}
-	// 如果库获取失败，返回备用 UA
-	return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	return datasource.GetRandomUA()
 }
 
 // Enhanced headers with more realistic browser characteristics
@@ -537,15 +530,9 @@ func computeSMA(closes []float64, idx, period int) float64 {
 	return sum / float64(period)
 }
 
-// parseFloatToFloat 将 K 线价格字符串转为 float64
+// parseFloatToFloat 转发到 datasource.ParseFloatToFloat（R-25a：实现已搬入 datasource）。
 func parseFloatToFloat(s string) (float64, error) {
-	s = strings.TrimSpace(s)
-	if s == "" || s == "-" || s == "null" {
-		return 0, nil
-	}
-	var f float64
-	_, err := fmt.Sscanf(s, "%f", &f)
-	return f, err
+	return datasource.ParseFloatToFloat(s)
 }
 
 func getMaxPeriod(periods []int) int {

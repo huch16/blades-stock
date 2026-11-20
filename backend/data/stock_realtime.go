@@ -1,15 +1,14 @@
 package data
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	url2 "net/url"
 	"strings"
 	"time"
 
+	"blades-stock/backend/datasource"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
@@ -18,8 +17,6 @@ import (
 	"github.com/duke-git/lancet/v2/strutil"
 	resty "github.com/go-resty/resty/v2"
 	"github.com/robertkrimen/otto"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"golang.org/x/text/transform"
 )
 
 // FormatMarketStockCode 给纯6位股票/ETF代码自适应补充交易所前缀（sh/sz/bj）
@@ -213,15 +210,9 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 	return &stockInfos, err
 }
 
-// GB18030ToUTF8 GB18030 转换为 UTF8
+// GB18030ToUTF8 GB18030 转换为 UTF8（转发；实现已搬入 datasource，R-25a）。
 func GB18030ToUTF8(bs []byte) string {
-	reader := transform.NewReader(bytes.NewReader(bs), simplifiedchinese.GB18030.NewDecoder())
-	d, err := io.ReadAll(reader)
-	if err != nil {
-		logger.SugaredLogger.Warnf("GB18030ToUTF8 decode error: %v, returning raw string", err)
-		return string(bs)
-	}
-	return string(d)
+	return datasource.GB18030ToUTF8(bs)
 }
 
 func ParseTxStockData(data string) (*StockInfo, error) {

@@ -3,6 +3,7 @@
 package data
 
 import (
+	"blades-stock/backend/datasource"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
 	"fmt"
@@ -16,7 +17,7 @@ func init() {
 
 func TestSinaKLineApi_GetDayKLine(t *testing.T) {
 	config := GetSettingConfig()
-	api := NewSinaKLineApi(config)
+	api := datasource.NewSinaKLineApi(config.CrawlTimeOut)
 	kLines := api.GetKLineData("600519.SH", "101", 10)
 	logger.SugaredLogger.Infof("Sina 日K: 获取到 %d 条数据", len(*kLines))
 	if len(*kLines) == 0 {
@@ -40,7 +41,7 @@ func TestSinaKLineApi_GetDayKLine(t *testing.T) {
 
 func TestSinaKLineApi_TodayKLineAllPeriods(t *testing.T) {
 	config := GetSettingConfig()
-	api := NewSinaKLineApi(config)
+	api := datasource.NewSinaKLineApi(config.CrawlTimeOut)
 	periods := []struct {
 		klt   string
 		label string
@@ -67,7 +68,7 @@ func TestSinaKLineApi_TodayKLineAllPeriods(t *testing.T) {
 
 func TestSinaKLineApi_Get5MinKLine(t *testing.T) {
 	config := GetSettingConfig()
-	api := NewSinaKLineApi(config)
+	api := datasource.NewSinaKLineApi(config.CrawlTimeOut)
 	kLines := api.GetKLineData("000001.SZ", "5", 10)
 	logger.SugaredLogger.Infof("Sina 5分钟K: 获取到 %d 条数据", len(*kLines))
 	if len(*kLines) == 0 {
@@ -77,7 +78,7 @@ func TestSinaKLineApi_Get5MinKLine(t *testing.T) {
 
 func TestTencentKLineApi_GetDayKLine(t *testing.T) {
 	config := GetSettingConfig()
-	api := NewTencentKLineApi(config)
+	api := datasource.NewTencentKLineApi(config.CrawlTimeOut)
 	kLines := api.GetKLineData("600519.SH", "101", 10)
 	logger.SugaredLogger.Infof("Tencent 日K: 获取到 %d 条数据", len(*kLines))
 	if len(*kLines) == 0 {
@@ -91,7 +92,7 @@ func TestTencentKLineApi_GetDayKLine(t *testing.T) {
 
 func TestTencentKLineApi_GetWeekKLine(t *testing.T) {
 	config := GetSettingConfig()
-	api := NewTencentKLineApi(config)
+	api := datasource.NewTencentKLineApi(config.CrawlTimeOut)
 	kLines := api.GetKLineData("600519.SH", "102", 10)
 	logger.SugaredLogger.Infof("Tencent 周K: 获取到 %d 条数据", len(*kLines))
 	if len(*kLines) == 0 {
