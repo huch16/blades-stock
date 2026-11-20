@@ -348,3 +348,39 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 数量对照：两文件 diff 共 62 行，全部差异点（import、类型名、变量名、3 处调用点、5 处注释、标题、占位符、HTML 注释、2 处表头、analyzeSector 9 行、2 处按钮块）逐项映射进合并文件，无遗漏；旧组件名全仓 0 残留。
 - 验证：`npx eslint` 新文件 0 errors、29 warnings（两文件各 29 → 合并后 29）；全量 `npm run lint` 0 errors、129 warnings（基线 158 − 29，正好是合并省掉的一份）；`npm run build` 退出 0（1m3s），产物 market chunk 含两组 Api 名、`资金流向 - 多`动态标题与 `show-market-intelligence-serenity`；Go 侧无改动，`go build/vet` 通过、`gofmt -l` 0 文件、check-deps.sh 通过。
 - 合并脚本见 `/tmp/r22d_merge.py`，旧文件备份见 `/tmp/r22d_bk_backup.vue`、`/tmp/r22d_concept_backup.vue`。
+
+### R-23 建 backend/datasource 空包 + 依赖护栏升级 —— 已完成
+
+- 新建 `backend/datasource/doc.go`（包注释写明“纯 vendor 客户端，只依赖基础包”）；`scripts/check-deps.sh` 的 datasource 规则（只有 data 能 import 它、datasource 是叶子、交付层不得直引）已在 R-01 预埋，本次核查无新增规则项，空跑通过。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go list ./backend/datasource/` 正常。
+
+### R-24a 搬 httpclient.go 进 datasource —— 已完成
+
+- `git mv backend/data/httpclient.go → backend/datasource/httpclient.go` + 改包名；data 侧留薄转发文件 `backend/data/httpclient.go`：`SharedHTTPClient`（同一指针）、`ConfigureFromSettings`（`SettingConfig` 是 data 类型，datasource 不能引用）、`CreateHTTPClientWithTimeout`、`parseProxyURL`（datasource 侧导出为 `ParseProxyURL`，`openai_tools.go:901` 的调用点不动）。
+- `market_news_flash/sentiment/calendar.go` 19 处 `FirefoxUserAgent` 改调 `datasource.FirefoxUserAgent`；`CreateDownloadClient` 零外部调用点，不留转发。
+- 外部包（tools/services/根包/cmd）调用点零改动。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data、agent/tools、services、根包全过。
+
+### R-24b 搬 akshare_api.go 进 datasource —— 已完成
+
+- `git mv → backend/datasource/akshare.go` + 改包名；`NewAkshareClient` 改为接收 baseURL 参数（datasource 不读设置表），data 侧留同名转发函数（DB 设置 → 环境变量/默认值解析原样保留），`app_settings.go:58` 的 Ping 调用点零改动。
+- 12 个零引用方法（R-05 跳过未删）随文件整体搬家，`Call()` 分发保留。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包与根包全过。
+
+### R-24c 搬 baostock_api.go 进 datasource —— 已完成
+
+- `git mv → backend/datasource/baostock.go` + 改包名；`NewBaostockApi` 改为接收 baseURL 参数（含 115.190.72.22 快速失败的 2 秒超时逻辑），data 侧留同名转发函数，`trading_day.go` 的调用点零改动。
+- `normalizeBaostockCode` 导出为 `NormalizeBaostockCode`（data 包的 `TestNormalizeBaostockCode` 改调 `datasource.NormalizeBaostockCode`，断言一字未改）——初版构建失败才发现测试引用了未导出 helper，下同类步骤先 grep 测试引用。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包与 agent 包全过。
+
+### R-24d 搬 tickflow_api.go 进 datasource —— 已完成
+
+- `git mv → backend/datasource/tickflow.go` + 改包名；`NewTickFlowClient` 改为接收 apiKey 参数（datasource 不读设置表；`SharedHTTPClient` 用 datasource 自身的同一指针），data 侧留同名转发函数（从设置读密钥），agent/tools 的 5 处 `data.NewTickFlowClient()` 调用点零改动。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包与 agent/tools 包全过。
+
+### R-24e 搬 trading_day.go 进 datasource —— 已完成
+
+- `git mv → backend/datasource/trading_day.go` + 改包名；`InitTradingCalendar` 改为依赖注入 `InitTradingCalendar(adataDays, baostockDays)`——datasource 不读设置表、不构造 AData/Baostock 客户端；data 侧留同名包装函数（解析服务地址、跳过已知离线主机 115.190.72.22、注入两个取数闭包），`main.go`/`app_settings.go` 的调用点零改动。
+- `IsTradingDay`/`IsTodayTradingDay`/`GetLatestTradingDay`/`GetTradingDaysBetween`/`GetNextTradingDay` 在 data 侧留转发（agent/tools/根包不得直接 import datasource，规则 3），全部外部调用点零改动；`backend/data/trading_day_test.go` 的测试调转发函数，断言未改。
+- 与方案出入：方案称 trading_day.go 为“交易日历纯函数”，实地核查 `InitTradingCalendar` 并不纯（读设置 + AData/Baostock 两路取数），故用依赖注入而非整体直搬；纯查询函数与缓存仍完整在 datasource 内。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包、agent/tools 包与根包全过。
