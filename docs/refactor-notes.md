@@ -96,3 +96,15 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 落点：新建 `backend/data/ths_markdown.go`，导出 `ThsResultToMarkdown`（与同包 `JSONToMarkdownTable` 同处）；删除 `backend/data/openai_tools.go:119` 的旧版与 `backend/agent/tools/data_tools_wrapper.go:54` 的 tools 版；6 处调用点不动逻辑，只改调用名（tools 内 3 处改调 `data.ThsResultToMarkdown`，data 内 3 处改调同包 `ThsResultToMarkdown`：`tool_search_bk.go:29`、`tool_search_etf_stock.go:37,66`）。
 - 全仓只剩 1 处定义；附带清理 `openai_tools.go` 多余的 convertor import。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 与 agent/tools 两包全过；`grep -rn 'func thsResultToMarkdown'` 全仓只剩 1 处定义（导出名）。
+
+### R-10 D3 去重：Float32 转换收敛 —— 已完成（走方案授权的备选方向）
+
+- 方向说明：方案原文要求“删 models 版、统一用 agent 版”，但实地核查证明该方向**结构上不可行**：`models` 不能 import `agent`（`agent` 已 import `models`，反向 import 即成环，且违反依赖规则 2；check-deps.sh 会拦截）。因此按方案同一条的备选条款执行——“若调用方不接受 nil，本步改为‘删 agent 版、统一 models 版’，以调用方为准”。
+- 调用方核查（nil 语义无人依赖）：
+  - agent 版唯一生产调用点 `semantic_distiller.go:447` 有 `len(vec) > 0` 守卫，永不传入空输入；
+  - `GetVector` 的调用方 `semantic_distiller.go:616` 只用 `len(vec) == 0` 判断，nil 与空切片无差别；
+  - `SetVector`/`GetVector` 本身（`knowledge_crystal.go:68,73`）只是透传，接受空输入 nil。
+  - 其余调用点只有往返测试（非空向量）。
+- 执行：先写空输入单测（新建 `backend/models/knowledge_crystal_test.go`，断言空输入返回长度 0 的非 nil 切片 + 非法长度返回 nil + 往返一致），**先跑通过、后删**；删 `backend/agent/blades_agent_memory_models.go` 的 agent 版两函数（`binary`/`math` import 随之清理）；agent 调用点改调 `models.Float32sToBytesLE` / `models.BytesToFloat32sLE`（`semantic_distiller.go:447`、测试文件两处，均已 import models）。
+- 全仓只剩 1 处定义（models 版）；`tools/sqlite_search_demo.go:19` 的小写副本按方案留待 R-28。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` models 与 agent 两包全过（含新增 3 个单测）。

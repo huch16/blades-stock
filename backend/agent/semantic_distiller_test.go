@@ -63,12 +63,12 @@ func setupTestDistillerDB(t *testing.T) *gorm.DB {
 
 func TestKnowledgeCrystalVectorPacking(t *testing.T) {
 	origVec := []float32{0.123, -0.456, 0.789, 1.0, -1.0, 0.0}
-	packed := Float32sToBytesLE(origVec)
+	packed := models.Float32sToBytesLE(origVec)
 	if len(packed) != len(origVec)*4 {
 		t.Fatalf("packed byte slice length = %d, want %d", len(packed), len(origVec)*4)
 	}
 
-	unpacked := BytesToFloat32sLE(packed)
+	unpacked := models.BytesToFloat32sLE(packed)
 	if len(unpacked) != len(origVec) {
 		t.Fatalf("unpacked length = %d, want %d", len(unpacked), len(origVec))
 	}

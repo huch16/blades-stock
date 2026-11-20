@@ -444,7 +444,7 @@ func (d *SemanticDistiller) DistillAgentMemories(ctx context.Context, olderThanD
 
 		if embSvc != nil {
 			if vec, err := embSvc.EmbedWithContext(ctx, factContent); err == nil && len(vec) > 0 {
-				factMem.Embedding = Float32sToBytesLE(vec)
+				factMem.Embedding = models.Float32sToBytesLE(vec)
 			}
 		}
 
