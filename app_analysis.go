@@ -2,7 +2,6 @@ package main
 
 import (
 	"blades-stock/backend/agent"
-	"blades-stock/backend/data"
 	"blades-stock/backend/models"
 	"blades-stock/backend/quant"
 
@@ -19,14 +18,14 @@ func (a *App) DiagnoseStock(stockCode string) (*quant.StockDiagnosisResult, erro
 
 // GetStockThesis 查询标的买方认知档案及最新判定
 func (a *App) GetStockThesis(stockCode string) (*models.StockThesisLedger, error) {
-	return data.NewStockThesisApi().GetStockThesis(stockCode)
+	return a.agentService.GetStockThesis(stockCode)
 }
 
 // GetStockThesisHistory 获取标的历史认知演化时间线
 
 // GetStockThesisHistory 获取标的历史认知演化时间线
 func (a *App) GetStockThesisHistory(stockCode string, limit int) ([]models.StockVerdictHistory, error) {
-	return data.NewStockThesisApi().GetStockThesisHistory(stockCode, limit)
+	return a.agentService.GetStockThesisHistory(stockCode, limit)
 }
 
 // SaveStockThesis 手动保存或调整买方认知假说
@@ -47,7 +46,7 @@ func (a *App) DeleteStockThesis(stockCode string) error {
 
 // GetAllStockTheses 获取全量标的认知状态映射表 (供自选列表极速匹配)
 func (a *App) GetAllStockTheses() (map[string]models.StockThesisLedger, error) {
-	return data.NewStockThesisApi().GetAllStockTheses()
+	return a.agentService.GetAllStockTheses()
 }
 
 // GetStockTheses 别名兼容接口，兼容前端对全量买方认知映射表的调用

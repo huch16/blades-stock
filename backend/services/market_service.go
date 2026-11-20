@@ -1306,3 +1306,23 @@ func (s *MarketService) SyncStockBasicToDB() (added, updated int, err error) {
 func (s *MarketService) SyncHKUSStockBasicToDB() (hkAdded, hkUpdated, usAdded, usUpdated int, err error) {
 	return data.SyncHKUSStockBasicToDB(data.NewTdxKLineApi())
 }
+
+// GetStockLatestFinanceToMarkdown 获取个股最新财务季报 F10 数据（Markdown，R-27c 新增）。
+func (s *MarketService) GetStockLatestFinanceToMarkdown(stockCode string) string {
+	return data.NewStockDataApi().GetStockLatestFinanceToMarkdown(stockCode)
+}
+
+// GetStockQtrMainFinanceToMarkdown 获取个股季度主要财务指标（Markdown，R-27c 新增）。
+func (s *MarketService) GetStockQtrMainFinanceToMarkdown(stockCode string) string {
+	return data.NewStockDataApi().GetStockQtrMainFinanceToMarkdown(stockCode)
+}
+
+// GetStockValuationPercentileToMarkdown 获取个股估值百分位（Markdown，R-27c 新增）。
+func (s *MarketService) GetStockValuationPercentileToMarkdown(stockCode string) string {
+	return data.NewStockDataApi().GetStockValuationPercentileToMarkdown(stockCode)
+}
+
+// GetStockPredictSummaryToMarkdown 获取机构预测汇总（Markdown，R-27c 新增）。
+func (s *MarketService) GetStockPredictSummaryToMarkdown(stockCode string) string {
+	return data.NewStockDataApi().GetStockPredictSummaryToMarkdown(stockCode)
+}

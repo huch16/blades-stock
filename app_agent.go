@@ -94,15 +94,14 @@ func isETFRecommendQuestion(q string) bool {
 	return false
 }
 
-func preFetchStockAnalysisData(stockCode string) string {
+func (a *App) preFetchStockAnalysisData(stockCode string) string {
 	if stockCode == "" {
 		return ""
 	}
-	api := data.NewStockDataApi()
 	var parts []string
 
 	// Real-time quote
-	if info, err := api.GetStockCodeRealTimeData(stockCode); err == nil && info != nil && len(*info) > 0 {
+	if info, err := a.marketService.GetStockCodeRealTimeData(stockCode); err == nil && info != nil && len(*info) > 0 {
 		s := (*info)[0]
 		changePercent := s.ChangePercent
 		changePrice := s.ChangePrice
@@ -111,25 +110,25 @@ func preFetchStockAnalysisData(stockCode string) string {
 	}
 
 	// Latest financial data
-	financeMd := api.GetStockLatestFinanceToMarkdown(stockCode)
+	financeMd := a.marketService.GetStockLatestFinanceToMarkdown(stockCode)
 	if financeMd != "" && !strings.HasPrefix(financeMd, "获取") {
 		parts = append(parts, financeMd)
 	}
 
 	// Quarterly financial indicators (ROE, gross margin, etc.)
-	qtrMd := api.GetStockQtrMainFinanceToMarkdown(stockCode)
+	qtrMd := a.marketService.GetStockQtrMainFinanceToMarkdown(stockCode)
 	if qtrMd != "" && !strings.HasPrefix(qtrMd, "获取") {
 		parts = append(parts, qtrMd)
 	}
 
 	// Valuation percentile (PE/PB percentile rank)
-	valMd := api.GetStockValuationPercentileToMarkdown(stockCode)
+	valMd := a.marketService.GetStockValuationPercentileToMarkdown(stockCode)
 	if valMd != "" && !strings.HasPrefix(valMd, "获取") {
 		parts = append(parts, valMd)
 	}
 
 	// Institutional prediction summary
-	predMd := api.GetStockPredictSummaryToMarkdown(stockCode)
+	predMd := a.marketService.GetStockPredictSummaryToMarkdown(stockCode)
 	if predMd != "" && !strings.HasPrefix(predMd, "获取") {
 		parts = append(parts, predMd)
 	}
@@ -160,7 +159,7 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 	// Pre-fetch real-time stock data as reference context for the agent
 	var preFetchCtx string
 	if !isETFOriented {
-		preFetchCtx = preFetchStockAnalysisData(stockCode)
+		preFetchCtx = a.preFetchStockAnalysisData(stockCode)
 	}
 
 	if analysisQuestion == "" {
@@ -180,7 +179,7 @@ func (a *App) NewChatStream(stock, stockCode, question string, aiConfigId int, s
 		sysPrompt = "你现在是顶级证券投资顾问与量化宏观专家“财智”。所有核心客观盘面数据、估值百分位与详尽财务指标已在用户输入中完整提供，无需额外调用外部工具。请直接基于输入中的真实数据，从技术面、基本面、消息面、资金面四个维度输出结构清晰、多空判断明确的深度研报，严禁在正文中生成任何伪造的工具调用标签。"
 	}
 
-	for msg := range agent.NewStockAiAgentApi().ChatWithContext(a.ctx, analysisQuestion, aiConfigId, sysPromptId, true, 5, think, agentMode, sysPrompt) {
+	for msg := range a.agentService.ChatWithAgentStream(a.ctx, analysisQuestion, aiConfigId, sysPromptId, true, 5, think, agentMode, sysPrompt) {
 		if msg == nil {
 			continue
 		}
@@ -296,7 +295,7 @@ func (a *App) SummaryStockNews(question string, aiConfigId int, sysPromptId *int
 	}
 
 	// Pre-fetch market index data as reference context
-	preFetchCtx := preFetchMarketSummaryData()
+	preFetchCtx := a.preFetchMarketSummaryData()
 	if preFetchCtx != "" {
 		preFetchCtx = "\n\n【预采集参考数据】以下为当前市场概况，可供直接引用：\n" + preFetchCtx
 	}
@@ -339,7 +338,7 @@ func (a *App) SummaryStockNews(question string, aiConfigId int, sysPromptId *int
 		q = q + preFetchCtx
 	}
 
-	for msg := range agent.NewStockAiAgentApi().ChatWithContext(ctx, q, aiConfigId, sysPromptId, false, 0, think, "plan_execute") {
+	for msg := range a.agentService.ChatWithAgentStream(ctx, q, aiConfigId, sysPromptId, false, 0, think, "plan_execute") {
 		if msg == nil {
 			continue
 		}
@@ -362,12 +361,11 @@ func (a *App) SummaryStockNews(question string, aiConfigId int, sysPromptId *int
 // preFetchMarketSummaryData collects macro-level market data for the AI market summary feature.
 
 // preFetchMarketSummaryData collects macro-level market data for the AI market summary feature.
-func preFetchMarketSummaryData() string {
-	api := data.NewMarketNewsApi()
+func (a *App) preFetchMarketSummaryData() string {
 	var parts []string
 
 	// Global indexes
-	indexes := api.GlobalStockIndexesReadable(30)
+	indexes := a.marketService.GlobalStockIndexesReadable()
 	if indexes != "" {
 		parts = append(parts, indexes)
 	}
