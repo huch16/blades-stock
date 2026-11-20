@@ -22,12 +22,12 @@ func TestExtractBillboardTotal(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotBuy, gotSell := extractBillboardTotal(tt.input)
+			gotBuy, gotSell := ExtractBillboardTotal(tt.input)
 			if gotBuy != tt.wantBuy {
-				t.Errorf("extractBillboardTotal() buy = %v, want %v", gotBuy, tt.wantBuy)
+				t.Errorf("ExtractBillboardTotal() buy = %v, want %v", gotBuy, tt.wantBuy)
 			}
 			if gotSell != tt.wantSell {
-				t.Errorf("extractBillboardTotal() sell = %v, want %v", gotSell, tt.wantSell)
+				t.Errorf("ExtractBillboardTotal() sell = %v, want %v", gotSell, tt.wantSell)
 			}
 		})
 	}
@@ -48,12 +48,12 @@ func TestExtractFirstNumber(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := extractFirstNumber(tt.input)
+			got, err := ExtractFirstNumber(tt.input)
 			if tt.want == 0 && err != nil {
 				return // expected error
 			}
 			if got != tt.want {
-				t.Errorf("extractFirstNumber(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("ExtractFirstNumber(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -70,8 +70,8 @@ func TestAbsFloat(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			if got := absFloat(tt.input); got != tt.want {
-				t.Errorf("absFloat(%v) = %v, want %v", tt.input, got, tt.want)
+			if got := AbsFloat(tt.input); got != tt.want {
+				t.Errorf("AbsFloat(%v) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -92,9 +92,9 @@ func TestDetectHolderConcentration(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detectHolderConcentration(tt.input)
+			got := DetectHolderConcentration(tt.input)
 			if got != tt.want {
-				t.Errorf("detectHolderConcentration(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("DetectHolderConcentration(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -113,9 +113,9 @@ func TestDetectBlockTradePositive(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detectBlockTradePositive(tt.input)
+			got := DetectBlockTradePositive(tt.input)
 			if got != tt.want {
-				t.Errorf("detectBlockTradePositive(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("DetectBlockTradePositive(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -134,9 +134,9 @@ func TestDetectMoneyFlowPositive(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detectMoneyFlowPositive(tt.input)
+			got := DetectMoneyFlowPositive(tt.input)
 			if got != tt.want {
-				t.Errorf("detectMoneyFlowPositive(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("DetectMoneyFlowPositive(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -157,9 +157,9 @@ func TestDetectMarginPositive(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := detectMarginPositive(tt.input)
+			got := DetectMarginPositive(tt.input)
 			if got != tt.want {
-				t.Errorf("detectMarginPositive(%q) = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("DetectMarginPositive(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -176,8 +176,8 @@ func TestSignalIcon(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			if got := signalIcon(tt.input); got != tt.want {
-				t.Errorf("signalIcon(%v) = %v, want %v", tt.input, got, tt.want)
+			if got := SignalIcon(tt.input); got != tt.want {
+				t.Errorf("SignalIcon(%v) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -198,9 +198,9 @@ func TestGuessMainForceBehavior(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			got := guessMainForceBehavior(tt.pos, tt.neg)
+			got := GuessMainForceBehavior(tt.pos, tt.neg)
 			if !strings.Contains(got, tt.contains) {
-				t.Errorf("guessMainForceBehavior(%v,%v) = %v, want contains %v", tt.pos, tt.neg, got, tt.contains)
+				t.Errorf("GuessMainForceBehavior(%v,%v) = %v, want contains %v", tt.pos, tt.neg, got, tt.contains)
 			}
 		})
 	}
@@ -216,14 +216,14 @@ func TestAssessCapitalNature(t *testing.T) {
 	}{
 		{"empty data", 0, 0, "", "数据不足"},
 		{"main force", 5000, -2000, "主力|+100|流入\n主力|+200|流入\n小单|-50|流出", "主力资金主导"},
-		{"retail money", -2000, 3000, "主力|-100|流出\n小单|+50|流入\n", "资金方向不明确"}, // extractMoneyFlowTrend 始终返回 (0,0)
+		{"retail money", -2000, 3000, "主力|-100|流出\n小单|+50|流入\n", "资金方向不明确"}, // ExtractMoneyFlowTrend 始终返回 (0,0)
 		{"no direction", 0, 0, "主力|0|平衡\n小单|0|平衡", "资金方向不明确"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := assessCapitalNature(tt.main, tt.retail, tt.moneyMd)
+			got := AssessCapitalNature(tt.main, tt.retail, tt.moneyMd)
 			if !strings.Contains(got, tt.want) {
-				t.Errorf("assessCapitalNature() = %v, want contains %v", got, tt.want)
+				t.Errorf("AssessCapitalNature() = %v, want contains %v", got, tt.want)
 			}
 		})
 	}

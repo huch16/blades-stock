@@ -81,3 +81,11 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
 - 零引用证据：生产代码、测试文件、技能 prompt 与工具名字符串注册中均 0 命中（逐个 grep，命中均为仅定义处 1 次）；前端 `frontend/wailsjs/` 与 `frontend/src/` 0 命中；定义均为 Api/服务层方法，非 Wails 绑定方法。附带清理：`wallstreetcn_api.go` 删 `GetLivesAsTelegraph` 后 `db`/`models` import 变多余，随之删除。
 - 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 与 agent 两包全过。
 - 说明：R-07 验证命令中途被运行时 SIGTERM 中断一次（build/vet/gofmt/check-deps 均已输出通过，测试未出结果），重跑 data + agent 测试通过后才提交；至此 51 个零引用函数中已删 31 个（R-04 16 个 + R-07 15 个），R-05 的 12 个 Akshare 方法与 R-06 的 5 个反思/进化方法因待确认未删，另有 3 个口径重叠（审计基线 59 个，审计已删 8 个）。
+
+### R-08 D1 去重：hot-money / chip 16 个工具函数合并 —— 已完成
+
+- 逐函数 diff 结果：15 个共享 helper 中 12 个逐字相同，3 个仅注释/死行漂移（`detectBlockTradePositive` 多 1 行注释；`detectHolderConcentration` 多 `lines := strings.Split` + `_ = lines` 死行；`extractBillboardTotal` 多 1 行注释、data 版多尾部 `_ = lines` 死行），逻辑零差异。
+- 落点：共享实现保留在 `backend/data/tool_hot_money_chip.go`（方案附录 A 的备选落点；另一选项“tools 版保留、data 改调”不可行——data import tools 会成环且违反依赖规则），15 个 helper 改为导出（`ExtractBillboardTotal` 等），tools 侧 15 个副本删除、调用点改调 `data.Xxx`；3 个漂移函数以 tools 版正文对齐（仅注释差异）；两处 `_ = lines` 死行连同未使用的 `lines` 变量一并删除。
+- data 侧测试 `tool_hot_money_chip_test.go` 仅调用点改名（小写→导出名），断言一字未改。
+- 数量对照：data 文件 19 个函数（init + 3 个 handler + 15 个共享 helper）；tools 文件 4 个函数（`GetHotMoneyChipTools` + 3 个工具构造器），`grep -c '^func '` 之和与拆前一致；净删 219 行。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 与 agent/tools 两包全过。
