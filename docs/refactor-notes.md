@@ -230,3 +230,12 @@ bash scripts/check-deps.sh   # R-01 建立后每步必跑
   - `go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration -count=1 ./...` 全量 **15 个包通过、0 个失败**（与 R-02 后基线一致）。
   - `grep -c '^func (.*App)'`：新文件之和 = 208（agent 55 + analysis 26 + cron 16 + fund 11 + market 34 + settings 32 + stock 34），与拆分前一致。
   - Wails 绑定：沙箱内无 `wails` CLI（`build.ps1` 本身也用 `-skipbindings -skipembedcreate`，即本项目构建默认不重新生成绑定），无法实际执行生成。改用等价验收：AST 提取根包全部导出 `*App` 方法签名（266 个，含 `app_common.go` 等既有文件）拆分前后 diff 为零；`frontend/wailsjs/go/main/App.d.ts` 未动（sha256 `997b7efe…0908e`，`export function` 245 个，与基线一致）。方法签名、接收者、绑定名一字未动，重新生成后 diff 为零是其直接推论；最终仍需在有 wails 的机器上跑一次生成复核。
+
+### R-20a 拆 backend/data/fund_data_api.go（2,324 行、45 个函数 → 核心文件 + 4 个域文件）—— 已完成
+
+- 拆分结果（原文件 2,324 行 → 核心文件 831 行，含全部 struct/var 定义）：
+  - `fund_data_api.go` 831 行，14 个函数：`NewFundApi`、自选基金读写（`GetFundList`、`searchFundOnline`、`GetFollowedFund`、`GetFollowedFundPaged`、`FollowFund`、`UnFollowFund`、`AllFund`）、自选净值刷新（`batchCrawlFundData`、`parseSinajsBatchResponse`、`computeFundRates`、`mergeFundBasicDefaults`）+ 2 个 `TableName()`。
+  - `fund_data_info.go` 399 行（8 个，基金信息/基础爬取）、`fund_data_netvalue.go` 428 行（11 个，基金净值/历史净值/场内判断）、`fund_data_ranking.go` 230 行（3 个，基金排行/搜索）、`fund_data_holdings.go` 495 行（9 个，基金持仓/行情补全）。
+  - 只拆方法：全部 struct 定义（`FollowedFund`、`FundBasic`、`FundNetUnitValue`、`FundHistoryNetValue`、`FundHoldingStock`、`FundRankingItem` 等）与两个 `TableName()`、两个 `var` 正则块留在原文件不动。
+  - 文件名说明：设计称第二域为“基金 K 线”，实际内容是净值/估值/历史净值（真正的 K 线逻辑在既有 `fund_kline_api.go` 的 `FundKLineApi` 内），故命名为 `fund_data_netvalue.go` 以免与 `fund_kline_api.go` 混淆；其余三域按设计命名（加 `fund_data_` 前缀）。
+- 验证：`go build/vet` 通过；`gofmt -l` 0 文件；check-deps.sh 通过；`go test -skip integration` data 包全过；`grep -c '^func '` 各文件之和 = 45（14+8+11+3+9），与拆分前一致。
