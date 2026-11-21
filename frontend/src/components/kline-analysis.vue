@@ -16,6 +16,7 @@ const message = useMessage()
 const searchQuery = ref('')
 const selectedCode = ref('')
 const stockList = ref([])
+const stockListLoaded = ref(false)
 const options = ref([])
 const darkTheme = ref(false)
 const chartHeight = ref(Math.max(450, window.innerHeight - 150))
@@ -25,11 +26,13 @@ let stockChangeHandler = null
 
 // 名称由代码派生（单一事实来源）：优先用已加载的股票列表按代码查名，
 // 其次用历史记录里该代码对应的名字；两者都没有时为空，界面回退显示代码。
-// 这样名称永远跟代码一致，旧版本留下的名码错配历史条目也进不了界面。
+// 列表还没加载完时，不拿历史记录的名字来凑——旧版本留下的错配条目
+// （如 code=000001.SZ 却存着“东方财富”）会趁虚而入；此时显示代码，列表一到就自动纠正。
 const selectedName = computed(() => {
   if (!selectedCode.value) return ''
   const found = stockList.value.find(item => toEastMoneyCode(item.ts_code) === selectedCode.value)
   if (found && found.name) return found.name
+  if (!stockListLoaded.value) return ''
   const recent = recentStocks.value.find(s => s.code === selectedCode.value)
   return recent?.name || ''
 })
@@ -40,6 +43,24 @@ function resolveStockName(code, fallback = '') {
   const found = stockList.value.find(item => toEastMoneyCode(item.ts_code) === code)
   if (found && found.name) return found.name
   return fallback
+}
+
+// 按代码查权威名称（异步）：本地列表优先；列表还没加载完或查不到时，
+// 向后端查一次（便宜的读接口），这样搜索/切换时不依赖全量列表是否已加载完。
+async function lookupStockName(code) {
+  if (!code) return ''
+  const local = resolveStockName(code, '')
+  if (local) return local
+  try {
+    const remote = await GetStockList(code)
+    if (Array.isArray(remote) && remote.length > 0) {
+      const m = remote.find(item => toEastMoneyCode(item.ts_code) === code) || remote[0]
+      if (m && m.name) return m.name
+    }
+  } catch (e) {
+    console.warn('lookupStockName remote error:', e)
+  }
+  return ''
 }
 
 // AI 深度量化诊断状态
@@ -177,6 +198,10 @@ async function handleSearch(value, nameHint = '') {
     const found = stockList.value.find(item => item.ts_code === raw || toEastMoneyCode(item.ts_code) === directEmCode)
     if (found) {
       targetName = found.name
+    } else {
+      // 本地列表还没加载完或查不到时，向后端查一次拿权威名称，
+      // 否则名称只能等列表加载完才纠正，中间会显示旧名或代码。
+      targetName = await lookupStockName(directEmCode)
     }
   }
 
@@ -199,10 +224,10 @@ async function handleSearch(value, nameHint = '') {
 
 function addToRecent(code, name) {
   if (!code) return
-  // 存之前先按代码查权威名称：列表里有就以列表为准（能纠正旧版本留下的错配条目），
-  // 列表里没有时保留该代码已存的好名字，都没有才回退到代码本身。
-  const existing = recentStocks.value.find(s => s.code === code)
-  const resolvedName = resolveStockName(code, name) || existing?.name || code
+  // 存之前先按代码查权威名称：列表里有就以列表为准（能纠正旧版本留下的错配条目）。
+  // 注意：不沿用该代码旧存的名字——它可能是旧 bug 留下的错配（如 000001.SZ 存着“东方财富”），
+  // 解析不到就存空，界面显示代码，等列表加载后 validateRecentNames 再纠正。
+  const resolvedName = resolveStockName(code, name)
   const list = recentStocks.value.filter(s => s.code !== code)
   list.unshift({ code, name: resolvedName })
   if (list.length > 10) list.length = 10
@@ -240,7 +265,7 @@ function loadRecentStocks() {
   validateRecentNames()
 }
 
-function selectRecent(code, name) {
+async function selectRecent(code, name) {
   const emCode = toEastMoneyCode(code)
   if (!emCode) {
     unsupportedCode.value = true
@@ -248,7 +273,12 @@ function selectRecent(code, name) {
   }
   unsupportedCode.value = false
   selectedCode.value = emCode
-  addToRecent(emCode, name)
+  // 名字以权威查询为准（本地列表优先，否则向后端查一次），不直接信任传入的旧名字——
+  // 历史条目可能是旧 bug 留下的错配。查完后若用户已切到别的股票，就不再回写。
+  const resolved = await lookupStockName(emCode)
+  if (selectedCode.value !== emCode) return
+  const finalName = resolved || name || ''
+  addToRecent(emCode, finalName)
   setCurrentStock({ code: emCode, name: selectedName.value })
   searchQuery.value = selectedName.value ? `${selectedName.value} (${emCode})` : emCode
 }
@@ -277,10 +307,11 @@ watch(() => route.query.code, (newCode) => {
 onBeforeMount(() => {
   GetStockList('').then(result => {
     stockList.value = result || []
+    stockListLoaded.value = true
     // 列表加载完成后校正一次历史记录里的名字（清掉旧版本留下的名码错配条目），
     // 界面上的名称由 selectedCode 派生，列表一到就自动纠正，无需再单独赋值。
     validateRecentNames()
-  }).catch(err => { console.error('GetStockList error:', err) })
+  }).catch(err => { console.error('GetStockList error:', err); stockListLoaded.value = true })
   GetConfig().then(result => {
     darkTheme.value = !!result.darkTheme
   }).catch(err => { console.error('GetConfig error:', err) })
