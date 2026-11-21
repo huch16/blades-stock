@@ -69,7 +69,7 @@ function Build-Go {
         # P3.4: build-time 自动重建 graph manifest
         Rebuild-Graph
         $commit = Get-ShortCommit
-        $version = "3.2.0"
+        $version = "4.0.0"
         $buildKey = "blades-stock-release-key"
         $ldflags = "-s -w -H=windowsgui -X main.Version=$version -X main.VersionCommit=$commit -X main.BuildKey=$buildKey"
         Write-Host "  Building desktop binary with tags desktop,production..." -ForegroundColor Gray

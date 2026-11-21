@@ -2,18 +2,17 @@
 
 <div align="center">
 
-[![Release](https://img.shields.io/badge/Release-v3.1.3-blue.svg?style=flat-square)](https://github.com/huch16/blades-stock/releases)
+[![Release](https://img.shields.io/badge/Release-v4.0.0-blue.svg?style=flat-square)](https://github.com/huch16/blades-stock/releases)
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8.svg?style=flat-square&logo=go)](https://golang.org/)
 [![Wails](https://img.shields.io/badge/Wails-v2.12.0-red.svg?style=flat-square)](https://wails.io/)
 [![Vue](https://img.shields.io/badge/Vue-3.5%2B-4FC08D.svg?style=flat-square&logo=vuedotjs)](https://vuejs.org/)
-[![License](https://img.shields.io/badge/License-GPL--3.0-green.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg?style=flat-square)](https://github.com/huch16/blades-stock)
 
 **Blades Stock** 是一款专为量化研究员、行业分析师与个人投资者打造的**桌面级智能量化投研工作站**。
 
 深度融合 **AI 智能体（Agent）**、多维量化回测引擎（VectorBT & ETF 动量）、实时盘口异动感知与全网金融情报聚合，提供开箱即用的智能化人机协同投研决策体验。支持 **桌面端 GUI** 与 **Web 云端 SaaS** 双模架构，可部署于任意 VPS，多端浏览器访问。
 
-[核心亮点](#-核心亮点) • [系统架构](#-系统架构) • [功能图景](#-核心功能) • [快速开始](#-快速开始) • [部署指南](#-部署指南) • [配置参数](#-配置参数) • [开发与构建](#-开发与构建) • [项目规范](#-项目规范) • [开源协议](#-开源许可与免责声明)
+[核心亮点](#-核心亮点) • [系统架构](#-系统架构) • [功能图景](#-核心功能) • [快速开始](#-快速开始) • [部署指南](#-部署指南) • [配置参数](#-配置参数) • [开发与构建](#-开发与构建) • [项目规范](#-项目规范) • [免责声明](#-免责声明)
 
 </div>
 
@@ -51,10 +50,6 @@
 - **一套核心资产，双模形态自适应**：同一仓库既支持编译跨平台独立桌面程序（Windows/macOS/Linux），又可通过内置 Universal Bridge 通信桥接无缝作为 **Web 私有投研工作站** 运行。
 - **Docker 容器化秒级交付**：纯 Go 静态无 CGO 依赖编译，镜像体积 <50MB，运行时内存仅需约 80MB；内置访问口令安全防护（`BLADES_AUTH_TOKEN`）与 SSE 流式实时推送。
 - **单节点权威嵌入式架构（Single-Node SQLite WAL）**：采用 `busy_timeout=30s` 与 `_txlock=immediate` 优化，采用独立运维数据库，零外部数据库依赖、零网络反序列化损耗，单节点垂直弹性伸缩，提供亚毫秒级行情计算吞吐。
-
-### 🔌 MCP（Model Context Protocol）扩展生态
-- 支持外部 MCP 服务动态注册、工具白名单管控、自动化心跳探活与故障自愈降级。
-- 支持 HTTP/Stdio 传输层，兼容标准 MCP 协议生态。
 
 ### 🛡️ 高可用韧性架构
 - 全并发 Goroutine 具备 `recover()` 异常隔离；集成熔断器（CircuitBreaker）、路径防穿越（PathGuard）与 SQLite WAL 优雅退出机制。
@@ -313,12 +308,8 @@ wails build
 
 ---
 
-## 📄 开源许可与免责声明
+## 📄 免责声明
 
-### 开源许可
-本项目基于 **[GNU General Public License v3.0 (GPL-3.0)](LICENSE)** 协议开源。欢迎社区提交 PR、报告 Issue 或参与共建。
-
-### 免责声明
 1. **非投资建议**：Blades Stock 及其内嵌 AI Agent、量化回测模型、评分体系输出的全部内容仅供个人学习、量化研究与技术探讨使用，**不构成任何形式的投资建议、买卖要约或收益承诺**。
 2. **市场风险提示**：金融市场有风险，投资需谨慎。投资者基于本系统数据、AI 建议或量化模型做出的任何交易决策，须自行承担全部盈亏与合规责任。
 

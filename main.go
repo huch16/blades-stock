@@ -72,7 +72,7 @@ var userManual []byte
 
 //go:generate cp -R ./data ./build/bin
 
-var Version string = "3.2.0"
+var Version string = "4.0.0"
 var VersionCommit string = "release"
 var OFFICIAL_STATEMENT string
 var BuildKey string

@@ -25,8 +25,8 @@ import (
 )
 
 var (
-	// Version 编译注入版本号（默认 3.2.0，与 package.json / wails.json / main.go 保持一致）
-	Version       = "3.2.0"
+	// Version 编译注入版本号（默认 4.0.0，与 package.json / wails.json / main.go 保持一致）
+	Version       = "4.0.0"
 	VersionCommit = "release"
 
 	portFlag    = flag.String("port", "8000", "Web server listening port")
