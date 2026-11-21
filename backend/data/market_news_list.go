@@ -7,6 +7,7 @@ import (
 
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,63 @@ func (m MarketNewsApi) TelegraphList(crawlTimeOut int64) *[]models.Telegraph {
 		if !ok || len(rollData) == 0 {
 			return m.GetNewTelegraph(crawlTimeOut)
 		}
+		// 批量预取去重依据与标签（原为每条快讯一次 Count、每个标签一次
+		// FirstOrCreate，N+1）。预取只覆盖本批 rollData 涉及的标题/内容/
+		// 主题名；循环内再用 seen 集合补上本批已入库的行，与原先逐条
+		// Count 能看到同批先入库的行等价。
+		contents := make([]string, 0, len(rollData))
+		titles := make([]string, 0, len(rollData))
+		subjectNames := make([]string, 0)
+		seenSubjectName := make(map[string]bool)
+		for _, v := range rollData {
+			news, ok := v.(map[string]any)
+			if !ok {
+				continue
+			}
+			title, _ := news["title"].(string)
+			content, _ := news["content"].(string)
+			if title == "" {
+				contents = append(contents, content)
+			} else {
+				titles = append(titles, title)
+			}
+			if subs, ok := news["subjects"].([]any); ok {
+				for _, subject := range subs {
+					if subMap, ok := subject.(map[string]any); ok {
+						if name, ok := subMap["subject_name"].(string); ok && name != "" && !seenSubjectName[name] {
+							seenSubjectName[name] = true
+							subjectNames = append(subjectNames, name)
+						}
+					}
+				}
+			}
+		}
+		existingContent := make(map[string]bool, len(contents))
+		if len(contents) > 0 {
+			var rows []models.Telegraph
+			db.Dao.Model(&models.Telegraph{}).Select("content").Where("content IN ?", contents).Find(&rows)
+			for _, r := range rows {
+				existingContent[r.Content] = true
+			}
+		}
+		existingTitle := make(map[string]bool, len(titles))
+		if len(titles) > 0 {
+			var rows []models.Telegraph
+			db.Dao.Model(&models.Telegraph{}).Select("title").Where("title IN ?", titles).Find(&rows)
+			for _, r := range rows {
+				existingTitle[r.Title] = true
+			}
+		}
+		tagByName := make(map[string]*models.Tags)
+		if len(subjectNames) > 0 {
+			var tags []models.Tags
+			db.Dao.Model(&models.Tags{}).Where("name IN ? AND type = ?", subjectNames, "subject").Find(&tags)
+			for i := range tags {
+				tagByName[tags[i].Name] = &tags[i]
+			}
+		}
+		seenContent := make(map[string]bool)
+		seenTitle := make(map[string]bool)
 		for _, v := range rollData {
 			news, ok := v.(map[string]any)
 			if !ok {
@@ -69,14 +127,18 @@ func (m MarketNewsApi) TelegraphList(crawlTimeOut int64) *[]models.Telegraph {
 				IsRed:           level != "C",
 				SentimentResult: AnalyzeSentiment(content).Description,
 			}
-			cnt := int64(0)
+			// 去重：查批量预取的集合 + 本批已入库的 seen 集合，与原先逐条
+			// Count 等价（原先 Count 也能看到同批先入库的行）。
 			if telegraph.Title == "" {
-				db.Dao.Model(telegraph).Where("content=?", telegraph.Content).Count(&cnt)
+				if existingContent[telegraph.Content] || seenContent[telegraph.Content] {
+					continue
+				}
+				seenContent[telegraph.Content] = true
 			} else {
-				db.Dao.Model(telegraph).Where("title=?", telegraph.Title).Count(&cnt)
-			}
-			if cnt > 0 {
-				continue
+				if existingTitle[telegraph.Title] || seenTitle[telegraph.Title] {
+					continue
+				}
+				seenTitle[telegraph.Title] = true
 			}
 			telegraphs = append(telegraphs, telegraph)
 			db.Dao.Model(&models.Telegraph{}).Create(&telegraph)
@@ -87,6 +149,11 @@ func (m MarketNewsApi) TelegraphList(crawlTimeOut int64) *[]models.Telegraph {
 			if !ok {
 				continue
 			}
+			// 标签：先查批量预取的表，只对真正新增的标签单独 Create；
+			// 关联行一次批量 Create（新快讯的 ID 不可能已有 TelegraphTags，
+			// 与原先逐对 FirstOrCreate 等价；同主题去重后一次写入）。
+			pairs := make([]models.TelegraphTags, 0, len(subjects))
+			seenTagID := make(map[uint]bool)
 			for _, subject := range subjects {
 				subMap, ok := subject.(map[string]any)
 				if !ok {
@@ -96,15 +163,25 @@ func (m MarketNewsApi) TelegraphList(crawlTimeOut int64) *[]models.Telegraph {
 				if !ok || name == "" {
 					continue
 				}
-				tag := &models.Tags{
-					Name: name,
-					Type: "subject",
+				tag, ok := tagByName[name]
+				if !ok {
+					tag = &models.Tags{
+						Name: name,
+						Type: "subject",
+					}
+					db.Dao.Model(tag).Create(tag)
+					tagByName[name] = tag
 				}
-				db.Dao.Model(tag).Where("name=? and type=?", name, "subject").FirstOrCreate(&tag)
-				db.Dao.Model(models.TelegraphTags{}).Where("telegraph_id=? and tag_id=?", telegraph.ID, tag.ID).FirstOrCreate(&models.TelegraphTags{
-					TelegraphId: telegraph.ID,
-					TagId:       tag.ID,
-				})
+				if !seenTagID[tag.ID] {
+					seenTagID[tag.ID] = true
+					pairs = append(pairs, models.TelegraphTags{
+						TelegraphId: telegraph.ID,
+						TagId:       tag.ID,
+					})
+				}
+			}
+			if len(pairs) > 0 {
+				db.Dao.Model(models.TelegraphTags{}).Create(&pairs)
 			}
 		}
 	} else {
@@ -136,6 +213,63 @@ func (m MarketNewsApi) GetNewTelegraph(crawlTimeOut int64) *[]models.Telegraph {
 		if !ok {
 			return &telegraphs
 		}
+		// 批量预取去重依据与标签（原为每条快讯一次 Count、每个标签一次
+		// FirstOrCreate，N+1）。预取只覆盖本批 rollData 涉及的标题/内容/
+		// 主题名；循环内再用 seen 集合补上本批已入库的行，与原先逐条
+		// Count 能看到同批先入库的行等价。
+		contents := make([]string, 0, len(rollData))
+		titles := make([]string, 0, len(rollData))
+		subjectNames := make([]string, 0)
+		seenSubjectName := make(map[string]bool)
+		for _, v := range rollData {
+			news, ok := v.(map[string]any)
+			if !ok {
+				continue
+			}
+			title, _ := news["title"].(string)
+			content, _ := news["content"].(string)
+			if title == "" {
+				contents = append(contents, content)
+			} else {
+				titles = append(titles, title)
+			}
+			if subs, ok := news["subjects"].([]any); ok {
+				for _, subject := range subs {
+					if subMap, ok := subject.(map[string]any); ok {
+						if name, ok := subMap["subject_name"].(string); ok && name != "" && !seenSubjectName[name] {
+							seenSubjectName[name] = true
+							subjectNames = append(subjectNames, name)
+						}
+					}
+				}
+			}
+		}
+		existingContent := make(map[string]bool, len(contents))
+		if len(contents) > 0 {
+			var rows []models.Telegraph
+			db.Dao.Model(&models.Telegraph{}).Select("content").Where("content IN ?", contents).Find(&rows)
+			for _, r := range rows {
+				existingContent[r.Content] = true
+			}
+		}
+		existingTitle := make(map[string]bool, len(titles))
+		if len(titles) > 0 {
+			var rows []models.Telegraph
+			db.Dao.Model(&models.Telegraph{}).Select("title").Where("title IN ?", titles).Find(&rows)
+			for _, r := range rows {
+				existingTitle[r.Title] = true
+			}
+		}
+		tagByName := make(map[string]*models.Tags)
+		if len(subjectNames) > 0 {
+			var tags []models.Tags
+			db.Dao.Model(&models.Tags{}).Where("name IN ? AND type = ?", subjectNames, "subject").Find(&tags)
+			for i := range tags {
+				tagByName[tags[i].Name] = &tags[i]
+			}
+		}
+		seenContent := make(map[string]bool)
+		seenTitle := make(map[string]bool)
 		for _, v := range rollData {
 			news, ok := v.(map[string]any)
 			if !ok {
@@ -165,14 +299,18 @@ func (m MarketNewsApi) GetNewTelegraph(crawlTimeOut int64) *[]models.Telegraph {
 				IsRed:           level != "C",
 				SentimentResult: AnalyzeSentiment(content).Description,
 			}
-			cnt := int64(0)
+			// 去重：查批量预取的集合 + 本批已入库的 seen 集合，与原先逐条
+			// Count 等价（原先 Count 也能看到同批先入库的行）。
 			if telegraph.Title == "" {
-				db.Dao.Model(telegraph).Where("content=?", telegraph.Content).Count(&cnt)
+				if existingContent[telegraph.Content] || seenContent[telegraph.Content] {
+					continue
+				}
+				seenContent[telegraph.Content] = true
 			} else {
-				db.Dao.Model(telegraph).Where("title=?", telegraph.Title).Count(&cnt)
-			}
-			if cnt > 0 {
-				continue
+				if existingTitle[telegraph.Title] || seenTitle[telegraph.Title] {
+					continue
+				}
+				seenTitle[telegraph.Title] = true
 			}
 			telegraphs = append(telegraphs, telegraph)
 			db.Dao.Model(&models.Telegraph{}).Create(&telegraph)
@@ -183,6 +321,11 @@ func (m MarketNewsApi) GetNewTelegraph(crawlTimeOut int64) *[]models.Telegraph {
 			if !ok {
 				continue
 			}
+			// 标签：先查批量预取的表，只对真正新增的标签单独 Create；
+			// 关联行一次批量 Create（新快讯的 ID 不可能已有 TelegraphTags，
+			// 与原先逐对 FirstOrCreate 等价；同主题去重后一次写入）。
+			pairs := make([]models.TelegraphTags, 0, len(subjects))
+			seenTagID := make(map[uint]bool)
 			for _, subject := range subjects {
 				subMap, ok := subject.(map[string]any)
 				if !ok {
@@ -192,15 +335,25 @@ func (m MarketNewsApi) GetNewTelegraph(crawlTimeOut int64) *[]models.Telegraph {
 				if !ok || name == "" {
 					continue
 				}
-				tag := &models.Tags{
-					Name: name,
-					Type: "subject",
+				tag, ok := tagByName[name]
+				if !ok {
+					tag = &models.Tags{
+						Name: name,
+						Type: "subject",
+					}
+					db.Dao.Model(tag).Create(tag)
+					tagByName[name] = tag
 				}
-				db.Dao.Model(tag).Where("name=? and type=?", name, "subject").FirstOrCreate(&tag)
-				db.Dao.Model(models.TelegraphTags{}).Where("telegraph_id=? and tag_id=?", telegraph.ID, tag.ID).FirstOrCreate(&models.TelegraphTags{
-					TelegraphId: telegraph.ID,
-					TagId:       tag.ID,
-				})
+				if !seenTagID[tag.ID] {
+					seenTagID[tag.ID] = true
+					pairs = append(pairs, models.TelegraphTags{
+						TelegraphId: telegraph.ID,
+						TagId:       tag.ID,
+					})
+				}
+			}
+			if len(pairs) > 0 {
+				db.Dao.Model(models.TelegraphTags{}).Create(&pairs)
 			}
 		}
 	}
@@ -214,14 +367,39 @@ func (m MarketNewsApi) GetTelegraphList(source string) *[]*models.Telegraph {
 	} else {
 		db.Dao.Model(news).Preload("TelegraphTags").Order("data_time desc,time desc").Limit(50).Find(news)
 	}
+	// 批量取回所有标签（原为每条快讯一次查询，N+1），再按 ID 查表。
+	// 原先每条快讯的标签名顺序是数据库返回顺序（按 id 升序），此处对每个快讯
+	// 的标签 ID 排升序后再映射，保持同样的顺序。
+	allTagIDs := make([]uint, 0)
+	seenTagID := make(map[uint]bool)
 	for _, item := range *news {
-		tags := &[]models.Tags{}
-		db.Dao.Model(&models.Tags{}).Where("id in ?", lo.Map(item.TelegraphTags, func(item models.TelegraphTags, index int) uint {
-			return item.TagId
-		})).Find(&tags)
-		tagNames := lo.Map(*tags, func(item models.Tags, index int) string {
-			return item.Name
-		})
+		for _, tt := range item.TelegraphTags {
+			if !seenTagID[tt.TagId] {
+				seenTagID[tt.TagId] = true
+				allTagIDs = append(allTagIDs, tt.TagId)
+			}
+		}
+	}
+	tagNameByID := make(map[uint]string)
+	if len(allTagIDs) > 0 {
+		allTags := &[]models.Tags{}
+		db.Dao.Model(&models.Tags{}).Where("id in ?", allTagIDs).Order("id").Find(allTags)
+		for _, t := range *allTags {
+			tagNameByID[t.ID] = t.Name
+		}
+	}
+	for _, item := range *news {
+		ids := make([]uint, 0, len(item.TelegraphTags))
+		for _, tt := range item.TelegraphTags {
+			ids = append(ids, tt.TagId)
+		}
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		tagNames := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if name, ok := tagNameByID[id]; ok {
+				tagNames = append(tagNames, name)
+			}
+		}
 		item.SubjectTags = tagNames
 		//logger.SugaredLogger.Infof("tagNames %v ，SubjectTags：%s", tagNames, item.SubjectTags)
 	}

@@ -136,8 +136,6 @@ func (m MarketNewsApi) GlobalStockIndexesToReadable(data map[string]any) string 
 }
 
 // CacheGlobalStockIndexes 将全球指数数据缓存到数据库
-
-// CacheGlobalStockIndexes 将全球指数数据缓存到数据库
 func (m MarketNewsApi) CacheGlobalStockIndexes(crawlTimeOut uint) error {
 	data := m.GlobalStockIndexes(crawlTimeOut)
 	if len(data) == 0 {
@@ -153,6 +151,9 @@ func (m MarketNewsApi) CacheGlobalStockIndexes(crawlTimeOut uint) error {
 		"other":   "其他",
 	}
 
+	// 先收集全部指数条目（原为每条一次 First + 一次 FirstOrCreate，N+1）
+	var indexes []models.GlobalStockIndex
+	qtCodes := make([]string, 0)
 	for regionKey, regionName := range regions {
 		raw, ok := data[regionKey]
 		if !ok || raw == nil {
@@ -169,7 +170,7 @@ func (m MarketNewsApi) CacheGlobalStockIndexes(crawlTimeOut uint) error {
 				continue
 			}
 
-			index := models.GlobalStockIndex{
+			indexes = append(indexes, models.GlobalStockIndex{
 				Code:       convertor.ToString(row["code"]),
 				Name:       convertor.ToString(row["name"]),
 				Location:   convertor.ToString(row["location"]),
@@ -180,34 +181,41 @@ func (m MarketNewsApi) CacheGlobalStockIndexes(crawlTimeOut uint) error {
 				Img:        convertor.ToString(row["img"]),
 				Region:     regionKey,
 				RegionName: regionName,
-			}
+			})
+			qtCodes = append(qtCodes, convertor.ToString(row["qtcode"]))
+		}
+	}
 
-			// 如果已存在则更新，不存在则创建
-			existing := models.GlobalStockIndex{}
-			query := db.Dao.Model(&models.GlobalStockIndex{}).Where("qtcode = ?", index.Qtcode)
-			if err := query.First(&existing).Error; err == nil {
-				// 记录已存在，更新
-				db.Dao.Model(&existing).Updates(map[string]any{
-					"name":     index.Name,
-					"location": index.Location,
-					"state":    index.State,
-					"zdf":      index.Zdf,
-					"zxj":      index.Zxj,
-					"img":      index.Img,
-					"region":   index.Region,
-				})
-			}
-			db.Dao.Where(models.GlobalStockIndex{Qtcode: index.Qtcode}).FirstOrCreate(&index)
+	// 一次 IN 查询取回已存在的行，按 qtcode 查表（原先每条查一次）
+	existingByQtcode := make(map[string]models.GlobalStockIndex, len(qtCodes))
+	if len(qtCodes) > 0 {
+		var existingRows []models.GlobalStockIndex
+		db.Dao.Model(&models.GlobalStockIndex{}).Where("qtcode IN ?", qtCodes).Find(&existingRows)
+		for _, r := range existingRows {
+			existingByQtcode[r.Qtcode] = r
+		}
+	}
+
+	// 如果已存在则更新，不存在则创建；新创建的行也记入 map，
+	// 使同一 qtcode 在多个区域出现时第二次走更新（与原先一致）。
+	for _, index := range indexes {
+		if existing, ok := existingByQtcode[index.Qtcode]; ok {
+			// 记录已存在，更新
+			db.Dao.Model(&existing).Updates(map[string]any{
+				"name":     index.Name,
+				"location": index.Location,
+				"state":    index.State,
+				"zdf":      index.Zdf,
+				"zxj":      index.Zxj,
+				"img":      index.Img,
+				"region":   index.Region,
+			})
+		} else {
+			db.Dao.Model(&models.GlobalStockIndex{}).Create(&index)
+			existingByQtcode[index.Qtcode] = index
 		}
 	}
 
 	logger.SugaredLogger.Info("全球指数缓存完成")
 	return nil
 }
-
-// GetCachedGlobalStockIndexes 从数据库获取缓存的全球指数数据
-
-// GetCachedGlobalStockIndexes 从数据库获取缓存的全球指数数据
-// GetCachedGlobalStockIndexesReadable 获取缓存的全球指数并转换为易读格式
-
-// GetCachedGlobalStockIndexesReadable 获取缓存的全球指数并转换为易读格式

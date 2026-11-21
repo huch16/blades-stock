@@ -274,17 +274,45 @@ func (d *SemanticDistiller) DistillAIReportsAndBacktests(ctx context.Context, mi
 		return 0, 0, fmt.Errorf("query backtests: %w", err)
 	}
 
+	// 批量取回关联的 AI 分析报告（原为每条回测一次 First，N+1）
+	reportIDs := make([]uint, 0, len(backtests))
+	for _, bt := range backtests {
+		if bt.ReportID > 0 {
+			reportIDs = append(reportIDs, bt.ReportID)
+		}
+	}
+	respByID := make(map[uint]models.AIResponseResult, len(reportIDs))
+	if len(reportIDs) > 0 {
+		var resps []models.AIResponseResult
+		db.Dao.Where("id IN ?", reportIDs).Find(&resps)
+		for _, r := range resps {
+			respByID[r.ID] = r
+		}
+	}
+
 	embSvc := d.getActiveEmbeddingService()
 	createdCrystals := 0
 
+	// 先算出每条回测的结晶计划（类别/标题/摘要/内容哈希），再一次查询
+	// 已存在的内容哈希（原为每条结晶一次 Count 防重，N+1）。
+	type crystalPlan struct {
+		bt             models.BacktestResult
+		resp           models.AIResponseResult
+		category       string
+		title          string
+		triggerPattern string
+		summary        string
+		keyInsights    string
+		accScore       float64
+		contentHash    string
+	}
+	plans := make([]crystalPlan, 0, len(backtests))
+	allHashes := make([]string, 0, len(backtests))
 	for _, bt := range backtests {
-		// 查询关联的 AI 分析报告
-		var resp models.AIResponseResult
-		if bt.ReportID > 0 {
-			if err := db.Dao.First(&resp, bt.ReportID).Error; err != nil {
-				continue
-			}
-		} else {
+		// 查询关联的 AI 分析报告（从批量预取的结果里查表；查不到则跳过，
+		// 与原先 First 报错后 continue 一致）
+		resp, ok := respByID[bt.ReportID]
+		if bt.ReportID <= 0 || !ok {
 			continue
 		}
 
@@ -319,33 +347,50 @@ func (d *SemanticDistiller) DistillAIReportsAndBacktests(ctx context.Context, mi
 		}
 
 		contentHash := ComputeContentHash(category, title, summary)
+		plans = append(plans, crystalPlan{
+			bt: bt, resp: resp, category: category, title: title,
+			triggerPattern: triggerPattern, summary: summary,
+			keyInsights: keyInsights, accScore: accScore, contentHash: contentHash,
+		})
+		allHashes = append(allHashes, contentHash)
+	}
+	existingHashes := make(map[string]bool, len(allHashes))
+	if len(allHashes) > 0 {
+		var rows []KnowledgeCrystal
+		db.Dao.Model(&KnowledgeCrystal{}).Select("content_hash").Where("content_hash IN ?", allHashes).Find(&rows)
+		for _, r := range rows {
+			existingHashes[r.ContentHash] = true
+		}
+	}
+	// 本批已创建的哈希也要防重（原先 Count 能看到同批先创建的行）
+	createdHashes := make(map[string]bool)
 
-		// 检查防重
-		var count int64
-		db.Dao.Model(&KnowledgeCrystal{}).Where("content_hash = ?", contentHash).Count(&count)
-		if count > 0 {
+	for _, p := range plans {
+		// 检查防重：查内存集合（预取的已有哈希 + 本批已创建的哈希），
+		// 与原先逐条 Count 等价
+		if existingHashes[p.contentHash] || createdHashes[p.contentHash] {
 			continue
 		}
 
 		crystal := KnowledgeCrystal{
-			Category:       category,
-			Title:          title,
-			TriggerPattern: triggerPattern,
-			Summary:        summary,
-			KeyInsights:    keyInsights,
-			AccuracyScore:  accScore,
+			Category:       p.category,
+			Title:          p.title,
+			TriggerPattern: p.triggerPattern,
+			Summary:        p.summary,
+			KeyInsights:    p.keyInsights,
+			AccuracyScore:  p.accScore,
 			HitCount:       1,
 			LastHitAt:      time.Now(),
-			SourceDate:     bt.VerifyDate,
-			SourceRef:      fmt.Sprintf("backtest_%d_report_%d", bt.ID, bt.ReportID),
-			ContentHash:    contentHash,
+			SourceDate:     p.bt.VerifyDate,
+			SourceRef:      fmt.Sprintf("backtest_%d_report_%d", p.bt.ID, p.bt.ReportID),
+			ContentHash:    p.contentHash,
 			CreatedAt:      time.Now(),
 			UpdatedAt:      time.Now(),
 		}
 
 		// 计算高维语义向量 (供未来 Agent 语义 RAG 召回)
 		if embSvc != nil {
-			embedPayload := fmt.Sprintf("%s %s %s", title, triggerPattern, summary)
+			embedPayload := fmt.Sprintf("%s %s %s", p.title, p.triggerPattern, p.summary)
 			if vec, err := embSvc.EmbedWithContext(ctx, embedPayload); err == nil && len(vec) > 0 {
 				crystal.SetVector(vec)
 			}
@@ -353,6 +398,7 @@ func (d *SemanticDistiller) DistillAIReportsAndBacktests(ctx context.Context, mi
 
 		if err := db.Dao.Create(&crystal).Error; err == nil {
 			createdCrystals++
+			createdHashes[p.contentHash] = true
 		}
 	}
 

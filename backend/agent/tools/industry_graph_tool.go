@@ -83,6 +83,29 @@ func GetIndustrySupplyGraphTool() bladesTools.Tool {
 				return fmt.Sprintf("暂未在产业知识图谱中检索到关于 %q 的直接节点。建议使用 '光模块'、'PCB'、'液冷'、'机器人'、'半导体设备' 等核心赛道关键词。", keyword), nil
 			}
 
+			// 批量取回所有匹配节点的关联边（原为每个节点一次查询，N+1），
+			// 再按节点 ID 分组；分组内保持数据库返回顺序，与原先逐节点查询一致。
+			// 一条边若两端都是匹配节点，会同时出现在两端的列表里（与原先一致）。
+			nodeIDs := make([]string, 0, len(nodes))
+			nodeIDSet := make(map[string]bool, len(nodes))
+			for _, n := range nodes {
+				nodeIDs = append(nodeIDs, n.ID)
+				nodeIDSet[n.ID] = true
+			}
+			edgesByNode := make(map[string][]models.IndustryEdge)
+			if len(nodeIDs) > 0 {
+				var allEdges []models.IndustryEdge
+				db.Dao.Where("source_id IN ? OR target_id IN ?", nodeIDs, nodeIDs).Find(&allEdges)
+				for _, e := range allEdges {
+					if nodeIDSet[e.SourceID] {
+						edgesByNode[e.SourceID] = append(edgesByNode[e.SourceID], e)
+					}
+					if e.TargetID != e.SourceID && nodeIDSet[e.TargetID] {
+						edgesByNode[e.TargetID] = append(edgesByNode[e.TargetID], e)
+					}
+				}
+			}
+
 			var sb strings.Builder
 			sb.WriteString(fmt.Sprintf("### 🕸️ A 股产业传导知识图谱检索结果 (%q)\n\n", keyword))
 			for i, n := range nodes {
@@ -94,9 +117,8 @@ func GetIndustrySupplyGraphTool() bladesTools.Tool {
 					fmt.Fprintf(&sb, "   - 标的代码：`%s` | 市值规模：%s\n", n.StockCode, n.MarketCap)
 				}
 
-				// 查询关联下游边
-				var edges []models.IndustryEdge
-				db.Dao.Where("source_id = ? OR target_id = ?", n.ID, n.ID).Find(&edges)
+				// 关联下游边（从批量预取的结果里查表）
+				edges := edgesByNode[n.ID]
 				if len(edges) > 0 {
 					sb.WriteString("   - 传导关系链：\n")
 					for _, e := range edges {

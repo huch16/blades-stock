@@ -147,9 +147,56 @@ func (g *IndustryKnowledgeGraph) CascadeEventReasoning(sourceName, headline stri
 	var hop1Edges []models.IndustryEdge
 	db.Dao.Where("source_id = ?", sourceNodeID).Find(&hop1Edges)
 
+	// 批量取回节点：原先每条边一次 First（N+1），现按目标 ID 一次 IN 查询后查表。
+	// 闭包只在本函数内使用，不新增顶层符号；查不到的 ID 在 map 里不存在，与原先
+	// First 报错后 continue 的行为一致。
+	loadNodesByID := func(ids []string) map[string]models.IndustryNode {
+		m := make(map[string]models.IndustryNode, len(ids))
+		if len(ids) == 0 {
+			return m
+		}
+		var nodes []models.IndustryNode
+		db.Dao.Where("id IN ?", ids).Find(&nodes)
+		for _, n := range nodes {
+			m[n.ID] = n
+		}
+		return m
+	}
+
+	hop1TargetIDs := make([]string, 0, len(hop1Edges))
 	for _, e1 := range hop1Edges {
-		var midNode models.IndustryNode
-		if err := db.Dao.Where("id = ?", e1.TargetID).First(&midNode).Error; err != nil {
+		hop1TargetIDs = append(hop1TargetIDs, e1.TargetID)
+	}
+	nodesByID := loadNodesByID(hop1TargetIDs)
+
+	// 2-hop 边：先确定哪些 1-hop 目标是非个股节点，再一次 IN 查询取回它们的出边，
+	// 按 source_id 分组；同时把所有 2-hop 目标节点也一次取回。原先每个非个股节点
+	// 各查一次出边、每条 2-hop 边再查一次目标节点（N+1）。
+	sectorIDs := make([]string, 0)
+	sectorSeen := make(map[string]bool)
+	for _, e1 := range hop1Edges {
+		if midNode, ok := nodesByID[e1.TargetID]; ok && !(midNode.Category == "A_STOCK" && midNode.StockCode != "") {
+			if !sectorSeen[midNode.ID] {
+				sectorSeen[midNode.ID] = true
+				sectorIDs = append(sectorIDs, midNode.ID)
+			}
+		}
+	}
+	hop2BySource := make(map[string][]models.IndustryEdge)
+	hop2TargetIDs := make([]string, 0)
+	if len(sectorIDs) > 0 {
+		var hop2All []models.IndustryEdge
+		db.Dao.Where("source_id IN ?", sectorIDs).Find(&hop2All)
+		for _, e2 := range hop2All {
+			hop2BySource[e2.SourceID] = append(hop2BySource[e2.SourceID], e2)
+			hop2TargetIDs = append(hop2TargetIDs, e2.TargetID)
+		}
+	}
+	hop2NodesByID := loadNodesByID(hop2TargetIDs)
+
+	for _, e1 := range hop1Edges {
+		midNode, ok := nodesByID[e1.TargetID]
+		if !ok {
 			continue
 		}
 
@@ -157,15 +204,14 @@ func (g *IndustryKnowledgeGraph) CascadeEventReasoning(sourceName, headline stri
 			candidatesMap[midNode.StockCode] = g.buildCandidate(midNode, e1.Notes, e1.Weight)
 		} else {
 			affectedSectorsMap[midNode.Name] = true
-			// 2-hop 边 (从行业环节传导至个股)
-			var hop2Edges []models.IndustryEdge
-			db.Dao.Where("source_id = ?", midNode.ID).Find(&hop2Edges)
-			for _, e2 := range hop2Edges {
-				var stockNode models.IndustryNode
-				if err := db.Dao.Where("id = ?", e2.TargetID).First(&stockNode).Error; err == nil {
-					combinedWeight := e1.Weight * e2.Weight
-					candidatesMap[stockNode.StockCode] = g.buildCandidate(stockNode, e2.Notes, combinedWeight)
+			// 2-hop 边 (从行业环节传导至个股)，从批量预取的结果里查表
+			for _, e2 := range hop2BySource[midNode.ID] {
+				stockNode, ok := hop2NodesByID[e2.TargetID]
+				if !ok {
+					continue
 				}
+				combinedWeight := e1.Weight * e2.Weight
+				candidatesMap[stockNode.StockCode] = g.buildCandidate(stockNode, e2.Notes, combinedWeight)
 			}
 		}
 	}
