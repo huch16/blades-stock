@@ -209,10 +209,6 @@ func (receiver *EastMoneyKLineApi) GetKLineData(stockCode, kLineType, adjustFlag
 }
 
 // GetKLineData2 与 GetKLineData 相同，保留给历史测试/调用方。
-func (receiver *EastMoneyKLineApi) GetKLineData2(stockCode, kLineType, adjustFlag string, days int) *[]KLineData {
-	return receiver.GetKLineDataBefore(stockCode, kLineType, adjustFlag, days, "20500101")
-}
-
 // GetKLineDataBefore 获取 end 时间点之前的 limit 根 K 线。
 // end 为空或 "20500101" 表示取到最新；否则为东方财富格式：日/周等为 YYYYMMDD，分钟线多为 YYYYMMDDHHmmss（与 f51 字段一致即可）。
 func (receiver *EastMoneyKLineApi) GetKLineDataBefore(stockCode, kLineType, adjustFlag string, limit int, end string) *[]KLineData {
@@ -320,15 +316,7 @@ func (receiver *EastMoneyKLineApi) GetMonthKLine(stockCode string, months int) *
 }
 
 // GetQuarterKLine 获取季 K 线数据
-func (receiver *EastMoneyKLineApi) GetQuarterKLine(stockCode string, quarters int) *[]KLineData {
-	return receiver.GetKLineData(stockCode, "104", "", quarters)
-}
-
 // GetYearKLine 获取年 K 线数据
-func (receiver *EastMoneyKLineApi) GetYearKLine(stockCode string, years int) *[]KLineData {
-	return receiver.GetKLineData(stockCode, "106", "", years)
-}
-
 // GetAdjustedKLine 获取复权 K 线数据
 // adjustType: qfq=前复权，hfq=后复权
 func (receiver *EastMoneyKLineApi) GetAdjustedKLine(stockCode, adjustType string, days int) *[]KLineData {
@@ -557,9 +545,3 @@ func (receiver *EastMoneyKLineApi) ValidateStockCode(stockCode string) bool {
 }
 
 // GetKLineCount 获取指定时间段内的 K 线数量
-func (receiver *EastMoneyKLineApi) GetKLineCount(stockCode string, kLineType string, startDate, endDate string) int {
-	// 这里可以实现获取指定时间范围内的 K 线数量
-	// 实际实现需要根据具体的 API 参数来调整
-	kLines := receiver.GetKLineData(stockCode, kLineType, "", 365) // 默认获取一年数据
-	return len(*kLines)
-}

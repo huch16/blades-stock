@@ -205,10 +205,6 @@ func tdxMarketFromStockCode(stockCode string) (uint8, string) {
 }
 
 // TdxMarketFromStockCode 是 tdxMarketFromStockCode 的导出版本，供外部包调用
-func TdxMarketFromStockCode(stockCode string) (uint8, string) {
-	return tdxMarketFromStockCode(stockCode)
-}
-
 // macExMarketFromStockCode 将港美股代码转为扩展行情的 category 值和纯代码。
 // 港股：主板 category=31，创业板 category=48（代码 08 开头为创业板）。
 // 美股：category=74。

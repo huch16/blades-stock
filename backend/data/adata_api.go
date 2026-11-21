@@ -30,10 +30,6 @@ func NewAdataClient() *AdataClient {
 	}
 }
 
-func (c *AdataClient) SetBaseURL(baseURL string) {
-	c.baseURL = strings.TrimRight(baseURL, "/")
-}
-
 // adataValueResponse 是 AData 服务实际返回的格式
 // {"value": [...], "count": N}
 type adataValueResponse struct {

@@ -2,7 +2,6 @@ package datasource
 
 import (
 	"blades-stock/backend/logger"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/tidwall/gjson"
 )
 
 type WallstreetcnApi struct {
@@ -499,34 +497,4 @@ func (w WallstreetcnApi) GetCalendarReadable(days int) string {
 	}
 
 	return md.String()
-}
-
-func (w WallstreetcnApi) SearchNews(query string, page, pageSize int) string {
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 20
-	}
-
-	url := fmt.Sprintf("%s/search/search?keyword=%s&page=%d&pageSize=%d",
-		strings.Replace(WSCNBaseURL, "api-one", "search-open-api", 1),
-		query, page, pageSize)
-
-	client := resty.New().SetTimeout(15*time.Second).R().
-		SetHeader("User-Agent", WSCNDefaultUA).
-		SetHeader("Accept", "application/json")
-
-	resp, err := client.Get(url)
-	if err != nil {
-		logger.SugaredLogger.Errorf("WallstreetcnApi SearchNews error: %v", err)
-		return "搜索失败"
-	}
-
-	var result map[string]any
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
-		return string(resp.Body())
-	}
-
-	return gjson.GetBytes(resp.Body(), "data").String()
 }

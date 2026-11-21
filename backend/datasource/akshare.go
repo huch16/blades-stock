@@ -35,24 +35,6 @@ type akShareResponse struct {
 	Meta map[string]any   `json:"meta,omitempty"`
 }
 
-func (c *AkshareClient) get(path string) (*akShareResponse, error) {
-	var resp akShareResponse
-	r, err := c.client.R().
-		SetResult(&resp).
-		SetHeader("User-Agent", "blades-stock/1.0").
-		Get(c.baseURL + path)
-	if err != nil {
-		return nil, fmt.Errorf("akshare HTTP GET %s: %w", path, err)
-	}
-	if r.StatusCode() >= 400 {
-		return nil, fmt.Errorf("akshare HTTP %d GET %s", r.StatusCode(), path)
-	}
-	if resp.Code >= 400 {
-		return nil, fmt.Errorf("akshare api err %s: %s", path, resp.Msg)
-	}
-	return &resp, nil
-}
-
 func (c *AkshareClient) post(path string, body map[string]any) (*akShareResponse, error) {
 	var resp akShareResponse
 	r, err := c.client.R().
