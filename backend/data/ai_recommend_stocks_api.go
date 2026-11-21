@@ -139,21 +139,7 @@ func (s *AiRecommendStocksService) GetAiRecommendStocksList(query *models.AiReco
 }
 
 // GetAiRecommendStocksByID 根据ID获取AI推荐股票记录
-func (s *AiRecommendStocksService) GetAiRecommendStocksByID(id uint) (*models.AiRecommendStocks, error) {
-	var recommend models.AiRecommendStocks
-	err := db.Dao.First(&recommend, id).Error
-	if err != nil {
-		return nil, err
-	}
-	return &recommend, nil
-}
-
 // UpdateAiRecommendStocks 更新AI推荐股票记录
-func (s *AiRecommendStocksService) UpdateAiRecommendStocks(id uint, recommend *models.AiRecommendStocks) error {
-	result := db.Dao.Model(&models.AiRecommendStocks{}).Where("id = ?", id).Updates(recommend)
-	return result.Error
-}
-
 // DeleteAiRecommendStocks 根据ID删除AI推荐股票记录
 func (s *AiRecommendStocksService) DeleteAiRecommendStocks(id uint) error {
 	// 使用软删除
@@ -168,8 +154,3 @@ func (s *AiRecommendStocksService) UpdateAiRecommendStocksAlert(id uint, enableA
 }
 
 // BatchDeleteAiRecommendStocks 批量删除AI推荐股票记录
-func (s *AiRecommendStocksService) BatchDeleteAiRecommendStocks(ids []uint) error {
-	// 使用软删除
-	result := db.Dao.Where("id IN ?", ids).Delete(&models.AiRecommendStocks{})
-	return result.Error
-}

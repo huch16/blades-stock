@@ -344,23 +344,6 @@ func fetchFromMAC(stockCode, klt string, limit int) *KLineSourceResult {
 	return &KLineSourceResult{Data: data}
 }
 
-func extractMonthKey(dayStr string) string {
-	s := strings.TrimSpace(dayStr)
-	if len(s) >= 7 && s[4] == '-' {
-		return s[:7]
-	}
-	if len(s) >= 6 {
-		return s[:4] + "-" + s[4:6]
-	}
-	if len(s) >= 10 && (strings.Contains(s, "/") || strings.Contains(s, "-")) {
-		t, err := time.Parse("2006-01-02", strings.ReplaceAll(s, "/", "-"))
-		if err == nil {
-			return t.Format("2006-01")
-		}
-	}
-	return ""
-}
-
 // truncateStr 转发到 datasource.TruncateStr（R-25a：实现已搬入 datasource）。
 func truncateStr(s string, maxLen int) string {
 	return datasource.TruncateStr(s, maxLen)

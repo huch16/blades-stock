@@ -6,7 +6,6 @@ import (
 	"blades-stock/backend/models"
 	_ "embed"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"unicode"
@@ -284,21 +283,6 @@ func isPunctuationOrSeparator(word string) bool {
 }
 
 // FilterWithRegex 使用正则表达式过滤标点和特殊字符
-func FilterWithRegex(frequencies map[string]models.WordFreqWithWeight) map[string]models.WordFreqWithWeight {
-	filteredWords := make(map[string]models.WordFreqWithWeight)
-
-	// 匹配标点符号、特殊字符的正则表达式
-	punctuationRegex := regexp.MustCompile(`^[[:punct:][:space:]]+$`)
-
-	for word, freqInfo := range frequencies {
-		// 过滤纯标点符号
-		if !punctuationRegex.MatchString(word) && strings.TrimSpace(word) != "" {
-			filteredWords[word] = freqInfo
-		}
-	}
-	return filteredWords
-}
-
 // countWordFrequencyWithWeight 统计词频并包含权重信息
 func countWordFrequencyWithWeight(text string) map[string]models.WordFreqWithWeight {
 	words := splitWords(text)

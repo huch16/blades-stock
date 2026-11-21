@@ -193,16 +193,3 @@ func (c *ConceptFundFlowApi) GetAllConceptCodes() []map[string]string {
 }
 
 // CleanOldData 清理N天前的旧数据
-func (c *ConceptFundFlowApi) CleanOldData(days int) int64 {
-	if days <= 0 {
-		days = 3
-	}
-	cutoff := time.Now().AddDate(0, 0, -days).Format("2006-01-02 15:04:05")
-	result := db.Dao.Where("snap_time < ?", cutoff).Delete(&models.ConceptFundFlow{})
-	if result.Error != nil {
-		logger.SugaredLogger.Errorf("CleanOldData error: %v", result.Error)
-		return 0
-	}
-	logger.SugaredLogger.Infof("ConceptFundFlow CleanOldData: deleted %d records before %s", result.RowsAffected, cutoff)
-	return result.RowsAffected
-}

@@ -1,39 +1,5 @@
 package data
 
-import "strings"
-
-func classifyDataToolGroups(question string) map[dataToolGroup]bool {
-	matched := map[dataToolGroup]bool{
-		dataToolGroupBase: true,
-	}
-	lowerQ := strings.ToLower(question)
-	for _, groupKeywords := range dataToolGroupKeywordsList {
-		for _, keyword := range groupKeywords.keywords {
-			if strings.Contains(lowerQ, strings.ToLower(keyword)) {
-				matched[groupKeywords.group] = true
-				break
-			}
-		}
-	}
-	if len(matched) <= 1 {
-		matched[dataToolGroupStockAnalysis] = true
-		matched[dataToolGroupMarket] = true
-		matched[dataToolGroupNewsResearch] = true
-	}
-	return matched
-}
-
-func filterDataToolsByGroups(allTools []Tool, groups map[dataToolGroup]bool) []Tool {
-	filtered := make([]Tool, 0, len(allTools))
-	for _, tool := range allTools {
-		group, exists := dataToolGroupMap[tool.Function.Name]
-		if !exists || groups[group] {
-			filtered = append(filtered, tool)
-		}
-	}
-	return filtered
-}
-
 func appendAgentParityTools(tools []Tool) []Tool {
 	for _, def := range []struct {
 		name        string

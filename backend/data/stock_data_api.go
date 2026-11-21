@@ -607,12 +607,6 @@ func (receiver StockDataApi) GetAllConcepts() ([]string, error) {
 	return concepts, err
 }
 
-func (receiver StockDataApi) GetStockInfoByCode(secucode string) models.AllStockInfo {
-	var stock models.AllStockInfo
-	db.Dao.Model(&models.AllStockInfo{}).Where("secucode = ?", secucode).First(&stock)
-	return stock
-}
-
 type tradingRecordFIFOLot struct {
 	Volume int64
 	Price  float64

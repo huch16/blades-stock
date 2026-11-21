@@ -750,20 +750,3 @@ func DCToTsCode(dcCode string) string {
 	}
 	return ""
 }
-
-func saveHKStockInfo(d map[string]any) {
-	for _, v := range d["page_data"].([]any) {
-		vv := v.(string)
-		splits := strings.Split(vv, "~")
-		stock := &models.StockInfoHK{
-			Code: strutil.PadStart(splits[0], 5, "0") + ".HK",
-			Name: splits[1],
-		}
-		//logger.SugaredLogger.Infof("vv:%s", vv)
-		db.Dao.Model(stock).Where("code = ?", stock.Code).First(stock)
-		if stock.ID == 0 {
-			//logger.SugaredLogger.Infof("stock:%+v", stock)
-			db.Dao.Model(&models.StockInfoHK{}).Create(stock)
-		}
-	}
-}

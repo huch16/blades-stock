@@ -3,11 +3,9 @@ package data
 import (
 	_ "embed"
 
-	"blades-stock/backend/logger"
 	"regexp"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/duke-git/lancet/v2/slice"
 	"github.com/duke-git/lancet/v2/strutil"
 )
@@ -80,52 +78,4 @@ func ConvertTushareCodeToStockCodes(a []string) []string {
 	})
 }
 
-func GetTableMarkdown(document *goquery.Document, waitVisible string, markdown *strings.Builder) {
-	document.Find(waitVisible).First().Find("tr").Each(func(index int, item *goquery.Selection) {
-		row := ""
-		item.Find("th, td").Each(func(i int, cell *goquery.Selection) {
-			text := cell.Children().FilterFunction(func(i int, s *goquery.Selection) bool {
-				return isVisible(s)
-			}).Text()
-			if text == "" {
-				text = cell.Text()
-			}
-
-			row += "|" + text
-		})
-		row += "|"
-
-		if index == 0 {
-			// Header row
-			markdown.WriteString(row + "\n")
-			// Separator row
-			separator := ""
-			item.Find("th, td").Each(func(i int, cell *goquery.Selection) {
-				separator += "|---"
-			})
-			markdown.WriteString(separator + "|\n")
-		} else {
-			// Data row
-			markdown.WriteString(row + "\n")
-		}
-	})
-	logger.SugaredLogger.Infof("\n%s", markdown.String())
-}
-
 // isVisible 函数用于判断元素是否可见
-func isVisible(s *goquery.Selection) bool {
-	// 检查 display 属性
-	display, _ := s.Attr("style")
-	if strings.Contains(strings.ToLower(display), "display: none") {
-		return false
-	}
-	// 检查 visibility 属性
-	if strings.Contains(strings.ToLower(display), "visibility: hidden") {
-		return false
-	}
-	// 检查 opacity 属性
-	if strings.Contains(strings.ToLower(display), "opacity: 0") {
-		return false
-	}
-	return true
-}
