@@ -54,6 +54,7 @@ import {
   EventsOn,
   WindowReload,
 } from '../../wailsjs/runtime'
+import { isWails } from '../api/bridge'
 import {Add, CreateOutline} from '@vicons/ionicons5'
 import { sanitizeMarkdownHtml } from '../utils/sanitize';
 import { useStockTabs } from '../composables/useStockTabs'
@@ -838,17 +839,16 @@ function openCenteredWindow(url, width, height) {
 }
 
 function search(code, name) {
-  setTimeout(() => {
-    //window.open("https://xueqiu.com/S/"+code)
-    //window.open("https://www.cls.cn/stock?code="+code)
-    //window.open("https://quote.eastmoney.com/"+code+".html")
-    //window.open("https://finance.sina.com.cn/realstock/company/"+code+"/nc.shtml")
-    //window.open("https://www.iwencai.com/unifiedwap/result?w=" + name)
-    //window.open("https://www.iwencai.com/chat/?question="+code)
-
-    openCenteredWindow("https://www.iwencai.com/unifiedwap/result?w=" + name, 1000, 800)
-
-  }, 500)
+  const url = "https://www.iwencai.com/unifiedwap/result?w=" + encodeURIComponent(name)
+  // Web 模式：必须在点击手势内同步 window.open，否则 setTimeout + 异步 Environment
+  // 会脱离手势调用栈而被浏览器拦截；且服务端 OpenURL 是在服务器进程里打开浏览器，
+  // 用户侧没有任何反应，故 Web 下一律直接 window.open（桌面端保留居中弹窗）。
+  if (!isWails()) {
+    const win = window.open(url, '_blank', 'noopener')
+    if (!win) message.warning('新窗口被浏览器拦截，请允许本站弹出窗口后重试')
+    return
+  }
+  openCenteredWindow(url, 1000, 800)
 }
 
 function handleLongEntryPriceUpdate(newPrice) {

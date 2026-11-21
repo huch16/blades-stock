@@ -101,9 +101,19 @@ async function findStockList(val) {
   }))
 }
 
+// 剥掉 “名字 (代码)” 格式，取括号内的东财代码；无括号时原样返回。
+// handleSearch 会把框写成 “平安银行 (000001.SZ)”，不剥掉就解析失败。
+function stripNameCodeFormat(input) {
+  const m = String(input).trim().match(/\(\s*([A-Za-z0-9]{2,}\.(?:SH|SZ|BJ|HK|US|SS))\s*\)\s*$/i)
+  if (m) return m[1]
+  return String(input).trim()
+}
+
 async function handleSearch(value) {
   if (!value) return
-  const raw = String(value).trim()
+  // 剥掉 handleSearch 自己写出的 “名字 (代码)” 格式（如 “贵州茅台 (000001.SZ)”），
+  // 否则 toEastMoneyCode 按空格切分会得到 “(000001.SZ)” 而解析失败，导致切不动股票。
+  const raw = stripNameCodeFormat(value)
   if (!raw) return
 
   // 说明（no-useless-assignment）：targetCode 仅作为「名称/拼音 → 代码」解析的中间量，
@@ -159,7 +169,9 @@ async function handleSearch(value) {
 
   unsupportedCode.value = false
   selectedCode.value = directEmCode
-  selectedName.value = targetName || selectedName.value || ''
+  // 查名失败时不保留旧名（旧逻辑 || selectedName.value 会把上一只股票的名字
+  // 配到新代码上，显示成 “贵州茅台 (000001.SZ)” 这种名码错配）
+  selectedName.value = targetName || ''
   addToRecent(directEmCode, selectedName.value)
   setCurrentStock({ code: directEmCode, name: selectedName.value })
   searchQuery.value = selectedName.value ? `${selectedName.value} (${directEmCode})` : directEmCode
@@ -221,10 +233,11 @@ watch(() => route.query.code, (newCode) => {
 onBeforeMount(() => {
   GetStockList('').then(result => {
     stockList.value = result || []
-    // 股票列表加载完成后再次确认当前选中股票的名称
-    if (selectedCode.value && !selectedName.value) {
+    // 股票列表加载完成后按代码校正一次名称（此前 !selectedName 条件恒为假，
+    // 因为 selectRecent 已先占位，导致名字错了也没人纠正）
+    if (selectedCode.value) {
       const found = stockList.value.find(item => toEastMoneyCode(item.ts_code) === selectedCode.value)
-      if (found) selectedName.value = found.name
+      if (found && found.name) selectedName.value = found.name
     }
   }).catch(err => { console.error('GetStockList error:', err) })
   GetConfig().then(result => {
@@ -359,6 +372,7 @@ onBeforeUnmount(() => {
               size="small"
               :on-select="handleSearch"
               @update:value="findStockList"
+              @keyup.enter="handleSearch(searchQuery)"
             />
             <n-button
               size="small"

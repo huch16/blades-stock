@@ -126,6 +126,11 @@ const nowTab = ref("市场快讯")
 const indexInterval = ref(null)
 const indexIndustryRank = ref(null)
 const tradingCheckInterval = ref(null)
+const newsInterval = ref(null)
+// 快讯现爬进行中的来源集合，避免定时器叠加多个 15 秒现爬
+const refreshingSources = new Set()
+// 快讯重试定时器，组件卸载时清理
+const telegraphRetryTimers = new Set()
 const mdPreviewRef = ref(null)
 const aiResultScrollRef = ref(null)
 const stockCode= ref('')
@@ -144,8 +149,31 @@ function getIndex() {
   }).catch(() => {})
 }
 
+// 快讯初次加载（带重试）：GetTelegraphList 是便宜的读库接口，失败时指数退避重试 3 次；
+// 失败不清空已有数据。库里为空时才走一次现爬 ReFlesh。
+function loadTelegraphList(source, setList, attempt = 0) {
+  GetTelegraphList(source).then(res => {
+    if (Array.isArray(res) && res.length > 0) {
+      setList(res)
+    } else if (attempt === 0) {
+      ReFlesh(source)
+    }
+  }).catch(err => {
+    console.error(`[telegraph] ${source} load failed (attempt ${attempt}):`, err)
+    if (attempt < 3) {
+      const timer = setTimeout(() => {
+        telegraphRetryTimers.delete(timer)
+        loadTelegraphList(source, setList, attempt + 1)
+      }, 1000 * (attempt + 1))
+      telegraphRetryTimers.add(timer)
+    }
+  })
+}
+
 onBeforeMount(() => {
-  nowTab.value = route.query.name
+  // 顶部“市场行情”菜单不带 query，route.query.name 为空时默认落在“市场快讯”，
+  // 否则 n-tabs 的 :value 为 undefined 且 display-directive="if"，没有任何 tab-pane 渲染
+  nowTab.value = route.query.name || '市场快讯'
   stockCode.value = route.query.stockCode
   GetConfig().then(result => {
     summaryBTN.value = result.openAiEnable
@@ -161,32 +189,9 @@ onBeforeMount(() => {
   refreshAiConfigs()
   EventsOn('updateSettings', onSettingsUpdated)
   EventsOn('aiConfigsUpdated', onAiConfigsUpdated)
-  GetTelegraphList("财联社电报").then((res) => {
-    if (Array.isArray(res) && res.length > 0) {
-      telegraphList.value = res
-    } else {
-      telegraphList.value = []
-      ReFlesh("财联社电报")
-    }
-  }).catch(() => { telegraphList.value = [] })
-
-  GetTelegraphList("新浪财经").then((res) => {
-    if (Array.isArray(res) && res.length > 0) {
-      sinaNewsList.value = res
-    } else {
-      sinaNewsList.value = []
-      ReFlesh("新浪财经")
-    }
-  }).catch(() => { sinaNewsList.value = [] })
-
-  GetTelegraphList("外媒").then((res) => {
-    if (Array.isArray(res) && res.length > 0) {
-      foreignNewsList.value = res
-    } else {
-      foreignNewsList.value = []
-      ReFlesh("外媒")
-    }
-  }).catch(() => { foreignNewsList.value = [] })
+  loadTelegraphList("财联社电报", res => { telegraphList.value = res })
+  loadTelegraphList("新浪财经", res => { sinaNewsList.value = res })
+  loadTelegraphList("外媒", res => { foreignNewsList.value = res })
   getIndex();
   industryRank();
   startTradingTimers();
@@ -216,6 +221,9 @@ onBeforeUnmount(() => {
   EventsOff("updateSettings", onSettingsUpdated)
   EventsOff("aiConfigsUpdated", onAiConfigsUpdated)
   stopTradingTimers()
+  stopNewsTimer()
+  telegraphRetryTimers.forEach(t => clearTimeout(t))
+  telegraphRetryTimers.clear()
   if (tradingCheckInterval.value) {
     clearInterval(tradingCheckInterval.value)
   }
@@ -230,10 +238,26 @@ function startTradingTimers() {
   indexIndustryRank.value = setInterval(() => {
     if (typeof document !== 'undefined' && document.hidden) return
     industryRank()
+  }, 1000 * 10)
+  // 快讯刷新独立于交易时段：周末休市也要继续刷，否则列表一旦加载失败就永久为空
+  startNewsTimer()
+}
+
+function startNewsTimer() {
+  if (newsInterval.value) return
+  newsInterval.value = setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return
     ReFlesh("财联社电报")
     ReFlesh("新浪财经")
     ReFlesh("外媒")
   }, 1000 * 10)
+}
+
+function stopNewsTimer() {
+  if (newsInterval.value) {
+    clearInterval(newsInterval.value)
+    newsInterval.value = null
+  }
 }
 
 function stopTradingTimers() {
@@ -515,8 +539,12 @@ function saveAsMarkdown() {
 }
 
 function ReFlesh(source) {
+  // 同一来源正在现爬时跳过，避免 10 秒定时器叠加多个 15 秒现爬
+  if (refreshingSources.has(source)) return
+  refreshingSources.add(source)
   ReFleshTelegraphList(source).then(res => {
-    if (Array.isArray(res)) {
+    // 空数组不覆盖已有数据（现爬可能暂时没抓到，不能把好数据清掉）
+    if (Array.isArray(res) && res.length > 0) {
       if (source === "财联社电报") {
         telegraphList.value = res
       } else if (source === "新浪财经") {
@@ -525,7 +553,9 @@ function ReFlesh(source) {
         foreignNewsList.value = res
       }
     }
-  }).catch(() => {})
+  }).catch(() => {}).finally(() => {
+    refreshingSources.delete(source)
+  })
 }
 function goToIntelligence(type) {
   const query = type ? { tab: type } : {}
