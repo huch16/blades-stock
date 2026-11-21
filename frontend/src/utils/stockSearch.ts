@@ -51,6 +51,18 @@ export function stripNameCodeFormat(input: string): string {
   return String(input).trim()
 }
 
+// 规范东财代码格式校验：只认“定长数字 + 标准后缀”。
+// A 股 6 位数字 + .SH/.SZ/.BJ/.SS；港股 5 位数字 + .HK；美股 1–5 位字母 + .US。
+// 注意不要用“像不像代码原文”的宽松判断代替本函数：任意位数字 + 后缀
+// （如 600500000119.SH）按宽松判断也会通过；本函数才是恢复 / 入库前的
+// 守门员——toEastMoneyCode 对 "600500000119" 也会照常补出 "600500000119.SH"，
+// 必须在这里拦下。
+export function isValidEastMoneyCode(code: string): boolean {
+  if (!code) return false
+  const c = String(code).trim().toUpperCase()
+  return /^(\d{6}\.(SH|SZ|BJ|SS)|\d{5}\.HK|[A-Z]{1,5}\.US)$/.test(c)
+}
+
 // 内存列表联想匹配（支持名称、代码、纯数字 symbol、拼音缩写 cnspell），按 includes 取前 limit 条。
 // 注意：920000.BJ（安徽凤凰）的 name/ts_code/symbol/cnspell 均不含 "000001"，
 // 所以输入 000001 时它不可能从这里进入联想列表（问题 2 的回归点）。

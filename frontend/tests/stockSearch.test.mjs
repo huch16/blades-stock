@@ -10,6 +10,7 @@ import {
   filterStockOptions,
   isCodeText,
   resolveSearchTarget,
+  isValidEastMoneyCode,
 } from '../src/utils/stockSearch.ts'
 
 const LIST = [
@@ -126,4 +127,24 @@ test('联动：gzmt 唯一建议时解析为 600519.SH；无建议时 AAPL 仍�
   assert.equal(toEastMoneyCode(resolveSearchTarget('AAPL', '', false, [])), 'AAPL.US')
   assert.equal(toEastMoneyCode(resolveSearchTarget('000001', '', false, ['000001.SZ'])), '000001.SZ')
   assert.equal(toEastMoneyCode(resolveSearchTarget('贵州茅台', '', false, ['600519.SH'])), '600519.SH')
+})
+
+test('isValidEastMoneyCode: 只认规范定长代码', () => {
+  for (const c of ['600519.SH', '000001.SZ', '920000.BJ', '159915.SZ', '00700.HK', 'AAPL.US', '600519.sh']) {
+    assert.equal(isValidEastMoneyCode(c), true, c)
+  }
+})
+
+test('isValidEastMoneyCode: 拒绝乱码与短码（600500000119.SH 回归）', () => {
+  for (const c of ['', '600500000119.SH', '6005000001.SH', '6005.SH', '600519', '600519.XX', '600519.SH6005', 'ABCDEF.US', '1234567.SH']) {
+    assert.equal(isValidEastMoneyCode(c), false, c)
+  }
+})
+
+test('联动：toEastMoneyCode 会放过乱码，isValidEastMoneyCode 拦下', () => {
+  // 框内 "(600519.SH)" 中间插入 "000001" 得到的拼接串，解析层照常放行——
+  // 这正是本次乱码能一路写进历史、刷新后又被恢复的缺口。
+  const garbled = toEastMoneyCode(stripNameCodeFormat('贵州茅台 (600500000119.SH)'))
+  assert.equal(garbled, '600500000119.SH')
+  assert.equal(isValidEastMoneyCode(garbled), false)
 })

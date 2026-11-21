@@ -10,7 +10,7 @@ import { useMessage } from 'naive-ui'
 import { onBeforeMount, onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { setCurrentStock } from '../utils/stockContextBus'
-import { toEastMoneyCode, stripNameCodeFormat, filterStockOptions, resolveSearchTarget } from '../utils/stockSearch'
+import { toEastMoneyCode, stripNameCodeFormat, filterStockOptions, resolveSearchTarget, isValidEastMoneyCode } from '../utils/stockSearch'
 
 const route = useRoute()
 const message = useMessage()
@@ -201,7 +201,9 @@ async function handleSearch(value, nameHint = '') {
     }
   }
 
-  if (!directEmCode) {
+  // 格式守门：toEastMoneyCode 对任意位数字都会补后缀（如 600500000119 →
+  // 600500000119.SH），非法代码到这里必须拦下，不进 selectedCode、不写历史。
+  if (!isValidEastMoneyCode(directEmCode)) {
     if (myGen !== searchGen) return
     unsupportedCode.value = true
     return
@@ -273,6 +275,7 @@ function onSearchBlur() {
 
 function addToRecent(code, name) {
   if (!code) return
+  if (!isValidEastMoneyCode(code)) return // 非法代码不写历史（最后一道防线）
   // 存之前先按代码查权威名称：列表里有就以列表为准（能纠正旧版本留下的错配条目）。
   // 注意：不沿用该代码旧存的名字——它可能是旧 bug 留下的错配（如 000001.SZ 存着“东方财富”），
   // 解析不到就存空，界面显示代码，等列表加载后 validateRecentNames 再纠正。
@@ -289,6 +292,15 @@ function addToRecent(code, name) {
 // 股票列表加载完成后，按代码校正历史记录里的名字，
 // 清掉旧版本 bug 留下的名码错配条目（如 code=000001.SZ 却存着“东方财富”）。
 function validateRecentNames() {
+  // 格式非法条目（如已存入的 600500000119.SH）直接剔除，不等列表加载；
+  // 否则它会一直留在历史里，下次刷新又被当作 selectedCode 恢复。
+  const valid = recentStocks.value.filter(s => s && isValidEastMoneyCode(s.code))
+  if (valid.length !== recentStocks.value.length) {
+    recentStocks.value = valid
+    try {
+      localStorage.setItem('kline-recent-stocks', JSON.stringify(recentStocks.value))
+    } catch {}
+  }
   if (!recentStocks.value.length || !stockList.value.length) return
   let changed = false
   recentStocks.value = recentStocks.value.map(s => {
@@ -309,14 +321,21 @@ function validateRecentNames() {
 function loadRecentStocks() {
   try {
     const raw = localStorage.getItem('kline-recent-stocks')
-    if (raw) recentStocks.value = JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      // 非数组或含格式非法代码（如 600500000119.SH）的条目直接丢弃，
+      // 不让它成为恢复 selectedCode 的候选。
+      recentStocks.value = Array.isArray(parsed)
+        ? parsed.filter(s => s && typeof s.code === 'string' && isValidEastMoneyCode(s.code))
+        : []
+    }
   } catch {}
   validateRecentNames()
 }
 
 async function selectRecent(code, name) {
   const emCode = toEastMoneyCode(code)
-  if (!emCode) {
+  if (!isValidEastMoneyCode(emCode)) {
     unsupportedCode.value = true
     return
   }
@@ -387,7 +406,7 @@ onMounted(async () => {
   stockChangeHandler = (data) => {
     if (data && data.ts_code) {
       const emCode = toEastMoneyCode(data.ts_code)
-      if (!emCode) {
+      if (!isValidEastMoneyCode(emCode)) {
         unsupportedCode.value = true
         return
       }
