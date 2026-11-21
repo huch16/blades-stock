@@ -15,7 +15,6 @@ const route = useRoute()
 const message = useMessage()
 const searchQuery = ref('')
 const selectedCode = ref('')
-const selectedName = ref('')
 const stockList = ref([])
 const options = ref([])
 const darkTheme = ref(false)
@@ -23,6 +22,25 @@ const chartHeight = ref(Math.max(450, window.innerHeight - 150))
 const recentStocks = ref([])
 const unsupportedCode = ref(false)
 let stockChangeHandler = null
+
+// 名称由代码派生（单一事实来源）：优先用已加载的股票列表按代码查名，
+// 其次用历史记录里该代码对应的名字；两者都没有时为空，界面回退显示代码。
+// 这样名称永远跟代码一致，旧版本留下的名码错配历史条目也进不了界面。
+const selectedName = computed(() => {
+  if (!selectedCode.value) return ''
+  const found = stockList.value.find(item => toEastMoneyCode(item.ts_code) === selectedCode.value)
+  if (found && found.name) return found.name
+  const recent = recentStocks.value.find(s => s.code === selectedCode.value)
+  return recent?.name || ''
+})
+
+// 按代码查权威名称（股票列表优先），查不到时用传入的后备名。
+function resolveStockName(code, fallback = '') {
+  if (!code) return fallback
+  const found = stockList.value.find(item => toEastMoneyCode(item.ts_code) === code)
+  if (found && found.name) return found.name
+  return fallback
+}
 
 // AI 深度量化诊断状态
 const diagnosisDrawerVisible = ref(false)
@@ -109,7 +127,7 @@ function stripNameCodeFormat(input) {
   return String(input).trim()
 }
 
-async function handleSearch(value) {
+async function handleSearch(value, nameHint = '') {
   if (!value) return
   // 剥掉 handleSearch 自己写出的 “名字 (代码)” 格式（如 “贵州茅台 (000001.SZ)”），
   // 否则 toEastMoneyCode 按空格切分会得到 “(000001.SZ)” 而解析失败，导致切不动股票。
@@ -169,18 +187,24 @@ async function handleSearch(value) {
 
   unsupportedCode.value = false
   selectedCode.value = directEmCode
-  // 查名失败时不保留旧名（旧逻辑 || selectedName.value 会把上一只股票的名字
-  // 配到新代码上，显示成 “贵州茅台 (000001.SZ)” 这种名码错配）
-  selectedName.value = targetName || ''
-  addToRecent(directEmCode, selectedName.value)
+  // 名称不再单独存一份可漂移的状态：先把解析到的名字写进历史记录，
+  // 再读派生出来的 selectedName（列表优先，其次历史记录），保证名、码、图三者一致。
+  // 查名失败时 targetName 为空，addToRecent 会保留该代码已存的好名字或回退到代码本身，
+  // 不会再把上一只股票的名字配到新代码上。
+  if (!targetName && nameHint) targetName = nameHint
+  addToRecent(directEmCode, targetName)
   setCurrentStock({ code: directEmCode, name: selectedName.value })
   searchQuery.value = selectedName.value ? `${selectedName.value} (${directEmCode})` : directEmCode
 }
 
 function addToRecent(code, name) {
   if (!code) return
+  // 存之前先按代码查权威名称：列表里有就以列表为准（能纠正旧版本留下的错配条目），
+  // 列表里没有时保留该代码已存的好名字，都没有才回退到代码本身。
+  const existing = recentStocks.value.find(s => s.code === code)
+  const resolvedName = resolveStockName(code, name) || existing?.name || code
   const list = recentStocks.value.filter(s => s.code !== code)
-  list.unshift({ code, name: name || code })
+  list.unshift({ code, name: resolvedName })
   if (list.length > 10) list.length = 10
   recentStocks.value = list
   try {
@@ -188,11 +212,32 @@ function addToRecent(code, name) {
   } catch {}
 }
 
+// 股票列表加载完成后，按代码校正历史记录里的名字，
+// 清掉旧版本 bug 留下的名码错配条目（如 code=000001.SZ 却存着“东方财富”）。
+function validateRecentNames() {
+  if (!recentStocks.value.length || !stockList.value.length) return
+  let changed = false
+  recentStocks.value = recentStocks.value.map(s => {
+    const found = stockList.value.find(item => toEastMoneyCode(item.ts_code) === s.code)
+    if (found && found.name && found.name !== s.name) {
+      changed = true
+      return { code: s.code, name: found.name }
+    }
+    return s
+  })
+  if (changed) {
+    try {
+      localStorage.setItem('kline-recent-stocks', JSON.stringify(recentStocks.value))
+    } catch {}
+  }
+}
+
 function loadRecentStocks() {
   try {
     const raw = localStorage.getItem('kline-recent-stocks')
     if (raw) recentStocks.value = JSON.parse(raw)
   } catch {}
+  validateRecentNames()
 }
 
 function selectRecent(code, name) {
@@ -203,9 +248,9 @@ function selectRecent(code, name) {
   }
   unsupportedCode.value = false
   selectedCode.value = emCode
-  selectedName.value = name || ''
   addToRecent(emCode, name)
   setCurrentStock({ code: emCode, name: selectedName.value })
+  searchQuery.value = selectedName.value ? `${selectedName.value} (${emCode})` : emCode
 }
 
 function updateChartHeight() {
@@ -216,8 +261,7 @@ function applyStockFromRoute() {
   const queryCode = route.query.code || route.query.ts_code
   const queryName = route.query.name || route.query.stockName
   if (queryCode) {
-    if (queryName) selectedName.value = String(queryName)
-    handleSearch(String(queryCode))
+    handleSearch(String(queryCode), queryName ? String(queryName) : '')
     return true
   }
   return false
@@ -233,12 +277,9 @@ watch(() => route.query.code, (newCode) => {
 onBeforeMount(() => {
   GetStockList('').then(result => {
     stockList.value = result || []
-    // 股票列表加载完成后按代码校正一次名称（此前 !selectedName 条件恒为假，
-    // 因为 selectRecent 已先占位，导致名字错了也没人纠正）
-    if (selectedCode.value) {
-      const found = stockList.value.find(item => toEastMoneyCode(item.ts_code) === selectedCode.value)
-      if (found && found.name) selectedName.value = found.name
-    }
+    // 列表加载完成后校正一次历史记录里的名字（清掉旧版本留下的名码错配条目），
+    // 界面上的名称由 selectedCode 派生，列表一到就自动纠正，无需再单独赋值。
+    validateRecentNames()
   }).catch(err => { console.error('GetStockList error:', err) })
   GetConfig().then(result => {
     darkTheme.value = !!result.darkTheme
@@ -272,8 +313,8 @@ onMounted(async () => {
       }
       unsupportedCode.value = false
       selectedCode.value = emCode
-      selectedName.value = data.name || ''
       addToRecent(emCode, data.name || '')
+      searchQuery.value = selectedName.value ? `${selectedName.value} (${emCode})` : emCode
     }
   }
   EventsOn('klineSelectStock', stockChangeHandler)
