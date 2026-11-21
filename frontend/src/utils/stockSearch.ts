@@ -65,10 +65,38 @@ export function filterStockOptions(list: StockListItem[], query: string, limit =
   ).slice(0, limit)
 }
 
+// 输入本身是不是合法的东财代码原文：纯数字（000001）、带标准后缀
+// （600519.SH）、或带市场前缀 + 数字（sh600519、sz000001、gb_aapl）。
+// 纯字母（如 gzmt / AAPL）不算——它可能是拼音缩写，需让位于唯一联想建议；
+// 无建议时仍由 toEastMoneyCode 按美股补 .US。
+// 注意前缀后必须跟数字：拼音 "shyh"（上海银行）不能误判为 sh 前缀代码。
+export function isCodeText(input: string): boolean {
+  const c = stripNameCodeFormat(input)
+  if (!c) return false
+  if (/\.(SH|SZ|BJ|HK|US|SS)$/i.test(c)) return true
+  if (/^\d+$/.test(c)) return true
+  if (/^(sh|sz|bj|hk|us)\d+$/i.test(c)) return true
+  if (/^gb_[a-z]+$/i.test(c)) return true
+  return false
+}
+
 // 搜索目标选择：回车/放大镜按输入原文解析，精确代码优先于联想建议；
 // 只有用户用方向键明确选中过建议（keyboardSelected）时，才按建议值走。
 // 解决 naive-ui auto-complete 自动高亮首项导致回车误跳的问题（问题 2）。
-export function resolveSearchTarget(rawText: string, suggestionValue: string, keyboardSelected: boolean): string {
+// 例外（问题 A）：输入本身不是合法代码原文（如拼音 gzmt、中文名），且当前
+// 联想列表恰好只有 1 条（suggestions）时，优先用该建议——否则 gzmt 会被
+// toEastMoneyCode 按纯字母补成 GZMT.US。多条/无建议时仍按原文解析。
+// suggestions 取组件回车时刻实际持有的联想列表的代码值（options.value 的
+// value 字段）；本地过滤结果优先，远程结果由 findStockList 的 generation
+// 守卫保证过期回包写不进来。
+export function resolveSearchTarget(
+  rawText: string,
+  suggestionValue: string,
+  keyboardSelected: boolean,
+  suggestions: string[] = [],
+): string {
   if (keyboardSelected && suggestionValue) return suggestionValue
+  if (isCodeText(rawText)) return rawText
+  if (suggestions.length === 1 && suggestions[0]) return suggestions[0]
   return rawText
 }

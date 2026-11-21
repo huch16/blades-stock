@@ -10,7 +10,7 @@ import { useMessage } from 'naive-ui'
 import { onBeforeMount, onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { setCurrentStock } from '../utils/stockContextBus'
-import { toEastMoneyCode, stripNameCodeFormat, filterStockOptions } from '../utils/stockSearch'
+import { toEastMoneyCode, stripNameCodeFormat, filterStockOptions, resolveSearchTarget } from '../utils/stockSearch'
 
 const route = useRoute()
 const message = useMessage()
@@ -141,17 +141,25 @@ async function handleSearch(value, nameHint = '') {
   const raw = stripNameCodeFormat(value)
   if (!raw) return
 
+  // 回车/放大镜：输入本身不是合法代码原文（如拼音 gzmt）且当前联想列表
+  // 恰好只有 1 条时，优先用该建议（问题 A：gzmt → 贵州茅台 600519.SH）；
+  // 否则按原文解析（000001 → 000001.SZ、AAPL → AAPL.US 均不变）。
+  // options 是回车时刻实际持有的联想列表：本地过滤在 findStockList 里同步
+  // 写回，远程回包受 generation 守卫保护，过期结果写不进来。
+  // handleSelectOption 传进来的已是合法代码（600519.SH），此规则对它无影响。
+  const target = resolveSearchTarget(raw, '', false, options.value.map((o) => o.value))
+
   // 说明（no-useless-assignment）：targetCode 仅作为「名称/拼音 → 代码」解析的中间量，
   // 解析后的最终值统一落在 directEmCode 上。此前它在函数作用域声明并带初值 ''，
   // 但初值从未被读取、else 分支的赋值也从未被使用，现下沉为块级局部变量。
   let targetName = ''
 
   // 1. 先尝试直接转东财代码（如果是纯数字代码如 600519，或标准格式如 600519.SH、AAPL.US）
-  let directEmCode = toEastMoneyCode(raw)
+  let directEmCode = toEastMoneyCode(target)
 
   // 2. 如果输入的是中文股票名（如"贵州茅台"、"茅台"）或拼音缩写（如"gzmt"）
   if (!directEmCode) {
-    const q = raw.toLowerCase()
+    const q = target.toLowerCase()
     // 优先从内存列表匹配
     let matched = stockList.value.find(item =>
       (item.name && item.name.toLowerCase() === q) ||
@@ -166,7 +174,7 @@ async function handleSearch(value, nameHint = '') {
     // 若内存未命中，向后端搜索
     if (!matched) {
       try {
-        const remote = await GetStockList(raw)
+        const remote = await GetStockList(target)
         if (myGen !== searchGen) return
         if (Array.isArray(remote) && remote.length > 0) {
           matched = remote[0]
@@ -182,7 +190,7 @@ async function handleSearch(value, nameHint = '') {
       directEmCode = toEastMoneyCode(matchedCode)
     }
   } else {
-    const found = stockList.value.find(item => item.ts_code === raw || toEastMoneyCode(item.ts_code) === directEmCode)
+    const found = stockList.value.find(item => item.ts_code === target || toEastMoneyCode(item.ts_code) === directEmCode)
     if (found) {
       targetName = found.name
     } else {
@@ -237,7 +245,8 @@ function handleSearchKeydown(e) {
   }
 }
 
-// keyup.enter：按输入原文解析（精确代码优先于联想建议）。
+// keyup.enter：精确代码优先于联想建议；拼音/名称输入且当前联想恰好唯一时
+// 用建议（问题 A：gzmt → 600519.SH，见 handleSearch 里的 resolveSearchTarget）。
 // 方向键选中后回车走 on-select，本函数跳过，避免对已被改写为建议 label 的
 // 输入框再解析一次。
 function handleSearchEnter() {
