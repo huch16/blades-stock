@@ -10,7 +10,7 @@ import { useMessage } from 'naive-ui'
 import { onBeforeMount, onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { setCurrentStock } from '../utils/stockContextBus'
-import { toEastMoneyCode, stripNameCodeFormat, filterStockOptions, resolveSearchTarget, isValidEastMoneyCode } from '../utils/stockSearch'
+import { toEastMoneyCode, stripNameCodeFormat, filterStockOptions, resolveSearchTarget, isValidEastMoneyCode, shouldWaitForStockList, parsePendingOptionCode } from '../utils/stockSearch'
 
 const route = useRoute()
 const message = useMessage()
@@ -25,6 +25,10 @@ const options = ref([])
 // 不得覆盖新调用的结果；只有最新一次调用能提交。
 let searchGen = 0
 let findStockGen = 0
+// 全量列表加载中的 promise：回车时若列表未到，handleSearch 等它（不发新请求）。
+let stockListLoadPromise: Promise<void> | null = null
+// 等全量列表的上限：超时则按现状走（拼音无建议时仍补 .US），不让回车无感地挂起。
+const STOCK_LIST_WAIT_MS = 3000
 // 方向键是否明确选中过联想建议：naive-ui 的 n-auto-complete 会把下拉首项
 // 自动设为 pending（auto-pending），回车会选中它。只在用户按过方向键后，
 // 回车才按建议走；否则回车/放大镜一律按输入原文解析（问题 2）。
@@ -32,9 +36,15 @@ let arrowNavSelected = false
 // 方向键选中后回车：naive-ui 的 keydown 选中建议后，keyup.enter 还会再触发一次，
 // 用此标志跳过那次重复解析（此时输入框已被改写为建议的 label）。
 let suppressEnterKeyup = false
+// 方向键选中的建议值：每次方向键 keyup 后从 naive-ui 的 pending 项快照
+// （handleSearchKeyup），回车以它为准，不受随后鼠标悬停另一建议的干扰。
+// naive-ui 不暴露 pending 值，快照读不到时为空，调用方回退到旧行为。
+let keyboardSelectedValue = ''
+// 方向键仍被按住（keyup 未到）时快照可能过期：回车不走快照，放行给 naive-ui。
+let arrowKeyDownPending = false
 
 // 联想列表一变，方向键选中即失效（旧建议已不在列表里），回车回到原文解析。
-watch(options, () => { arrowNavSelected = false })
+watch(options, () => { arrowNavSelected = false; keyboardSelectedValue = ''; arrowKeyDownPending = false })
 const darkTheme = ref(false)
 const chartHeight = ref(Math.max(450, window.innerHeight - 150))
 const recentStocks = ref([])
@@ -146,8 +156,23 @@ async function handleSearch(value, nameHint = '') {
   // 否则按原文解析（000001 → 000001.SZ、AAPL → AAPL.US 均不变）。
   // options 是回车时刻实际持有的联想列表：本地过滤在 findStockList 里同步
   // 写回，远程回包受 generation 守卫保护，过期结果写不进来。
+  // 全量列表未加载完且联想为空时，拼音/名称输入无法判断：后端 GetStockList
+  // 不按 cnspell 匹配，远程查不到拼音；等一次已在路上的列表加载（不发新
+  // 请求），最多等 STOCK_LIST_WAIT_MS，超时或加载失败则按现状走。
+  // 列表到了就用本地数据重算联想，再按同一规则取目标。
+  let suggestionCodes = options.value.map((o) => o.value)
+  if (stockListLoadPromise && shouldWaitForStockList(raw, suggestionCodes, stockListLoaded.value)) {
+    await Promise.race([
+      stockListLoadPromise,
+      new Promise((resolve) => setTimeout(resolve, STOCK_LIST_WAIT_MS)),
+    ])
+    if (myGen !== searchGen) return
+    if (stockListLoaded.value) {
+      suggestionCodes = filterStockOptions(stockList.value, raw, 30).map((item) => item.ts_code || item.symbol)
+    }
+  }
   // handleSelectOption 传进来的已是合法代码（600519.SH），此规则对它无影响。
-  const target = resolveSearchTarget(raw, '', false, options.value.map((o) => o.value))
+  const target = resolveSearchTarget(raw, '', false, suggestionCodes)
 
   // 说明（no-useless-assignment）：targetCode 仅作为「名称/拼音 → 代码」解析的中间量，
   // 解析后的最终值统一落在 directEmCode 上。此前它在函数作用域声明并带初值 ''，
@@ -230,16 +255,35 @@ async function handleSearch(value, nameHint = '') {
 // 且鼠标悬停也会改 pending——两者都不是用户的明确选中。
 // - 输入法组合中（isComposing）时不动，让输入法与 naive-ui 自行处理；
 // - 方向键：只记录“用户明确用方向键选中过建议”，放行给 naive-ui 移动 pending；
-// - 回车：方向键选中过 → 放行给 naive-ui 选中 pending 建议，并抑制随后 keyup
-//   的重复解析；否则 → 拦截掉 naive-ui 的自动选中，随后 keyup 按输入原文解析。
+//   keyup 时再把移动后的 pending 快照到 keyboardSelectedValue（见 handleSearchKeyup）；
+// - 回车：方向键选中过 → 以快照值直接选中，不再放行给 naive-ui，以免随后
+//   的鼠标悬停改写 pending 导致回车选错；快照缺失或方向键仍按住时回退到
+//   旧行为（放行给 naive-ui 选 pending），并抑制随后 keyup 的重复解析；
+//   否则 → 拦截掉 naive-ui 的自动选中，随后 keyup 按输入原文解析。
 function handleSearchKeydown(e) {
   if (e.isComposing) return
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    if (options.value.length > 0) arrowNavSelected = true
+    if (options.value.length > 0) {
+      arrowNavSelected = true
+      arrowKeyDownPending = true
+    }
+    return
+  }
+  if (e.key === 'Escape') {
+    // 菜单已关，方向键选中随之作废：否则随后回车会选一个已被关掉的建议。
+    arrowNavSelected = false
+    keyboardSelectedValue = ''
+    arrowKeyDownPending = false
     return
   }
   if (e.key === 'Enter') {
     if (arrowNavSelected) {
+      if (!arrowKeyDownPending && keyboardSelectedValue) {
+        e.stopPropagation()
+        suppressEnterKeyup = true
+        handleSelectOption(keyboardSelectedValue)
+        return
+      }
       suppressEnterKeyup = true
       return
     }
@@ -247,9 +291,37 @@ function handleSearchKeydown(e) {
   }
 }
 
+// 读 naive-ui 当前 pending 建议的代码值（naive-ui 2.44.1：pending 项带
+// n-base-select-option--pending class，label 为 “名字 - 代码”；
+// 本页无其他 auto-complete/select 菜单，不会读到别处）。
+// 读不到、解析不出、或不在当前联想列表里时返回 ''（调用方回退到旧行为）。
+// 注意：本应用未自定义 naive-ui 的 cls-prefix，默认前缀即 n；
+// 将来升级 naive-ui 改了内部 class 时本函数返回 ''，只是回退到旧行为，
+// 不会选错股票。
+function readKeyboardPendingValue() {
+  if (typeof document === 'undefined') return ''
+  const el = document.querySelector('.n-base-select-option--pending')
+  if (!el) return ''
+  return parsePendingOptionCode(el.textContent || '', options.value.map((o: { value: string }) => o.value))
+}
+
+// 方向键 keyup：naive-ui 已在 keydown 里移动 pending，此时快照即方向键
+// 选中的项；随后鼠标悬停再改 pending 也不会改写快照。方向键仍按住时
+// keyup 未到，快照保持旧值，回车时由 arrowKeyDownPending 挡下，
+// 不用可能过期的快照。
+function handleSearchKeyup(e: KeyboardEvent) {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    arrowKeyDownPending = false
+    if (arrowNavSelected) {
+      keyboardSelectedValue = readKeyboardPendingValue()
+    }
+  }
+}
+
 // keyup.enter：精确代码优先于联想建议；拼音/名称输入且当前联想恰好唯一时
 // 用建议（问题 A：gzmt → 600519.SH，见 handleSearch 里的 resolveSearchTarget）。
-// 方向键选中后回车走 on-select，本函数跳过，避免对已被改写为建议 label 的
+// 方向键选中后回车走 handleSelectOption（快照值直接调，或放行给 naive-ui
+// 选 pending），本函数跳过，避免对已被改写为建议 label 的
 // 输入框再解析一次。
 function handleSearchEnter() {
   if (suppressEnterKeyup) {
@@ -264,6 +336,8 @@ function handleSearchEnter() {
 // 所以这里不会收到“首项自动高亮”的误触发。）
 function handleSelectOption(value) {
   arrowNavSelected = false
+  keyboardSelectedValue = ''
+  arrowKeyDownPending = false
   handleSearch(value)
 }
 
@@ -271,6 +345,8 @@ function handleSelectOption(value) {
 function onSearchBlur() {
   arrowNavSelected = false
   suppressEnterKeyup = false
+  keyboardSelectedValue = ''
+  arrowKeyDownPending = false
 }
 
 function addToRecent(code, name) {
@@ -373,7 +449,8 @@ watch(() => route.query.code, (newCode) => {
 })
 
 onBeforeMount(() => {
-  GetStockList('').then(result => {
+  // 末尾接 catch 使该 promise 永不 reject：handleSearch 等它时无需再包 try/catch。
+  stockListLoadPromise = GetStockList('').then(result => {
     stockList.value = result || []
     stockListLoaded.value = true
     // 列表加载完成后校正一次历史记录里的名字（清掉旧版本留下的名码错配条目），
@@ -507,7 +584,7 @@ onBeforeUnmount(() => {
             <n-auto-complete
               v-model:value="searchQuery"
               :options="options"
-              :input-props="{ onKeydown: handleSearchKeydown }"
+              :input-props="{ onKeydown: handleSearchKeydown, onKeyup: handleSearchKeyup }"
               placeholder="搜索股票/代码/拼音..."
               clearable
               size="small"

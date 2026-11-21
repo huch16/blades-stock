@@ -8,6 +8,7 @@ import {
 import { NButton, NFlex, NInput, NSpin, NText, NTooltip } from 'naive-ui'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { parseNumStr, formatPrice2, formatVolumeCn, formatAmountCn, formatPctField, formatSigned2 } from './kline/format'
+import { createGenerationGuard } from '../utils/stockSearch'
 import { eastMoneyKlineFieldToUnixSeconds, chartTimeToUtcMs, formatTickTime, sortKey, toChartTime, mergeKlineRows, mergeRefreshWithLatest, extractYmdDatePart, barSecondsForMinuteKlt, formatYmdCompactShanghai, formatYmdHmsCompactShanghai } from './kline/time'
 import { CLR_RISE, CLR_FALL, DAILY_LIKE_KLT, CN_TZ, HISTORY_PAGE_SIZE, BARS_BEFORE_LOAD_MORE, DEFAULT_VISIBLE_BARS, DEFAULT_RIGHT_LOGICAL_GAP, SHOW_CHIP_TOOLBAR_BUTTON, INTERVALS } from './kline/constants'
 import { indicatorTips } from './kline/indicators/tips'
@@ -69,6 +70,14 @@ let crosshairMoveHandler = null
 let chartClickHandler = null
 /** 上一次请求更早 K 线使用的 end，用于识别「重叠返回」避免误判无更多数据 */
 let lastOlderHistoryEndTried = ''
+// 三路异步请求代次守卫：loadData / 轮询 / 历史分页各自取号，旧请求的
+// 失败或成功都不得覆盖新请求的状态（超时横幅竞态）。
+// loadData 发起时同时让在途的历史分页失效（它随后会把旧数据合并进已清空
+// 的行）；轮询只读 loadGuard 的当前代次快照，不推进它，避免高频轮询
+// 饿死 loadData；轮询自己另有 pollGuard，只丢弃被更新一轮轮询超车的旧回包。
+const loadGuard = createGenerationGuard()
+const pollGuard = createGenerationGuard()
+const historyGuard = createGenerationGuard()
 /** >0 时表示由代码在改时间轴（fitContent / setData / setVisibleLogicalRange），不触发分页加载 */
 let programmaticRangeDepth = 0
 /** 多单标注：createPriceLine 返回的句柄，需在 dispose / 重绘前 remove */
@@ -474,6 +483,7 @@ async function loadOlderHistory() {
     hasMoreOlder.value = false
     return
   }
+  const myHistoryGen = historyGuard.next()
   loadingHistory.value = true
   const logical = chart.timeScale().getVisibleLogicalRange()
   const beforeCount = mergedRawRows.length
@@ -485,6 +495,9 @@ async function loadOlderHistory() {
       HISTORY_PAGE_SIZE,
       end,
     )
+    // 代次守卫：期间若发起了新的 loadData（清空了 mergedRawRows）或新的
+    // 历史分页，本次旧回包直接丢弃，不合并、不清横幅。
+    if (!historyGuard.isCurrent(myHistoryGen)) return
     if (kltSnap !== activeKlt.value || codeSnap !== props.code) return
     const src = result?.source || ''
     if (src) activeDataSource.value = src
@@ -533,6 +546,11 @@ async function refreshLatestPoll() {
   if (!props.code || !candleSeries) return
   const kltSnap = activeKlt.value
   const codeSnap = props.code
+  // 只读快照：期间若发起了新的 loadData，本次轮询回包不再写状态；
+  // 轮询不推进 loadGuard 的代次。另取 pollGuard 的号，丢弃被更新一轮
+  // 轮询超车的旧回包（轮询间隔短于请求耗时时）。
+  const loadGenAtStart = loadGuard.current
+  const myPollGen = pollGuard.next()
   try {
     const meta = INTERVALS.find((x) => x.klt === kltSnap) || INTERVALS[0]
     const result = await GetStockKLineWithFallback(
@@ -541,6 +559,8 @@ async function refreshLatestPoll() {
       meta.klt,
       meta.limit,
     )
+    if (!pollGuard.isCurrent(myPollGen)) return
+    if (!loadGuard.isCurrent(loadGenAtStart)) return
     if (codeSnap !== props.code || activeKlt.value !== kltSnap) return
     const src = result?.source || ''
     if (src) activeDataSource.value = src
@@ -642,8 +662,13 @@ function ensureChart() {
 }
 
 async function loadData() {
+  // 新的全量加载让在途的历史分页失效（它随后会把旧数据合并进已清空的行）；
+  // 也让在途的旧 loadData 与轮询回包失效（见下方的 loadGuard 取号）。
+  loadGuard.invalidate()
+  historyGuard.invalidate()
   if (!props.code) {
     errorText.value = '未设置股票代码'
+    loading.value = false // 在途的旧 loadData 已被上方 invalidate，其 finally 不再清 loading，这里收尾
     mergedRawRows = []
     mergedRawRowsVersion.value++
     syncDefaultLatestPanelRow()
@@ -656,6 +681,7 @@ async function loadData() {
     chipMeta.value = { avgCost: 0, profitRatio: 0, current: 0, hoverDate: '', minPrice: 0, maxPrice: 0 }
     return
   }
+  const myGen = loadGuard.next()
   loading.value = true
   errorText.value = ''
   const codeSnap = props.code
@@ -673,6 +699,10 @@ async function loadData() {
       meta.klt,
       meta.limit,
     )
+    // 代次守卫：期间若发起了新的 loadData，本次旧回包直接丢弃——旧失败
+    // 不再覆盖新成功留下的图与横幅，旧成功也不再清掉新失败设的横幅。
+    // code/klt 快照校验保留：代次只防同码同周期的重叠调用。
+    if (!loadGuard.isCurrent(myGen)) return
     if (codeSnap !== props.code || kltSnap !== activeKlt.value) return
     const src = result?.source || ''
     activeDataSource.value = src
@@ -698,9 +728,8 @@ async function loadData() {
     })
     // 成功画图后明确清除 errorText：开头虽已清过，但两次 loadData 重叠时
     // 先失败的那次可能比后成功这次更早写 errorText，成功这次若不清，旧错
-    // 误会残留在已画出的图上。快照已在上方校验，空数据分支在更早处 return，
-    // 不会误清“暂无 K 线数据”。（注：旧调用晚于新调用才失败的极端交错仍可能
-    // 覆写，属既有竞态，本次不扩大改动范围。）
+    // 误会残留在已画出的图上。代次守卫已保证：旧调用晚于新调用才失败时，
+    // 其 catch 根本写不进来（见下）；本行只清当前代次自己的旧错。
     errorText.value = ''
 
     if (showChip.value) {
@@ -709,9 +738,12 @@ async function loadData() {
       chipItems.value = []
     }
   } catch (e) {
+    // 代次守卫：旧调用晚于新调用才失败时，不写 errorText、不碰 loading。
+    if (!loadGuard.isCurrent(myGen)) return
     errorText.value = String(e?.message || e)
   } finally {
-    loading.value = false
+    // 旧调用的 finally 不清 loading：新调用可能仍在请求中。
+    if (loadGuard.isCurrent(myGen)) loading.value = false
   }
 }
 

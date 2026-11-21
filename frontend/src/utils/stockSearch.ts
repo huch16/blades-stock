@@ -2,6 +2,8 @@
 // 从 kline-analysis.vue 抽出，便于单元测试（node --test tests/stockSearch.test.mjs）。
 // 注意：本文件只用可擦除的 TypeScript 语法（无枚举/命名空间/参数属性），
 // 以便 Node 24 的类型剥离直接运行。
+// 另：createGenerationGuard 是三路 K 线异步请求（loadData / 轮询 / 历史分页）
+// 共用的代次守卫纯逻辑，放在这里只因它是本目录唯一的纯函数共享点。
 
 export interface StockListItem {
   name?: string
@@ -111,4 +113,57 @@ export function resolveSearchTarget(
   if (isCodeText(rawText)) return rawText
   if (suggestions.length === 1 && suggestions[0]) return suggestions[0]
   return rawText
+}
+
+// 代次守卫：异步请求的旧回包不得覆盖新请求的状态。
+// 用法：发起时 const g = guard.next()；await 后 guard.isCurrent(g) 为 false
+// 即已有更新的请求，旧回包直接丢弃；guard.invalidate() 让所有在途请求失效
+// （如全量加载发起时，在途的历史分页与轮询回包都不应再写状态）。
+// 注意：只读方（如轮询相对 loadData）应取 guard.current 快照再比对，
+// 不要调用 next()——高频调用方推进代次会饿死被它观察的那路请求。
+export function createGenerationGuard() {
+  let gen = 0
+  return {
+    next(): number {
+      gen += 1
+      return gen
+    },
+    isCurrent(g: number): boolean {
+      return g === gen
+    },
+    get current(): number {
+      return gen
+    },
+    invalidate(): void {
+      gen += 1
+    },
+  }
+}
+
+// 回车时是否值得等全量股票列表：列表未加载完、输入不是合法代码原文、
+// 且当前联想为空时，拼音/名称输入无法用本地数据判断（后端 GetStockList
+// 不按 cnspell 匹配，远程查不到拼音）；等一次已在路上的列表加载是唯一
+// 可信的兜底。三种情况都不等：列表已到、输入本身就是代码、已有联想可用。
+export function shouldWaitForStockList(
+  rawText: string,
+  suggestions: string[],
+  listLoaded: boolean,
+): boolean {
+  if (listLoaded) return false
+  if (isCodeText(rawText)) return false
+  if (suggestions.length > 0) return false
+  return true
+}
+
+// 从 naive-ui pending 建议的 label 文本解析代码值（label 格式 “名字 - 代码”）。
+// 解析不出、或解析出的值不在当前联想列表里时返回 ''（调用方回退到旧行为，
+// 不按解析值走）。label 来自 DOM 快照，naive-ui 内部 class 变化导致读不到
+// 时同样返回 ''，属于可预期的降级而非错误。
+export function parsePendingOptionCode(label: string, optionValues: string[]): string {
+  // 注意：先切分再 trim 末段——整串先 trim 会把 “ - 代码”（空名）开头的
+  // ' - ' 切坏（'- 代码' 里不再含 ' - '）。
+  const parts = String(label ?? '').split(' - ')
+  const code = (parts[parts.length - 1] || '').trim()
+  if (!code) return ''
+  return optionValues.includes(code) ? code : ''
 }
