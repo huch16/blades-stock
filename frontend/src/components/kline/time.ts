@@ -1,5 +1,5 @@
 import { TickMarkType } from 'lightweight-charts'
-import { CN_TZ } from './constants'
+import { CN_TZ } from './constants.ts'
 
 export function eastMoneyDayToUnixSeconds(dayStr) {
   const t = String(dayStr || '').trim().replace(/\//g, '-')
