@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {onMounted, onUnmounted, ref} from "vue";
 import {GetStockMoneyTrendByDay} from "../../wailsjs/go/main/App";
-import * as echarts from "../utils/echarts";
+import { loadEcharts, getLoadedEcharts } from "../utils/echarts-loader";
 
 const {code, name, darkTheme, days, chartHeight} = defineProps({
   code: {
@@ -33,7 +33,10 @@ onMounted(
     }
 )
 const handleLine = (code, days) => {
-  GetStockMoneyTrendByDay(code, days).then(result => {
+  // 数据请求与 ECharts 加载并行，拿到数据后再等 ECharts 就绪才画图
+  const echartsReady = loadEcharts()
+  GetStockMoneyTrendByDay(code, days).then(async result => {
+    const echarts = await echartsReady
     //console.log("GetStockMoneyTrendByDay", result)
     const chart = echarts.init(LineChartRef.value);
     const categoryData = [];
@@ -363,7 +366,9 @@ const handleLine = (code, days) => {
 }
 
 onUnmounted(() => {
-  if (LineChartRef.value) {
+  // 只在 ECharts 已加载时才释放实例；从未画过图时为空操作，不触发拉取。
+  const echarts = getLoadedEcharts()
+  if (echarts && LineChartRef.value) {
     echarts.getInstanceByDom(LineChartRef.value)?.dispose();
   }
 });

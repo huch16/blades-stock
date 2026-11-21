@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {onMounted, onUnmounted, ref, watchEffect} from "vue";
-import * as echarts from '../utils/echarts';
+import { loadEcharts } from '../utils/echarts-loader';
 import {GetStockMinutePriceLineData} from "../../wailsjs/go/main/App"; // 如果您使用多个组件，请将此样式导入放在您的主文件中
 // darkTheme 虽在 props 中保留（供父组件继续传参），但本组件并未消费，故不解构
 const {idSuffix,stockCode,stockName,lastPrice,openPrice} = defineProps({
@@ -30,6 +30,15 @@ const {idSuffix,stockCode,stockName,lastPrice,openPrice} = defineProps({
   },
 })
 
+
+// ECharts 按需加载：迷你图首次挂载时才拉取完整 ECharts，首屏不引入。
+// echartsApi 在 onMounted 里就绪后才画图；watchEffect 只在 chart 已创建时重绘，
+// 此时 echartsApi 一定已就绪。
+let echartsApi = null
+async function ensureEcharts() {
+  if (!echartsApi) echartsApi = await loadEcharts()
+  return echartsApi
+}
 
 function setChartData(chart) {
   //console.log("setChartData")
@@ -106,7 +115,7 @@ function setChartData(chart) {
             color: lastPrice > openPrice ? 'rgba(245, 0, 0, 1)' : 'rgb(6,251,10)'
           },
           areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+            color: new echartsApi.graphic.LinearGradient(0, 0, 0, 1, [{
               offset: 0,
               color: lastPrice > openPrice ? 'rgba(245, 0, 0, 1)' : 'rgba(6,251,10, 1)'
             }, {
@@ -122,8 +131,9 @@ function setChartData(chart) {
 }
 const chart =ref( null)
 
-onMounted(() => {
-  chart.value = echarts.init( document.getElementById('sparkLine'+stockCode+idSuffix));
+onMounted(async () => {
+  await ensureEcharts()
+  chart.value = echartsApi.init( document.getElementById('sparkLine'+stockCode+idSuffix));
   setChartData(chart.value);
 })
 

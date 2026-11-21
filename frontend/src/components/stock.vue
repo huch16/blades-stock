@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, h, nextTick, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import * as echarts from '../utils/echarts';
 import {
   AddGroup,
   AddStockGroup,
@@ -251,7 +250,7 @@ const groupResults = computed(() => {
 
 // 逻辑抽至 composables（R-22b）：拖拽标签 / ECharts / AI 分析 / 成本报警
 const { initDraggableTabs, cleanupDraggableTabs } = useStockTabs({ groupList, message })
-const { handleKLine, handleFeishi, clearFeishi } = useStockEcharts({ data, feishiInterval, kLineChartRef, kLineChartRef2 })
+const { handleKLine, handleFeishi, clearFeishi, disposeKlineCharts } = useStockEcharts({ data, feishiInterval, kLineChartRef, kLineChartRef2 })
 const { triggerAiWatchlistScreening, aiCheckStock, aiReCheckStock, saveAsImage, saveAsMarkdown, saveAsWord } = useStockAi({ activeThesis, aiAnalysisTimeout, aiConfigStore, currentGroupId, data, enableTools, groupList, groupResults, mdEditorRef, mdPreviewRef, message, modalShow4, sortedResults, thinkingMode, tipsRef })
 const { checkPriceLineAlerts, updateCostPriceAndVolumeNew, saveTradingPriceToBackend, setStock } = useStockAlerts({ currentGroupId, currentStockTradingPrice, followList, formModel, fromEastMoneyCode, message, modalShow, monitor, stocks })
 const showPopover = ref(false)
@@ -517,12 +516,8 @@ onBeforeUnmount(() => {
 
   cleanupDraggableTabs()
 
-  if (kLineChartRef2.value) {
-    echarts.getInstanceByDom(kLineChartRef2.value)?.dispose()
-  }
-  if (kLineChartRef.value) {
-    echarts.getInstanceByDom(kLineChartRef.value)?.dispose()
-  }
+  // K 线/分时图表实例只在 ECharts 已加载时才存在；从未打开过弹窗时为空操作，不触发拉取。
+  disposeKlineCharts()
 
 })
 

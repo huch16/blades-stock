@@ -2,7 +2,9 @@
 // 由 stock.vue 抽出（R-22b），逻辑逐字搬运；data 与两个图表容器 ref、
 // feishiInterval 由组件以 ctx 传入（feishiInterval 的声明仍在组件，
 // onBeforeUnmount 里也要清它）。
-import * as echarts from '../utils/echarts'
+// ECharts 按需加载：本文件只在弹窗打开画图时才拉取完整 ECharts，
+// 首屏不引入（见 utils/echarts-loader.ts）。
+import { loadEcharts, getLoadedEcharts } from '../utils/echarts-loader'
 import {
   GetStockKLine,
   GetStockMinutePriceLineData,
@@ -24,8 +26,11 @@ function clearFeishi() {
 function showFsChart(code, name) {
   data.name = name
   data.code = code
-  const chart = echarts.getInstanceByDom(kLineChartRef2.value) || echarts.init(kLineChartRef2.value);
-  GetStockMinutePriceLineData(code, name).then(result => {
+  // 数据请求与 ECharts 加载并行，拿到数据后再等 ECharts 就绪才画图
+  const echartsReady = loadEcharts()
+  GetStockMinutePriceLineData(code, name).then(async result => {
+    const echarts = await echartsReady
+    const chart = echarts.getInstanceByDom(kLineChartRef2.value) || echarts.init(kLineChartRef2.value);
     // console.log("GetStockMinutePriceLineData", result)
     const priceData = result.priceData
     const category = []
@@ -271,7 +276,10 @@ function calculateMA(dayCount, values) {
   return result;
 }
 function handleKLine() {
-  GetStockKLine(data.code, data.name, 365).then(result => {
+  // 数据请求与 ECharts 加载并行，拿到数据后再等 ECharts 就绪才画图
+  const echartsReady = loadEcharts()
+  GetStockKLine(data.code, data.name, 365).then(async result => {
+    const echarts = await echartsReady
     //console.log("GetStockKLine",result)
     const chart = echarts.getInstanceByDom(kLineChartRef.value) || echarts.init(kLineChartRef.value);
     const categoryData = [];
@@ -596,5 +604,18 @@ function handleKLine() {
   })
 }
 
-  return { showFsChart, handleKLine, handleFeishi, clearFeishi }
+// 卸载清理：仅当 ECharts 已加载时才释放两个图表实例；
+// 从不触发拉取——如果用户从未打开过 K 线/分时弹窗，这里就是空操作。
+function disposeKlineCharts() {
+  const echarts = getLoadedEcharts()
+  if (!echarts) return
+  if (kLineChartRef2.value) {
+    echarts.getInstanceByDom(kLineChartRef2.value)?.dispose()
+  }
+  if (kLineChartRef.value) {
+    echarts.getInstanceByDom(kLineChartRef.value)?.dispose()
+  }
+}
+
+  return { showFsChart, handleKLine, handleFeishi, clearFeishi, disposeKlineCharts }
 }
