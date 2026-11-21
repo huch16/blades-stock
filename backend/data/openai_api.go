@@ -32,8 +32,6 @@ type OpenAi struct {
 	ChatSource       string  `json:"-"`
 }
 
-func (o *OpenAi) Ctx() context.Context { return o.ctx }
-
 func (o OpenAi) String() string {
 	return fmt.Sprintf("OpenAi{BaseUrl: %s, Model: %s, MaxTokens: %d, Temperature: %.2f, Prompt: %s, TimeOut: %d, QuestionTemplate: %s, CrawlTimeOut: %d, KDays: %d, BrowserPath: %s, ApiKey: [MASKED]}",
 		o.BaseUrl, o.Model, o.MaxTokens, o.Temperature, o.Prompt, o.TimeOut, o.QuestionTemplate, o.CrawlTimeOut, o.KDays, o.BrowserPath)

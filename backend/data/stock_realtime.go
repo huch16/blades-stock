@@ -568,34 +568,6 @@ func ParseSHSZStockData(datas []string) (map[string]string, error) {
 	return result, nil
 }
 
-func SearchStockPriceInfo(stockName, stockCode string, crawlTimeOut int64) *[]string {
-	stockData, err := NewStockDataApi().GetStockCodeRealTimeData(stockCode)
-	if err != nil || stockData == nil || len(*stockData) == 0 {
-		return &[]string{}
-	}
-	info := (*stockData)[0]
-	var messages []string
-	priceTime := info.Date + " " + info.Time
-	name := info.Name
-	if name == "" {
-		name = stockName
-	}
-	messages = append(messages, fmt.Sprintf("%s:%s现价%s", priceTime, name, info.Price))
-	messages = append(messages, fmt.Sprintf("开盘价: %s", info.Open))
-	messages = append(messages, fmt.Sprintf("最高价: %s", info.High))
-	messages = append(messages, fmt.Sprintf("最低价: %s", info.Low))
-	messages = append(messages, fmt.Sprintf("昨收价: %s", info.PreClose))
-	messages = append(messages, fmt.Sprintf("成交量: %s", info.Volume))
-	messages = append(messages, fmt.Sprintf("成交额: %s", info.Amount))
-	if info.ChangePercent != 0 {
-		messages = append(messages, fmt.Sprintf("涨跌幅: %.2f%%", info.ChangePercent))
-	}
-	if info.ChangePrice != 0 {
-		messages = append(messages, fmt.Sprintf("涨跌额: %.2f", info.ChangePrice))
-	}
-	return &messages
-}
-
 func SearchStockInfo(stock, msgType string, crawlTimeOut int64) *[]string {
 	if crawlTimeOut <= 0 {
 		crawlTimeOut = 10
