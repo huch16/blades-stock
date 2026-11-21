@@ -74,18 +74,14 @@ func TestIsAllowedOrigin(t *testing.T) {
 		{"https://stock.8501025.xyz", "other", true},       // 生产域名后缀
 		{"https://x.instabox.tech", "other", true},         // 生产域名后缀
 		{"https://woha.men.evil.com", "other", false},      // 后缀欺骗：woha.men 不在末尾
-		{"https://evil-woha.men", "other", false},          // HasSuffix("woha.men") 命中？evil-woha.men 以 woha.men 结尾 → 注意
+		{"https://woha.men", "other", true},                // 生产域名本身
+		{"https://evil-woha.men", "other", false},          // 后缀欺骗：须以 ".woha.men" 结尾才放行
+		{"https://evil-8501025.xyz", "other", false},       // 同理
 		{"not a url", "example.com", false},                // 解析不出 host
 	}
 	for _, c := range cases {
-		// "https://evil-woha.men" 的 hostname 确实以 "woha.men" 结尾，
-		// 现有实现按后缀放行——这是已知宽松点，钉住行为而非改期望。
-		want := c.want
-		if c.origin == "https://evil-woha.men" {
-			want = true
-		}
-		if got := isAllowedOrigin(c.origin, c.host); got != want {
-			t.Errorf("isAllowedOrigin(%q, %q) = %v, want %v", c.origin, c.host, got, want)
+		if got := isAllowedOrigin(c.origin, c.host); got != c.want {
+			t.Errorf("isAllowedOrigin(%q, %q) = %v, want %v", c.origin, c.host, got, c.want)
 		}
 	}
 }

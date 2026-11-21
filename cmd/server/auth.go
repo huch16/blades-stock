@@ -133,10 +133,12 @@ func isAllowedOrigin(origin, host string) bool {
 			}
 		}
 	}
-	// 默认投研生产域名与远程沙箱放行
-	if strings.HasSuffix(u.Hostname(), "woha.men") ||
-		strings.HasSuffix(u.Hostname(), "8501025.xyz") ||
-		strings.HasSuffix(u.Hostname(), "instabox.tech") {
+	// 默认投研生产域名与远程沙箱放行（须整串相等或以 ".域名" 结尾，
+	// 避免 evil-woha.men 这类后缀欺骗通过白名单；见 C 组 P2 发现）
+	hostName := u.Hostname()
+	if hostName == "woha.men" || strings.HasSuffix(hostName, ".woha.men") ||
+		hostName == "8501025.xyz" || strings.HasSuffix(hostName, ".8501025.xyz") ||
+		hostName == "instabox.tech" || strings.HasSuffix(hostName, ".instabox.tech") {
 		return true
 	}
 	return false
