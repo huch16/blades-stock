@@ -324,7 +324,7 @@ func SeedStockBasicsIfEmpty() {
 }
 
 // defaultETFPrompt / defaultSerenityPrompt 是编译期嵌入的默认技能提示词
-// （与 cmd/insert_*_skill/*.txt 同源）。此前 services 版在运行时用相对
+// （源文件见 seeddata/*.txt）。此前 services 版在运行时用相对
 // 路径读文件，发布包里没有 cmd/ 目录时会静默回退到两行占位常量；
 // main 版则一直用 //go:embed。R-11 统一为 embed，两端行为一致。
 //

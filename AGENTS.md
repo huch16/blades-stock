@@ -2,6 +2,7 @@
 
 ## Build & Verify
 - `go build ./...` — Go-only compile check (fastest)
+- `main.go` embeds `frontend/dist` (+ app icons + 使用手册） — dist 缺失时 `go build` 会报 `pattern frontend/dist: no matching files found`；先跑 `npm run build` 重建 dist（dist 是 gitignored 构建产物，不是可删的杂物）
 - `make lint` — `go vet` + `staticcheck` + `golangci-lint`
 - `make test` — unit tests only (`-run "^Test" -skip "integration"`)
 - `.\build.ps1 frontend` — build Vue 3 frontend only
@@ -40,7 +41,6 @@ Layers, top to bottom (enforced by `scripts/check-deps.sh`, run it after every c
 - **Datasource** (`backend/datasource/`) — leaf: pure vendor clients (Sina/Tencent/TDX/EastMoney/Akshare/Baostock/TickFlow/WallStreetCN/search). Only depends on base packages (`models`/`util`/`paths`/`circuitbreaker`/`machineid`/`types`/`logger`); never reads settings/DB — settings come in as constructor params or provider funcs.
 - **Base** (`backend/models`, `backend/util`, `backend/paths`, `backend/circuitbreaker`, `backend/machineid`, `backend/types`, `backend/logger`, `backend/db`) — never depend on business packages (`logger → paths` is the only exception).
 - **Quant** (`backend/quant/`, `backend/strategy/`) — takes data via `data`'s public Api, never imports `datasource` directly.
-- `backend/service/akshare_service.py` (FastAPI wrapper) now lives at `scripts/akshare_service.py` (no in-repo callers; moved out of `backend/`, not deleted).
 
 ## Agent Pipeline (backend/agent/)
 1. `ChatWithContext()` (`agent_api.go:80`) receives question
@@ -61,7 +61,7 @@ Detected by baseURL pattern matching in `detectChatModelProvider()`.
 - `GetAllDataTools()` in `data_tools_wrapper.go` returns all ~30 data tools
 
 ## Skills (DB-driven)
-- Stored in `models.Skill` table, inserted via `cmd/insert_*_skill/main.go`
+- Stored in `models.Skill` table, seeded at startup from `backend/services/seeddata/*.txt` via `services.SeedDefaultSkills()`
 - Loaded at runtime by `buildSkillPrompt()` — DB-only changes need app restart only
 - Current skills: ETF轮动多Agent分析 (ID=7), Serenity式产业分析 (ID=4)
 - Skill keywords trigger injection; non-matching questions skip skill prompt
@@ -104,19 +104,6 @@ Detected by baseURL pattern matching in `detectChatModelProvider()`.
 - Source changes → `.\build.ps1 wails` to apply; frontend changes → `.\build.ps1 dev` or `npm run build`
 - `wails dev -skipbindings -skipembedcreate` and `wails build -skipbindings -skipembedcreate` required for Go 1.26.x (blades "without types" bug)
 - Chinese chars in Go source must be UTF-8; use `\uXXXX` escapes if encoding corrupted
-
-## MCP Server Setup (Tushare / Wudao)
-- `go run ./cmd/setup_mcp/` — inserts/updates MCP server entries in DB for Tushare (smart-financial-mcp) and Wudao (悟道数据)
-- Requires env vars: `TUSHARE_TOKEN` and `WUDAO_BEARER_TOKEN` (set before running)
-- After setup, restart the app and test connections from 研究中心 → MCP服务
-
-### Tushare MCP allowlist
-- `backend/data/tushare_allowlist.go` — curated allowlist of 124 Tushare API fields required for stock market data (daily, weekly, monthly, adj_factor, money_flow, income, balance_sheet, cash_flow)
-- Combines unified field names + Tushare field names for smooth API compatibility
-
-### Probe commands (dev tools, build-ignored)
-- `cmd/probe_tushare_perms/` — issues `ak_times=1` probe to check which Tushare API fields the current token can access (must set `TUSHARE_TOKEN`)
-- `cmd/diag_skill_mcp/`, `cmd/diag_mcp_schema/` — MCP diagnostic helpers, all tagged `//go:build ignore`
 
 ## Repo Hygiene / Safety
 - **Never** commit `.venv/`, `*.exe`, `.graph/`, or build artifacts (`stock_basic.json`, `.md5` checkpoints)

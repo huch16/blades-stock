@@ -1,4 +1,4 @@
-# Makefile for Blades Stock (v3.0.0)
+# Makefile for Blades Stock (v4.0.0)
 #
 # 说明：本目标集刻意只依赖「本机确实可用」的工具链。
 # 早期版本在此处调用了 golangci-lint，但该工具未随项目安装，导致 `make lint` 必然失败。
