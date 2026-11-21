@@ -264,25 +264,6 @@ func (s *ChatMemoryService) semanticRetrieve(memories []db.ChatMemory, query str
 	return result, nil
 }
 
-func (s *ChatMemoryService) GetHistory() ([]string, error) {
-	memories, err := s.loadMessages()
-	if err != nil {
-		logger.SugaredLogger.Errorf("GetHistory failed: %v", err)
-		return nil, err
-	}
-
-	var history []string
-	for _, m := range memories {
-		role := m.Role
-		if role == "user" {
-			history = append(history, "用户: "+m.Content)
-		} else if role == "assistant" {
-			history = append(history, "助手: "+m.Content)
-		}
-	}
-	return history, nil
-}
-
 func (s *ChatMemoryService) GetSummary() (string, error) {
 	summary, err := db.GetChatMemorySummary(s.sessionID)
 	if err != nil {
@@ -462,17 +443,4 @@ func (s *ChatMemoryService) summarizeHistoryAsync(sessionID string, pairs []stri
 		CreatedAt: time.Now(),
 	}).Save()
 	logger.SugaredLogger.Debugf("async LLM summary stored for session %s", sessionID)
-}
-
-func (s *ChatMemoryService) Clear() error {
-	if err := db.DeleteChatMemorySummary(s.sessionID); err != nil {
-		logger.SugaredLogger.Errorf("delete chat memory summary failed in Clear: %v", err)
-	}
-	err := db.ClearChatMemory(s.sessionID)
-	s.mu.Lock()
-	s.cache = nil
-	s.cacheReady = false
-	s.msgCount = 0
-	s.mu.Unlock()
-	return err
 }

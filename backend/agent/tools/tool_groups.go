@@ -202,17 +202,6 @@ func ClassifyQuestion(question string) map[ToolGroup]bool {
 }
 
 // FilterToolsByGroups curates tools per group; groups not in map are excluded.
-func FilterToolsByGroups(allTools []tools.Tool, groups map[ToolGroup]bool) []tools.Tool {
-	var filtered []tools.Tool
-	for _, t := range allTools {
-		group, exists := lookupCapability(t)
-		if !exists || groups[group] {
-			filtered = append(filtered, t)
-		}
-	}
-	return filtered
-}
-
 // groupToolCaps 每组允许注入模型的最大工具数。每注入一个工具，其名称、描述、
 // 参数 schema 都会全量发送给模型消耗 tokens；这些上限保证命中多组时不会把
 // 上百个工具定义全部塞进提示词。无上限的组（GroupBase/GroupProject 等体量小
@@ -371,12 +360,3 @@ func isValidToolGroup(g ToolGroup) bool {
 }
 
 // GetToolGroup returns the ToolGroup assigned to a tool name (used for validation & testing).
-func GetToolGroup(toolName string) (ToolGroup, bool) {
-	// 统一读能力注册表（工具身份的唯一事实源）
-	c, ok := CapabilityOf(toolName)
-	if !ok {
-		return "", false
-	}
-	g := c.Group
-	return g, ok
-}

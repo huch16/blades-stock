@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -463,21 +462,6 @@ func RecordQuotaLimits(ctx context.Context, runBudget, dailyBudget int64, dailyC
 }
 
 // SetBacktestAccuracy 设置回测准备率指标
-func SetBacktestAccuracy(ctx context.Context, skillID uint, accuracy float64) {
-	initMetrics()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	attrs := []attribute.KeyValue{
-		attribute.String("skill_id", strconv.FormatUint(uint64(skillID), 10)),
-	}
-
-	if backtestAccuracyGauge != nil {
-		backtestAccuracyGauge.Record(ctx, accuracy, metric.WithAttributes(attrs...))
-	}
-}
-
 // RecordAgentRequest 记录 Agent 请求（包含模式：react|plan_execute）
 func RecordAgentRequest(ctx context.Context, mode string, success bool, duration time.Duration) {
 	initMetrics()
@@ -569,16 +553,3 @@ func RecordTokenUsage(ctx context.Context, modelName string, promptTokens, compl
 }
 
 // RecordEmbeddingLatency 记录嵌入模型延迟
-func RecordEmbeddingLatency(ctx context.Context, modelName string, latency time.Duration) {
-	initMetrics()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	attrs := []attribute.KeyValue{
-		attribute.String("model", modelName),
-	}
-	if retrieverLatency != nil && latency > 0 {
-		retrieverLatency.Record(ctx, float64(latency.Milliseconds()), metric.WithAttributes(attrs...))
-	}
-}

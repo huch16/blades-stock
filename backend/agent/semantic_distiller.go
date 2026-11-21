@@ -53,12 +53,6 @@ func NewSemanticDistiller(embSvc *EmbeddingService) *SemanticDistiller {
 }
 
 // SetEmbeddingService 注入向量服务
-func (d *SemanticDistiller) SetEmbeddingService(svc *EmbeddingService) {
-	d.stateMu.Lock()
-	defer d.stateMu.Unlock()
-	d.embSvc = svc
-}
-
 // getActiveEmbeddingService 获取当前激活的向量模型服务（若未设置则自动解析）
 func (d *SemanticDistiller) getActiveEmbeddingService() *EmbeddingService {
 	d.stateMu.RLock()

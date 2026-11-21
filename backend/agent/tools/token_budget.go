@@ -182,26 +182,6 @@ type TokenBudgetReport struct {
 }
 
 // ReportTokenBudget 生成一份可读的预算报告（不改变输入）。
-func ReportTokenBudget(in []bladesTools.Tool, groups map[ToolGroup]bool) TokenBudgetReport {
-	kept, dropped := FilterByTokenBudget(in, groups)
-	rep := TokenBudgetReport{
-		ToolCount: len(kept),
-		TokenEst:  EstimateTokens(kept),
-		ByGroup:   map[ToolGroup]int{},
-		Budgets:   map[ToolGroup]int{},
-		Dropped:   dropped,
-	}
-	for _, t := range kept {
-		if c, ok := CapabilityOf(t.Name()); ok {
-			rep.ByGroup[c.Group] += estimateToolTokens(t)
-		}
-	}
-	for g, b := range groupTokenBudget {
-		rep.Budgets[g] = b
-	}
-	return rep
-}
-
 // ── 开关（与能力闸门共用，便于一起灰度）─────────────────────────────────
 
 // TokenBudgetEnabled token 预算是否真正生效（默认 false = 影子模式）。

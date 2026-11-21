@@ -233,12 +233,6 @@ func triggerRebuildAsync(reason string) {
 }
 
 // GetRebuildStatus 供 UI / 健康检查查询重建状态。
-func GetRebuildStatus() (inProgress bool, last rebuildStatus) {
-	rebuildMu.Lock()
-	defer rebuildMu.Unlock()
-	return rebuildingNow, lastRebuild
-}
-
 // checkCommitMismatch 对比 manifest.commit_sha 与 git HEAD 短 hash。
 // 返回警告消息或空字符串：
 //   - manifest 不存在 / 无 commit_sha → 空（不影响功能）

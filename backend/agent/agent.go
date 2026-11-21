@@ -69,15 +69,7 @@ func (PlanTrace) TableName() string {
 }
 
 // ClassifyComplexityForAudit exports classifyComplexity for audit testing and benchmarks.
-func ClassifyComplexityForAudit(question string) AgentMode {
-	return classifyComplexity(question)
-}
-
 // IsIndividualStockQuestionForAudit exports isIndividualStockQuestion for audit testing.
-func IsIndividualStockQuestionForAudit(question string) bool {
-	return isIndividualStockQuestion(question)
-}
-
 func classifyComplexity(question string) AgentMode {
 	// 针对已完整注入客观数据/样本列表的共振推演、排雷诊断与专项研报，直接采用 Direct 模式快速合成，避免漫长无效的外部工具循环与超时
 	if strings.Contains(question, "【AI 形态选股列表共振推演与操盘计划】") ||

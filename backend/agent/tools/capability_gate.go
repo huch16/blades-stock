@@ -191,8 +191,6 @@ func loadGateOverride() Gate {
 }
 
 // GateOverrideError 返回闸门覆盖配置的解析错误（无则为 nil）。
-func GateOverrideError() error { return gateOverrideErr }
-
 // GateEnforceEnabled 闸门是否真正生效（默认 false = 影子模式）。
 func GateEnforceEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("BLADES_STOCK_GATE_ENFORCE")), "1") ||

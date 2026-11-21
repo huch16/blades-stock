@@ -170,15 +170,6 @@ func (cb *CircuitBreaker) tripLocked() {
 }
 
 // Reset 手动重置为闭合状态。
-func (cb *CircuitBreaker) Reset() {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	cb.state = Closed
-	cb.failures = 0
-	cb.halfOpenProbes = 0
-	cb.halfOpenOK = 0
-}
-
 // State 返回当前状态。
 func (cb *CircuitBreaker) State() State {
 	cb.mu.Lock()
