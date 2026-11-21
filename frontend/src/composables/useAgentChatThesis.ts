@@ -2,7 +2,6 @@
 // 由 agent-chat.vue 抽出（R-22c），逻辑逐字搬运；共享状态与服务由组件以 ctx 传入。
 import { h, ref } from 'vue'
 import { useDialog } from 'naive-ui'
-import html2canvas from 'html2canvas'
 import { useAiConfigStore } from '@/stores/aiConfig'
 import { SaveImage, SaveStockThesis } from '../../wailsjs/go/main/App'
 import { EventsEmit } from '../../wailsjs/runtime'
@@ -257,6 +256,9 @@ async function handleExportImage(msg: ChatMessage) {
 
   const isDark = document.documentElement.getAttribute('theme-mode') === 'dark'
   try {
+    // html2canvas 只在“保存为图片”时才需要，动态加载，避免 /agent 路由入口就带上它
+    const html2canvasModule = await import('html2canvas')
+    const html2canvas = html2canvasModule.default || html2canvasModule
     const canvas = await html2canvas(target, {
       useCORS: true,
       scale: 2,

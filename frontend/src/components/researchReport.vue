@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { computed, h, onBeforeMount, onMounted, ref, reactive } from 'vue'
+import { computed, defineAsyncComponent, h, onBeforeMount, onMounted, ref, reactive } from 'vue'
 import { GetAIResponseResultList, GetConfig, SaveAsMarkdown, DeleteAIResponseResult } from "../../wailsjs/go/main/App"
 import { NButton, NEllipsis, NText, useMessage } from "naive-ui"
-import { MdPreview } from 'md-editor-v3'
+// MdPreview 只在报告弹窗里用，改为异步加载，避免 /research 路由入口就带上
+// md-editor-v3 + CodeMirror 约 2.8MB（与 stock.vue 的写法一致）
+const MdPreview = defineAsyncComponent(() => import('md-editor-v3').then(m => {
+  import('md-editor-v3/lib/style.css');
+  return m.MdPreview;
+}))
 import { sanitizeMarkdownHtml } from '../utils/sanitize'
 
 const message = useMessage()
