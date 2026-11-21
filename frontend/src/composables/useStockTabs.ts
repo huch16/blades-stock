@@ -1,7 +1,7 @@
 // 自选分组标签拖拽排序：拖拽状态 + 7 个拖拽处理器 + 初始化/清理。
 // 由 stock.vue 抽出（R-22b），逻辑逐字搬运；groupList / message 由组件以 ctx 传入。
 import { ref } from 'vue'
-import { UpdateGroupSort } from '../../wailsjs/go/main/App'
+import { GetGroupList, UpdateGroupSort } from '../../wailsjs/go/main/App'
 
 export function useStockTabs(ctx) {
   const groupList = ctx.groupList
