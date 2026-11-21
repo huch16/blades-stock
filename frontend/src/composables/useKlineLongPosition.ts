@@ -3,6 +3,7 @@
 // chart / candleSeries 改为 ctx 传入的 getter；props / emit / chartContainerRef /
 // defaultLatestRawRow 以原样传入。watchers 随功能一起搬入本文件。
 import { computed, nextTick, ref, watch } from 'vue'
+import { LineStyle } from 'lightweight-charts'
 import { parseNumStr } from '../components/kline/format'
 
 export function useKlineLongPosition(ctx) {
