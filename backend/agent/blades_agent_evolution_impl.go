@@ -174,49 +174,6 @@ func (ev *Evolver) RecordToolUse(toolName string, success bool, durationMs float
 	db.Dao.Save(&rank)
 }
 
-func (ev *Evolver) ProposeEvolutionPlan() *EvolutionPlan {
-	now := time.Now()
-	weekStart := now.AddDate(0, 0, -int(now.Weekday()))
-	weekEnd := weekStart.AddDate(0, 0, 6)
-
-	var lowTraces []AgentTrace
-	db.Dao.Where("score < 0 AND created_at >= ?", weekStart).Order("score asc").Limit(10).Find(&lowTraces)
-
-	var highTraces []AgentTrace
-	db.Dao.Where("score > 0 AND created_at >= ?", weekStart).Order("score desc").Limit(10).Find(&highTraces)
-
-	ranks := ev.RankTools()
-
-	var improvements []string
-	for _, t := range lowTraces {
-		parts := strings.SplitN(t.Feedback, "|", 2)
-		if len(parts) == 2 {
-			improvements = append(improvements, strings.TrimSpace(parts[1]))
-		}
-	}
-	if len(improvements) == 0 {
-		improvements = append(improvements, "本周无低分轨迹，继续保持")
-	}
-
-	var suggestions []string
-	for _, t := range highTraces {
-		suggestions = append(suggestions, t.Question)
-	}
-	if len(suggestions) == 0 {
-		suggestions = append(suggestions, "继续收集高质量轨迹数据")
-	}
-
-	return &EvolutionPlan{
-		WeekStart:        weekStart.Format("2006-01-02"),
-		WeekEnd:          weekEnd.Format("2006-01-02"),
-		HighQualityCount: len(highTraces),
-		LowQualityCount:  len(lowTraces),
-		TopTools:         ranks,
-		Improvements:     improvements,
-		Suggestions:      suggestions,
-	}
-}
-
 type LearnedSkill struct {
 	Name            string   `json:"name"`
 	Description     string   `json:"description"`
@@ -279,13 +236,6 @@ func (ev *Evolver) LearnFromProject(projectName, analysis string, llm LLMOptimiz
 	return &skill, nil
 }
 
-func (ev *Evolver) CleanupToolRanks(days int) (int, error) {
-	cutoff := time.Now().AddDate(0, 0, -days)
-	r := db.Dao.Where("updated_at < ?", cutoff).Delete(&ToolRank{})
-	return int(r.RowsAffected), r.Error
-}
-
-// LLMFromConfig creates an LLM callback from the first enabled AI config.
 func LLMFromConfig() LLMOptimizerFunc {
 	return func(systemPrompt, userMessage string) (string, error) {
 		settingConfig := data.GetSettingConfig()

@@ -2,7 +2,6 @@ package datasource
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 
@@ -87,113 +86,6 @@ func (c *AkshareClient) Ping() error {
 	}
 	logger.SugaredLogger.Infof("[AkshareClient] connected to %s", c.baseURL)
 	return nil
-}
-
-func (c *AkshareClient) FuturesSpot(market string) ([]map[string]any, error) {
-	marketMap := map[string]string{
-		"上期所": "SHFE", "大商所": "DCE", "郑商所": "CZCE",
-		"广期所": "GFEX", "中金所": "CFFEX", "上海国际能源交易中心": "INE",
-		"shfe": "SHFE", "dce": "DCE", "czce": "CZEX",
-		"gfex": "GFEX", "cffex": "CFFEX", "ine": "INE",
-	}
-	if mapped, ok := marketMap[market]; ok {
-		market = mapped
-	}
-	resp, err := c.get(fmt.Sprintf("/api/v1/futures/spot?market=%s", url.QueryEscape(market)))
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) ETFSpot() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/etf/spot")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) ETFHistorical(symbol, period, startDate, endDate, adjust string) ([]map[string]any, error) {
-	path := fmt.Sprintf("/api/v1/etf/historical?symbol=%s&period=%s&start_date=%s&end_date=%s&adjust=%s", symbol, period, startDate, endDate, adjust)
-	resp, err := c.get(path)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) OpenFundNetValue(symbol, startDate, endDate string) ([]map[string]any, error) {
-	path := fmt.Sprintf("/api/v1/fund/open/net_value?symbol=%s&start_date=%s&end_date=%s", symbol, startDate, endDate)
-	resp, err := c.get(path)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) BoardConcept() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/board/concept")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) BoardIndustry() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/board/industry")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) MacroCPI() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/macro/cpi")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) MacroGDP() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/macro/gdp")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) MacroPMI() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/macro/pmi")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) MacroMoneySupply() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/macro/money_supply")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) LongHuToday() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/longhu/today")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
-}
-
-func (c *AkshareClient) ConvertibleBondSpot() ([]map[string]any, error) {
-	resp, err := c.get("/api/v1/convertible/bond_spot")
-	if err != nil {
-		return nil, err
-	}
-	return resp.Data, nil
 }
 
 func (c *AkshareClient) Call(function string, kwargs map[string]any) ([]map[string]any, error) {

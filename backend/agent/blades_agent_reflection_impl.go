@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -31,16 +30,6 @@ type ReflectionScore struct {
 	Relevance    int `json:"relevance"`    // 0-10
 	ToolUse      int `json:"toolUse"`      // 0-10
 	Completeness int `json:"completeness"` // 0-10
-}
-
-var defaultEvaluator *Evaluator
-var evaluatorOnce sync.Once
-
-func DefaultEvaluator() *Evaluator {
-	evaluatorOnce.Do(func() {
-		defaultEvaluator = NewEvaluator()
-	})
-	return defaultEvaluator
 }
 
 type Evaluator struct{}
@@ -375,28 +364,12 @@ func textSimilarity(a, b string) float64 {
 	return float64(inter) / float64(union)
 }
 
-func (e *Evaluator) RecordFeedback(traceID uint, score int, feedback string) error {
-	return db.Dao.Model(&AgentTrace{}).Where("id = ?", traceID).Updates(map[string]interface{}{
-		"score":    score,
-		"feedback": feedback,
-	}).Error
-}
-
 func (e *Evaluator) GetHighQualityTraces(limit int) []AgentTrace {
 	if limit <= 0 {
 		limit = 10
 	}
 	var traces []AgentTrace
 	db.Dao.Where("score > 0").Order("score desc, id desc").Limit(limit).Find(&traces)
-	return traces
-}
-
-func (e *Evaluator) GetLowQualityTraces(limit int) []AgentTrace {
-	if limit <= 0 {
-		limit = 10
-	}
-	var traces []AgentTrace
-	db.Dao.Where("score < 0").Order("score asc, id desc").Limit(limit).Find(&traces)
 	return traces
 }
 
