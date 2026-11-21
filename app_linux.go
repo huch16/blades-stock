@@ -175,11 +175,6 @@ func MonitorStockPrices(a *App) {
 	go runtime.EventsEmit(a.ctx, "realtime_profit", fmt.Sprintf("  %.2f", total))
 }
 
-// getFrameless 返回是否使用无边框窗口
-func getFrameless() bool {
-	return false
-}
-
 // getScreenResolution 返回屏幕分辨率
 func getScreenResolution() (int, int, int, int, error) {
 	return 1412, 834, 900, 600, nil

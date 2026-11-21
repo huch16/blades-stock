@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"sort"
 	"strings"
 
 	"blades-stock/backend/logger"
@@ -54,19 +53,6 @@ func (d *RPCDispatcher) HasMethod(name string) bool {
 	}
 	_, ok := d.methods[name]
 	return ok
-}
-
-// GetMethodNames 获取所有已注册的 RPC 方法名列表
-func (d *RPCDispatcher) GetMethodNames() []string {
-	if d == nil {
-		return nil
-	}
-	names := make([]string, 0, len(d.methods))
-	for name := range d.methods {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
 
 // goTypeToOpenAPISchema 将 Go reflect.Type 反射映射为标准 OpenAPI 3.0 数据结构 Schema

@@ -106,11 +106,6 @@ func isGeminiGoogleAI(baseLower, modelLower string) bool {
 	return false
 }
 
-// CreateChatModel 是 createChatModel 的公开包装，供外部直接安全创建 ModelProvider
-func CreateChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelProvider, error) {
-	return createChatModel(ctx, aiConfig)
-}
-
 func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelProvider, error) {
 	baseURL := normalizeChatModelBaseURL(aiConfig.BaseUrl)
 	baseLower := strings.ToLower(baseURL)
