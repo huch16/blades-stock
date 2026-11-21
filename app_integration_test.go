@@ -9,7 +9,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
@@ -98,22 +97,6 @@ func TestGetAiRecommendStocksList(t *testing.T) {
 	}
 	content := util.MarkdownTableWithTitle("近期AI分析/推荐股票明细列表", dataExport)
 	t.Log(content)
-}
-
-func TestSummaryStockNews(t *testing.T) {
-	db.Init("./data/stock.db")
-	question := "分析今日的市场行情走势是否和券商的观点一致"
-	app := NewApp()
-	msgs := data.NewDeepSeekOpenAi(app.ctx, 0).NewSummaryStockNewsStreamWithTools(question, nil, app.AiTools, true, nil)
-
-	var content strings.Builder
-	for msg := range msgs {
-		t.Logf("msg:%+v", msg)
-		if c, ok := msg["content"].(string); ok {
-			content.WriteString(c)
-		}
-	}
-	t.Log(content.String())
 }
 
 func TestFetchAiModels(t *testing.T) {

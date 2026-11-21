@@ -1,7 +1,6 @@
 package data
 
 import (
-	"net/url"
 	"time"
 
 	"blades-stock/backend/datasource"
@@ -37,9 +36,4 @@ func ConfigureFromSettings(config *SettingConfig) {
 // CreateHTTPClientWithTimeout 转发到 datasource（services 经 data 调用）。
 func CreateHTTPClientWithTimeout(timeout time.Duration) *resty.Client {
 	return datasource.CreateHTTPClientWithTimeout(timeout)
-}
-
-// parseProxyURL 转发到 datasource（openai_tools.go 的 createHTTPClientWithProxy 在用）。
-func parseProxyURL(proxyURL string) *url.URL {
-	return datasource.ParseProxyURL(proxyURL)
 }

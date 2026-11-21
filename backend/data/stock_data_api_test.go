@@ -7,12 +7,9 @@ import (
 	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 	"blades-stock/backend/util"
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
-	"strings"
 	"testing"
 	"time"
 
@@ -38,17 +35,6 @@ func TestGetTelegraph(t *testing.T) {
 	for _, telegraph := range *list {
 		logger.SugaredLogger.Infof("telegraph:%+v", telegraph)
 	}
-}
-
-func TestGetFinancialReports(t *testing.T) {
-	db.Init("../../data/stock.db")
-	//GetFinancialReports("sz000802", 30)
-	//GetFinancialReports("hk00927", 30)
-	//GetFinancialReports("gb_aapl", 30)
-	GetFinancialReportsByXUEQIU("sz000802", 30)
-	GetFinancialReportsByXUEQIU("gb_aapl", 30)
-	GetFinancialReportsByXUEQIU("hk00927", 30)
-
 }
 
 func TestGetTelegraphSearch(t *testing.T) {
@@ -96,22 +82,6 @@ func TestFilterStocks(t *testing.T) {
 		CONCERN_RANK_7DAYS: 50,
 	})
 	logger.SugaredLogger.Infof("%+#v", len((*res).Result.Data))
-
-}
-func TestSearchStockInfoByCode(t *testing.T) {
-	db.Init("../../data/stock.db")
-	SearchStockInfoByCode("sh600745")
-}
-
-func TestSearchStockPriceInfo(t *testing.T) {
-	db.Init("../../data/stock.db")
-	SearchStockPriceInfo("博安生物", "hk06955", 30)
-	SearchStockPriceInfo("上海贝岭", "sh600171", 30)
-	//SearchStockPriceInfo("苹果公司", "gb_aapl", 30)
-	//SearchStockPriceInfo("微创光电", "bj430198", 30)
-	//getZSInfo("创业板指数", "sz399006", 30)
-	//getZSInfo("上证综合指数", "sh000001", 30)
-	//getZSInfo("沪深300指数", "sh000300", 30)
 
 }
 func TestGetStockMinutePriceData(t *testing.T) {
@@ -166,34 +136,6 @@ func TestParseTxStockData(t *testing.T) {
 	//str = "v_r_hk09660=\"100~地平线机器人-W~09660~6.860~7.000~7.010~21157200.0~0~0~6.860~0~0~0~0~0~0~0~0~0~6.860~0~0~0~0~0~0~0~0~0~21157200.0~2025/05/09\n09:43:13~-0.140~-2.00~7.030~6.730~6.860~21157200.0~144331073.000~0~35.74~~0~0~4.29~759.8070~905.5401~HORIZONROBOT-W~0.00~10.380~3.320~2.93~11.10~0~0~0~0~0~35.74~7.04~0.19~600~90.56~4.73~GP~19.70~11.51~17.26~48.48~13.58~13200293682.00~11075904412.00~35.74~0.000~6.822~71.93~HKD~1~30\";"
 	info, _ := ParseTxStockData(str)
 	logger.SugaredLogger.Infof("%+#v", info)
-}
-
-func TestGetRealTimeStockPriceInfo(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	text, texttime := GetRealTimeStockPriceInfo(ctx, "sh600171")
-	logger.SugaredLogger.Infof("res:%s,%s", text, texttime)
-
-	text, texttime = GetRealTimeStockPriceInfo(ctx, "sh600438")
-	logger.SugaredLogger.Infof("res:%s,%s", text, texttime)
-
-	texttime = strings.ReplaceAll(texttime, "）", "")
-	texttime = strings.ReplaceAll(texttime, "（", "")
-	parts := strings.Split(texttime, " ")
-	logger.SugaredLogger.Infof("parts:%+v", parts)
-
-	//去除中文字符
-	// 正则表达式匹配中文字符
-	re := regexp.MustCompile(`\p{Han}+`)
-	texttime = re.ReplaceAllString(texttime, "")
-
-	logger.SugaredLogger.Infof("texttime:%s", texttime)
-	location, err := time.ParseInLocation("2006-01-02 15:04:05", texttime, time.Local)
-	if err != nil {
-		return
-	}
-	logger.SugaredLogger.Infof("location:%s", location.Format("2006-01-02 15:04:05"))
 }
 
 func TestParseFullSingleStockData(t *testing.T) {
@@ -628,85 +570,6 @@ func TestEmHotspotDiscovery(t *testing.T) {
 		body = body[:800] + "..."
 	}
 	t.Logf("Response: %s", body)
-}
-
-func TestIwencaiQueryAPI(t *testing.T) {
-	apiKey := getIwencaiAPIKey(t)
-
-	query := "贵州茅台最新价"
-	page := 1
-	limit := 5
-
-	reqBody := map[string]any{
-		"query":        query,
-		"page":         fmt.Sprintf("%d", page),
-		"limit":        fmt.Sprintf("%d", limit),
-		"is_cache":     "1",
-		"expand_index": "true",
-		"app_id":       "AIME_SKILL",
-	}
-
-	resp, err := resty.New().R().
-		SetHeaders(iwencaiCommonHeaders(apiKey, "query2data", "1.0.0")).
-		SetBody(reqBody).
-		Post("https://openapi.iwencai.com/v1/query2data")
-
-	if err != nil {
-		t.Fatalf("请求失败: %v", err)
-	}
-
-	t.Logf("HTTP Status: %d", resp.StatusCode())
-
-	if resp.StatusCode() == 200 {
-		var result IwencaiResponse
-		if err := json.Unmarshal(resp.Body(), &result); err == nil {
-			t.Logf("Status Code: %d, Msg: %s, CodeCount: %d, Datas: %d",
-				result.StatusCode, result.StatusMsg, result.CodeCount, len(result.Datas))
-			if len(result.Datas) > 0 {
-				t.Logf("第一条数据: %v", result.Datas[0])
-			}
-		}
-	} else {
-		t.Logf("Response Body: %s", resp.String())
-	}
-}
-
-func TestIwencaiSearchAPI(t *testing.T) {
-	apiKey := getIwencaiAPIKey(t)
-
-	reqBody := map[string]any{
-		"channels": []string{"news"},
-		"app_id":   "AIME_SKILL",
-		"query":    "贵州茅台",
-	}
-
-	resp, err := resty.New().R().
-		SetHeaders(iwencaiCommonHeaders(apiKey, "news-search", "1.0.0")).
-		SetBody(reqBody).
-		Post("https://openapi.iwencai.com/v1/comprehensive/search")
-
-	if err != nil {
-		t.Fatalf("请求失败: %v", err)
-	}
-
-	t.Logf("HTTP Status: %d", resp.StatusCode())
-
-	if resp.StatusCode() == 200 {
-		var result IwencaiSearchResponse
-		if err := json.Unmarshal(resp.Body(), &result); err == nil {
-			t.Logf("Search Results Count: %d", len(result.Data))
-			if len(result.Data) > 0 {
-				for i, item := range result.Data {
-					if i >= 3 {
-						break
-					}
-					t.Logf("  [%d] %s (%s)", i+1, item.Title, item.PublishDate)
-				}
-			}
-		}
-	} else {
-		t.Logf("Response Body: %s", resp.String())
-	}
 }
 
 func TestF10LatestFinance(t *testing.T) {

@@ -17,7 +17,6 @@ import (
 
 	"github.com/coocood/freecache"
 	"github.com/duke-git/lancet/v2/convertor"
-	"github.com/duke-git/lancet/v2/random"
 	"github.com/duke-git/lancet/v2/strutil"
 	"github.com/go-resty/resty/v2"
 	"github.com/tidwall/gjson"

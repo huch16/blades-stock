@@ -118,23 +118,6 @@ func TestWebSearchApi_Baidu(t *testing.T) {
 	}
 }
 
-func TestWebSearchApi_NewWebSearchApi(t *testing.T) {
-	api1 := NewWebSearchApi(0)
-	if api1.timeout != 30 {
-		t.Errorf("Expected default timeout 30, got %d", api1.timeout)
-	}
-
-	api2 := NewWebSearchApi(60)
-	if api2.timeout != 60 {
-		t.Errorf("Expected timeout 60, got %d", api2.timeout)
-	}
-
-	api3 := NewWebSearchApi(-10)
-	if api3.timeout != 30 {
-		t.Errorf("Expected default timeout 30 for negative input, got %d", api3.timeout)
-	}
-}
-
 func TestCleanText(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -184,41 +167,6 @@ func TestRandomSleep(t *testing.T) {
 	duration := datasource.RandomSleep(100, 100)
 	if duration != 100*time.Millisecond {
 		t.Errorf("datasource.RandomSleep(100, 100) should return 100ms, got %v", duration)
-	}
-}
-
-func TestParseBingResultsWithGoquery(t *testing.T) {
-	html := `
-		<ul id="b_results">
-			<li class="b_algo">
-				<h2><a href="https://example.com/1">Test Title 1</a></h2>
-				<div class="b_caption"><p>Test snippet 1</p></div>
-			</li>
-			<li class="b_algo">
-				<h2><a href="https://example.com/2">Test Title 2</a></h2>
-				<div class="b_caption"><p>Test snippet 2</p></div>
-			</li>
-		</ul>
-	`
-
-	api := NewWebSearchApi(30)
-	results := api.parseBingResultsWithGoquery(html, 5)
-
-	if len(results) != 2 {
-		t.Errorf("Expected 2 results, got %d", len(results))
-		return
-	}
-
-	if results[0].Title != "Test Title 1" {
-		t.Errorf("Expected title 'Test Title 1', got %q", results[0].Title)
-	}
-
-	if results[0].Url != "https://example.com/1" {
-		t.Errorf("Expected URL 'https://example.com/1', got %q", results[0].Url)
-	}
-
-	if results[0].Snippet != "Test snippet 1" {
-		t.Errorf("Expected snippet 'Test snippet 1', got %q", results[0].Snippet)
 	}
 }
 

@@ -2,7 +2,6 @@ package data
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"blades-stock/backend/logger"
@@ -30,11 +29,6 @@ type OpenAi struct {
 	HttpProxy        string  `json:"httpProxy"`
 	HttpProxyEnabled bool    `json:"httpProxyEnabled"`
 	ChatSource       string  `json:"-"`
-}
-
-func (o OpenAi) String() string {
-	return fmt.Sprintf("OpenAi{BaseUrl: %s, Model: %s, MaxTokens: %d, Temperature: %.2f, Prompt: %s, TimeOut: %d, QuestionTemplate: %s, CrawlTimeOut: %d, KDays: %d, BrowserPath: %s, ApiKey: [MASKED]}",
-		o.BaseUrl, o.Model, o.MaxTokens, o.Temperature, o.Prompt, o.TimeOut, o.QuestionTemplate, o.CrawlTimeOut, o.KDays, o.BrowserPath)
 }
 
 // DefaultResearchSystemPrompt 是机构级买方量化投研导师系统提示词，强化确定性数据底座、VectorBT量化诊断、买方认知假说、模拟盘净值问责与全天候自主闭环。

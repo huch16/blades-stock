@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"blades-stock/backend/datasource"
 )
 
 func TestWallstreetcnApi_GetLives(t *testing.T) {
@@ -85,7 +87,7 @@ func TestWallstreetcnApi_GetMarketReal(t *testing.T) {
 	fmt.Printf("字段: %v\n\n", resp.Data.Fields)
 	for code, values := range resp.Data.Snapshot {
 		name := code
-		if cnName, ok := WSCNProdCodes[code]; ok {
+		if cnName, ok := datasource.WSCNProdCodes[code]; ok {
 			name = cnName
 		}
 		fmt.Printf("  %s (%s): %v\n", name, code, values)
