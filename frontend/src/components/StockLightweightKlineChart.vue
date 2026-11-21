@@ -518,6 +518,10 @@ async function loadOlderHistory() {
         })
       }
     })
+    // 分页成功让图表从无数据变有数据（或补上可解析的 K 线）时，清除旧的
+    // 错误横幅：此前 loadData 失败留下的 errorText 不应残留在已画出的图上。
+    // 快照已在上方校验（code/klt 不符直接 return），不会清掉别的标的的错误。
+    if (mergedRawRows.length) errorText.value = ''
   } catch {
     /* 网络/桥接异常：保留 hasMoreOlder，用户可继续拖动重试 */
   } finally {
@@ -547,6 +551,12 @@ async function refreshLatestPoll() {
     mergedRawRowsVersion.value++
     syncDefaultLatestPanelRow()
     withProgrammaticTimeRange(() => applySeriesFromRaw())
+    // 轮询成功画图后清除旧的超时/错误横幅：同码重搜不触发 loadData（watch
+    // 只认 code 变化），图是靠这条轮询路重画的，但它以前全程不碰 errorText，
+    // 导致“图已恢复、红色超时横幅残留”。快照已在上方校验（code/klt 不符
+    // 直接 return），且本段与上一次 await 之间无 await，不会清掉一次随后才
+    // 失败的同码 loadData 新设的错误（那次失败发生在 await 之后，会重新设置）。
+    if (mergedRawRows.length) errorText.value = ''
   } catch {
     /* 静默，避免打断看盘 */
   }
@@ -686,6 +696,12 @@ async function loadData() {
       applySeriesFromRaw()
       applyDefaultVisibleRange()
     })
+    // 成功画图后明确清除 errorText：开头虽已清过，但两次 loadData 重叠时
+    // 先失败的那次可能比后成功这次更早写 errorText，成功这次若不清，旧错
+    // 误会残留在已画出的图上。快照已在上方校验，空数据分支在更早处 return，
+    // 不会误清“暂无 K 线数据”。（注：旧调用晚于新调用才失败的极端交错仍可能
+    // 覆写，属既有竞态，本次不扩大改动范围。）
+    errorText.value = ''
 
     if (showChip.value) {
       updateChipFromHover()
