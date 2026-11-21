@@ -538,10 +538,61 @@ func GetMaxPeriod(periods []int) int {
 	return max
 }
 
-// ValidateStockCode 验证股票代码是否有效
+// ValidateStockCode 验证股票代码是否有效（定长校验，与前端 isValidEastMoneyCode 同规则，
+// 另接受无歧义的裸码/市场前缀 A 股形式）。
+// 此前实现只看 ConvertStockCode 返回是否为空，而 ConvertStockCode 对任意非空输入
+// 几乎总返回非空（"invalid"→"INVALID"、"600500000119.SH"→"1.600500000119"），
+// 导致乱码代码可直达东财请求（见 2026-11-21 线上 600500000119.SH 事件）。
+// ConvertStockCode 本身保持宽容（它是转换器，调用方另有用途）；校验只收紧此处。
 func (receiver *EastMoneyKLineApi) ValidateStockCode(stockCode string) bool {
-	secid := receiver.ConvertStockCode(stockCode)
-	return secid != ""
+	code := CleanCodeOnly(stockCode)
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "" {
+		return false
+	}
+	// 带后缀的标准形式：A 股 6 位 + .SH/.SZ/.BJ/.SS；港股 5 位 + .HK；美股 1–5 字母 + .US
+	if strings.Contains(code, ".") {
+		parts := strings.Split(code, ".")
+		if len(parts) != 2 {
+			return false
+		}
+		num, suffix := parts[0], parts[1]
+		switch suffix {
+		case "SH", "SZ", "BJ", "SS":
+			return len(num) == 6 && validator.IsNumberStr(num)
+		case "HK":
+			return len(num) == 5 && validator.IsNumberStr(num)
+		case "US":
+			return isAllLetters(num) && len(num) <= 5
+		default:
+			return false
+		}
+	}
+	// 无后缀：只接受无歧义的 A 股形式（裸 6 位数字、SH/SZ/BJ + 6 位数字）。
+	// 裸 5 位数字（如 00700）有歧义（港股/深市），裸字母（如 AAPL）东财路径本就无法处理，均拒绝。
+	if len(code) == 6 && validator.IsNumberStr(code) {
+		return true
+	}
+	for _, p := range []string{"SH", "SZ", "BJ"} {
+		if strings.HasPrefix(code, p) && len(code) == 8 && validator.IsNumberStr(code[2:]) {
+			return true
+		}
+	}
+	return false
+}
+
+// isAllLetters 报告 s 是否全部由字母组成（空串返回 false）。
+func isAllLetters(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < 'A' || c > 'Z') && (c < 'a' || c > 'z') {
+			return false
+		}
+	}
+	return true
 }
 
 // GetKLineCount 获取指定时间段内的 K 线数量

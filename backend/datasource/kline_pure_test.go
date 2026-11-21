@@ -198,35 +198,23 @@ func TestAggregateKLineEveryN(t *testing.T) {
 	}
 }
 
-// TestValidateStockCode_KnownGap 钉住当前实现的行为，不是期望行为。
-// 现状：ValidateStockCode 只看 ConvertStockCode 返回是否为空，而
-// ConvertStockCode 对任意非空输入几乎总返回非空（见上），所以：
-//   - "invalid" -> true（与 backend/data/eastmoney_kline_api_test.go
-//     集成测试期望的 false 直接矛盾，该集成测试目前只在 -tags=integration 下跑）；
-//   - "600500000119.SH"（2026-11-21 线上乱码代码）-> true，
-//     后端完全拦不住，前端 isValidEastMoneyCode 是目前唯一防线。
-//
-// 修好 ValidateStockCode（按定长校验）时，必须把本测试的这两处期望翻转为 false。
-// 在修好之前不要“修测试”让它变绿——它变绿之日就是回归之时。
-func TestValidateStockCode_KnownGap(t *testing.T) {
+// TestValidateStockCode 定长校验：合法码 true、空/乱码/非法 false。
+// 历史：2026-11-22 前 ValidateStockCode 只看 ConvertStockCode 返回是否为空，
+// 而 ConvertStockCode 对任意非空输入几乎总返回非空，"invalid" 与 "600500000119.SH"
+// （2026-11-21 线上乱码代码）都返回 true；后端完全拦不住，前端 isValidEastMoneyCode
+// 是当时唯一防线。本测试曾以 TestValidateStockCode_KnownGap 钉住该缺陷行为，
+// 2026-11-22 ValidateStockCode 改为定长校验后翻转为期望行为；同时与
+// backend/data/eastmoney_kline_api_test.go 的集成测试期望一致（"invalid" → false）。
+func TestValidateStockCode(t *testing.T) {
 	api := &EastMoneyKLineApi{}
-	for _, code := range []string{"000001.SZ", "600519.SH", "00700.HK"} {
+	for _, code := range []string{"000001.SZ", "600519.SH", "00700.HK", "AAPL.US", "000001", "600519", "sh600519", "sz000001", "2906"} {
 		if !api.ValidateStockCode(code) {
 			t.Errorf("ValidateStockCode(%q) = false, want true", code)
 		}
 	}
-	if api.ValidateStockCode("") {
-		t.Error("ValidateStockCode(\"\") = true, want false")
-	}
-	// 以下两断言钉住当前缺陷行为；见上方注释。
-	if !api.ValidateStockCode("invalid") {
-		t.Error("KNOWN-GAP pin: ValidateStockCode(\"invalid\") currently returns true; flip to false when fixed")
-	} else {
-		t.Log("KNOWN-GAP confirmed: ValidateStockCode(\"invalid\") = true (should be false)")
-	}
-	if !api.ValidateStockCode("600500000119.SH") {
-		t.Error("KNOWN-GAP pin: ValidateStockCode(\"600500000119.SH\") currently returns true; flip to false when fixed")
-	} else {
-		t.Log("KNOWN-GAP confirmed: ValidateStockCode(\"600500000119.SH\") = true (should be false)")
+	for _, code := range []string{"", "invalid", "600500000119.SH", "600500000119", "0070.HK", "007000.HK", "ABCDEF.US", "600519.BK", "AAPL"} {
+		if api.ValidateStockCode(code) {
+			t.Errorf("ValidateStockCode(%q) = true, want false", code)
+		}
 	}
 }
