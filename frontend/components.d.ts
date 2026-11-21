@@ -12,7 +12,6 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AgentChat: typeof import('./src/components/agent-chat.vue')['default']
-    AiRecommendStocksList: typeof import('./src/components/aiRecommendStocksList.vue')['default']
     AllStockList: typeof import('./src/components/allStockList.vue')['default']
     AssistantMessage: typeof import('./src/components/chat/AssistantMessage.vue')['default']
     ChatMarkdown: typeof import('./src/components/chat/ChatMarkdown.vue')['default']
@@ -41,7 +40,6 @@ declare module 'vue' {
     Market: typeof import('./src/components/market.vue')['default']
     MarketIntelligenceDrawer: typeof import('./src/components/MarketIntelligenceDrawer.vue')['default']
     MarketIntelligenceView: typeof import('./src/components/MarketIntelligenceView.vue')['default']
-    McpServerManager: typeof import('./src/components/mcp-server-manager.vue')['default']
     MessageAnchorNav: typeof import('./src/components/chat/MessageAnchorNav.vue')['default']
     MoneyTrend: typeof import('./src/components/moneyTrend.vue')['default']
     NewsList: typeof import('./src/components/newsList.vue')['default']
@@ -52,7 +50,6 @@ declare module 'vue' {
     RouterView: typeof import('vue-router')['RouterView']
     SelectStock: typeof import('./src/components/SelectStock.vue')['default']
     Settings: typeof import('./src/components/settings.vue')['default']
-    SkillManager: typeof import('./src/components/skill-manager.vue')['default']
     Stock: typeof import('./src/components/stock.vue')['default']
     StockCard: typeof import('./src/components/StockCard.vue')['default']
     StockChangesMonitor: typeof import('./src/components/stockChangesMonitor.vue')['default']
