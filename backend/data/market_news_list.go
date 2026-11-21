@@ -448,57 +448,148 @@ func (m MarketNewsApi) GetSinaNews(crawlTimeOut uint) *[]models.Telegraph {
 	if !ok || len(rawList) == 0 {
 		return news
 	}
+	// 先解析本批快讯（不写库），再批量预取去重依据与标签：原为每条快讯一次
+	// Count、每个标签一次 FirstOrCreate、每对关联行一次 First + 一次
+	// FirstOrCreate（N+1；每批最多 20 条，最坏约 20×(1+标签数×2) 次查询）。
+	// 批量预取只覆盖本批涉及的标题/内容/标签名；循环内再用 seen 集合补上本批
+	// 已入库的行，与原先逐条 Count 能看到同批先入库的行等价（与 TelegraphList /
+	// GetNewTelegraph 在 3d0784c 中的批量修复同构）。
+	type sinaParsed struct {
+		title, content, timeStr string
+		dataTime                time.Time
+		hasTime                 bool
+		tags                    []string
+	}
+	parsed := make([]sinaParsed, 0, len(rawList))
+	contents := make([]string, 0, len(rawList))
+	titles := make([]string, 0, len(rawList))
+	tagNames := make([]string, 0)
+	seenTagName := make(map[string]bool)
 	for _, item := range rawList {
 		data, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		telegraph := models.Telegraph{Source: "新浪财经"}
 		richText, _ := data["rich_text"].(string)
 		createTime, _ := data["create_time"].(string)
-		telegraph.Content = richText
-		telegraph.Title = strutil.SubInBetween(richText, "【", "】")
-		telegraph.Time = strings.Split(createTime, " ")[1]
-		dataTime, _ := time.ParseInLocation("2006-01-02 15:04:05", createTime, time.Local)
-		if !dataTime.IsZero() {
+		p := sinaParsed{
+			content: richText,
+			title:   strutil.SubInBetween(richText, "【", "】"),
+			timeStr: strings.Split(createTime, " ")[1],
+		}
+		if dataTime, _ := time.ParseInLocation("2006-01-02 15:04:05", createTime, time.Local); !dataTime.IsZero() {
+			p.dataTime = dataTime
+			p.hasTime = true
+		}
+		if rawTags, _ := data["tag"].([]any); len(rawTags) > 0 {
+			p.tags = make([]string, 0, len(rawTags))
+			for _, tagItem := range rawTags {
+				tagMap, _ := tagItem.(map[string]any)
+				name, _ := tagMap["name"].(string)
+				p.tags = append(p.tags, name)
+				if name != "" && !seenTagName[name] {
+					seenTagName[name] = true
+					tagNames = append(tagNames, name)
+				}
+			}
+		} else {
+			p.tags = []string{}
+		}
+		if p.title == "" {
+			contents = append(contents, p.content)
+		} else {
+			titles = append(titles, p.title)
+		}
+		parsed = append(parsed, p)
+	}
+	existingContent := make(map[string]bool, len(contents))
+	if len(contents) > 0 {
+		var rows []models.Telegraph
+		db.Dao.Model(&models.Telegraph{}).Select("content").Where("content IN ?", contents).Find(&rows)
+		for _, r := range rows {
+			existingContent[r.Content] = true
+		}
+	}
+	existingTitle := make(map[string]bool, len(titles))
+	if len(titles) > 0 {
+		var rows []models.Telegraph
+		db.Dao.Model(&models.Telegraph{}).Select("title").Where("title IN ?", titles).Find(&rows)
+		for _, r := range rows {
+			existingTitle[r.Title] = true
+		}
+	}
+	tagByName := make(map[string]*models.Tags)
+	if len(tagNames) > 0 {
+		var tags []models.Tags
+		db.Dao.Model(&models.Tags{}).Where("name IN ? AND type = ?", tagNames, "sina_subject").Find(&tags)
+		for i := range tags {
+			tagByName[tags[i].Name] = &tags[i]
+		}
+	}
+	seenContent := make(map[string]bool)
+	seenTitle := make(map[string]bool)
+	for _, p := range parsed {
+		telegraph := models.Telegraph{Source: "新浪财经"}
+		telegraph.Content = p.content
+		telegraph.Title = p.title
+		telegraph.Time = p.timeStr
+		if p.hasTime {
+			dataTime := p.dataTime
 			telegraph.DataTime = &dataTime
 		}
-		rawTags, _ := data["tag"].([]any)
-		telegraph.SubjectTags = lo.Map(rawTags, func(tagItem any, index int) string {
-			tagMap, _ := tagItem.(map[string]any)
-			name, _ := tagMap["name"].(string)
-			tag := &models.Tags{
-				Name: name,
-				Type: "sina_subject",
-			}
-			db.Dao.Model(tag).Where("name=? and type=?", name, "sina_subject").FirstOrCreate(&tag)
-			return name
-		})
+		telegraph.SubjectTags = p.tags
 		if _, ok := lo.Find(telegraph.SubjectTags, func(item string) bool { return item == "焦点" }); ok {
 			telegraph.IsRed = true
 		}
 
 		if telegraph.Content != "" {
 			telegraph.SentimentResult = AnalyzeSentiment(telegraph.Content).Description
-			cnt := int64(0)
+			// 去重：查批量预取的集合 + 本批已入库的 seen 集合，与原先逐条
+			// Count 等价（原先 Count 也能看到同批先入库的行）。
 			if telegraph.Title == "" {
-				db.Dao.Model(telegraph).Where("content=?", telegraph.Content).Count(&cnt)
-			} else {
-				db.Dao.Model(telegraph).Where("title=?", telegraph.Title).Count(&cnt)
-			}
-			if cnt == 0 {
-				db.Dao.Create(&telegraph)
-				telegraphs = append(telegraphs, telegraph)
-				for _, tag := range telegraph.SubjectTags {
-					tagInfo := &models.Tags{}
-					db.Dao.Model(models.Tags{}).Where("name=? and type=?", tag, "sina_subject").First(&tagInfo)
-					if tagInfo.ID > 0 {
-						db.Dao.Model(models.TelegraphTags{}).Where("telegraph_id=? and tag_id=?", telegraph.ID, tagInfo.ID).FirstOrCreate(&models.TelegraphTags{
-							TelegraphId: telegraph.ID,
-							TagId:       tagInfo.ID,
-						})
-					}
+				if existingContent[telegraph.Content] || seenContent[telegraph.Content] {
+					continue
 				}
+				seenContent[telegraph.Content] = true
+			} else {
+				if existingTitle[telegraph.Title] || seenTitle[telegraph.Title] {
+					continue
+				}
+				seenTitle[telegraph.Title] = true
+			}
+			db.Dao.Create(&telegraph)
+			telegraphs = append(telegraphs, telegraph)
+			// 标签：先查批量预取的表，只对真正新增的标签单独 Create；
+			// 关联行一次批量 Create（新快讯的 ID 不可能已有 TelegraphTags，
+			// 与原先逐对 FirstOrCreate 等价；同标签去重后一次写入）。
+			// 注意两处与原先行为的细微差别（见 round2 报告 B-N1-1）：跳过
+			// 本批重复快讯时不再为其创建标签；空字符串标签不再建 Tags 行，
+			// 但返回的 SubjectTags 仍原样保留空字符串。
+			pairs := make([]models.TelegraphTags, 0, len(telegraph.SubjectTags))
+			seenTagID := make(map[uint]bool)
+			for _, name := range telegraph.SubjectTags {
+				if name == "" {
+					continue
+				}
+				tag, ok := tagByName[name]
+				if !ok {
+					tag = &models.Tags{
+						Name: name,
+						Type: "sina_subject",
+					}
+					db.Dao.Model(tag).Create(tag)
+					tagByName[name] = tag
+				}
+				if !seenTagID[tag.ID] {
+					seenTagID[tag.ID] = true
+					pairs = append(pairs, models.TelegraphTags{
+						TelegraphId: telegraph.ID,
+						TagId:       tag.ID,
+					})
+				}
+			}
+			if len(pairs) > 0 {
+				db.Dao.Model(models.TelegraphTags{}).Create(&pairs)
 			}
 		}
 	}
@@ -512,17 +603,37 @@ func (m MarketNewsApi) GetNews24HoursList(source string, limit int) *[]*models.T
 	} else {
 		db.Dao.Model(news).Preload("TelegraphTags").Where("created_at>?", time.Now().Add(-24*time.Hour)).Order("data_time desc,is_red desc").Limit(limit).Find(news)
 	}
+	// 批量取标签名（原为每条快讯一次 Tags 查询，N+1；与 GetTelegraphList 同构：
+	// 一次 IN 取回全部标签并按 ID 查表，每条快讯的标签 ID 排升序后映射）。
+	allTagIDs := make([]uint, 0)
+	for _, item := range *news {
+		for _, tt := range item.TelegraphTags {
+			allTagIDs = append(allTagIDs, tt.TagId)
+		}
+	}
+	tagNameByID := make(map[uint]string)
+	if len(allTagIDs) > 0 {
+		allTags := &[]models.Tags{}
+		db.Dao.Model(&models.Tags{}).Where("id in ?", allTagIDs).Order("id").Find(allTags)
+		for _, t := range *allTags {
+			tagNameByID[t.ID] = t.Name
+		}
+	}
 	// 内容去重
 	uniqueNews := make([]*models.Telegraph, 0)
 	seenContent := make(map[string]bool)
 	for _, item := range *news {
-		tags := &[]models.Tags{}
-		db.Dao.Model(&models.Tags{}).Where("id in ?", lo.Map(item.TelegraphTags, func(item models.TelegraphTags, index int) uint {
-			return item.TagId
-		})).Find(&tags)
-		tagNames := lo.Map(*tags, func(item models.Tags, index int) string {
-			return item.Name
-		})
+		ids := make([]uint, 0, len(item.TelegraphTags))
+		for _, tt := range item.TelegraphTags {
+			ids = append(ids, tt.TagId)
+		}
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		tagNames := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if name, ok := tagNameByID[id]; ok {
+				tagNames = append(tagNames, name)
+			}
+		}
 		item.SubjectTags = tagNames
 		//logger.SugaredLogger.Infof("tagNames %v ，SubjectTags：%s", tagNames, item.SubjectTags)
 		// 使用内容作为去重键值，可以考虑只使用内容的前几个字符或哈希值
@@ -534,8 +645,6 @@ func (m MarketNewsApi) GetNews24HoursList(source string, limit int) *[]*models.T
 	}
 	return &uniqueNews
 }
-
-// GetNewsListData 分页获取新闻列表，page 从 1 开始，pageSize 为每页条数（<=0 时默认 20）。返回本页去重后的列表与总条数。
 
 // GetNewsListData 分页获取新闻列表，page 从 1 开始，pageSize 为每页条数（<=0 时默认 20）。返回本页去重后的列表与总条数。
 func (m MarketNewsApi) GetNewsListData(keyWord string, startTime time.Time, page, pageSize int) (*[]*models.Telegraph, int64) {

@@ -41,6 +41,26 @@ func FormatMarketStockCode(code string) string {
 	return "sh" + clean
 }
 
+// saveStockInfoAsync 异步 upsert 一条实时行情（Count + Create/Updates）。
+// 三处调用点（港股/腾讯兜底/新浪）原为逐字相同的闭包，仅 panic 日志 tag 不同，
+// 抽成 helper 后行为不变；N+1 本身未消除（见 round2 报告 B-N1-3：
+// StockInfo.Code 只有普通 index，无唯一约束，做 ON CONFLICT 批量 upsert
+// 需先加唯一索引/迁移，故此处只做去重）。
+func saveStockInfoAsync(sd StockInfo, tag string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.SugaredLogger.Warnf("%s panic: %v", tag, r)
+		}
+	}()
+	var count int64
+	db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Count(&count)
+	if count == 0 {
+		db.Dao.Model(&StockInfo{}).Create(&sd)
+	} else {
+		db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Updates(&sd)
+	}
+}
+
 func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]StockInfo, error) {
 	normalizedCodes := make([]string, 0, len(StockCodes))
 	for _, c := range StockCodes {
@@ -89,20 +109,7 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 				continue
 			}
 			stockInfos = append(stockInfos, *stockData)
-			go func(sd StockInfo) {
-				defer func() {
-					if r := recover(); r != nil {
-						logger.SugaredLogger.Warnf("Save StockInfo panic: %v", r)
-					}
-				}()
-				var count int64
-				db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Count(&count)
-				if count == 0 {
-					db.Dao.Model(&StockInfo{}).Create(&sd)
-				} else {
-					db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Updates(&sd)
-				}
-			}(*stockData)
+			go saveStockInfoAsync(*stockData, "Save StockInfo")
 		}
 	}
 
@@ -156,20 +163,7 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 				continue
 			}
 			stockInfos = append(stockInfos, *stockData)
-			go func(sd StockInfo) {
-				defer func() {
-					if r := recover(); r != nil {
-						logger.SugaredLogger.Warnf("Save TxStockInfo panic: %v", r)
-					}
-				}()
-				var count int64
-				db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Count(&count)
-				if count == 0 {
-					db.Dao.Model(&StockInfo{}).Create(&sd)
-				} else {
-					db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Updates(&sd)
-				}
-			}(*stockData)
+			go saveStockInfoAsync(*stockData, "Save TxStockInfo")
 		}
 		return &stockInfos, nil
 	}
@@ -190,20 +184,7 @@ func (receiver StockDataApi) GetStockCodeRealTimeData(StockCodes ...string) (*[]
 		}
 		stockInfos = append(stockInfos, *stockData)
 
-		go func(sd StockInfo) {
-			defer func() {
-				if r := recover(); r != nil {
-					logger.SugaredLogger.Warnf("Save SingleStockData panic: %v", r)
-				}
-			}()
-			var count int64
-			db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Count(&count)
-			if count == 0 {
-				db.Dao.Model(&StockInfo{}).Create(&sd)
-			} else {
-				db.Dao.Model(&StockInfo{}).Where("code = ?", sd.Code).Updates(&sd)
-			}
-		}(*stockData)
+		go saveStockInfoAsync(*stockData, "Save SingleStockData")
 
 	}
 

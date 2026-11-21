@@ -129,15 +129,6 @@ func (a *MCPServerApi) List(query *models.MCPServerQuery) *models.MCPServerPageR
 	}
 }
 
-func (a *MCPServerApi) GetAll() []models.MCPServer {
-	servers := make([]models.MCPServer, 0)
-	if db.Dao == nil {
-		return servers
-	}
-	db.Dao.Where("enable = ?", true).Order("created_at DESC").Find(&servers)
-	return servers
-}
-
 func (a *MCPServerApi) EnableServer(id uint, enable bool) error {
 	if db.Dao == nil {
 		return fmt.Errorf("数据库连接未就绪")
