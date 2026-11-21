@@ -50,6 +50,7 @@ CGO_ENABLED=0 go build -o build/bin/blades-stock-server ./cmd/server
 ## 开发
 
 ```bash
+bash scripts/verify-all.sh       # 一键全量验证（推荐，含 gofmt/vet/分层/前后端测试与构建）
 go build ./...                  # 编译 Go 后端
 go vet ./...                    # 静态检查
 go test ./...                   # 单元测试

@@ -3,7 +3,8 @@
 ## Build & Verify
 - `go build ./...` — Go-only compile check (fastest)
 - `main.go` embeds `frontend/dist` (+ app icons + 使用手册） — dist 缺失时 `go build` 会报 `pattern frontend/dist: no matching files found`；先跑 `npm run build` 重建 dist（dist 是 gitignored 构建产物，不是可删的杂物）
-- `make lint` — `go vet` + `staticcheck` + `golangci-lint`
+- `make lint` — `gofmt` + `go vet` + `staticcheck`（可选，未安装时跳过；golangci-lint 未安装，不用）
+- `bash scripts/verify-all.sh` — 一键全量验证（gofmt、go vet、check-deps、go test、npm test、npm run build），改完代码后跑它
 - `make test` — unit tests only (`-run "^Test" -skip "integration"`)
 - `.\build.ps1 frontend` — build Vue 3 frontend only
 - `.\build.ps1 go` — build Go backend binary
