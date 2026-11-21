@@ -38,15 +38,6 @@ onBeforeMount(() => {
 </script>
 
 <template>
-  <!--    <n-timeline size="large"  style="text-align: left">-->
-  <!--      <n-timeline-item v-for="item in list" :key="item.date" :title="item.date"  type="info" >-->
-  <!--        <n-list>-->
-  <!--          <n-list-item v-for="l in item.list" :key="l.article_id	">-->
-  <!--            <n-text>{{l.title}}</n-text>-->
-  <!--          </n-list-item>-->
-  <!--        </n-list>-->
-  <!--      </n-timeline-item>-->
-  <!--    </n-timeline>-->
 
   <n-list
     bordered

@@ -59,14 +59,6 @@ export function consumePendingConsult(): ConsultPayload | null {
   return p
 }
 
-export function getPendingConsult(): ConsultPayload | null {
-  return pendingConsult
-}
-
-export function clearPendingConsult() {
-  pendingConsult = null
-}
-
 /**
  * 快速呼叫智能体发起深度推演（跨组件统一入口）
  */

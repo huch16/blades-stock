@@ -148,7 +148,6 @@ function handleEXPLANATION(value, _option){
     <n-thead>
       <n-tr>
         <n-th>代码</n-th>
-        <!--                <n-th width="90px">日期</n-th>-->
         <n-th width="60px">
           名称
         </n-th>
@@ -160,9 +159,6 @@ function handleEXPLANATION(value, _option){
         <n-th>龙虎榜买入额(万)</n-th>
         <n-th>龙虎榜卖出额(万)</n-th>
         <n-th>龙虎榜成交额(万)</n-th>
-        <!--                <n-th>市场总成交额(万)</n-th>-->
-        <!--                <n-th>净买额占总成交比</n-th>-->
-        <!--                <n-th>成交额占总成交比</n-th>-->
         <n-th
           width="60px"
           data-field="TURNOVERRATE"

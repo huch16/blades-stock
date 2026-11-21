@@ -78,7 +78,7 @@ const ExportPDF = defineAsyncComponent(() => import('@vavt/v3-extension').then(m
 // 轻量 K 线（含 lightweight-charts + 全量技术指标计算 + 筹码分布）体积约 134 KB，
 // 此前由 unplugin-vue-components 自动注册而**静态打进首屏入口 chunk**。
 // 它只在用户点开「轻量K线」弹层 (modalShow6) 时才需要，改为显式异步组件后，
-// 与 market.vue / allStockList.vue / FundRanking.vue 的全站既有写法保持一致，
+// 与 market.vue / FundRanking.vue 的全站既有写法保持一致，
 // 首屏入口 chunk 直接减约 134 KB (br ≈ 38 KB)。
 const StockLightweightKlineChart = defineAsyncComponent(() => import('./StockLightweightKlineChart.vue'))
 
@@ -538,7 +538,7 @@ function fetchGroupList() {
   })
 }
 
-// 关注时的分组选择下拉选项（参考形态选股 allStockList.vue）
+// 关注时的分组选择下拉选项（参考形态选股的分组选择写法）
 const followGroupOptions = computed(() => {
   const opts = [{label: '默认（不分组）', key: 0}]
   groupList.value.forEach(g => opts.push({label: g.name, key: g.ID}))

@@ -12,7 +12,6 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AgentChat: typeof import('./src/components/agent-chat.vue')['default']
-    AllStockList: typeof import('./src/components/allStockList.vue')['default']
     AssistantMessage: typeof import('./src/components/chat/AssistantMessage.vue')['default']
     ChatMarkdown: typeof import('./src/components/chat/ChatMarkdown.vue')['default']
     ChatMessage: typeof import('./src/components/chat/ChatMessage.vue')['default']
@@ -59,7 +58,6 @@ declare module 'vue' {
     StockNoticeList: typeof import('./src/components/StockNoticeList.vue')['default']
     StockResearchReportList: typeof import('./src/components/StockResearchReportList.vue')['default']
     StockSparkLine: typeof import('./src/components/stockSparkLine.vue')['default']
-    StreamingSkeleton: typeof import('./src/components/chat/StreamingSkeleton.vue')['default']
     ToolTimeline: typeof import('./src/components/chat/ToolTimeline.vue')['default']
     TradingRecordManager: typeof import('./src/components/TradingRecordManager.vue')['default']
     UplimitLadder: typeof import('./src/components/uplimitLadder.vue')['default']

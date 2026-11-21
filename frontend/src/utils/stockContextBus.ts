@@ -56,10 +56,3 @@ export function setCurrentStock(stock: { code: string; name?: string; ts_code?: 
   // 跨窗口与非 Vue 上下文事件通知
   window.dispatchEvent(new CustomEvent('blades-stock:stock-focused', { detail: updated }))
 }
-
-/**
- * 获取当前全局聚焦的股票
- */
-export function getCurrentStock(): FocusedStock | null {
-  return currentStock.value
-}

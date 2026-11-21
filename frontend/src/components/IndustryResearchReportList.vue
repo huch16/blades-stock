@@ -78,8 +78,6 @@ function handleSearch(value) {
   >
     <n-thead>
       <n-tr>
-        <!--        <n-th>代码</n-th>-->
-        <!--        <n-th>名称</n-th>-->
         <n-th>行业</n-th>
         <n-th>标题</n-th>
         <n-th>东财评级</n-th>
@@ -104,15 +102,6 @@ function handleSearch(value) {
         v-for="item in list"
         :key="item.infoCode"
       >
-        <!--        <n-td>{{item.stockCode}}</n-td>-->
-        <!--        <n-td :title="item.stockCode">-->
-        <!--          <n-popover trigger="hover" placement="right">-->
-        <!--            <template #trigger>-->
-        <!--              <n-tag type="info"  :bordered="false">{{item.stockName}}</n-tag>-->
-        <!--            </template>-->
-        <!--            <k-line-chart style="width: 800px" :code="getmMarketCode(item.market,item.stockCode)" :chart-height="500" :name="item.stockName" :k-days="20" :dark-theme="true"></k-line-chart>-->
-        <!--          </n-popover>-->
-        <!--        </n-td>-->
         <n-td>
           <n-tag
             type="info"

@@ -46,9 +46,6 @@ function showPage(htid) {
     hoverable
     clickable
   >
-    <!--    <template #header>-->
-    <!--      股吧热门-->
-    <!--    </template>-->
     <n-list-item
       v-for="(item, index) in list"
       :key="index"

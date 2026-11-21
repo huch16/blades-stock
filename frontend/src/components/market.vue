@@ -785,10 +785,6 @@ function goToIntelligence(type) {
           display-directive="show:lazy"
           :animated="false"
         >
-          <!--          <n-tab-pane name="西部数据" tab="西部数据">-->
-          <!--            <StockLightweightKlineChart code="105.WDC" :chart-height="panelHeight" stock-name="西部数据"-->
-          <!--                                        :dark-theme="true"></StockLightweightKlineChart>-->
-          <!--          </n-tab-pane>-->
 
           <n-tab-pane
             name="上证指数"
