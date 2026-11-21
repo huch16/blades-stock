@@ -10,6 +10,7 @@ import { useMessage } from 'naive-ui'
 import { onBeforeMount, onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { setCurrentStock } from '../utils/stockContextBus'
+import { toEastMoneyCode, stripNameCodeFormat, filterStockOptions } from '../utils/stockSearch'
 
 const route = useRoute()
 const message = useMessage()
@@ -18,6 +19,22 @@ const selectedCode = ref('')
 const stockList = ref([])
 const stockListLoaded = ref(false)
 const options = ref([])
+
+// 搜索竞速守卫：handleSearch / findStockList 都是异步的，旧调用的慢响应
+// （如列表未加载时 findStockList 的远程回包、handleSearch 的远程查名）
+// 不得覆盖新调用的结果；只有最新一次调用能提交。
+let searchGen = 0
+let findStockGen = 0
+// 方向键是否明确选中过联想建议：naive-ui 的 n-auto-complete 会把下拉首项
+// 自动设为 pending（auto-pending），回车会选中它。只在用户按过方向键后，
+// 回车才按建议走；否则回车/放大镜一律按输入原文解析（问题 2）。
+let arrowNavSelected = false
+// 方向键选中后回车：naive-ui 的 keydown 选中建议后，keyup.enter 还会再触发一次，
+// 用此标志跳过那次重复解析（此时输入框已被改写为建议的 label）。
+let suppressEnterKeyup = false
+
+// 联想列表一变，方向键选中即失效（旧建议已不在列表里），回车回到原文解析。
+watch(options, () => { arrowNavSelected = false })
 const darkTheme = ref(false)
 const chartHeight = ref(Math.max(450, window.innerHeight - 150))
 const recentStocks = ref([])
@@ -78,54 +95,26 @@ function handleDiagnose() {
   diagnosisDrawerVisible.value = true
 }
 
-function toEastMoneyCode(code) {
-  if (!code) return ''
-  let c = String(code).trim()
-  // 兼容 "天目药业 - 600671.SH" 或 "天目药业 600671"
-  for (const sep of [' - ', '-', ' ']) {
-    if (c.includes(sep)) {
-      const parts = c.split(sep)
-      c = parts[parts.length - 1].trim()
-    }
-  }
-  if (/\.(SH|SZ|BJ|HK|US|SS)$/i.test(c)) return c.toUpperCase()
-  const lower = c.toLowerCase()
-  if (lower.startsWith('sh')) return lower.slice(2) + '.SH'
-  if (lower.startsWith('sz')) return lower.slice(2) + '.SZ'
-  if (lower.startsWith('bj')) return lower.slice(2) + '.BJ'
-  if (lower.startsWith('hk')) return lower.slice(2).toUpperCase() + '.HK'
-  if (lower.startsWith('us')) return lower.slice(2).toUpperCase() + '.US'
-  if (lower.startsWith('gb_')) return lower.slice(3).toUpperCase() + '.US'
-  if (/^\d+$/.test(c)) {
-    const d = c[0]
-    if (d === '6' || d === '5') return c + '.SH' // 6: 沪市主板/科创板; 5: 沪市ETF/封闭式基金 (如510300, 588000)
-    if (d === '0' || d === '3' || d === '1') return c + '.SZ' // 0: 深市主板; 3: 创业板; 1: 深市ETF/LOF (如159915)
-    if (d === '4' || d === '8' || d === '9') return c + '.BJ' // 北交所 / 新三板
-    return c + '.SZ'
-  }
-  // 纯字母代码视为美股（如 AAPL → AAPL.US）
-  if (/^[a-zA-Z]+$/.test(c)) return c.toUpperCase() + '.US'
-  return ''
-}
-
 async function findStockList(val) {
+  // 每次调用都推进代次，使之前未完成的远程请求回包后失效。
+  const myGen = ++findStockGen
   if (!val || !val.trim()) {
     options.value = []
     return
   }
-  const q = val.trim().toLowerCase()
+  const q = val.trim()
   // 1. 先在内存列表 stockList 中匹配 (支持名称、代码、纯数字symbol、拼音缩写cnspell)
-  let filtered = stockList.value.filter(item =>
-    (item.name && item.name.toLowerCase().includes(q)) ||
-    (item.ts_code && item.ts_code.toLowerCase().includes(q)) ||
-    (item.symbol && item.symbol.toLowerCase().includes(q)) ||
-    (item.cnspell && item.cnspell.toLowerCase().includes(q))
-  ).slice(0, 30)
+  let filtered = filterStockOptions(stockList.value, q, 30)
 
   // 2. 若内存无结果或全量列表尚未加载完毕，动态向后端 API 请求模糊搜索
   if (filtered.length === 0) {
     try {
-      const remote = await GetStockList(val.trim())
+      const remote = await GetStockList(q)
+      // 旧输入的慢回包不得覆盖新输入的联想列表：列表未加载时每次按键都会发
+      // 远程请求，先发的 “0”（命中上千条、最慢）可能比后发的 “000001” 晚到，
+      // 此前它会把 options 写回成 “0” 的结果，首项被回车选中即误跳（问题 2）。
+      if (myGen !== findStockGen) return
+      if (searchQuery.value.trim() !== q) return
       if (Array.isArray(remote) && remote.length > 0) {
         filtered = remote.slice(0, 30)
       }
@@ -134,21 +123,18 @@ async function findStockList(val) {
     }
   }
 
+  if (myGen !== findStockGen) return
   options.value = filtered.map(item => ({
     label: (item.name || '') + ' - ' + (item.ts_code || item.symbol || ''),
     value: item.ts_code || item.symbol,
   }))
 }
 
-// 剥掉 “名字 (代码)” 格式，取括号内的东财代码；无括号时原样返回。
-// handleSearch 会把框写成 “平安银行 (000001.SZ)”，不剥掉就解析失败。
-function stripNameCodeFormat(input) {
-  const m = String(input).trim().match(/\(\s*([A-Za-z0-9]{2,}\.(?:SH|SZ|BJ|HK|US|SS))\s*\)\s*$/i)
-  if (m) return m[1]
-  return String(input).trim()
-}
-
 async function handleSearch(value, nameHint = '') {
+  // 每次调用都推进代次：回车与放大镜可能连续触发两次 handleSearch，
+  // 旧调用的慢响应（远程查名）不得覆盖新调用的结果（问题 2：放大镜点击
+  // 后回车的误选曾把点击的结果覆盖掉）。
+  const myGen = ++searchGen
   if (!value) return
   // 剥掉 handleSearch 自己写出的 “名字 (代码)” 格式（如 “贵州茅台 (000001.SZ)”），
   // 否则 toEastMoneyCode 按空格切分会得到 “(000001.SZ)” 而解析失败，导致切不动股票。
@@ -181,6 +167,7 @@ async function handleSearch(value, nameHint = '') {
     if (!matched) {
       try {
         const remote = await GetStockList(raw)
+        if (myGen !== searchGen) return
         if (Array.isArray(remote) && remote.length > 0) {
           matched = remote[0]
         }
@@ -202,14 +189,17 @@ async function handleSearch(value, nameHint = '') {
       // 本地列表还没加载完或查不到时，向后端查一次拿权威名称，
       // 否则名称只能等列表加载完才纠正，中间会显示旧名或代码。
       targetName = await lookupStockName(directEmCode)
+      if (myGen !== searchGen) return
     }
   }
 
   if (!directEmCode) {
+    if (myGen !== searchGen) return
     unsupportedCode.value = true
     return
   }
 
+  if (myGen !== searchGen) return
   unsupportedCode.value = false
   selectedCode.value = directEmCode
   // 名称不再单独存一份可漂移的状态：先把解析到的名字写进历史记录，
@@ -220,6 +210,56 @@ async function handleSearch(value, nameHint = '') {
   addToRecent(directEmCode, targetName)
   setCurrentStock({ code: directEmCode, name: selectedName.value })
   searchQuery.value = selectedName.value ? `${selectedName.value} (${directEmCode})` : directEmCode
+}
+
+// 搜索框 keydown 拦截（经 :input-props 挂在原生 input 上，在事件冒泡到
+// naive-ui 的 auto-complete 根节点之前触发；见 naive-ui 2.44.1
+// AutoComplete.handleKeyDown：回车时若下拉有 pending 项就会选中它）。
+// naive-ui 的 NInternalSelectMenu 以 auto-pending: true 渲染，联想列表一变
+// 就把首项设为 pending（getNode(输入文本) 查不到 → getFirstAvailableNode()），
+// 且鼠标悬停也会改 pending——两者都不是用户的明确选中。
+// - 输入法组合中（isComposing）时不动，让输入法与 naive-ui 自行处理；
+// - 方向键：只记录“用户明确用方向键选中过建议”，放行给 naive-ui 移动 pending；
+// - 回车：方向键选中过 → 放行给 naive-ui 选中 pending 建议，并抑制随后 keyup
+//   的重复解析；否则 → 拦截掉 naive-ui 的自动选中，随后 keyup 按输入原文解析。
+function handleSearchKeydown(e) {
+  if (e.isComposing) return
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (options.value.length > 0) arrowNavSelected = true
+    return
+  }
+  if (e.key === 'Enter') {
+    if (arrowNavSelected) {
+      suppressEnterKeyup = true
+      return
+    }
+    e.stopPropagation()
+  }
+}
+
+// keyup.enter：按输入原文解析（精确代码优先于联想建议）。
+// 方向键选中后回车走 on-select，本函数跳过，避免对已被改写为建议 label 的
+// 输入框再解析一次。
+function handleSearchEnter() {
+  if (suppressEnterKeyup) {
+    suppressEnterKeyup = false
+    return
+  }
+  handleSearch(searchQuery.value)
+}
+
+// 联想建议被明确选中时才触发：点击下拉项，或方向键选中后回车。
+// （直接回车时 handleSearchKeydown 已拦截 naive-ui 的自动选中，
+// 所以这里不会收到“首项自动高亮”的误触发。）
+function handleSelectOption(value) {
+  arrowNavSelected = false
+  handleSearch(value)
+}
+
+// 输入框失焦：菜单关闭，方向键选中随之失效；回车回到原文解析。
+function onSearchBlur() {
+  arrowNavSelected = false
+  suppressEnterKeyup = false
 }
 
 function addToRecent(code, name) {
@@ -439,12 +479,14 @@ onBeforeUnmount(() => {
             <n-auto-complete
               v-model:value="searchQuery"
               :options="options"
+              :input-props="{ onKeydown: handleSearchKeydown }"
               placeholder="搜索股票/代码/拼音..."
               clearable
               size="small"
-              :on-select="handleSearch"
+              :on-select="handleSelectOption"
               @update:value="findStockList"
-              @keyup.enter="handleSearch(searchQuery)"
+              @keyup.enter="handleSearchEnter"
+              @blur="onSearchBlur"
             />
             <n-button
               size="small"
