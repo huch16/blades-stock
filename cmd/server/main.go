@@ -25,8 +25,8 @@ import (
 )
 
 var (
-	// Version 编译注入版本号（默认 3.0.0）
-	Version       = "3.0.0"
+	// Version 编译注入版本号（默认 3.2.0，与 package.json / wails.json / main.go 保持一致）
+	Version       = "3.2.0"
 	VersionCommit = "release"
 
 	portFlag    = flag.String("port", "8000", "Web server listening port")
@@ -338,6 +338,13 @@ func main() {
 	quantService := services.NewQuantService()
 	agentService := services.NewAgentService()
 	settingsService := services.NewSettingsService()
+
+	// 将编译注入的版本号同步到 SettingsService，使 Web 端 GetVersionInfo
+	// 与桌面端（main.go 的 Version）一致，不再各自写死
+	if vi := settingsService.GetVersionInfo(); vi != nil {
+		vi.Version = Version
+		settingsService.SetVersionInfo(vi)
+	}
 
 	// 挂载云端 SSE 广播作为 Agent 默认流式消息发射器与智能研报/价格告警广播钩子
 	agentService.SetDefaultEmitter(globalSSEHub.Broadcast)
