@@ -17,10 +17,6 @@ type SkillChangeRequest struct {
 	ReviewedAt time.Time `json:"reviewedAt,omitempty"`                   // 审批时间
 }
 
-func (SkillChangeRequest) TableName() string {
-	return "skill_change_requests"
-}
-
 // SkillChangeQuery 分页查询参数
 type SkillChangeQuery struct {
 	Page       int    `form:"page" json:"page"`                       // 页码

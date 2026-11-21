@@ -12,8 +12,3 @@ type IndexManifest struct {
 	IndexedAt   time.Time `gorm:"not null" json:"indexedAt"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
-
-// TableName 自定义表名
-func (IndexManifest) TableName() string {
-	return "index_manifests"
-}

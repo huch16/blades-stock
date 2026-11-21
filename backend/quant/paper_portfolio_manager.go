@@ -399,52 +399,6 @@ func (m *PaperPortfolioManager) UpdateDailyNAV() (*models.PaperDailyNAV, error) 
 }
 
 // CheckAutoExitSignals 检查止损/止盈主动风控平仓信号
-func (m *PaperPortfolioManager) CheckAutoExitSignals() ([]models.PaperTradeOrder, error) {
-	if db.Dao == nil {
-		return nil, fmt.Errorf("database not initialized")
-	}
-
-	p, err := m.GetOrCreateDefaultPortfolio()
-	if err != nil {
-		return nil, err
-	}
-
-	var positions []models.PaperPosition
-	db.Dao.Where("portfolio_id = ?", p.ID).Find(&positions)
-
-	var executedOrders []models.PaperTradeOrder
-
-	for _, pos := range positions {
-		latestPrice := fetchLatestStockPrice(pos.StockCode)
-		if latestPrice <= 0 {
-			continue
-		}
-
-		// 1. 击穿止损线风控平仓
-		if pos.StopLossPrice > 0 && latestPrice <= pos.StopLossPrice {
-			order, err := m.ExecuteVirtualSell(pos.StockCode, latestPrice, pos.Shares, "STOP_LOSS")
-			if err == nil && order != nil {
-				executedOrders = append(executedOrders, *order)
-				logger.SugaredLogger.Warnf("[PaperPortfolio] 触发纪律止损强平: %s 现价 %.2f <= 止损线 %.2f",
-					pos.StockName, latestPrice, pos.StopLossPrice)
-			}
-			continue
-		}
-
-		// 2. 达到目标止盈线止盈平仓
-		if pos.TakeProfitPrice > 0 && latestPrice >= pos.TakeProfitPrice {
-			order, err := m.ExecuteVirtualSell(pos.StockCode, latestPrice, pos.Shares, "TAKE_PROFIT")
-			if err == nil && order != nil {
-				executedOrders = append(executedOrders, *order)
-				logger.SugaredLogger.Infof("[PaperPortfolio] 达成目标收益止盈平仓: %s 现价 %.2f >= 目标价 %.2f",
-					pos.StockName, latestPrice, pos.TakeProfitPrice)
-			}
-		}
-	}
-
-	return executedOrders, nil
-}
-
 // GetPortfolioStats 获取综合报表
 func (m *PaperPortfolioManager) GetPortfolioStats() (*models.PaperPortfolioStats, error) {
 	p, err := m.GetOrCreateDefaultPortfolio()

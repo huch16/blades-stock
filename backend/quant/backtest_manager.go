@@ -210,17 +210,7 @@ func (m *BacktestManager) RunSingleReportBacktest(r models.AIResponseResult) (*m
 // ============================================================================
 
 // RunStrategyBacktest 对单只股票运行策略回测
-func (m *BacktestManager) RunStrategyBacktest(stockCode string, strategy Strategy, days int, initCash float64) (*BacktestResult, error) {
-	svc := NewVectorBacktestService()
-	return svc.RunStockBacktest(stockCode, strategy, days, initCash)
-}
-
 // RunStrategyGridSearch 对单只股票运行参数网格扫描
-func (m *BacktestManager) RunStrategyGridSearch(stockCode string, strategies []Strategy, days int, initCash float64) (*GridSearchResult, error) {
-	svc := NewVectorBacktestService()
-	return svc.RunStockGridSearch(stockCode, strategies, days, initCash)
-}
-
 // ============================================================================
 // 统计查询
 // ============================================================================

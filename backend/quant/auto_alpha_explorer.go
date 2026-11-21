@@ -148,28 +148,6 @@ func (e *AutoAlphaExplorer) ExploreETFMomentumParams(targetCodes []string) (*mod
 }
 
 // RunNightlyAutoAlphaExploration 批量执行全资产池夜间参数进化
-func (e *AutoAlphaExplorer) RunNightlyAutoAlphaExploration() ([]models.AutoAlphaProposal, error) {
-	var proposals []models.AutoAlphaProposal
-
-	pools := []struct {
-		Name  string
-		Codes []string
-	}{
-		{"科技成长ETF池", []string{"512480", "159915", "515050", "588000"}},
-		{"大盘价值ETF池", []string{"510300", "510050", "510500"}},
-		{"顺周期制造池", []string{"512880", "512660", "512400"}},
-	}
-
-	for _, p := range pools {
-		prop, err := e.ExploreETFMomentumParams(p.Codes)
-		if err == nil && prop != nil {
-			proposals = append(proposals, *prop)
-		}
-	}
-
-	return proposals, nil
-}
-
 // GetActiveProposals 获取最近的策略优化提案列表
 func (e *AutoAlphaExplorer) GetActiveProposals(limit int) ([]models.AutoAlphaProposal, error) {
 	if db.Dao == nil {
