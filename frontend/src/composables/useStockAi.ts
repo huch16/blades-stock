@@ -2,6 +2,7 @@
 // 报告存图 / 存 Markdown / 存 Word。
 // 由 stock.vue 抽出（R-22b），逻辑逐字搬运；共享状态与服务由组件以 ctx 传入。
 import { consultAgent } from '../utils/agentControlBus'
+import { Environment } from '../../wailsjs/runtime'
 import {
   GetAIResponseResult,
   NewChatStream,

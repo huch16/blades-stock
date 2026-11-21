@@ -4,6 +4,7 @@
 // defaultLatestRawRow 以原样传入。watchers 随功能一起搬入本文件。
 import { computed, nextTick, ref, watch } from 'vue'
 import { LineStyle } from 'lightweight-charts'
+import { CLR_FALL, CLR_RISE } from '../components/kline/constants'
 import { parseNumStr } from '../components/kline/format'
 
 export function useKlineLongPosition(ctx) {
