@@ -1541,7 +1541,14 @@ const handlePageSizeChange = (size) => {
 const handleExecute = async (row) => {
   try {
     const result = await ExecuteCronTaskNow(row.id)
-    message.success(result)
+    // 后端是 fire-and-forget：成功时返回「任务执行中」，任务不存在时返回
+    // 「任务不存在：...」；旧代码不论返回什么都弹 success，失败也被报成成功。
+    const text = String(result || '')
+    if (/不存在|失败|错误/.test(text)) {
+      message.error(text)
+    } else {
+      message.success(text || '任务执行中')
+    }
   } catch (error) {
     message.error('执行任务失败：' + error.message)
   }

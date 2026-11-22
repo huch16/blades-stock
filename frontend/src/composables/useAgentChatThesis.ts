@@ -224,15 +224,19 @@ async function handleSaveThesisFromMsg(msg: ChatMessage) {
 
 // 导出单条 AI 投研回答为高清长图
 async function handleExportImage(msg: ChatMessage) {
-  const anchorId = 'msg-anchor-' + msg.id
-  const el = document.getElementById(anchorId) || document.getElementById('msg-item-' + msg.id)
+  // 消息 DOM 节点的真实 id 是 AssistantMessage/UserMessage 里的 `msg-<id>`
+  // （anchorId = `msg-${message.id}`）。旧代码找 `msg-anchor-<id>` /
+  // `msg-item-<id>`，两个 id 在任何地方都不存在，导致导出图片永远报
+  // 「未找到对应消息 DOM 节点」。同时 .t-chat__message-item 是已拆除的
+  // TDesign 残留类名，一并修正为当前真实的 .msg-wrapper。
+  const el = document.getElementById('msg-' + msg.id)
   if (!el) {
     notifyWarning('未找到对应消息 DOM 节点，请重试')
     return
   }
 
-  // 查找最近的 .t-chat__message-item 或 .assistant-msg 容器
-  const target = (el.closest('.t-chat__message-item') || el.closest('.assistant-msg') || el) as HTMLElement
+  // 导出整条消息卡片（头像 + 正文 + 指标），而不仅是正文区
+  const target = (el.closest('.msg-wrapper') || el) as HTMLElement
 
   const savedStyles: Array<{ el: HTMLElement; overflow: string; overflowY: string; height: string; maxHeight: string }> = []
   let p = target.parentElement

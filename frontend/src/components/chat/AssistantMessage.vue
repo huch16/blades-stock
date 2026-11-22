@@ -52,18 +52,7 @@
         @copy-result="handleCopyToolResult"
       />
 
-      <!-- 4. 结构化报告（可折叠，默认折叠） -->
-      <CollapsibleSection
-        v-if="jsonMarkdown"
-        title="📊 结构化报告"
-        :expanded="expandedReport"
-        @toggle="expandedReport = !expandedReport"
-        class="section-report"
-      >
-        <ChatMarkdown :content="jsonMarkdown" />
-      </CollapsibleSection>
-
-      <!-- 5. 最终回答（主内容，始终展示） -->
+      <!-- 4. 最终回答（主内容，始终展示） -->
       <div class="msg-main-content" :id="anchorId">
         <ChatMarkdown v-if="content" :content="content" />
         <div v-else-if="isStreaming" class="streaming-placeholder">
@@ -87,7 +76,7 @@
           <div class="empty-title">⚠️ 模型没有给出正文回答</div>
           <div v-if="reasoning || rawReasoning">
             本轮模型产出了<b>思考内容</b>但没有写出最终答案，思考过程已折叠在上方
-            <b>「💭 思考过程」</b>中。
+            <b>「🧠 思考过程」</b>中。
             <div class="empty-hint-title">怎么办：</div>
             <ol>
               <li>到「设置 → AI模型注册表」关闭该卡片的<b>「深度思考」</b>后重试（最常见原因：思考吃掉了全部输出预算）</li>
@@ -115,8 +104,12 @@
         </div>
 
         <!-- 流式收尾异常提示：必须在流式结束后仍可见，
-             否则用户只看到“回复突然结束”，无从判断原因。 -->
-        <div v-if="message.streamNotice && !isStreaming" class="stream-notice">
+             否则用户只看到“回复突然结束”，无从判断原因。
+             看门狗超时（streamTimeout）时例外：提示与「继续等待/停止」按钮
+             必须在流式进行中就可见，否则用户永远点不到它们
+             （旧条件 `&& !isStreaming` 把超时提示藏到流结束之后，
+             而 finalizeStream 又会把 streamTimeout 清掉）。 -->
+        <div v-if="message.streamNotice && (!isStreaming || message.streamTimeout)" class="stream-notice">
           {{ message.streamNotice }}
           <!-- 看门狗超时：渲染**真实按钮**并向外 emit，
                绝不把 HTML 拼进 streamNotice（那会被 {{ }} 当成纯文本原样显示）。 -->
@@ -238,7 +231,6 @@ const hasStockThesisPotential = computed(() => {
 const content = computed(() => stripAllAgentActionBlocks(props.message.content || ''))
 const reasoning = computed(() => props.message.reasoning || '')
 const rawReasoning = computed(() => props.message.rawReasoning || '')
-const jsonMarkdown = computed(() => props.message.jsonMarkdown || '')
 const steps = computed(() => props.message.steps || [])
 const toolCalls = computed(() => props.message.toolCalls || [])
 const actions = computed(() => props.message.actions || [])
@@ -289,7 +281,6 @@ function handleTriggerAction(act: any) {
 const expandedReasoning = ref(false)
 const expandedSteps = ref(false)
 const expandedTools = ref(false)
-const expandedReport = ref(false)
 
 // 如果正在流式，自动展开思考过程
 watch(() => props.isStreaming, (val) => {

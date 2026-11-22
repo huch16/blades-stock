@@ -136,10 +136,14 @@ function callAgentForDeepAnalysis() {
   let contextText = `标的代码: ${code}, 标的名称: ${name}\n`
   if (diagnosisData.value) {
     const d = diagnosisData.value
-    contextText += `量化综合评分: ${d.totalScore || '未知'}分\n`
-    if (d.advice) contextText += `量化操作建议: ${d.advice}\n`
-    if (d.supportPrice || d.resistancePrice) {
-      contextText += `技术关键位: 支撑位 ${d.supportPrice || '--'} / 阻力位 ${d.resistancePrice || '--'}\n`
+    // 注意字段名以后端 quant.StockDiagnosisResult 为准：综合评分是 overallScore、
+    // 操作建议是 suggestion、关键价位是 targetPrice/stopLossPrice；
+    // 旧代码用的 totalScore/advice/supportPrice/resistancePrice 后端根本没有，
+    // 导致发给 Agent 的上下文里评分恒为「未知」、建议与关键位全部缺失。
+    contextText += `量化综合评分: ${d.overallScore ?? '未知'}分\n`
+    if (d.suggestion) contextText += `量化操作建议: ${d.suggestion}\n`
+    if (d.targetPrice || d.stopLossPrice) {
+      contextText += `技术关键位: 第一目标价 ${d.targetPrice || '--'} / 止损价 ${d.stopLossPrice || '--'}\n`
     }
   }
   if (thesisData.value) {
@@ -227,7 +231,8 @@ async function fetchDiagnosis(targetCode) {
     return
   }
 
-  lastDiagnosisTime.set(code, now)
+  // 注意：时间戳只在成功后才写。旧代码先写时间戳再请求，请求一旦失败，
+  // 30 秒内任何重试都会被静默吞掉（只有一条 console 日志），用户只能干等。
   diagnosing.value = true
   loading.value = true
 
@@ -243,6 +248,7 @@ async function fetchDiagnosis(targetCode) {
     if (res) {
       diagnosisData.value = res
       if (res.stockName) activeName.value = res.stockName
+      lastDiagnosisTime.set(code, Date.now())
     } else {
       message.error('量化诊断返回空数据')
     }

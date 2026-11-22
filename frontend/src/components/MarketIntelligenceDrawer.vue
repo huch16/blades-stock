@@ -483,6 +483,10 @@ function selectSerenityPreset(preset) {
 }
 
 let pollTimer = null
+// 生成代次：每次 generate() 自增。已“停止等待”或被新一轮取代的旧生成，
+// 其 RPC 回来后必须直接丢弃——旧代码无此守卫，旧生成晚到时会覆盖新一轮
+// 已展示的报告、清掉新一轮的 loading/互斥锁，甚至用旧 startTime 重开轮询。
+let generationSeq = 0
 
 /**
  * 统一的「本次生成已结束」收尾：清轮询、清后台进度条、解除 loading。
@@ -513,7 +517,7 @@ function endGeneration() {
 // 用户因此长期以为"每一步都不出结果"。
 const backgroundStatus = ref('')
 
-function startPollingForCompletion(tabKey, startTime) {
+function startPollingForCompletion(tabKey, startTime, seq) {
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
@@ -528,6 +532,12 @@ function startPollingForCompletion(tabKey, startTime) {
   const maxAttempts = 120 // 最长轮询 600 秒
 
   pollTimer = setInterval(async () => {
+    // 已被新一轮生成取代：停掉本轮询，绝不碰新一轮的报告与 loading 状态
+    if (seq !== generationSeq) {
+      clearInterval(pollTimer)
+      pollTimer = null
+      return
+    }
     attempts++
     const waited = Math.round((Date.now() - startTime) / 1000)
     backgroundStatus.value = `大模型深度推演中… 已等待 ${waited} 秒（深度研报通常需要 4~10 分钟，请保持页面打开）`
@@ -582,6 +592,7 @@ async function generate() {
   tabLoading[currentTab.value] = true
   generatingTab.value = currentTab.value
   const startTime = Date.now()
+  const mySeq = ++generationSeq
   message.info(`正在生成【${currentTitle.value}】，多Agent量化模型深度推演中...`)
 
   try {
@@ -600,12 +611,16 @@ async function generate() {
       )
     }
 
+    // 旧生成晚到：已被用户「停止等待」后重开的新一轮取代，直接丢弃，
+    // 绝不覆盖新一轮的报告、loading 与互斥锁（见 generationSeq 说明）。
+    if (mySeq !== generationSeq) return
+
     // 后端"同步窗口内未完成、已转后台"的明确信号（market_report_async.go）。
     // 生产入口约 20s 硬切断，研报推演常态 40~90s，这是常规路径而非异常：
     // 必须转入轮询等后台结果，而不是把空报告当残损弹给用户。
     if (res && res.inBackground) {
       message.loading(res.statusText || '大模型深度推演中，系统已转入后台持续生成...', { duration: 8000 })
-      startPollingForCompletion(currentTab.value, startTime)
+      startPollingForCompletion(currentTab.value, startTime, mySeq)
       return
     }
 
@@ -626,6 +641,8 @@ async function generate() {
       endGeneration()
     }
   } catch (err) {
+    // 旧生成晚到的报错同样丢弃（见 generationSeq 说明）
+    if (mySeq !== generationSeq) return
     console.error('generate error:', err)
     const errMsg = String(err?.message || err)
     // 弹性容错机制：大模型深度推演因长文本容易触发反向代理（如 Nginx）的 60s 超时 (502)
@@ -650,7 +667,7 @@ async function generate() {
       errMsg.includes('context canceled')
     ) {
       message.loading('大模型深度推演耗时较长（通常需 40~90 秒），上游代理连接已断开，系统已自动转入后台持续生成中...', { duration: 8000 })
-      startPollingForCompletion(currentTab.value, startTime)
+      startPollingForCompletion(currentTab.value, startTime, mySeq)
       return
     } else {
       message.error(`研报生成失败: ${errMsg}。请检查 AI 配置是否有效，或切换其他大模型重试。`)

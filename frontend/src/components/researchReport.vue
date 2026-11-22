@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, h, onBeforeMount, onMounted, ref, reactive } from 'vue'
 import { GetAIResponseResultList, GetConfig, SaveAsMarkdown, DeleteAIResponseResult } from "../../wailsjs/go/main/App"
-import { NButton, NEllipsis, NText, useMessage } from "naive-ui"
+import { NButton, NEllipsis, NText, useMessage, useDialog } from "naive-ui"
 // MdPreview 只在报告弹窗里用，改为异步加载，避免 /research 路由入口就带上
 // md-editor-v3 + CodeMirror 约 2.8MB（与 stock.vue 的写法一致）
 const MdPreview = defineAsyncComponent(() => import('md-editor-v3').then(m => {
@@ -11,6 +11,7 @@ const MdPreview = defineAsyncComponent(() => import('md-editor-v3').then(m => {
 import { sanitizeMarkdownHtml } from '../utils/sanitize'
 
 const message = useMessage()
+const dialog = useDialog()
 const mdPreviewRef = ref(null)
 
 const editorDataRef = reactive({
@@ -151,7 +152,6 @@ onMounted(() => {
   query({
     page: 1,
     pageSize: paginationReactive.pageSize,
-    order: "desc",
     keyword: paginationReactive.keyword || "",
     startDate,
     endDate
@@ -185,7 +185,6 @@ function showReport(row) {
 function query({
   page = 1,
   pageSize = 12,
-  order = 'desc',
   keyword = "",
   startDate = "",
   endDate = ""
@@ -194,10 +193,9 @@ function query({
     GetAIResponseResultList({
       page: page,
       pageSize: pageSize,
-      // 修复：order 参数此前被声明却从未使用，请求体中硬编码为 "desc"，
-      // 导致调用方传入的排序方向被静默忽略。现按签名契约如实透传（当前所有调用方
-      // 均传 "desc"，因此对外行为不变，仅消除潜在陷阱）。
-      order: order,
+      // 注意：不要再传 order——后端 models.AIResponseResultQuery 根本没有
+      // Order 字段，wailsjs 绑定里也没有，传了也会被静默丢弃；排序由后端
+      // 在 ai_response_result_api.go 里硬编码为 created_at DESC。
       modelName: keyword,
       question: keyword,
       stockName: keyword,
@@ -234,7 +232,6 @@ function handlePageChange(currentPage) {
     query({
       page: currentPage,
       pageSize: paginationReactive.pageSize,
-      order: "desc",
       keyword: paginationReactive.keyword || "",
       startDate,
       endDate
@@ -256,7 +253,6 @@ function handleSearch() {
     query({
       page: 1,
       pageSize: paginationReactive.pageSize,
-      order: "desc",
       keyword: paginationReactive.keyword || "",
       startDate,
       endDate
@@ -315,13 +311,23 @@ async function copyToClipboard() {
 
 function deleteAIResponseResult(id) {
   if (!id) return
-  DeleteAIResponseResult(id).then(result => {
-    if (result) {
-      message.success(result)
+  // 删除是软删除但不可逆操作（无回收站入口），此前点一下直接删，
+  // 误删只能重跑 AI 生成；改为二次确认。
+  dialog.warning({
+    title: '确认删除',
+    content: '确定要删除这条 AI 分析报告吗？删除后无法恢复。',
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      DeleteAIResponseResult(id).then(result => {
+        if (result) {
+          message.success(result)
+        }
+        handleSearch()
+      }).catch(err => {
+        message.error('删除失败: ' + (err?.message || err))
+      })
     }
-    handleSearch()
-  }).catch(err => {
-    message.error('删除失败: ' + (err?.message || err))
   })
 }
 </script>
@@ -383,10 +389,7 @@ function deleteAIResponseResult(id) {
       />
     </n-spin>
     <template #footer>
-      <n-flex
-        ref="tipsRef"
-        justify="space-between"
-      >
+      <n-flex justify="space-between">
         <n-text
           v-if="editorDataRef.chatId"
           type="info"

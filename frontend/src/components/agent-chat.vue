@@ -594,7 +594,6 @@
       <!-- 输入框主体 -->
       <div class="input-sender-box">
         <ChatSender
-          ref="chatSenderRef"
           v-model="inputValue"
           :placeholder="configOptions.length ? '输入个股代码/名称、ETF轮动需求或选股策略... (Enter发送，Shift+Enter换行)' : '⚠️ 请先选择或在设置中添加 AI 模型配置'"
           :loading="isStreaming"
@@ -1127,9 +1126,11 @@ const FINISH_REASON_NOTICE: Record<string, string> = {
 //
 // ⚠️ 阈值必须大于**最慢一次真实运行**，否则会把仍在正常推演的任务掐死。
 // 踩坑记录：初版取 180s，生产实测慢速模型（NVIDIA）单次流水线要
-//   283.5s / 382.8s / 422.7s。现取 300s（5 分钟）：显著高于实测最坏
-//   422.7s，又短于"真的该放弃"的尺度。若将来出现更慢的模型，请同步
-//   上调本值。
+//   283.5s / 382.8s / 422.7s。现取 300s（5 分钟）：仍**低于**实测最坏
+//   422.7s，因此慢模型会在第 5 分钟误触发一次“长时间未收到输出”提示；
+//   但这里超时只提示、不掐断（用户可点「继续等待」），所以误报的代价
+//   是一次多余的提示而非一次白费的推理。若将来出现更慢的模型，请同步
+//   上调本值（或改成按模型区分的阈值）。
 //
 // 设计原则：看门狗超时时**不直接终止流**，而是给用户选择"继续等待"
 // 或"停止"。推理模型（如 DeepSeek-R1、Nemotron）单次思考可能需
@@ -1302,7 +1303,15 @@ function handleSend() {
     currentSessionId.value || ''
   ).catch((err: any) => {
     console.error('ChatWithAgent error', err)
-    assistantMsg.content = `❌ 服务调用失败：${err?.message || err}`
+    // 注意：ChatWithAgent 是 fire-and-forget（后端 go 协程后立即返回），
+    // 这里只在 Wails 调用本身失败时触发；此时流式事件可能已先到了。
+    // 若已有部分正文，不要用错误文本覆盖它（finalizeStream 会以 rawContent
+    // 为准重写 content，覆盖即等于丢错误），改为挂 streamNotice 说明。
+    if (assistantMsg.rawContent) {
+      assistantMsg.streamNotice = `❌ 服务调用失败：${err?.message || err}（已保留此前收到的部分内容，可重试）`
+    } else {
+      assistantMsg.content = `❌ 服务调用失败：${err?.message || err}`
+    }
     finalizeStream(assistantMsg)
   })
 }
@@ -1319,6 +1328,11 @@ function handleStop(msgId?: string) {
     : messages.value.find(m => m.id === streamingMsgId.value)
   if (target) {
     target.streamTimeout = false
+    // 手动停止后在消息下方留一条说明，否则用户只看到正文戛然而止，
+    // 无从判断是模型写完了还是被自己掐断了。
+    if (target.rawContent || target.content) {
+      target.streamNotice = '⏹ 已手动停止本次生成，内容可能不完整，可点击「重试」重新生成。'
+    }
   }
   clearStreamWatchdog()
   isStreaming.value = false

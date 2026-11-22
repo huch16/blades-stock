@@ -49,7 +49,9 @@ const aiConfigStore = useAiConfigStore()
 // 计算头像和名称
 const avatar = computed(() => {
   if (props.message.role === 'assistant') {
-    return props.message.avatar || aiConfigStore.activeConfig?.baseUrl?.includes('localhost') ? '🏠' : '🤖'
+    // 注意运算符优先级：`||` 高于 `?:`，不加括号会把「头像 URL 或布尔值」
+    // 整个当成三元条件，导致只要头像 URL 非空就返回 '🏠'、URL 永远用不上。
+    return props.message.avatar || (aiConfigStore.activeConfig?.baseUrl?.includes('localhost') ? '🏠' : '🤖')
   }
   return props.currentUserAvatar || props.message.avatar
 })

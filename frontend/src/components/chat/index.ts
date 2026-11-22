@@ -1,4 +1,3 @@
-export { useChatStream } from './useChatStream'
 export { useMessageAnchor } from './useMessageAnchor'
 export type { AnchorNavItem } from './useMessageAnchor'
 export * from './types'

@@ -33,7 +33,6 @@ export interface ChatMessage {
   rawContent?: string
   reasoning?: string
   rawReasoning?: string
-  jsonMarkdown?: string
   statusText?: string
   steps?: string[]
   toolCalls?: ToolCall[]

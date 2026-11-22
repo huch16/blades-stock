@@ -5,6 +5,9 @@ import { RefreshCircleSharp,} from "@vicons/ionicons5";
 
 import KLineChart from "./KLineChart.vue";
 import {BrowserOpenURL} from "../../wailsjs/runtime";
+import { useMessage } from "naive-ui";
+
+const message = useMessage()
 
 const {stockCode}=defineProps(
     {
@@ -20,9 +23,13 @@ const list  = ref([])
 const options =  ref([])
 
 function getStockResearchReport(value) {
+  // 旧代码无任何错误处理：后端失败时 promise  rejection 未捕获、
+  // 列表静默停留在旧数据上，用户无从得知刷新失败。
   StockResearchReport(value).then(result => {
-    //console.log(result)
-    list.value = result
+    list.value = result || []
+  }).catch(err => {
+    console.error('[StockResearchReport] failed:', err)
+    message.error('刷新个股研报失败: ' + (err?.message || err))
   })
 }
 
@@ -65,12 +72,14 @@ function openWin(code) {
 function findStockList(query){
   if (query){
     GetStockList(query).then(result => {
-      options.value=result.map(item => {
+      options.value=(result || []).map(item => {
         return {
           label: item.name+" - "+item.ts_code,
           value: item.ts_code
         }
       })
+    }).catch(err => {
+      console.error('[StockResearchReport] GetStockList failed:', err)
     })
   }else{
     getStockResearchReport('')

@@ -12,9 +12,17 @@ const list  = ref([])
 const options =  ref([])
 
 function getIndustryResearchReport(value) {
-  message.loading("正在刷新数据...")
+  // message.loading() 返回销毁函数，必须在 settled 后调掉；旧代码直接丢弃
+  // 返回值，导致「正在刷新数据...」常驻不消失，且失败时无任何提示、列表
+  // 静默停留在旧数据上。
+  const destroyLoading = message.loading("正在刷新数据...")
   IndustryResearchReport(value).then(result => {
-    list.value = result
+    list.value = result || []
+  }).catch(err => {
+    console.error('[IndustryResearchReport] failed:', err)
+    message.error('刷新行业研报失败: ' + (err?.message || err))
+  }).finally(() => {
+    destroyLoading()
   })
 }
 
@@ -50,6 +58,9 @@ function EMDictCodeList(keyVal){
             value: item.bkCode
           }
         })
+    }).catch(err => {
+      console.error('[IndustryResearchReport] EMDictCode failed:', err)
+      message.error('加载行业字典失败: ' + (err?.message || err))
     })
   }else{
     getIndustryResearchReport('')

@@ -47,8 +47,10 @@
               <span class="progress-text">执行中...</span>
             </div>
 
-            <!-- 参数详情 -->
-            <details class="tool-details" v-if="showArgs[call.id || idx]" open>
+            <!-- 参数详情（原生 <details> 自带折叠；旧代码用 showArgs/showResult
+                 两个 map 做 v-if 门禁，但没有任何地方会把它们置 true，
+                 导致参数/结果详情与「复制」按钮永远渲染不出来） -->
+            <details class="tool-details" open>
               <summary class="details-summary">
                 <span>📥 参数</span>
                 <n-button size="tiny" text @click.stop="handleCopyArgs(call)">
@@ -59,7 +61,7 @@
             </details>
 
             <!-- 结果详情 -->
-            <details class="tool-details" v-if="call.result && showResult[call.id || idx]">
+            <details class="tool-details" v-if="call.result">
               <summary class="details-summary">
                 <span>📤 结果</span>
                 <n-button size="tiny" text @click.stop="handleCopyResult(call)">
@@ -87,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { NButton } from 'naive-ui'
 import CollapsibleSection from './CollapsibleSection.vue'
 import {
@@ -119,10 +121,6 @@ const expanded = computed({
   }
 })
 
-// 追踪哪些详情已展开
-const showArgs = ref<Record<string | number, boolean>>({})
-const showResult = ref<Record<string | number, boolean>>({})
-
 // 判断是否正在流式执行
 function isStreaming(call: ToolCall): boolean {
   return call.status === 'pending'
@@ -137,25 +135,52 @@ function progressWidth(call: ToolCall): number {
   return progressMap.value[key] || 0
 }
 
-// 模拟进度动画
+// 给一条 pending 调用启动模拟进度。抽成函数，供挂载与后续新增调用共用：
+// 旧实现只在 onMounted 里扫一遍，流式中后追加的工具调用永远拿不到定时器，
+// 进度条恒为 0%；已完成的调用要及时停表，避免定时器空转。
+function startProgressFor(call: ToolCall, idx: number) {
+  const key = call.id || idx
+  if (activeTimers.has(key) || progressMap.value[key] === 100) return
+  let progress = progressMap.value[key] || 0
+  const interval = setInterval(() => {
+    progress += Math.random() * 15 + 5
+    if (progress >= 100) {
+      progress = 100
+      clearInterval(interval)
+      activeTimers.delete(key)
+    }
+    progressMap.value[key] = progress
+  }, 200)
+  activeTimers.set(key, interval)
+}
+
+function stopProgressFor(call: ToolCall, idx: number) {
+  const key = call.id || idx
+  const timer = activeTimers.get(key)
+  if (timer) {
+    clearInterval(timer)
+    activeTimers.delete(key)
+  }
+  if (call.status !== 'pending') progressMap.value[key] = 100
+}
+
+// 模拟进度动画：挂载时启动一次，之后每当 calls 变化（流式追加/状态翻转）
+// 都补启动新 pending 调用、停掉已完成调用的表。
 onMounted(() => {
   props.calls.forEach((call, idx) => {
-    if (isStreaming(call)) {
-      const key = call.id || idx
-      let progress = 0
-      const interval = setInterval(() => {
-        progress += Math.random() * 15 + 5
-        if (progress >= 100) {
-          progress = 100
-          clearInterval(interval)
-          activeTimers.delete(key)
-        }
-        progressMap.value[key] = progress
-      }, 200)
-      activeTimers.set(key, interval)
-    }
+    if (isStreaming(call)) startProgressFor(call, idx)
   })
 })
+
+watch(
+  () => props.calls.map(c => `${c.id ?? ''}:${c.status}`).join('|'),
+  () => {
+    props.calls.forEach((call, idx) => {
+      if (isStreaming(call)) startProgressFor(call, idx)
+      else stopProgressFor(call, idx)
+    })
+  }
+)
 
 onBeforeUnmount(() => {
   activeTimers.forEach((timer) => clearInterval(timer))
