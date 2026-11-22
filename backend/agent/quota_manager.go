@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -92,11 +93,13 @@ func (qm *ToolQuotaManager) GetToolCost(toolName string) float64 {
 	return defaultFallbackToolCost
 }
 
-// CheckAndConsume 记录一次工具调用的使用情况
-// 限额检查已移除，始终允许调用，仅累加使用量供监控。
+// CheckAndConsume 记录一次工具调用的使用情况并记账到可观测指标。
+// 注意：本管理器只有计量，没有可执行的上限值（全仓没有配置任何工具
+// 调用次数/成本上限），所以这里恢复的是「指标产生」，不是硬限流；
+// 硬限流在 ModelProviderWrapper 一侧（卡片自带 RateLimitPerSecond /
+// DailyRequestQuota / DailyCostQuota 配置）。
 func (qm *ToolQuotaManager) CheckAndConsume(ctx context.Context, toolName string) (float64, error) {
 	qm.mu.Lock()
-	defer qm.mu.Unlock()
 
 	// 1. 跨天自动重置
 	today := time.Now().Format("2006-01-02")
@@ -118,6 +121,12 @@ func (qm *ToolQuotaManager) CheckAndConsume(ctx context.Context, toolName string
 	// 3. 累加使用量
 	qm.dailyCalls++
 	qm.dailyCostUSD += toolCost
+	qm.mu.Unlock()
+
+	// 4. 记账到可观测指标（锁外：OTEL 记录不参与配额状态机）。
+	//    此前只累加内存计数、从不调这两个函数，配额/成本指标永不产生。
+	RecordQuotaUsage(ctx, toolName, 1)
+	RecordToolCost(ctx, toolName, toolCost)
 
 	return toolCost, nil
 }
@@ -162,10 +171,32 @@ func WrapToolWithQuota(original bladesTools.Tool) bladesTools.Tool {
 			start := time.Now()
 			result, err := original.Handle(ctx, input)
 			duration := time.Since(start)
-			RecordToolCall(ctx, toolName, err == nil, duration)
+			// V2（带错误类型）：失败时 agent_tool_errors_total 按
+			// error_type 分桶计数；V1 仍由 agent_api.go 的流式工具
+			// 观测点调用，这里只记一次，不重复计数。
+			RecordToolCallV2(ctx, toolName, err == nil, duration, classifyToolErrorType(err))
 			return result, err
 		}),
 	)
+}
+
+// classifyToolErrorType 把工具错误映射到 RecordToolCallV2 的粗粒度
+// error_type 分桶（成功时返回 ""，V2 不计错误）。
+func classifyToolErrorType(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(s, "timeout") || strings.Contains(s, "deadline exceeded"):
+		return "timeout"
+	case strings.Contains(s, "429") || strings.Contains(s, "rate limit") || strings.Contains(s, "rate_limit"):
+		return "rate_limit"
+	case strings.Contains(s, "401") || strings.Contains(s, "403") || strings.Contains(s, "unauthorized") || strings.Contains(s, "forbidden"):
+		return "auth"
+	default:
+		return "unknown"
+	}
 }
 
 // WrapToolsWithQuota 批量为工具列表注入配额与成本控制器

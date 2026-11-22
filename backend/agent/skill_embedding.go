@@ -293,7 +293,7 @@ func skillEmbedText(sk models.Skill) string {
 	return text
 }
 
-func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.Skill {
+func (s *SkillEmbeddingService) MatchSkills(question string, topK int) (matched []models.Skill) {
 	skills := data.NewSkillApi().GetEnabledSkills()
 	if len(skills) == 0 {
 		return nil
@@ -312,7 +312,17 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 		return kwMatched
 	}
 
-	// Semantic matching via internal skill embeddings
+	// Semantic matching via internal skill embeddings.
+	// Retriever telemetry: record hit/miss + latency for the vector search
+	// (keyword hits above are deterministic and do not go through
+	// retrieval). The defer also covers the "embeddings unavailable /
+	// embed failed" early returns — those are genuine retrieval misses.
+	// （外部 Retriever 回退路径在生产上不可达：GetSkillEmbeddingService
+	// 恒传 retr=nil；即使将来接通，命中与否仍按本次检索结果如实记录。）
+	semanticStart := time.Now()
+	defer func() {
+		RecordRetrieverHit(context.Background(), "skill_embedding", len(matched) > 0, time.Since(semanticStart))
+	}()
 	if !s.enabled || s.es == nil {
 		// Fallback to external retriever if available
 		if s.retr != nil && s.retr.IsReady() {
@@ -373,7 +383,6 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 		scoredSkills = scoredSkills[:topK]
 	}
 
-	var matched []models.Skill
 	for _, sc := range scoredSkills {
 		matched = append(matched, sc.skill)
 	}

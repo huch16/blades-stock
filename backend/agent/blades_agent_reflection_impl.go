@@ -127,25 +127,24 @@ type LLMReflectionFunc func(systemPrompt, userMessage string) (string, error)
 // GenerateReflection 对一次回答做四维度质量评分，写入 AgentTrace 与长期记忆，
 // 并在低分时触发 Prompt 进化建议。
 //
-// ⚠️⚠️ 【当前处于未接线（DORMANT）状态，调用它之前请先读这段】⚠️⚠️
+// 【已恢复接线】生产调用点：agent_api.go 的 postProcessResponse（回答收尾
+// 的 fire-and-forget 步骤 3），只走 llm == nil 的确定性路径（零 Token）。
+// 下面 a158883 的历史记录保留作背景：当初清理掐掉的是「LLM 打分」的 token
+// 成本，但被连带删掉的确定性评分 + 写库是零 Token 的误伤，本处只恢复这一半。
+// 千万不要顺手把 LLM 打分也接回来（那才是当初要掐掉的成本）。
+// 另注：低分分支的 maybeGenerateEvolutionAdvice 内部会**真的调 LLM**
+// （OptimizePrompt），因此恢复确定性路径时需一并注意，别把成本从侧门放回来；
+// 该分支受 6 小时/会话限频（见 evolution_wiring.go）。
 //
-// 本函数目前**没有任何生产调用点**。唯一调用点曾在
-// agent_api.go 的回答收尾处，已于提交 a158883
-// （chore(cleanup): ... strip agent reflection token burn ...）被整体删除。
-// 那次清理是针对「反射评估的 LLM 打分会产生 token 消耗」的，
-// 但被删掉的代码块实际包含**两个不同代价**的部分：
+// 历史（提交 a158883，strip agent reflection token burn）：
+// 唯一调用点曾在 agent_api.go 的回答收尾处被整体删除。那次清理针对的是
+// 「反射评估的 LLM 打分会产生 token 消耗」，但被删掉的代码块实际包含
+// **两个不同代价**的部分：
 //
 //  1. LLM 打分（花钱）—— 由 shouldRunLLMReflection 限频后才调，是清理的正当目标。
 //  2. 确定性评分 + writeBackToMemory + 写 AgentTrace（**零 token**）——
 //     被连带删除。当 llm == nil 时本函数完全自给自足：仍会
 //     ScoreResultStructured → defaultInsight/defaultImprovement → 写库。
-//
-// 所以「零 Token 质量闭环」是被误伤掉的，与项目自定的
-// 「零 Token 确定性法则」相悖 —— 恢复时**只需恢复 llm==nil 的确定性路径**，
-// 千万不要顺手把 LLM 打分也接回来（那才是当初要掐掉的成本）。
-//
-// 另注：低分分支的 maybeGenerateEvolutionAdvice 内部会**真的调 LLM**
-// （OptimizePrompt），因此恢复确定性路径时需一并注意，别把成本从侧门放回来。
 func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durationMs int64, llm LLMReflectionFunc, toolsUsed string) (*ReflectionResult, error) {
 	fallback := e.ScoreResultStructured(answer)
 	autoScore := fallback.Score

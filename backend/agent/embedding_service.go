@@ -97,6 +97,7 @@ func (s *EmbeddingService) EmbedWithContext(ctx context.Context, text string) ([
 		req.Header.Set("Authorization", "Bearer "+s.apiKey)
 	}
 
+	embedStart := time.Now()
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("embedding request failed: %w", err)
@@ -121,6 +122,9 @@ func (s *EmbeddingService) EmbedWithContext(ctx context.Context, text string) ([
 		return nil, fmt.Errorf("embedding response has no data")
 	}
 
+	// 嵌入延迟指标：只记真实远端调用（缓存命中不走这里），便于发现
+	// embedding 端点变慢拖垮技能匹配与记忆检索。
+	RecordEmbeddingLatency(ctx, s.modelName, time.Since(embedStart))
 	logger.SugaredLogger.Debugf("embedding %d tokens for %d chars", result.Usage.TotalTokens, len(text))
 	vec := result.Data[0].Embedding
 	// 异步持久化写入缓存

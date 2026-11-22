@@ -123,12 +123,11 @@ const evolutionAdviceCooldown = 6 * time.Hour
 
 // maybeGenerateEvolutionAdvice 低分轨迹异步生成 Prompt 优化建议并写入长期记忆。
 //
-// ⚠️ 【当前无生产触发路径，DORMANT】—— 唯一调用点在
-// GenerateReflection 内部（result.Score < 0 分支），而 GenerateReflection
-// 本身已无调用者（见其注释，提交 a158883）。
-// 即：Prompt 进化闭环目前**整条不运行**。
+// 【已恢复触发路径】调用点在 GenerateReflection 内部（result.Score < 0 分支），
+// 而 GenerateReflection 已由 agent_api.go 的 postProcessResponse 在生产调用
+// （llm == nil 确定性路径）。即：Prompt 进化闭环随确定性反思一并恢复。
 // 特别提醒：本函数**会真实调用 LLM**（ev.OptimizePrompt），
-// 所以恢复它前先确认这正是预期成本，不要与「零 Token 确定性路径」混为一谈。
+// 受 6 小时/会话限频（evolutionAdviceCooldown），不要与「零 Token 确定性路径」混为一谈。
 func (ev *Evolver) maybeGenerateEvolutionAdvice(sessionID string, trace *AgentTrace) {
 	go func() {
 		defer func() {

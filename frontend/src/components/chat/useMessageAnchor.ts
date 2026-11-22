@@ -204,13 +204,16 @@ export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>
           scrollToLatest()
         }
         break
+      // Home/End 按平台标准语义：聊天区是自然时间线（旧消息在上、
+      // 新消息在下），Home 回顶部 = 最旧消息，End 到底部 = 最新消息。
+      // 此前两者写反了（Home 去了最新、End 去了最旧）。
       case 'Home':
         e.preventDefault()
-        scrollToLatest()
+        scrollToOldest()
         break
       case 'End':
         e.preventDefault()
-        scrollToOldest()
+        scrollToLatest()
         break
     }
   }

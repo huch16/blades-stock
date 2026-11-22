@@ -84,58 +84,109 @@ func recordLLMQotaMetrics(ctx context.Context, dailyQuota int64, dailyCostUSD fl
 	}
 }
 
+// checkLimits enforces the card's configured rate limit and daily quotas.
+//
+// All checks are no-ops when the card leaves them at 0 (unlimited — the
+// default for every card, see data/settings_api.go), so restoring
+// enforcement cannot disturb existing normal calls: only cards with an
+// explicitly configured limit can ever be rejected.
+// A rejection returns ErrRateLimited and records the event for
+// observability; callers must surface the error, never silently drop
+// the request.
+func (w *ModelProviderWrapper) checkLimits(ctx context.Context, req *blades.ModelRequest) error {
+	if w.config == nil {
+		return nil
+	}
+	// Check rate limiter
+	if w.limiter != nil {
+		if !w.limiter.Allow() {
+			RecordQuotaExceeded(ctx, w.config.ModelName, "rate_limit")
+			return ErrRateLimited
+		}
+	}
+	// Check daily request quota
+	if w.config.DailyRequestQuota > 0 {
+		w.quotaMu.Lock()
+		today := time.Now().UTC().Format("2006-01-02")
+		if today != w.lastResetDate {
+			// New day, reset quota
+			w.dailyQuota = 0
+			w.dailyCostUSD = 0
+			w.lastResetDate = today
+		}
+		if w.dailyQuota >= w.config.DailyRequestQuota {
+			w.quotaMu.Unlock()
+			RecordQuotaExceeded(ctx, w.config.ModelName, "daily_request_quota")
+			return ErrRateLimited
+		}
+		w.dailyQuota++
+		// Record LLM quota metrics
+		go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
+		w.quotaMu.Unlock()
+	}
+	// Check daily cost quota
+	if w.config.DailyCostQuota > 0 {
+		w.quotaMu.Lock()
+		today := time.Now().UTC().Format("2006-01-02")
+		if today != w.lastResetDate {
+			// New day, reset cost tracking
+			w.dailyQuota = 0
+			w.dailyCostUSD = 0
+			w.lastResetDate = today
+		}
+		// Estimate cost for this request (placeholder - in practice would use token usage)
+		estimatedCost := estimateLLMCost(w.config, req)
+		if w.dailyCostUSD+estimatedCost > w.config.DailyCostQuota {
+			w.quotaMu.Unlock()
+			RecordQuotaExceeded(ctx, w.config.ModelName, "daily_cost_quota")
+			return ErrRateLimited
+		}
+		w.dailyCostUSD += estimatedCost
+		// Record LLM quota metrics
+		go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
+		w.quotaMu.Unlock()
+	}
+	return nil
+}
+
 // Generate wraps the provider's Generate method with rate limit and quota checks.
 func (w *ModelProviderWrapper) Generate(ctx context.Context, req *blades.ModelRequest) (*blades.ModelResponse, error) {
-	// skip all self-limiters: rate limit, daily request quota, daily cost quota - always allow
-	if false {
-		// Check rate limiter
-		if w.limiter != nil {
-			if !w.limiter.Allow() {
-				return nil, ErrRateLimited
-			}
-		}
-		// Check daily request quota
-		if w.config.DailyRequestQuota > 0 {
-			w.quotaMu.Lock()
-			today := time.Now().UTC().Format("2006-01-02")
-			if today != w.lastResetDate {
-				// New day, reset quota
-				w.dailyQuota = 0
-				w.dailyCostUSD = 0
-				w.lastResetDate = today
-			}
-			if w.dailyQuota >= w.config.DailyRequestQuota {
-				w.quotaMu.Unlock()
-				return nil, ErrRateLimited
-			}
-			w.dailyQuota++
-			// Record LLM quota metrics
-			go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
-			w.quotaMu.Unlock()
-		}
-		// Check daily cost quota
-		if w.config.DailyCostQuota > 0 {
-			w.quotaMu.Lock()
-			today := time.Now().UTC().Format("2006-01-02")
-			if today != w.lastResetDate {
-				// New day, reset cost tracking
-				w.dailyQuota = 0
-				w.dailyCostUSD = 0
-				w.lastResetDate = today
-			}
-			// Estimate cost for this request (placeholder - in practice would use token usage)
-			estimatedCost := estimateLLMCost(w.config, req)
-			if w.dailyCostUSD+estimatedCost > w.config.DailyCostQuota {
-				w.quotaMu.Unlock()
-				return nil, ErrRateLimited
-			}
-			w.dailyCostUSD += estimatedCost
-			// Record LLM quota metrics
-			go recordLLMQotaMetrics(ctx, int64(w.dailyQuota), w.dailyCostUSD, int64(w.config.DailyRequestQuota), w.config.DailyCostQuota)
-			w.quotaMu.Unlock()
-		}
+	if err := w.checkLimits(ctx, req); err != nil {
+		return nil, err
 	}
 	// Call the underlying provider
 	resp, err := w.ModelProvider.Generate(ctx, req)
+	if err == nil && resp != nil && resp.Message != nil {
+		// Non-streaming responses carry real token usage (the streaming
+		// adapter never populates Message.TokenUsage); record it when
+		// present so the token metric is actually produced.
+		if u := resp.Message.TokenUsage; u.TotalTokens > 0 {
+			modelName := ""
+			if w.config != nil {
+				modelName = w.config.ModelName
+			}
+			if modelName == "" {
+				modelName = w.Name()
+			}
+			RecordTokenUsage(ctx, modelName, u.InputTokens, u.OutputTokens)
+		}
+	}
 	return resp, err
+}
+
+// NewStreaming mirrors Generate: the same rate-limit/quota gate applies
+// before the stream starts, so a limited card cannot be bypassed by
+// streaming (previously NewStreaming was not overridden at all and the
+// embedded provider was passed through unchecked).
+// The check runs once per stream, not per chunk; a rejection yields a
+// single terminal error instead of silently dropping the request.
+// Token usage is not recorded here: the streaming adapter never populates
+// Message.TokenUsage (only the non-streaming path does).
+func (w *ModelProviderWrapper) NewStreaming(ctx context.Context, req *blades.ModelRequest) blades.Generator[*blades.ModelResponse, error] {
+	if err := w.checkLimits(ctx, req); err != nil {
+		return func(yield func(*blades.ModelResponse, error) bool) {
+			yield(nil, err)
+		}
+	}
+	return w.ModelProvider.NewStreaming(ctx, req)
 }
