@@ -309,10 +309,79 @@ func safeRuntimeEventsEmit(ctx context.Context, event string, optionalData ...an
 // MarketLifecycleService 市场全流程生命周期智能服务
 type MarketLifecycleService struct {
 	ctx context.Context
+	// serenityChatRound runs one Serenity LLM round and collects the stream.
+	// serenityFallbackPicker selects the first available fallback card for
+	// a Serenity whole-round retry. Both are injectable seams: production
+	// defaults are set by NewMarketLifecycleService, tests replace them.
+	// A nil seam falls back to the production implementation, so a
+	// zero-value service still works.
+	serenityChatRound      func(ctx context.Context, prompt, sysPrompt string, aiConfigId int) reportStreamResult
+	serenityFallbackPicker func(ctx context.Context, primaryAIConfigID int) (fallbackID int, fallbackName string, ok bool)
 }
 
 func NewMarketLifecycleService(ctx context.Context) *MarketLifecycleService {
-	return &MarketLifecycleService{ctx: ctx}
+	return &MarketLifecycleService{
+		ctx:                    ctx,
+		serenityChatRound:      defaultSerenityChatRound,
+		serenityFallbackPicker: defaultSerenityFallbackPicker,
+	}
+}
+
+// defaultSerenityChatRound is the production Serenity round: Direct mode,
+// zero tools, stream collected by collectReportStream.
+func defaultSerenityChatRound(ctx context.Context, prompt, sysPrompt string, aiConfigId int) reportStreamResult {
+	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
+	return collectReportStream(ch)
+}
+
+// defaultSerenityFallbackPicker resolves the card actually used by the
+// first round and returns the first available fallback card from the
+// fallback chain (registry order, same exclusions as
+// BuildFallbackProvidersFromDB). It never hard-codes a model: whatever
+// the registry lists first wins.
+func defaultSerenityFallbackPicker(ctx context.Context, primaryAIConfigID int) (int, string, bool) {
+	res, err := data.ResolveModel(primaryAIConfigID)
+	if err != nil {
+		return 0, "", false
+	}
+	if fb, ok := FirstFallbackAIConfig(res.Config); ok {
+		return int(fb.ID), fb.ModelName, true
+	}
+	return 0, "", false
+}
+
+// runSerenityGeneration runs one Serenity generation round. If the round is
+// interrupted mid-stream (stream error / timeout), it retries the WHOLE
+// round exactly once with the first available fallback card.
+//
+// 背景：fallback 层只在「无实质正文」时降级；已有实质正文后断流，错误会
+// 原样上抛（两段模型输出绝不能无声拼成一段）。但 Serenity 失败时半份
+// 内容本来就被丢弃、不落库，所以在 market_lifecycle 层换卡整轮重跑是
+// 安全的：重试丢弃首轮的全部半份输出（reasoning 与 content 均不带入
+// 第二轮），第二轮从空白 prompt 重新生成，最终结果只含第二轮的输出。
+//
+// 只重试一次；第二轮的结果（成功或失败）直接采用，不再重试。
+// 截断（finish_reason=length/content_filter）不是流中断，不重试——
+// 换卡也大概率在同样的 maxTokens 下再次截断。
+func (s *MarketLifecycleService) runSerenityGeneration(ctx context.Context, prompt, sysPrompt string, aiConfigId int) reportStreamResult {
+	chatRound := s.serenityChatRound
+	if chatRound == nil {
+		chatRound = defaultSerenityChatRound
+	}
+	res := chatRound(ctx, prompt, sysPrompt, aiConfigId)
+	if res.StreamErr == "" {
+		return res
+	}
+	picker := s.serenityFallbackPicker
+	if picker == nil {
+		picker = defaultSerenityFallbackPicker
+	}
+	fbID, fbName, ok := picker(ctx, aiConfigId)
+	if !ok {
+		return res
+	}
+	logger.SugaredLogger.Warnf("🔄 【Serenity换卡整轮重试】首轮生成中断（%s），丢弃半份输出，改用备用卡片 [%s] 整轮重跑（仅重试一次）", res.StreamErr, fbName)
+	return chatRound(ctx, prompt, sysPrompt, fbID)
 }
 
 // GetCurrentMarketPhase 计算当前时间的市场阶段
@@ -803,8 +872,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	genCtx = WithRunKindIfUnset(genCtx, RunKindSectorAnomaly)
 	defer cancel()
 
-	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
-	streamRes := collectReportStream(ch)
+	streamRes := s.runSerenityGeneration(genCtx, prompt, sysPrompt, aiConfigId)
 	if streamRes.Truncated {
 		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
 			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
