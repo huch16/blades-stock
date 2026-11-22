@@ -338,6 +338,39 @@ func GetVectorGridSearchTool() bladesTools.Tool {
 	)
 }
 
+// diagnoseStockCodeKeys 是 DiagnoseStock 接受的代码参数键名（按优先级）。
+// 实测根因：工具只认 stock_code 一个键，但模型在同一会话里见到的键名并不
+// 统一——SaveStockThesis/GetStockThesis 与游资/筹码工具用 stockCode，
+// RunVectorizedBacktest 用 stock_codes，而 L4 提示词只写 DiagnoseStock(股票代码)
+// 从不点名参数。模型一旦用 stockCode/code/stock_codes 传参或漏传，
+// 本工具就误判为空并返回“请提供股票或ETF代码”（601318 本身无论字符串、
+// JSON 数字、带 .SH/SH 前缀都能正常解析，与该代码无关）。
+var diagnoseStockCodeKeys = []string{"stock_code", "stockCode", "code", "stock_codes", "symbol", "ticker"}
+
+// extractDiagnoseStockCode 从工具调用参数里提取股票代码，兼容模型可能
+// 输出的多种键名与形态（字符串、JSON 数字、单元素数组）；全部缺失/为空
+// 时返回 ""，由调用方返回“请提供股票或ETF代码”。
+func extractDiagnoseStockCode(args string) string {
+	for _, key := range diagnoseStockCodeKeys {
+		res := gjson.Get(args, key)
+		if !res.Exists() {
+			continue
+		}
+		if res.IsArray() {
+			for _, el := range res.Array() {
+				if v := strings.TrimSpace(el.String()); v != "" {
+					return v
+				}
+			}
+			continue
+		}
+		if v := strings.TrimSpace(res.String()); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // GetDiagnoseStockTool 对指定股票或ETF执行三维量化深度诊断（VectorBT矩阵回测+资金筹码流向+技术形态+点位测算）
 func GetDiagnoseStockTool() bladesTools.Tool {
 	return NewDataToolWrapper(
@@ -347,8 +380,8 @@ func GetDiagnoseStockTool() bladesTools.Tool {
 			"stock_code": {Type: "string", Desc: "股票或ETF代码，如 600671、510300、159915、000001", Required: true},
 		},
 		func(args string) (string, error) {
-			rawCode := gjson.Get(args, "stock_code").String()
-			if strings.TrimSpace(rawCode) == "" {
+			rawCode := extractDiagnoseStockCode(args)
+			if rawCode == "" {
 				return "请提供股票或ETF代码", nil
 			}
 			diag, err := quant.DiagnoseStock(rawCode)

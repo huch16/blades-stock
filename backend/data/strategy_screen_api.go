@@ -122,10 +122,7 @@ func ScreenByStrategy(strategyName string, codes []string, limit int) (*Strategy
 
 	results := make([]StrategyScreenResult, 0, len(jobs))
 	for _, j := range jobs {
-		name := nameMap[j.code]
-		if name == "" {
-			name = j.code
-		}
+		name := resolveStrategyScreenName(nameMap, j.code)
 		matched := make([]string, 0, len(j.score.Matched))
 		reasons := make([]string, 0, len(j.score.Matched))
 		for _, d := range j.score.Matched {
@@ -154,6 +151,21 @@ func ScreenByStrategy(strategyName string, codes []string, limit int) (*Strategy
 		ScannedCount: len(universe),
 		Results:      results,
 	}, nil
+}
+
+// strategyScreenUnknownName 是策略选股里名称查不到时的标记。绝不能把代码
+// 本身当作名称填回去——否则下游会把 "601318" 当成一只名叫 601318 的股票，
+// 代码-名称一致性校验也被绕过（601318 因此能以“名称=601318”混入分析）。
+// 查不到名称只影响展示，该行评分/现价仍是真实数据，故保留该行、只标记未知。
+const strategyScreenUnknownName = "未知"
+
+// resolveStrategyScreenName 从 nameMap 取股票名称；未命中、空白或
+// 名称本身就是代码时返回“未知”，绝不回退到代码。
+func resolveStrategyScreenName(nameMap map[string]string, code string) string {
+	if name := strings.TrimSpace(nameMap[code]); name != "" && name != code {
+		return name
+	}
+	return strategyScreenUnknownName
 }
 
 func strategyOverrideDir() string {
@@ -219,6 +231,16 @@ func buildStrategyUniverse(codes []string) ([]string, map[string]string) {
 	}
 	if len(codes) == 0 {
 		codes = fallbackUniverse()
+		// 兜底池此前完全不查名称，nameMap 为空导致 24 只兜底股（含 601318）
+		// 的名称全部回退成代码本身；此处补一次 DB 名称查询，仍查不到的
+		// 才由 resolveStrategyScreenName 标记为“未知”。
+		var fbStocks []models.AllStockInfo
+		if err := db.Dao.Model(&models.AllStockInfo{}).Where("sec_uri_tycode IN ?", codes).Find(&fbStocks).Error; err != nil {
+			logger.SugaredLogger.Errorf("查询兜底池股票名称失败: %v", err)
+		}
+		for _, st := range fbStocks {
+			nameMap[st.SECURITYCODE] = st.SECURITYNAMEABBR
+		}
 	}
 	return codes, nameMap
 }
