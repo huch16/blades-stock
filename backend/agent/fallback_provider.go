@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"blades-stock/backend/data"
@@ -34,27 +35,76 @@ func GetFallbackNotifier(ctx context.Context) FallbackNotifier {
 }
 
 // IsPermanentAuthError 判定错误是否为不可逆的 API Key/鉴权失效或账户余额/用量耗尽 (401/403/429 quota/token_rejected)
+//
+// 分类必须区分「永久」与「瞬时」，因为它同时驱动两件事：30 分钟全局熔断
+// （MarkModelPermanentFailure）与同凭证备用模型的排除
+// （BuildFallbackProvidersFromDB 跳过共享 ApiKey+BaseUrl 的配置）。
+// 把一次瞬时 429 误判为永久，会同时锁死主模型与走同一网关的备用模型。
+//
+// 规则：
+//   - 401/403 与鉴权类文案 → 永久；
+//   - 硬性计费/停用信号（insufficient_quota、balance exhausted、account_deactivated、
+//     欠费、token plan、MiniMax 2056）→ 永久，即使伴随 429（OpenAI 的
+//     insufficient_quota 本来就是以 429 返回的，但含义是账单耗尽而非瞬时限流）；
+//   - 模糊的额度文案（quota exceeded、用量上限）→ 只有在**不带** 429/限流/容量信号时
+//     才算永久；一旦带有 429、rate_limit、too many requests、try again later、
+//     at/over capacity、overloaded 等信号，就按瞬时容量/限流处理。
+//     网关（如 TokenLab“容量满”）常把 429 瞬时限流写成 quota exceeded，旧实现
+//     在此直接判永久，会让一次容量抖动锁死整条同网关备用链。
 func IsPermanentAuthError(err error) bool {
 	if err == nil {
 		return false
 	}
 	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "401") ||
+
+	// 硬性计费/停用信号：即使伴随 429 也视为永久。
+	if strings.Contains(s, "insufficient_quota") ||
+		strings.Contains(s, "balance exhausted") ||
+		strings.Contains(s, "account_deactivated") ||
+		strings.Contains(s, "token plan") ||
+		strings.Contains(s, "2056") || // MiniMax error code for token plan quota exhaustion
+		strings.Contains(s, "欠费") {
+		return true
+	}
+
+	// 401/403 鉴权失败：永久。
+	if strings.Contains(s, "401") ||
 		strings.Contains(s, "403") ||
 		strings.Contains(s, "token_rejected") ||
 		strings.Contains(s, "invalid token") ||
 		strings.Contains(s, "invalid_api_key") ||
 		strings.Contains(s, "unauthorized") ||
-		strings.Contains(s, "forbidden") ||
-		strings.Contains(s, "insufficient_quota") ||
-		strings.Contains(s, "quota exceeded") ||
+		strings.Contains(s, "forbidden") {
+		return true
+	}
+
+	// 模糊的额度文案：仅在没有瞬时限流/容量信号时才按用量耗尽处理。
+	if strings.Contains(s, "quota exceeded") ||
 		strings.Contains(s, "quota_exceeded") ||
-		strings.Contains(s, "用量上限") ||
-		strings.Contains(s, "token plan") ||
-		strings.Contains(s, "2056") || // MiniMax error code for token plan quota exhaustion
-		strings.Contains(s, "balance exhausted") ||
-		strings.Contains(s, "account_deactivated") ||
-		strings.Contains(s, "欠费")
+		strings.Contains(s, "用量上限") {
+		return !isTransientRateLimitSignal(s)
+	}
+	return false
+}
+
+// isTransientRateLimitSignal 判断错误文本是否带有 429/限流/容量不足的瞬时信号。
+func isTransientRateLimitSignal(s string) bool {
+	for _, m := range []string{
+		"429",
+		"rate_limit",
+		"rate limit",
+		"too many requests",
+		"try again later",
+		"at capacity",
+		"over capacity",
+		"overloaded",
+		"capacity",
+	} {
+		if strings.Contains(s, m) {
+			return true
+		}
+	}
+	return false
 }
 
 var (
@@ -184,6 +234,46 @@ func CleanFallbackModelName(name string) string {
 // 只需判断「有没有正文」，无需完整正文，故设上限避免长报告重复驻留内存。
 const emptyOutputProbeCap = 256 * 1024
 
+// 流式停滞看门狗阈值（包级变量而非常量，便于单测收窄；生产值见注释）。
+//
+// 为什么需要它：流式传输可以“静默挂起”——连接不断、一个 chunk 都不来，
+// 上层只能等到卡片级请求超时（默认 300 秒）才失败。看门狗在无任何 chunk
+// 的静默期到达阈值时主动取消本次尝试，让降级链提前接管。
+//   - 首包等待 120 秒：SSE 正常在连接建立后立刻下发 role 首包；推理模型
+//     在思考期间也会持续下发 reasoning delta；120 秒零字节基本等于挂起，
+//     远短于 300 秒请求超时，又留足了网关排队余量。
+//   - 后续 chunk 间隔 180 秒：长思考/长输出的间隙也应有上限；一旦超过，
+//     视为网关挂起而非“模型还在想”。
+//
+// 注意：看门狗只看“有没有 chunk 到达”，不看内容——reasoning delta 与空
+// chunk 同样能证明连接存活（blades 的 OpenAI 适配层会把 reasoning
+// delta 转成零 part 消息下发，本层仍能收到回调）。
+var (
+	fallbackFirstChunkTimeout  = 120 * time.Second
+	fallbackStreamStallTimeout = 180 * time.Second
+)
+
+// hasSubstantiveContent 判断本次尝试累计的正文里是否已有**可见的最终答案文本**。
+//
+// 与流末空答检测不同，这里刻意不用 cleanFinalContent 的“挽救”路径：
+// cleanFinalContent 会在正文为空但原始文本很长时把 <think> 思考体本身
+// 当作正文挽救回来，而思考体对用户不可见（agent_api 的 thinkFilter
+// 会实时剥离），不能算“已输出内容”。这里只剥离 think 块与 agent-action
+// 块，剩余非空白即为实质正文。
+// 用途：流中途出错时，只有**没有**实质正文才允许降级重跑；一旦已有实质
+// 正文，两个模型的部分输出绝不能无声拼成一段，必须把错误原样上抛。
+func hasSubstantiveContent(raw string) bool {
+	s := stripAllAgentActionBlocks(cleanThinkBlocks(raw))
+	return strings.TrimSpace(s) != ""
+}
+
+// streamStallError 构造流式停滞错误：看门狗取消本次尝试后，底层一般只会
+// 返回 context canceled，必须换成能说明真实原因的错误，否则上层与用户
+// 看到的都是误导性的“上下文取消”。
+func streamStallError(stallAfter time.Duration) error {
+	return fmt.Errorf("模型流式响应停滞: %v 内未收到任何数据，疑似网关挂起或上游排队", stallAfter)
+}
+
 // FallbackModelProvider 实现多模型容灾降级
 // 当主模型执行失败、超时或限流时，自动无缝尝试备用模型列表
 // 具备“粘性提升”（Sticky Promotion）和“死锁黑名单”机制，避免在多步骤 Agent 循环中重复在已知失败模型上空等超时
@@ -305,6 +395,20 @@ func (f *FallbackModelProvider) Generate(ctx context.Context, req *blades.ModelR
 }
 
 // NewStreaming 实现流式输出（具备故障自动转移到备用模型的能力）
+//
+// 降级触发规则（2026-11-22 修正，见根因说明）：
+//   - 流出错时能否降级，不看“是否 yield 过任何 chunk”，而看“是否已产出
+//     实质正文”（hasSubstantiveContent）。blades 的 OpenAI 适配层会对每个
+//     SSE chunk 都 yield 一条消息，包括首包 role chunk（零 part）与
+//     reasoning-only chunk（reasoning_content 不被映射，同样是零 part
+//     消息）——推理模型在出正文前就会 yield 大量空消息，旧的 yieldedAny
+//     判定会在“85 秒、0 字、中途流重置”时错误地拒绝降级。
+//   - 一旦已有实质正文，绝不静默降级：两个模型的部分输出不能无声拼成
+//     一段，错误原样上抛，由上层决定（Serenity 等研报路径会丢弃半份内容
+//     并报错；交互对话同理不重试已送出的部分回答）。
+//   - 有工具调用后出错同样不降级：重跑会重复执行工具（部分工具有副作用）。
+//   - 流静默超过看门狗阈值（首包 120 秒/后续间隔 180 秒）时主动取消本次
+//     尝试并按同一规则降级，不再等到 300 秒请求超时。
 func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.ModelRequest) blades.Generator[*blades.ModelResponse, error] {
 	return func(yield func(*blades.ModelResponse, error) bool) {
 		allProviders := append([]blades.ModelProvider{f.primary}, f.fallbacks...)
@@ -340,8 +444,58 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 			prov := allProviders[idx]
 			curName := names[idx]
 
-			gen := prov.NewStreaming(ctx, req)
+			// 本次尝试用独立的可取消 ctx：停滞看门狗只能取消本次尝试，
+			// 绝不能取消外层 ctx（外层取消意味着用户/上层已主动放弃，
+			// 此时不应再降级重跑）。
+			attemptCtx, cancelAttempt := context.WithCancel(ctx)
+
+			// ── 流式停滞看门狗 ──────────────────────────────────────
+			// 任何 chunk 回调（哪怕是空消息）都会重置计时；只有“零字节
+			// 静默”才会触发。触发后取消 attemptCtx，底层随即以错误结束，
+			// 错误分支再按实质正文规则决定是否降级。
+			// 阈值在主 goroutine 里一次读成局部变量再交给看门狗：
+			// 看门狗 goroutine 绝不能直接读包级变量——它可能在调用方
+			// 已经返回（测试里恢复阈值）后才被调度执行，直接读会与
+			// 调用方的写形成数据竞争（-race 已抓到）。
+			firstChunkTimeout := fallbackFirstChunkTimeout
+			stallTimeout := fallbackStreamStallTimeout
+			chunkSeen := make(chan struct{}, 1)
+			watchdogDone := make(chan struct{})
+			var stallFired atomic.Bool
+			var stallAfter atomic.Int64 // 纳秒，记录触发时正在等的阈值
+			stallAfter.Store(int64(firstChunkTimeout))
+			go func() {
+				timer := time.NewTimer(firstChunkTimeout)
+				defer timer.Stop()
+				for {
+					select {
+					case <-watchdogDone:
+						return
+					case <-chunkSeen:
+						if !timer.Stop() {
+							select {
+							case <-timer.C:
+							default:
+							}
+						}
+						stallAfter.Store(int64(stallTimeout))
+						timer.Reset(stallTimeout)
+					case <-timer.C:
+						stallFired.Store(true)
+						logger.SugaredLogger.Warnf("⚠️ [FallbackModelProvider] 模型 [%s] 流式响应停滞 %v 未收到任何数据，主动取消本次尝试", curName, time.Duration(stallAfter.Load()))
+						cancelAttempt()
+						return
+					}
+				}
+			}()
+			stopWatchdog := func() {
+				close(watchdogDone)
+				cancelAttempt()
+			}
+
+			gen := prov.NewStreaming(attemptCtx, req)
 			if gen == nil {
+				stopWatchdog()
 				continue
 			}
 
@@ -356,11 +510,41 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 			toolPartSeen := false
 
 			gen(func(resp *blades.ModelResponse, err error) bool {
+				// 任何回调都证明连接存活，重置看门狗计时。
+				select {
+				case chunkSeen <- struct{}{}:
+				default:
+				}
+
 				if err != nil {
+					// 看门狗触发的取消在底层只表现为 context canceled，
+					// 换成能说明真实原因的错误再进入降级判定。
+					if stallFired.Load() {
+						logger.SugaredLogger.Warnf("⚠️ [FallbackModelProvider] 模型 [%s] 流式停滞取消，原始错误: %v", curName, err)
+						err = streamStallError(time.Duration(stallAfter.Load()))
+					}
+
 					nextIdx := nextAlive(idx + 1)
 
-					// 如果第一个 chunk 就报错（且还有备用模型），标记失败由外层切换
-					if !yieldedAny && nextIdx < len(allProviders) {
+					// ── 中途断流降级判定（2026-11-22 根因修复）───────
+					//
+					// 旧判定 `!yieldedAny` 是错的：blades 的 OpenAI 适配
+					// 层对每个 SSE chunk 都 yield 一条消息，首包 role
+					// chunk 与 reasoning-only chunk 都是零 part 的空
+					// 消息——推理模型还没出一个正文词，yieldedAny 就
+					// 已经是 true。生产事故“85 秒、0 字、流重置却不降
+					// 级”正是这样发生的。
+					//
+					// 新判定：只有“尚未产出实质正文且无工具调用”才能
+					// 降级重跑。已有实质正文时降级会把两个模型的部分
+					// 输出无声拼成一段；已有工具调用时重跑会重复执行
+					// 工具——这两种情况都必须把错误原样上抛。
+					// 外层 ctx 已取消时也不降级（调用方已主动放弃）。
+					canFallback := nextIdx < len(allProviders) &&
+						ctx.Err() == nil &&
+						!toolPartSeen &&
+						!hasSubstantiveContent(contentBuf.String())
+					if canFallback {
 						failed = true
 						nextName := names[nextIdx]
 
@@ -376,13 +560,17 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 						f.activeIdx = int32(nextIdx)
 						f.mu.Unlock()
 
-						logger.SugaredLogger.Warnf("⚠️ [FallbackModelProvider] 模型 [%s] 流式调用首包失败: %v, 自动降级切换至 [%s]...", curName, err, nextName)
+						if yieldedAny {
+							logger.SugaredLogger.Warnf("⚠️ [FallbackModelProvider] 模型 [%s] 流式中途失败（仅空/reasoning chunk，无实质正文）: %v, 自动降级切换至 [%s]...", curName, err, nextName)
+						} else {
+							logger.SugaredLogger.Warnf("⚠️ [FallbackModelProvider] 模型 [%s] 流式调用首包失败: %v, 自动降级切换至 [%s]...", curName, err, nextName)
+						}
 						if notifier != nil {
 							notifier(CleanFallbackModelName(curName), CleanFallbackModelName(nextName), err)
 						}
 						return false // 停止当前 generator
 					}
-					// 已经吐过内容或无备选模型，正常将错误 yield 出去
+					// 已有实质正文/工具调用或无备选模型，正常将错误 yield 出去
 					return yield(resp, err)
 				}
 
@@ -410,6 +598,7 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 
 				return yield(resp, nil)
 			})
+			stopWatchdog()
 
 			// ── 空答检测（关键修复）───────────────────────────────────────────
 			//
@@ -485,7 +674,11 @@ func BuildFallbackProvidersFromDB(ctx context.Context, currentConfig data.AIConf
 			continue
 		}
 
-		// 若主模型已因鉴权/用量耗尽熔断，跳过共享相同 ApiKey+BaseUrl 的备用配置，避免重复失败空转
+		// 若主模型已因鉴权/用量耗尽熔断，跳过共享相同 ApiKey+BaseUrl 的备用配置，避免重复失败空转。
+		// 注意：这条跳过成立的前提是熔断本身分类正确（见 IsPermanentAuthError）。
+		// 容量型 429（如 TokenLab "at capacity"）是按模型/按时刻的瞬时问题，
+		// 同一网关换一个模型完全可能成功——它绝不能让主模型进熔断，否则
+		// 同网关的备用模型会被这里一并排除，整条链名存实亡。
 		if (IsModelInCooldown(currentConfig.ModelName) || IsModelInCooldown(fmt.Sprintf("%s(%s)", currentConfig.ModelName, currentConfig.BaseUrl))) && cfgKey == primaryKey {
 			continue
 		}

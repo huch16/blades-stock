@@ -146,6 +146,18 @@ func TestIsPermanentAuthError(t *testing.T) {
 		{"context deadline exceeded", false},
 		{"500 Internal Server Error", false},
 		{"429 Too Many Requests", false},
+		// 容量型 429：网关把瞬时限流/容量不足写成 quota exceeded 时，
+		// 绝不能按永久处理（否则同网关备用链会被一并熔断排除）。
+		{"429 Too Many Requests: quota exceeded, please try again later", false},
+		{"429 Too Many Requests: model at capacity", false},
+		{"HTTP 429: 用量上限，请稍后重试", false},
+		{"rate_limit: quota exceeded for this minute", false},
+		// 同样的额度文案，不带任何 429/限流信号时仍按用量耗尽（永久）处理。
+		{"quota exceeded for this model", true},
+		{"用量上限", true},
+		// 硬性计费耗尽：即使以 429 返回也是永久（账单问题不会自愈）。
+		{"429: insufficient_quota, billing limit reached", true},
+		{"403 Forbidden: insufficient_quota", true},
 	}
 
 	for _, c := range cases {

@@ -16,6 +16,16 @@ const (
 	RunKindPipeline      = "pipeline"       // 五阶流水线（BUIS L1→L5）
 )
 
+// ctxOrBackground 返回非空的 context：nil 时用 Background 兜底，避免
+// context.WithTimeout / WithoutCancel 在 nil 父级上 panic。调用方在
+// 从入参 ctx 派生子 context（同时又想保留其值）时使用。
+func ctxOrBackground(ctx context.Context) context.Context {
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 type runKindCtxKey struct{}
 
 // WithRunKind 给上下文打上本次运行的类型标签。
