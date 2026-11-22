@@ -31,10 +31,21 @@ func TestIsTransientModelError(t *testing.T) {
 		{"Context deadline exceeded", errors.New("context deadline exceeded"), true},
 		{"Client timeout", errors.New("client.timeout exceeded while awaiting headers"), true},
 
+		// HTTP/2 流层瞬时故障（生产事故：网关重置流）
+		{"HTTP/2 stream reset (production incident)", errors.New("stream error: stream ID 1; INTERNAL_ERROR; received from peer"), true},
+		{"Stream reset by peer", errors.New("stream reset by peer"), true},
+		{"INTERNAL_ERROR code", errors.New("INTERNAL_ERROR"), true},
+		{"Internal error", errors.New("internal error occurred"), true},
+		{"HTTP/2 error", errors.New("http/2: stream error"), true},
+		{"HTTP2 GOAWAY", errors.New("http2: received GoAway from peer"), true},
+
 		// Non-transient errors (should NOT retry)
 		{"Authentication Failure", errors.New("invalid api key (401)"), false},
 		{"Permission Denied", errors.New("permission denied (403)"), false},
 		{"Model Not Found", errors.New("model 'gpt-none' does not exist (404)"), false},
+		{"Plain model not found", errors.New("model not found"), false},
+		// 护栏：裸 "reset" 不是瞬时标记，"password reset" 等正常业务文本不得误判为可重试
+		{"Bare reset must not match", errors.New("password reset required"), false},
 		{"Invalid Request Params", errors.New("invalid params, function parameters is empty (2013)"), false},
 		{"Bad Schema", errors.New("schema validation failed"), false},
 	}

@@ -155,9 +155,14 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		return nil
 	}
 
-	// 注入 Multi-LLM 容灾 Fallback 能力（若配置了多个可用模型）
+	// 注入 Multi-LLM 容灾 Fallback 能力（若配置了多个可用模型）。
+	// 主模型处于全局熔断冷却期时，直接以首个可用备用模型为主模型启动
+	// （其余备用顺延），避免每次运行先烧一次主模型调用（首包/超时等待）；
+	// 无备用可用时保持现状（仍试主模型）。
 	if fallbacks, fbNames := BuildFallbackProvidersFromDB(ctx, aiConfig); len(fallbacks) > 0 {
-		modelProvider = NewFallbackModelProvider(modelProvider, aiConfig.ModelName, fallbacks, fbNames)
+		primaryName := aiConfig.ModelName
+		modelProvider, primaryName, fallbacks, fbNames = promoteCooldownPrimary(modelProvider, primaryName, fallbacks, fbNames)
+		modelProvider = NewFallbackModelProvider(modelProvider, primaryName, fallbacks, fbNames)
 	}
 
 	mode := resolveAgentMode(agentMode, question)
@@ -213,6 +218,24 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 		AIConfig: aiConfig,
 		AllTools: allTools,
 	}
+}
+
+// promoteCooldownPrimary 主模型处于全局熔断冷却期（MarkModelPermanentFailure
+// 记录的 30 分钟隔离）且存在可用备用模型时，把首个备用提升为主模型，
+// 其余备用顺延；主模型未冷却或无可用备用时原样返回。
+//
+// 前置条件：BuildFallbackProvidersFromDB 已排除冷却中与同凭证的备用候选，
+// 所以这里的 fallbacks 均可直接用作主模型。只剩一个备用时，剩余链为空，
+// NewFallbackModelProvider 会直接返回被提升的备用模型本身。
+func promoteCooldownPrimary(primary blades.ModelProvider, primaryName string, fallbacks []blades.ModelProvider, fallbackNames []string) (blades.ModelProvider, string, []blades.ModelProvider, []string) {
+	if len(fallbacks) == 0 || len(fallbackNames) == 0 {
+		return primary, primaryName, fallbacks, fallbackNames
+	}
+	if !IsModelInCooldown(primaryName) {
+		return primary, primaryName, fallbacks, fallbackNames
+	}
+	logger.SugaredLogger.Warnf("⏭️ [Fallback] 主模型 [%s] 处于熔断冷却期，直接以备用模型 [%s] 为主模型启动", primaryName, fallbackNames[0])
+	return fallbacks[0], fallbackNames[0], fallbacks[1:], fallbackNames[1:]
 }
 
 func personalityPrompt() string {

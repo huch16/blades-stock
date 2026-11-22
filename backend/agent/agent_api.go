@@ -1079,6 +1079,13 @@ func isTransientModelError(err error) bool {
 		"overloaded", "too many requests", "request limit reached",
 		"temporarily unavailable", "try again later", "server busy", "service busy",
 		"over capacity",
+		// HTTP/2 流层瞬时故障（网关/代理重置流）：生产事故
+		// "stream error: stream ID 1; INTERNAL_ERROR; received from peer"
+		// 属于此类，必须进重试循环。注意不加裸 "reset"，避免误伤
+		// 正常业务文本中的 reset（如 password reset）。
+		"stream error", "stream reset",
+		"internal_error", "internal error",
+		"http/2", "http2", "goaway",
 		"unexpected end of json input",
 		"unexpected eof",
 		"eof",
