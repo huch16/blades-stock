@@ -151,9 +151,12 @@ func isValidMarketReport(content string) (bool, string) {
 	if trimmed == "" {
 		return false, "模型未返回任何有效内容，请检查大模型配置或网络"
 	}
-	// 任何位置包含 ❌ 或“Agent 调用失败”均视为异常中断，严禁存库与呈现
+	// 任何位置包含 ❌ 或“Agent 调用失败”均视为异常中断，严禁存库与呈现。
+	// 注意：错误原因里只放截断后的文本——旧实现把整篇研报原文
+	// 原样塞进 error，调用方再原样打日志，一份几万字的报告
+	// 会完整进日志文件。
 	if strings.Contains(trimmed, "❌") || strings.Contains(trimmed, "Agent 调用失败") {
-		return false, trimmed
+		return false, truncateText(trimmed, 200)
 	}
 	lower := strings.ToLower(trimmed)
 	if strings.Contains(lower, "no longer available") ||
@@ -495,16 +498,28 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 		}
 	}
 
-	// 采集主流行业与宽基 ETF 实时/日线行情
+	// 采集主流行业与宽基 ETF 实时/日线行情。
+	// 一次批量拉取：旧实现对 7 只 ETF 逐只调 GetStockCodeRealTimeData，
+	// 每只都是一次独立 HTTP 请求；该接口本身支持变长批量参数。
 	etfCodes := []string{"510300.SH", "159915.SZ", "512480.SH", "512660.SH", "512010.SH", "512800.SH", "510880.SH"}
 	var etfSummary strings.Builder
 	etfSummary.WriteString("核心关注ETF池（沪深300、创业板、半导体、军工、医药、证券、红利）：\n")
 	stockAPI := data.NewStockDataApi()
-	for _, code := range etfCodes {
-		quotes, err := stockAPI.GetStockCodeRealTimeData(code)
-		if err == nil && quotes != nil && len(*quotes) > 0 {
-			q := (*quotes)[0]
-			etfSummary.WriteString(fmt.Sprintf("- %s(%s): 现价 %v, 今日/昨日涨跌幅 %v%%\n", q.Name, code, q.Price, q.ChangePercent))
+	etfQuotes, err := stockAPI.GetStockCodeRealTimeData(etfCodes...)
+	if err != nil {
+		logger.SugaredLogger.Warnf("批量获取核心ETF行情失败: %v", err)
+	} else if etfQuotes != nil {
+		// 按 etfCodes 顺序输出（批量接口返回顺序不保证，用 clean code 建表映射）。
+		quoteByCode := make(map[string]data.StockInfo, len(*etfQuotes))
+		for _, q := range *etfQuotes {
+			if clean := models.CleanStockCode(q.Code); clean != "" {
+				quoteByCode[clean] = q
+			}
+		}
+		for _, code := range etfCodes {
+			if q, ok := quoteByCode[models.CleanStockCode(code)]; ok {
+				etfSummary.WriteString(fmt.Sprintf("- %s(%s): 现价 %v, 今日/昨日涨跌幅 %v%%\n", q.Name, code, q.Price, q.ChangePercent))
+			}
 		}
 	}
 
@@ -777,8 +792,14 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	contentBuilder := strings.Builder{}
 	var streamErr string
 
-	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	genCtx, cancel := context.WithTimeout(context.WithoutCancel(ctxOrBackground(ctx)), 10*time.Minute)
 	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
+	// 注意：必须用 WithoutCancel 包住入参 ctx 再派生——直接用 context.Background()
+	// 会丢掉调用方预先打上的 RunKindSerenity 标注（GenerateSerenityResearchReport
+	// 先标 serenity，这里 WithRunKindIfUnset 本应保留它），导致手动 Serenity
+	// 拆解在运行记录里被误记为 sector_anomaly；而直接用 ctx 派生又会把 HTTP
+	// 请求的取消信号带进来，后台研报会被前端断连掐断。WithoutCancel 只剥离
+	// 取消信号，保留全部 context 值，两全其美。
 	genCtx = WithRunKindIfUnset(genCtx, RunKindSectorAnomaly)
 	defer cancel()
 
