@@ -160,7 +160,9 @@ func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question strin
 	// （其余备用顺延），避免每次运行先烧一次主模型调用（首包/超时等待）；
 	// 无备用可用时保持现状（仍试主模型）。
 	if fallbacks, fbNames := BuildFallbackProvidersFromDB(ctx, aiConfig); len(fallbacks) > 0 {
-		primaryName := aiConfig.ModelName
+		// 主模型名同样用“模型名 + 网关身份”，冷却判断才按网关细分；
+		// 裸模型名会让同名不同网关的备用卡被误判为冷却中。
+		primaryName := FallbackProviderName(aiConfig)
 		modelProvider, primaryName, fallbacks, fbNames = promoteCooldownPrimary(modelProvider, primaryName, fallbacks, fbNames)
 		modelProvider = NewFallbackModelProvider(modelProvider, primaryName, fallbacks, fbNames)
 	}
@@ -234,7 +236,7 @@ func promoteCooldownPrimary(primary blades.ModelProvider, primaryName string, fa
 	if !IsModelInCooldown(primaryName) {
 		return primary, primaryName, fallbacks, fallbackNames
 	}
-	logger.SugaredLogger.Warnf("⏭️ [Fallback] 主模型 [%s] 处于熔断冷却期，直接以备用模型 [%s] 为主模型启动", primaryName, fallbackNames[0])
+	logger.SugaredLogger.Warnf("⏭️ [Fallback] 主模型 [%s] 处于熔断冷却期，直接以备用模型 [%s] 为主模型启动", DisplayFallbackProviderName(primaryName), DisplayFallbackProviderName(fallbackNames[0]))
 	return fallbacks[0], fallbackNames[0], fallbacks[1:], fallbackNames[1:]
 }
 

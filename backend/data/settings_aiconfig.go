@@ -33,7 +33,7 @@ func (s *SettingsApi) GetAiConfigTemplates() []*AiConfigTemplate {
 			Type:           "cloud",
 			Label:          "DeepSeek 官方 API",
 			Description:    "高性价比云端推理，支持 deepseek-chat / deepseek-reasoner",
-			BaseUrl:        "https://api.deepseek.com",
+			BaseUrl:        "https://api.deepseek.com/v1",
 			ModelName:      "deepseek-reasoner",
 			ApiKeyRequired: true,
 			EnvHint:        "在 https://platform.deepseek.com 获取 API Key",

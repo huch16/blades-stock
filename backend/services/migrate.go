@@ -109,6 +109,12 @@ func AutoMigrateAll() {
 	// 11. 自动自愈清理历史遗留的虚假推荐指标与排雷Prompt脏数据
 	_ = agent.CleanDirtyRecommendStocks()
 	_ = NewAgentService().PurgeCorruptedMarketReports(context.Background())
+	// 审计日志 90 天保留期：启动时清一次超期行；运行中由 RecordAuditLog /
+	// RecordAuditLogSync 写路径每小时最多触发一次（见 agent/audit.go）。
+	// created_at 有索引，单次 DELETE 代价可控；失败只记日志不阻塞启动。
+	if n := agent.CleanupOldAuditLogs(0); n > 0 {
+		logger.SugaredLogger.Infof("[Database] 启动清理过期审计日志 %d 条", n)
+	}
 
 	// 12. 校验并播种机构级基准自选股，剔除退市/ST/问题股等历史遗留垃圾标的，并完成代码格式标准化去重
 	SeedDefaultFollowedStocksIfEmpty()
@@ -144,13 +150,15 @@ func SeedDefaultAIConfigsIfEmpty() {
 
 	defaultConfigs := []*data.AIConfig{
 		{
-			Name:                "DeepSeek 官方 API",
-			BaseUrl:             "https://api.deepseek.com",
-			ApiKey:              deepseekKey,
-			ModelName:           "deepseek-chat",
-			MaxTokens:           8192,
-			Temperature:         0.3,
-			TimeOut:             300,
+			Name:        "DeepSeek 官方 API",
+			BaseUrl:     "https://api.deepseek.com/v1",
+			ApiKey:      deepseekKey,
+			ModelName:   "deepseek-chat",
+			MaxTokens:   8192,
+			Temperature: 0.3,
+			// Serenity 深度研报主用卡：慢推理模型“思考 60–120s + 输出 300s”
+			// 可能撞上 300s 单次请求超时；提到 600s，与外层 genCtx 10 分钟一致。
+			TimeOut:             600,
 			LLMConcurrencyLimit: 2,
 			SubAgentTimeout:     60,
 		},

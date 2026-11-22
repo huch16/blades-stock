@@ -22,7 +22,6 @@ import {
   GetLatestMarketIntelligenceReport,
   GetLatestMarketIntelligenceReportByType,
   GetMarketLifecycleStatus,
-  GetAiConfigs,
   GetConfig,
   PurgeCorruptedMarketReports,
   ClearMarketIntelligenceReport,
@@ -38,6 +37,7 @@ const MdPreview = defineAsyncComponent(() => import('md-editor-v3').then(m => {
 
 import { sanitizeMarkdownHtml } from '../utils/sanitize'
 import { dispatchAgentAction, consultAgent } from '../utils/agentControlBus'
+import { useAiConfigStore } from '../stores/aiConfig'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
@@ -62,8 +62,10 @@ const currentTab = ref(props.reportType || 'pre_market_briefing')
 // 向后兼容：所有模板中 :loading="loading" 自动映射为当前标签页的独立状态
 const loading = computed(() => tabLoading[currentTab.value] || false)
 const lifecycle = ref(null)
-const aiConfigs = ref([])
-const selectedAiConfigId = ref(0)
+// 当前模型与聊天共用 aiConfigStore（同一份“当前模型”）：抽屉里切换模型，
+// 聊天页同步切换，反之亦然。抽屉旧的独立 localStorage 键
+// market_intelligence_ai_config_id 已废弃，见 loadAiConfigs。
+const aiConfigStore = useAiConfigStore()
 const aiConfigReady = ref(false)
 const darkConfig = ref(false)
 
@@ -261,8 +263,8 @@ async function handleSaveThesisToLedger() {
   }
   isSavingThesis.value = true
   try {
-    const activeCfg = aiConfigs.value?.find(c => (c.ID || c.id) === selectedAiConfigId.value)
-    const modelName = activeCfg?.modelName || activeCfg?.ModelName || 'Serenity-Skill4'
+    const activeCfg = aiConfigStore.activeConfig
+    const modelName = activeCfg?.modelName || 'Serenity-Skill4'
     let verdictCode = 'NEW_THESIS'
     let verdictText = '观望/新建档'
     const vUpper = (t.verdict || '').toUpperCase()
@@ -308,11 +310,11 @@ const phaseTagType = computed(() => {
 })
 
 const aiConfigOptions = computed(() => {
-  const list = Array.isArray(aiConfigs.value) ? aiConfigs.value : []
+  const list = Array.isArray(aiConfigStore.configs) ? aiConfigStore.configs : []
   return list.map((c, index) => {
-    const id = c.ID != null ? Number(c.ID) : (c.id != null ? Number(c.id) : index + 1)
-    const name = c.name || c.Name || `配置 #${id}`
-    const modelName = c.modelName || c.ModelName || ''
+    const id = c.ID != null ? Number(c.ID) : index + 1
+    const name = c.name || `配置 #${id}`
+    const modelName = c.modelName || ''
     return {
       label: modelName ? `${name} [${modelName}]` : name,
       value: id
@@ -355,34 +357,22 @@ watch(
   }
 )
 
-async function loadAiConfigs(preferredId) {
+async function loadAiConfigs(preferredId: any = null) {
   try {
-    const configs = await GetAiConfigs()
-    aiConfigs.value = Array.isArray(configs) ? configs : []
-
-    const validIds = aiConfigs.value.map(c => (c.ID != null ? Number(c.ID) : Number(c.id)))
-    if (preferredId != null && validIds.includes(Number(preferredId))) {
-      selectedAiConfigId.value = Number(preferredId)
-    } else {
-      const saved = localStorage.getItem('market_intelligence_ai_config_id')
-      const savedId = saved ? parseInt(saved, 10) : 0
-      if (savedId && validIds.includes(savedId)) {
-        selectedAiConfigId.value = savedId
-      } else if (validIds.length > 0) {
-        selectedAiConfigId.value = validIds[0]
+    await aiConfigStore.loadConfigs()
+    if (preferredId != null) {
+      const id = Number(preferredId)
+      if (aiConfigStore.configs.some(c => Number(c.ID) === id)) {
+        aiConfigStore.setActiveConfigId(id)
       }
     }
+    // 旧抽屉独立选择键已废弃（现与聊天共用 aiConfigStore），清掉残留键避免歧义。
+    localStorage.removeItem('market_intelligence_ai_config_id')
     aiConfigReady.value = true
   } catch (e) {
-    console.error('GetAiConfigs error:', e)
+    console.error('loadAiConfigs error:', e)
   }
 }
-
-watch(selectedAiConfigId, (newId) => {
-  if (newId) {
-    localStorage.setItem('market_intelligence_ai_config_id', String(newId))
-  }
-})
 
 function goToSettings() {
   emit('update:show', false)
@@ -572,7 +562,7 @@ function startPollingForCompletion(tabKey, startTime, seq) {
 }
 
 async function generate() {
-  if (!selectedAiConfigId.value) {
+  if (!aiConfigStore.activeConfigId) {
     message.warning('请先选择 AI 配置')
     return
   }
@@ -598,16 +588,16 @@ async function generate() {
   try {
     let res = null
     if (currentTab.value === 'pre_market_briefing') {
-      res = await GeneratePreMarketBriefing(selectedAiConfigId.value)
+      res = await GeneratePreMarketBriefing(aiConfigStore.activeConfigId)
     } else if (currentTab.value === 'post_market_review') {
-      res = await GeneratePostMarketReview(selectedAiConfigId.value)
+      res = await GeneratePostMarketReview(aiConfigStore.activeConfigId)
     } else if (currentTab.value === 'etf_rotation_decision') {
-      res = await GenerateETFRotationReport(selectedAiConfigId.value)
+      res = await GenerateETFRotationReport(aiConfigStore.activeConfigId)
     } else if (currentTab.value === 'serenity_industry_analysis') {
       res = await GenerateSerenityResearchReport(
         serenityTarget.value || '核心赛道',
         serenityCode.value || '',
-        selectedAiConfigId.value
+        aiConfigStore.activeConfigId
       )
     }
 
@@ -891,7 +881,7 @@ onBeforeUnmount(() => {
           <span class="model-picker-label">🤖 模型:</span>
           <NSelect
             v-if="aiConfigOptions.length > 0"
-            v-model:value="selectedAiConfigId"
+            v-model:value="aiConfigStore.activeConfigId"
             :options="aiConfigOptions"
             size="tiny"
             style="min-width: 170px; max-width: 250px;"
@@ -1205,7 +1195,7 @@ onBeforeUnmount(() => {
             <span class="model-picker-label">🤖 模型:</span>
             <NSelect
               v-if="aiConfigOptions.length > 0"
-              v-model:value="selectedAiConfigId"
+              v-model:value="aiConfigStore.activeConfigId"
               :options="aiConfigOptions"
               size="tiny"
               style="min-width: 150px; max-width: 220px;"

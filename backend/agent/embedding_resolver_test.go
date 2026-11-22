@@ -69,7 +69,7 @@ func TestProviderEmbeddingDefaults(t *testing.T) {
 		{"nil", nil, false, ""},
 		{"nvidia", &data.AIConfig{BaseUrl: "https://integrate.api.nvidia.com/v1", ModelName: "deepseek-ai/deepseek-v4-pro"}, false, ""},
 		{"minimax", &data.AIConfig{BaseUrl: "https://api.minimax.chat/v1", ModelName: "MiniMax-M3"}, false, ""},
-		{"deepseek-official", &data.AIConfig{BaseUrl: "https://api.deepseek.com", ModelName: "deepseek-chat"}, false, ""},
+		{"deepseek-official", &data.AIConfig{BaseUrl: "https://api.deepseek.com/v1", ModelName: "deepseek-chat"}, false, ""},
 		{"gemini", &data.AIConfig{BaseUrl: "https://generativelanguage.googleapis.com", ModelName: "gemini-2.5-pro"}, false, ""},
 		{"ollama", &data.AIConfig{BaseUrl: "http://localhost:11434", ModelName: "qwen2.5"}, true, ""},
 		{"openai", &data.AIConfig{BaseUrl: "https://api.openai.com/v1", ModelName: "gpt-4o"}, true, "text-embedding-3-small"},

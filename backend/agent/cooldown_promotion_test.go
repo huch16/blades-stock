@@ -11,12 +11,15 @@ import (
 // unmarkModelCooldownForTest 是测试专用的冷却表清理手段：每个用例用唯一模型名
 // 隔离全局冷却表（MarkModelPermanentFailure 是进程级状态），用例结束时删掉
 // 本用例写入的条目，避免污染其它测试。不改任何生产语义。
+// 冷却键是“模型名 + 网关身份”的细分键，清理时按同一规则导出键再删，
+// 另保留裸名/原始名的删除以兼容历史遗留条目。
 func unmarkModelCooldownForTest(t *testing.T, names ...string) {
 	t.Helper()
 	t.Cleanup(func() {
 		globalDeadModelMu.Lock()
 		defer globalDeadModelMu.Unlock()
 		for _, n := range names {
+			delete(globalDeadModelCooldown, cooldownKeyFromName(n))
 			delete(globalDeadModelCooldown, n)
 			delete(globalDeadModelCooldown, CleanFallbackModelName(n))
 		}

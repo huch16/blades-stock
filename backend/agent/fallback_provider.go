@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -109,28 +111,82 @@ func isTransientRateLimitSignal(s string) bool {
 
 var (
 	globalDeadModelMu       sync.RWMutex
-	globalDeadModelCooldown = make(map[string]time.Time) // modelIdentifier -> cooldownUntil
+	globalDeadModelCooldown = make(map[string]time.Time) // 冷却键（模型名+网关身份）-> cooldownUntil
 )
+
+// apiKeyFingerprint 取 ApiKey 的短哈希指纹（前 12 位十六进制），用于冷却键区分
+// 同一网关上不同凭证的卡片。只存哈希前缀，原始 Key 永不进入冷却表或日志。
+func apiKeyFingerprint(apiKey string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(apiKey)))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+// FallbackProviderName 生成备用链内部使用的模型身份名，格式为
+// "模型名(BaseUrl#key指纹)"，例如 "deepseek-chat(https://api.deepseek.com/v1#e3b0c44298fc)"。
+// 它是冷却键的载体：同一模型名在不同网关/不同凭证下得到不同名字，
+// 从而在 MarkModelPermanentFailure / IsModelInCooldown 里独立冷却。
+// 对外展示一律用 DisplayFallbackProviderName（去掉 #指纹部分）或
+// CleanFallbackModelName（只留模型名）；指纹不进入运行记录与用户可见文案。
+func FallbackProviderName(cfg data.AIConfig) string {
+	return fmt.Sprintf("%s(%s#%s)",
+		strings.TrimSpace(cfg.ModelName),
+		normalizeBaseURL(cfg.BaseUrl),
+		apiKeyFingerprint(cfg.ApiKey))
+}
+
+// parseCooldownIdentity 从备用链身份名解析（模型名，网关 BaseUrl，凭证指纹）。
+// 兼容旧格式与裸模型名（测试/历史调用）：
+//   - "Model(BaseUrl#fp)" → (Model, BaseUrl, fp)
+//   - "Model(BaseUrl)"    → (Model, BaseUrl, "")，凭证未知
+//   - "Model"             → (Model, "", "")，网关与凭证均未知
+func parseCooldownIdentity(name string) (model, baseUrl, keyFp string) {
+	name = strings.TrimSpace(name)
+	open := strings.Index(name, "(")
+	if open <= 0 {
+		return name, "", ""
+	}
+	model = strings.TrimSpace(name[:open])
+	inner := strings.TrimSpace(strings.TrimSuffix(name[open+1:], ")"))
+	if i := strings.LastIndex(inner, "#"); i >= 0 {
+		return model, normalizeBaseURL(inner[:i]), strings.TrimSpace(inner[i+1:])
+	}
+	return model, normalizeBaseURL(inner), ""
+}
+
+// DisplayFallbackProviderName 把内部身份名还原为展示用名（去掉 #凭证指纹）：
+// "Model(BaseUrl#fp)" → "Model(BaseUrl)"；其它格式原样返回。
+// 用于运行记录 FallbackChain 与日志，避免哈希指纹污染用户可见内容。
+func DisplayFallbackProviderName(name string) string {
+	model, baseUrl, _ := parseCooldownIdentity(name)
+	if baseUrl == "" {
+		return model
+	}
+	return fmt.Sprintf("%s(%s)", model, baseUrl)
+}
+
+// cooldownKeyFromName 由身份名导出冷却表键：模型名 + 网关（BaseUrl + 凭证指纹）。
+// 旧实现以裸模型名（CleanFallbackModelName）与原始身份名双键存储，
+// 本质仍是按模型名冷却：同一模型名在不同网关的卡片会互相牵连
+// （A 网关鉴权失败 → B 网关同名卡也被排除 30 分钟）；
+// 现改为模型+网关细分，同名不同网关/不同凭证独立冷却。
+func cooldownKeyFromName(name string) string {
+	model, baseUrl, keyFp := parseCooldownIdentity(name)
+	return model + "\n" + baseUrl + "\n" + keyFp
+}
 
 // MarkModelPermanentFailure 记录某个模型发生永久鉴权或用量耗尽失败，进入 30 分钟全局熔断冷却隔离
 func MarkModelPermanentFailure(modelIdentifier string) {
 	globalDeadModelMu.Lock()
 	defer globalDeadModelMu.Unlock()
-	clean := CleanFallbackModelName(modelIdentifier)
-	globalDeadModelCooldown[clean] = time.Now().Add(30 * time.Minute)
-	globalDeadModelCooldown[modelIdentifier] = time.Now().Add(30 * time.Minute)
-	logger.SugaredLogger.Warnf("🚫 [Fallback] 模型 [%s] 发生不可逆鉴权或用量耗尽错误，已自动进入全局熔断隔离池 (冷却30分钟)", clean)
+	globalDeadModelCooldown[cooldownKeyFromName(modelIdentifier)] = time.Now().Add(30 * time.Minute)
+	logger.SugaredLogger.Warnf("🚫 [Fallback] 模型 [%s] 发生不可逆鉴权或用量耗尽错误，已自动进入全局熔断隔离池 (冷却30分钟)", CleanFallbackModelName(modelIdentifier))
 }
 
 // IsModelInCooldown 检查模型是否处于全局熔断冷却期
 func IsModelInCooldown(modelIdentifier string) bool {
 	globalDeadModelMu.RLock()
 	defer globalDeadModelMu.RUnlock()
-	clean := CleanFallbackModelName(modelIdentifier)
-	if until, ok := globalDeadModelCooldown[clean]; ok && time.Now().Before(until) {
-		return true
-	}
-	if until, ok := globalDeadModelCooldown[modelIdentifier]; ok && time.Now().Before(until) {
+	if until, ok := globalDeadModelCooldown[cooldownKeyFromName(modelIdentifier)]; ok && time.Now().Before(until) {
 		return true
 	}
 	return false
@@ -649,6 +705,65 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 	}
 }
 
+// isFallbackCandidate reports whether cfg may serve as a fallback for
+// currentConfig, applying the shared exclusions of the fallback chain:
+// skip the primary itself, empty API keys, models in the 30-minute global
+// cooldown pool, and — when the primary is itself in cooldown — configs
+// that share the primary's ApiKey+BaseUrl (retrying them would repeat the
+// same auth/quota failure). Shared by BuildFallbackProvidersFromDB and
+// FirstFallbackAIConfig so the chain order and the Serenity retry picker
+// can never drift apart.
+func isFallbackCandidate(cfg, currentConfig data.AIConfig, primaryKey string, primaryInCooldown bool) bool {
+	if cfg.ID == currentConfig.ID || strings.TrimSpace(cfg.ApiKey) == "" {
+		return false
+	}
+	// 冷却键是“模型名 + 网关（BaseUrl + 凭证指纹）”，同名不同网关的卡片
+	// 不再互相牵连（旧实现还按裸模型名查 IsModelInCooldown(cfg.ModelName)，
+	// A 网关鉴权失败会把 B 网关同名卡一并排除 30 分钟）。
+	if IsModelInCooldown(FallbackProviderName(cfg)) {
+		return false
+	}
+	// 若主模型已因鉴权/用量耗尽熔断，跳过共享相同 ApiKey+BaseUrl 的备用配置，避免重复失败空转。
+	// 注意：这条跳过成立的前提是熔断本身分类正确（见 IsPermanentAuthError）。
+	// 容量型 429（如 TokenLab "at capacity"）是按模型/按时刻的瞬时问题，
+	// 同一网关换一个模型完全可能成功——它绝不能让主模型进熔断，否则
+	// 同网关的备用模型会被这里一并排除，整条链名存实亡。
+	if primaryInCooldown {
+		cfgKey := fmt.Sprintf("%s|%s", strings.TrimSpace(cfg.ApiKey), strings.TrimSpace(cfg.BaseUrl))
+		if cfgKey == primaryKey {
+			return false
+		}
+	}
+	return true
+}
+
+// FirstFallbackAIConfig returns the first available fallback card for
+// currentConfig, in registry order, using the same exclusions as
+// BuildFallbackProvidersFromDB — but without instantiating a provider.
+// It is the card selector for the Serenity whole-round retry: the retry
+// round re-runs ChatWithContext with this card as primary, so the card
+// gets its own fallback chain there. Selection is by registry/cooldown
+// state only, never a hard-coded model; a card that later fails to
+// connect surfaces as the retry round's own error.
+func FirstFallbackAIConfig(currentConfig data.AIConfig) (data.AIConfig, bool) {
+	settingConfig := data.GetSettingConfig()
+	if settingConfig == nil || len(settingConfig.AiConfigs) == 0 {
+		return data.AIConfig{}, false
+	}
+	primaryKey := fmt.Sprintf("%s|%s", strings.TrimSpace(currentConfig.ApiKey), strings.TrimSpace(currentConfig.BaseUrl))
+	primaryInCooldown := IsModelInCooldown(FallbackProviderName(currentConfig))
+	for _, cfgPtr := range settingConfig.AiConfigs {
+		if cfgPtr == nil {
+			continue
+		}
+		cfg := *cfgPtr
+		if isFallbackCandidate(cfg, currentConfig, primaryKey, primaryInCooldown) {
+			return cfg, true
+		}
+	}
+	return data.AIConfig{}, false
+}
+
 // BuildFallbackProvidersFromDB 从数据库或全局配置中获取备用的 AIConfig 并实例化 Provider
 func BuildFallbackProvidersFromDB(ctx context.Context, currentConfig data.AIConfig) ([]blades.ModelProvider, []string) {
 	var fallbackProviders []blades.ModelProvider
@@ -660,33 +775,21 @@ func BuildFallbackProvidersFromDB(ctx context.Context, currentConfig data.AIConf
 	}
 
 	primaryKey := fmt.Sprintf("%s|%s", strings.TrimSpace(currentConfig.ApiKey), strings.TrimSpace(currentConfig.BaseUrl))
+	primaryInCooldown := IsModelInCooldown(FallbackProviderName(currentConfig))
 
 	for _, cfgPtr := range settingConfig.AiConfigs {
 		if cfgPtr == nil {
 			continue
 		}
 		cfg := *cfgPtr
-		modelKey := fmt.Sprintf("%s(%s)", cfg.ModelName, cfg.BaseUrl)
-		cfgKey := fmt.Sprintf("%s|%s", strings.TrimSpace(cfg.ApiKey), strings.TrimSpace(cfg.BaseUrl))
-
-		// 跳过当前主配置、空 Key 或已处于全局熔断隔离池的失效模型
-		if cfg.ID == currentConfig.ID || strings.TrimSpace(cfg.ApiKey) == "" || IsModelInCooldown(modelKey) || IsModelInCooldown(cfg.ModelName) {
-			continue
-		}
-
-		// 若主模型已因鉴权/用量耗尽熔断，跳过共享相同 ApiKey+BaseUrl 的备用配置，避免重复失败空转。
-		// 注意：这条跳过成立的前提是熔断本身分类正确（见 IsPermanentAuthError）。
-		// 容量型 429（如 TokenLab "at capacity"）是按模型/按时刻的瞬时问题，
-		// 同一网关换一个模型完全可能成功——它绝不能让主模型进熔断，否则
-		// 同网关的备用模型会被这里一并排除，整条链名存实亡。
-		if (IsModelInCooldown(currentConfig.ModelName) || IsModelInCooldown(fmt.Sprintf("%s(%s)", currentConfig.ModelName, currentConfig.BaseUrl))) && cfgKey == primaryKey {
+		if !isFallbackCandidate(cfg, currentConfig, primaryKey, primaryInCooldown) {
 			continue
 		}
 
 		provider, err := createChatModel(ctx, cfg)
 		if err == nil && provider != nil {
 			fallbackProviders = append(fallbackProviders, provider)
-			fallbackNames = append(fallbackNames, fmt.Sprintf("%s(%s)", cfg.ModelName, cfg.BaseUrl))
+			fallbackNames = append(fallbackNames, FallbackProviderName(cfg))
 		}
 	}
 

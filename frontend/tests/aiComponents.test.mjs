@@ -115,3 +115,57 @@ test('cron-task-manager：立即执行的失败文案不得再弹 success', () =
   const src = read('src/components/cron-task-manager.vue')
   assert.match(src, /\/不存在\|失败\|错误\/\.test\(text\)/)
 })
+
+test('researchReport：弹窗导出必须按行 ID 导出当前打开的报告，而非按 code 取最新', () => {
+  const src = read('src/components/researchReport.vue')
+  // 打开弹窗时记下行 ID，导出按钮传该 ID 调新接口。
+  assert.match(src, /editorDataRef\.reportId = row\.ID \|\| 0/)
+  assert.match(src, /SaveReportAsMarkdownById\(id\)/)
+  assert.match(src, /@click="saveReportAsMarkdownById\(editorDataRef\.reportId, editorDataRef\.stockCode, editorDataRef\.stockName\)"/)
+  // 弹窗里不得再直接按 code 导出（那会拿到同一标的的最新一条）。
+  assert.doesNotMatch(src, /@click="saveAsMarkdown\(editorDataRef\.stockCode, editorDataRef\.stockName\)"/)
+  // wailsjs 绑定必须存在（手补条目，待 wails 重新生成绑定时核对）。
+  const dts = read('wailsjs/go/main/App.d.ts')
+  assert.match(dts, /export function SaveReportAsMarkdownById\(arg1:number\):Promise<string>;/)
+  const js = read('wailsjs/go/main/App.js')
+  assert.match(js, /export function SaveReportAsMarkdownById\(arg1\)/)
+})
+
+test('agent-chat：tool_calls 分支必须把结构化工具调用推进 ToolTimeline', () => {
+  const src = read('src/components/agent-chat.vue')
+  assert.match(src, /if \(data\.tool_calls && data\.tool_calls\.length > 0\)/)
+  assert.match(src, /targetMsg\.toolCalls\.push\(\.\.\.data\.tool_calls\)/)
+  // 后端字段形状必须与 chat/types.ts 的 ToolCall 对齐（本测试只守前端侧，
+  // 后端侧由 backend/agent/stream_tool_calls_test.go 的 JSON 形状测试守）。
+  const types = read('src/components/chat/types.ts')
+  assert.match(types, /tool_calls\?: ToolCall\[\]/)
+  assert.match(types, /function: \{\s*name: string\s*arguments: string\s*\}/)
+  assert.match(types, /status: 'pending' \| 'success' \| 'error'/)
+})
+
+test('MarketIntelligenceDrawer：当前模型必须与聊天共用 aiConfigStore，不得自存一份', () => {
+  const src = read('src/components/MarketIntelligenceDrawer.vue')
+  // 抽屉与聊天各存一份“当前模型”导致切换不互通（2026-11-23 第三轮 C 组）：
+  // 抽屉改读 aiConfigStore.activeConfigId，模板选择器与生成调用都走 store。
+  assert.match(src, /import \{ useAiConfigStore \} from '\.\.\/stores\/aiConfig'/)
+  assert.match(src, /const aiConfigStore = useAiConfigStore\(\)/)
+  assert.match(src, /v-model:value="aiConfigStore\.activeConfigId"/)
+  assert.match(src, /GenerateSerenityResearchReport\(\s*serenityTarget\.value[^)]*aiConfigStore\.activeConfigId/s)
+  assert.match(src, /aiConfigStore\.loadConfigs\(\)/)
+  assert.match(src, /aiConfigStore\.setActiveConfigId\(id\)/)
+  // 不得再有抽屉私有的选择 state 与读写旧键（只允许一处 removeItem 清理残留）。
+  assert.doesNotMatch(src, /selectedAiConfigId/)
+  assert.doesNotMatch(src, /localStorage\.getItem\('market_intelligence_ai_config_id'\)/)
+  assert.doesNotMatch(src, /localStorage\.setItem\('market_intelligence_ai_config_id'/)
+  assert.doesNotMatch(src, /GetAiConfigs\(\)/)
+})
+
+test('settings：硅基流动离线兜底模型必须与后端注册表一致', () => {
+  const src = read('src/components/settings.vue')
+  // 后端模板与种子卡均为 Qwen/Qwen2.5-7B-Instruct，前端兜底曾用
+  // deepseek-ai/DeepSeek-V3（2026-11-23 第三轮 C 组统一为后端值）。
+  assert.match(src, /modelName: 'Qwen\/Qwen2\.5-7B-Instruct'/)
+  assert.doesNotMatch(src, /deepseek-ai\/DeepSeek-V3/)
+  // DeepSeek 兜底地址必须带 /v1（与后端注册表修正后一致）。
+  assert.match(src, /baseUrl: 'https:\/\/api\.deepseek\.com\/v1'/)
+})

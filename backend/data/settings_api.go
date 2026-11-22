@@ -300,7 +300,7 @@ func GetSettingConfig() *SettingConfig {
 			}
 			// ✅ 修复：BaseUrl/ModelName/Name 为空时填充默认值，避免前端下拉框空白
 			if strings.TrimSpace(item.BaseUrl) == "" {
-				item.BaseUrl = "https://api.deepseek.com"
+				item.BaseUrl = "https://api.deepseek.com/v1"
 			}
 			if strings.TrimSpace(item.ModelName) == "" {
 				item.ModelName = "deepseek-reasoner"

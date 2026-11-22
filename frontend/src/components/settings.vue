@@ -850,7 +850,7 @@ async function openModelTemplateWizard() {
         label: '硅基流动 SiliconFlow 开源模型聚合',
         description: '极速推理加速平台，聚合 DeepSeek / Qwen 等优秀开源权重',
         baseUrl: 'https://api.siliconflow.cn/v1',
-        modelName: 'deepseek-ai/DeepSeek-V3',
+        modelName: 'Qwen/Qwen2.5-7B-Instruct',
         apiKeyRequired: true
       },
       {
