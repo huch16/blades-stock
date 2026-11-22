@@ -33,12 +33,11 @@ func SetEastMoneyKlineBrowserHeaders(r *resty.Request, referer string) {
 
 // fetchKLineJSONBytesByHTTP 每次调用均发起真实 GET，不缓存 K 线响应；cookieHeader 仅来自 chromedp 缓存或当次刷新。
 // 由于 Transport 设置了 DisableCompression=true，需要手动处理 gzip 解压。
+// 注意：超时在构造时已固化到独立 client（见 NewEastMoneyKLineApi），这里
+// 不再调 client.SetTimeout——receiver.client 曾是共享单例，每次请求改写
+// 其 http.Client.Timeout 是并发 K 线拉取的数据竞态根因之一。
 func (receiver *EastMoneyKLineApi) fetchKLineJSONBytesByHTTP(reqURL string) ([]byte, error) {
-	timeout := 10 * time.Second
-	if receiver.crawlTimeoutSec > 0 {
-		timeout = time.Duration(receiver.crawlTimeoutSec) * time.Second
-	}
-	req := receiver.client.SetTimeout(timeout).R()
+	req := receiver.client.R()
 	SetEastMoneyKlineBrowserHeaders(req, "https://quote.eastmoney.com")
 	// 使用缓存的 Cookie，pageURL 参数传空字符串由函数内部使用默认值
 	//cookieHeader, err := FetchEastMoneyCookiesViaChromedp("", time.Second*5, reqURL)
@@ -155,49 +154,18 @@ type CallAuctionData struct {
 // （空表示未配置，HTTP 请求不带 chromedp cookie）；均由调用方
 // （backend/data 的转发函数）从设置传入，本包不读设置表。
 func NewEastMoneyKLineApi(crawlTimeoutSec int64, browserPath string) *EastMoneyKLineApi {
-	client := SharedHTTPClient
-
-	//// 配置强制 IPv4 优先的 Transport，解决 IPv6 连接问题
-	//dialer := &net.Dialer{
-	//	Timeout:       10 * time.Second,
-	//	KeepAlive:     30 * time.Second,
-	//	DualStack:     false, // 禁用双栈
-	//	FallbackDelay: -1,    // 禁用 Happy Eyeballs
-	//}
-	//
-	//client.SetTransport(&http.Transport{
-	//	DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-	//		// 强制只使用 IPv4
-	//		host, port, err := net.SplitHostPort(addr)
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//		// 解析 A 记录（IPv4）
-	//		ips, err := net.DefaultResolver.LookupIP(ctx, "ip4", host)
-	//		if err != nil {
-	//			return nil, err
-	//		}
-	//		if len(ips) == 0 {
-	//			return nil, fmt.Errorf("no IPv4 address found for %s", host)
-	//		}
-	//		ipv4 := ips[0].String()
-	//		return dialer.DialContext(ctx, "tcp4", net.JoinHostPort(ipv4, port))
-	//	},
-	//	TLSClientConfig: &tls.Config{
-	//		MinVersion: tls.VersionTLS12,
-	//		ServerName: "push2his.eastmoney.com",
-	//	},
-	//	DisableCompression:  true, // 禁用自动压缩，手动处理 gzip
-	//	MaxIdleConns:        100,
-	//	MaxIdleConnsPerHost: 10,
-	//	IdleConnTimeout:     90 * time.Second,
-	//	ForceAttemptHTTP2:   false, // 强制使用 HTTP/1.1
-	//})
-	//
-	//client.SetTimeout(time.Duration(config.CrawlTimeOut) * time.Second)
+	// 超时在构造时固化到独立 client（共享 transport，见
+	// CreateHTTPClientWithTimeout；与 settings_service.go 的做法一致）：
+	// 不再用 SharedHTTPClient——并发拉取时每次请求调 SetTimeout 会改写
+	// 共享 http.Client.Timeout（数据竞态）。超时取值与原来每次请求时
+	// 的计算一致（<=0 取默认 10 秒），语义不变。
+	timeout := 10 * time.Second
+	if crawlTimeoutSec > 0 {
+		timeout = time.Duration(crawlTimeoutSec) * time.Second
+	}
 
 	return &EastMoneyKLineApi{
-		client:          client,
+		client:          CreateHTTPClientWithTimeout(timeout),
 		crawlTimeoutSec: crawlTimeoutSec,
 		browserPath:     browserPath,
 	}

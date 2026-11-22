@@ -29,11 +29,14 @@ type SinaKLineItem struct {
 
 // NewSinaKLineApi 构造新浪 K 线客户端。crawlTimeoutSec 为爬取超时（秒），
 // 由调用方（backend/data 的降级链）从设置传入；本包不读设置表。
+// 注意：不用 SharedHTTPClient——它是在并发 K 线拉取中共用的全局单例，
+// 在此调 SetTimeout 会改写所有并发请求的 http.Client.Timeout（数据竞态，
+// 见 kline_eastmoney.go:41 / kline_sina.go:131/401 的竞态栈）。改用独立
+// client（共享 transport，见 CreateHTTPClientWithTimeout；与
+// settings_service.go 的做法一致），超时语义不变。
 func NewSinaKLineApi(crawlTimeoutSec int64) *SinaKLineApi {
-	client := SharedHTTPClient
-	client.SetTimeout(time.Duration(crawlTimeoutSec) * time.Second)
 	return &SinaKLineApi{
-		client: client,
+		client: CreateHTTPClientWithTimeout(time.Duration(crawlTimeoutSec) * time.Second),
 	}
 }
 
@@ -396,11 +399,12 @@ func (r *TencentKLineResponse) UnmarshalJSON(b []byte) error {
 
 // NewTencentKLineApi 构造腾讯 K 线客户端。crawlTimeoutSec 为爬取超时（秒），
 // 由调用方（backend/data 的降级链）从设置传入；本包不读设置表。
+// 注意：不用 SharedHTTPClient——原因同 NewSinaKLineApi（并发下 SetTimeout
+// 改写共享 http.Client.Timeout 产生数据竞态）。独立 client（共享
+// transport），超时语义不变。
 func NewTencentKLineApi(crawlTimeoutSec int64) *TencentKLineApi {
-	client := SharedHTTPClient
-	client.SetTimeout(time.Duration(crawlTimeoutSec) * time.Second)
 	return &TencentKLineApi{
-		client: client,
+		client: CreateHTTPClientWithTimeout(time.Duration(crawlTimeoutSec) * time.Second),
 	}
 }
 
