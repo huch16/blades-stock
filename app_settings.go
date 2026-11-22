@@ -608,6 +608,41 @@ func (a *App) SaveAsMarkdown(stockCode, stockName string) string {
 	return "分析结果异常,无法保存。"
 }
 
+// SaveReportAsMarkdownById 按报告 ID 导出指定行的研报（桌面模式：弹保存对话框写文件）。
+//
+// 与按 stockCode 取最新的 SaveAsMarkdown 不同：用户在研报列表里点开一条
+// 旧报告再点导出，必须拿到该行的旧内容，而不是同一标的的最新一条。
+// 取行与文件名均走 settingsService（delivery 层只做薄转发 + 桌面文件对话框），
+// 与 SaveAsMarkdown 的返回文案约定一致（"已保存至：…" / "取消保存" / 错误文案），
+// 前端可复用同一套结果处理分支。
+func (a *App) SaveReportAsMarkdownById(id int) string {
+	res := a.settingsService.GetReportById(id)
+	if res != nil && res.ID > 0 && len(res.Content) > 100 {
+		analysisTime := res.CreatedAt.Format("2006-01-02_15_04_05")
+		file, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+			Title:           "保存为Markdown",
+			DefaultFilename: fmt.Sprintf("%s[%s]AI分析结果_%s.md", res.StockName, res.StockCode, analysisTime),
+			Filters: []runtime.FileFilter{
+				{
+					DisplayName: "Markdown",
+					Pattern:     "*.md;*.markdown",
+				},
+			},
+		})
+		if err != nil {
+			return err.Error()
+		}
+		if file == "" {
+			return "取消保存"
+		}
+		if err = os.WriteFile(file, []byte(res.Content), 0644); err != nil {
+			return "保存失败：" + err.Error()
+		}
+		return "已保存至：" + file
+	}
+	return "分析结果异常,无法保存。"
+}
+
 // @Description:  跨平台打开默认浏览器（增强协议校验与 SSRF 拦截）
 // @receiver a
 // @param url

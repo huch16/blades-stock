@@ -55,6 +55,55 @@ type StreamMessage struct {
 	ModelName        string              `json:"model_name,omitempty"`
 	FinishReason     string              `json:"finish_reason,omitempty"`
 	StatusText       string              `json:"status_text,omitempty"`
+	// ToolCalls 本轮流里已完成的工具调用（结构化）。
+	//
+	// 与前端 chat/types.ts 的 ToolCall 对齐：function.name/arguments、
+	// status（success/error）、duration（毫秒，可空）、result（摘要）。
+	// 推理区的 [STEP] 文本保留作人类可读的过程记录；本字段供
+	// ToolTimeline 渲染。blades 只在工具执行完成后才 yield 带
+	// request+response 的 ToolPart，因此这里只有终态（success/error），
+	// 没有 pending——pending 进度条只在前端后续补“调用中”事件时才有意义。
+	ToolCalls []StreamToolCall `json:"tool_calls,omitempty"`
+}
+
+// StreamToolCall 是流式消息里单次工具调用的结构化记录。
+type StreamToolCall struct {
+	ID       string                 `json:"id,omitempty"`
+	Function StreamToolCallFunction `json:"function"`
+	Status   string                 `json:"status"`             // success | error
+	Duration int64                  `json:"duration,omitempty"` // 毫秒；blades ToolPart 不带耗时，暂空
+	Result   string                 `json:"result,omitempty"`   // 结果摘要（已脱敏、截断）
+}
+
+// StreamToolCallFunction 与前端 ToolCall.function 同形。
+type StreamToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// streamToolCallResultMaxRunes 是 ToolCalls 里 result 摘要的上限。
+// 工具结果原文可能很大（整段 JSON）；前端 <pre> 区可滚动，但整条
+// 流消息不宜无限膨胀——[STEP] 文本里已有 80 字摘要，这里给 2000 字。
+const streamToolCallResultMaxRunes = 2000
+
+// buildStreamToolCall 把一次已完成的 blades 工具调用转成前端
+// ToolTimeline 能直接渲染的结构。参数与结果均先脱敏（与 [STEP]
+// 文本同一口径）；成败判定复用 toolCallSucceeded，与工具排名记分一致。
+func buildStreamToolCall(tp *blades.ToolPart) StreamToolCall {
+	status := "success"
+	if !toolCallSucceeded(tp.Response) {
+		status = "error"
+	}
+	result := tools.SanitizeSensitiveInfo(tp.Response)
+	if len([]rune(result)) > streamToolCallResultMaxRunes {
+		result = string([]rune(result)[:streamToolCallResultMaxRunes]) + "…（结果过长，已截断）"
+	}
+	return StreamToolCall{
+		ID:       tp.ID,
+		Function: StreamToolCallFunction{Name: tp.Name, Arguments: tools.SanitizeSensitiveInfo(tp.Request)},
+		Status:   status,
+		Result:   result,
+	}
 }
 
 type StockAiAgent struct {
@@ -266,9 +315,14 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			logger.SugaredLogger.Warnf("【模型解析】发生回落: %s", resolved.Describe())
 		}
 
-		// 备用链（本 run 实际挂载了哪些备用模型）
+		// 备用链（本 run 实际挂载了哪些备用模型）。
+		// 内部身份名含 #凭证指纹（冷却键载体），入库前还原为展示名。
 		if _, fbNames := BuildFallbackProvidersFromDB(ctx, resolved.Config); len(fbNames) > 0 {
-			runRecord.FallbackChain = strings.Join(fbNames, " -> ")
+			displayNames := make([]string, len(fbNames))
+			for i, n := range fbNames {
+				displayNames[i] = DisplayFallbackProviderName(n)
+			}
+			runRecord.FallbackChain = strings.Join(displayNames, " -> ")
 		}
 
 		originalAiConfig := &resolved.Config
@@ -545,6 +599,8 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 			trackRecord := fmt.Sprintf("【回测记录】你的历史分析总体准确率: %.1f%% (已验证 %d 次, 共 %d 份报告)%s", overall.AccuracyRate, overall.VerifiedCount, overall.TotalReports, sampleWarning)
 			sysPrompt += "\n\n" + trackRecord
+			// 回测准确率指标：gauge（0-1），随每次总体统计刷新。
+			SetBacktestAccuracy(ctx, overall.AccuracyRate/100)
 		}
 
 		if memoryService != nil {
@@ -752,6 +808,13 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 								ReasoningContent: resultStepText,
 							}
 						}
+						// 结构化工具调用：供前端 ToolTimeline 渲染（agent-chat.vue
+						// 的 data.tool_calls 分支）。[STEP] 文本只进思考区，
+						// 没有本字段时时间线永远收不到数据。
+						ch <- &StreamMessage{
+							Role:      "assistant",
+							ToolCalls: []StreamToolCall{buildStreamToolCall(tp)},
+						}
 					}
 				}
 			}
@@ -849,6 +912,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		)
 		// 记录业务级 OpenTelemetry 指标
 		RecordLLMRun(ctx, totalDur, firstChunkLat, finalStatus, retryCount)
+		RecordAgentRequest(ctx, string(stockAiAgent.instance.Mode), agentErr == nil, totalDur)
 
 		// Audit log for LLM run
 		isSuccess := agentErr == nil
@@ -931,7 +995,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 
 		// fire-and-forget post-processing: memory, evaluation, tool ranking
 		if fullResponse.Len() > 0 && stockAiAgent != nil && stockAiAgent.sessionID != "" {
-			go postProcessResponse(stockAiAgent.sessionID, question, fullResponse.String(), toolNames, toolSuccess)
+			go postProcessResponse(stockAiAgent.sessionID, question, fullResponse.String(), toolNames, toolSuccess, totalDur.Milliseconds())
 		}
 
 		// 解析并在结束前下发伴随的全局控制动作指令
@@ -979,7 +1043,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 // postProcessResponse runs memory storage, evaluation, and tool ranking in
 // parallel after the agent response is complete. It is fire-and-forget and
 // must not block the response stream.
-func postProcessResponse(sessionID, question, response string, toolNames []string, toolSuccess []bool) {
+func postProcessResponse(sessionID, question, response string, toolNames []string, toolSuccess []bool, durationMs int64) {
 	recoverLog := func(label string) {
 		if r := recover(); r != nil {
 			logger.SugaredLogger.Errorf("panic in postProcessResponse [%s]: %v", label, r)
@@ -1007,6 +1071,23 @@ func postProcessResponse(sessionID, question, response string, toolNames []strin
 				ok = toolSuccess[i]
 			}
 			DefaultEvolver().RecordToolUse(name, ok, 0)
+		}
+	}()
+
+	// 3. 确定性反思评分（零 Token）：四维度质量评分写入 AgentTrace 与长期
+	//    记忆，低分样本触发进化建议。llm 传 nil，只走确定性评分路径，
+	//    绝不为打分调 LLM（当初清理掐掉的正是 LLM 打分的 token 成本；
+	//    零 Token 的评分 + 写库是被连带误伤的，本处只恢复这一半）。
+	//    注意：低分（score < 0）时 GenerateReflection 内部仍会触发
+	//    maybeGenerateEvolutionAdvice（OptimizePrompt 真调一次 LLM），
+	//    但受 6 小时/会话限频，见 evolution_wiring.go。
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer recoverLog("reflection")
+		toolsUsed := strings.Join(toolNames, ", ")
+		if _, err := NewEvaluator().GenerateReflection(sessionID, question, response, durationMs, nil, toolsUsed); err != nil {
+			logger.SugaredLogger.Warnf("reflection failed: %v", err)
 		}
 	}()
 

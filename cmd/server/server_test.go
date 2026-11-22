@@ -488,6 +488,7 @@ func TestRPCDispatcher_MethodParityAudit(t *testing.T) {
 		"SaveAsMarkdown",
 		"SaveCustomStrategy",
 		"SaveImage",
+		"SaveReportAsMarkdownById",
 		"SaveStockChangesToHistory",
 		"SaveWordFile",
 		"SearchCronTasks",

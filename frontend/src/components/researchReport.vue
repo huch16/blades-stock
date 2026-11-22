@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, h, onBeforeMount, onMounted, ref, reactive } from 'vue'
-import { GetAIResponseResultList, GetConfig, SaveAsMarkdown, DeleteAIResponseResult } from "../../wailsjs/go/main/App"
+import { GetAIResponseResultList, GetConfig, SaveAsMarkdown, SaveReportAsMarkdownById, DeleteAIResponseResult } from "../../wailsjs/go/main/App"
 import { NButton, NEllipsis, NText, useMessage, useDialog } from "naive-ui"
 // MdPreview 只在报告弹窗里用，改为异步加载，避免 /research 路由入口就带上
 // md-editor-v3 + CodeMirror 约 2.8MB（与 stock.vue 的写法一致）
@@ -18,6 +18,7 @@ const editorDataRef = reactive({
   show: false,
   loading: false,
   darkTheme: false,
+  reportId: 0,
   chatId: "",
   modelName: "",
   CreatedAt: "",
@@ -172,6 +173,7 @@ const theme = computed(() => {
 function showReport(row) {
   if (!row) return
   editorDataRef.show = true
+  editorDataRef.reportId = row.ID || 0
   editorDataRef.chatId = row.chatId || ""
   editorDataRef.modelName = row.modelName || ""
   editorDataRef.CreatedAt = row.CreatedAt ? String(row.CreatedAt).substring(0, 19).replace('T', ' ') : ""
@@ -269,6 +271,43 @@ function handleSearch() {
 
 function saveAsMarkdown(code, name) {
   SaveAsMarkdown(code, name).then(result => {
+    if (!result || result === '取消保存') {
+      message.info(result || '已取消保存')
+      return
+    }
+    if (result.startsWith('保存失败') || result.startsWith('分析结果异常')) {
+      message.error(result)
+      return
+    }
+    if (result.startsWith('已保存至：')) {
+      message.success(result)
+      return
+    }
+    // Web 模式下后端返回 Markdown 正文，触发浏览器下载
+    const blob = new Blob([result], { type: 'text/markdown;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${name || '个股'}[${code || ''}]-AI研报.md`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    message.success('已导出为 Markdown 文件并开始下载')
+  }).catch(err => {
+    message.error('导出 Markdown 失败: ' + (err?.message || err))
+  })
+}
+
+// 按行导出：导出当前打开的这一条报告，而不是同一标的的最新一条。
+// 后端 SaveReportAsMarkdownById 与 SaveAsMarkdown 的返回约定一致
+// （桌面 "已保存至：…" / "取消保存" / 错误文案；Web 直接返回 Markdown 正文），
+// 因此复用同一套结果处理分支；行 ID 缺失时（如旧数据）回落到按 code 导出。
+function saveReportAsMarkdownById(id, code, name) {
+  if (!id) {
+    saveAsMarkdown(code, name)
+    return
+  }
+  SaveReportAsMarkdownById(id).then(result => {
     if (!result || result === '取消保存') {
       message.info(result || '已取消保存')
       return
@@ -422,7 +461,7 @@ function deleteAIResponseResult(id) {
         <n-button
           size="tiny"
           type="primary"
-          @click="saveAsMarkdown(editorDataRef.stockCode, editorDataRef.stockName)"
+          @click="saveReportAsMarkdownById(editorDataRef.reportId, editorDataRef.stockCode, editorDataRef.stockName)"
         >
           保存为Markdown文件
         </n-button>

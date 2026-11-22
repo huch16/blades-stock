@@ -131,3 +131,14 @@ func (o *OpenAi) GetAIResponseResult(stock string) *models.AIResponseResult {
 	db.Dao.Where("stock_code = ?", stock).Order("id desc").Limit(1).Find(&result)
 	return &result
 }
+
+// GetAIResponseResultById 按主键取单条 AI 分析结果（研报导出按行）。
+//
+// 与按 stockCode 取最新的 GetAIResponseResult 不同：用户在列表里点开一条
+// 旧报告再点导出，必须拿到该行的旧内容，而不是同一标的的最新一条。
+// 未找到时返回零值记录（ID==0），与 GetAIResponseResult 的约定一致。
+func (o *OpenAi) GetAIResponseResultById(id uint) *models.AIResponseResult {
+	var result models.AIResponseResult
+	db.Dao.Where("id = ?", id).Limit(1).Find(&result)
+	return &result
+}

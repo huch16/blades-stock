@@ -414,6 +414,8 @@ export function SaveCustomStrategy(arg1:models.CustomStrategy):Promise<string>;
 
 export function SaveImage(arg1:string,arg2:string):Promise<string>;
 
+export function SaveReportAsMarkdownById(arg1:number):Promise<string>;
+
 export function SaveStockChangesToHistory(arg1:Array<number>):Promise<string>;
 
 export function SaveWordFile(arg1:string,arg2:string):Promise<string>;

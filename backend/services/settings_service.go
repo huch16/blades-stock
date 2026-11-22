@@ -171,6 +171,28 @@ func (s *SettingsService) SaveAsMarkdown(stockCode, stockName string) string {
 	return "分析结果异常,无法保存。"
 }
 
+// GetReportById 按报告 ID 取单条 AI 分析结果（供桌面端按行导出时取文件名与内容）。
+// id<=0 时返回 nil；未找到时返回 ID==0 的零值记录。
+func (s *SettingsService) GetReportById(id int) *models.AIResponseResult {
+	if id <= 0 {
+		return nil
+	}
+	return data.NewDeepSeekOpenAi(context.Background(), 0).GetAIResponseResultById(uint(id))
+}
+
+// SaveReportAsMarkdownById 按报告 ID 导出指定行的 Markdown（Web 模式返回正文）。
+//
+// 与按 stockCode 取最新的 SaveAsMarkdown 不同：用户在研报列表里点开一条
+// 旧报告再点导出，必须拿到该行的旧内容，而不是同一标的的最新一条。
+// 未找到或内容为空时返回与 SaveAsMarkdown 相同的错误文案，前端按原有分支处理。
+func (s *SettingsService) SaveReportAsMarkdownById(id int) string {
+	res := s.GetReportById(id)
+	if res != nil && res.ID > 0 && len(res.Content) > 0 {
+		return res.Content
+	}
+	return "分析结果异常,无法保存。"
+}
+
 // SaveWordFile 跨平台保存 Word 文件（Web 模式返回文件名）
 func (s *SettingsService) SaveWordFile(filename string, base64Data string) string {
 	return filename

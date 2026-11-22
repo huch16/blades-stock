@@ -814,6 +814,10 @@ export function SaveImage(arg1, arg2) {
   return window['go']['main']['App']['SaveImage'](arg1, arg2);
 }
 
+export function SaveReportAsMarkdownById(arg1) {
+  return window['go']['main']['App']['SaveReportAsMarkdownById'](arg1);
+}
+
 export function SaveStockChangesToHistory(arg1) {
   return window['go']['main']['App']['SaveStockChangesToHistory'](arg1);
 }
