@@ -83,6 +83,13 @@ func TestMarketService_Basic(t *testing.T) {
 }
 
 func TestSettingsService_AuditLog(t *testing.T) {
+	// 自给自足：newServicesTestEnv 的 cleanup 会关闭共享 db.Dao，
+	// 按字母顺序先跑的测试（如 seed_aiconfig_test.go）已关过一次库；
+	// 本测试必须自己建临时库，不能依赖包级 init 打开的真实 data/stock.db。
+	newServicesTestEnv(t)
+	if err := db.Dao.AutoMigrate(&models.AuditLog{}); err != nil {
+		t.Fatalf("AutoMigrate audit_logs 失败: %v", err)
+	}
 	ss := NewSettingsService()
 	resp, err := ss.GetAuditLogList(models.AuditLogQuery{
 		Page:     1,
