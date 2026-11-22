@@ -140,10 +140,13 @@ func trimHistoryMessages(historyMessages []map[string]string, maxTokens int) []m
 		lastMsg := historyMessages[len(historyMessages)-1]
 		content := lastMsg["content"]
 		maxChars := maxTokens * 2
-		if len(content) > maxChars {
+		// 按 rune 截断并保留尾部：直接按字节切片 content[len-maxChars:]
+		// 可能切在多字节汉字中间，产生非法 UTF-8。
+		runes := []rune(content)
+		if len(runes) > maxChars {
 			lastMsg = map[string]string{
 				"role":    lastMsg["role"],
-				"content": content[len(content)-maxChars:] + "\n...(更早的内容已省略)",
+				"content": string(runes[len(runes)-maxChars:]) + "\n...(更早的内容已省略)",
 			}
 		}
 		result = []map[string]string{lastMsg}

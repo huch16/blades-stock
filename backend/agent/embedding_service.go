@@ -28,6 +28,10 @@ func NewEmbeddingService(baseURL, apiKey, modelName string) *EmbeddingService {
 	embeddingsURL := ""
 	if baseURL != "" {
 		switch {
+		case strings.HasSuffix(baseURL, "/embeddings"):
+			// 调用方已传入完整端点（如配置里直接写了 /v1/embeddings），
+			// 不要再追加一次变成 /embeddings/embeddings。
+			embeddingsURL = baseURL
 		case strings.Contains(strings.ToLower(baseURL), "volces.com"):
 			// VolcArk OpenAI-compatible embeddings live at /api/v3/embeddings (no /v1 layer)
 			embeddingsURL = baseURL + "/embeddings"
@@ -161,25 +165,9 @@ func (s *EmbeddingService) Describe() string {
 	return s.embeddingsURL + " model=" + s.modelName
 }
 
-// EmbedText is an alias for Embed to satisfy the Retriever interface.
+// EmbedText adapts Embed to the Retriever method shape. Unlike the old
+// alias it honours ctx: a cancelled context fails fast instead of
+// embedding on context.Background().
 func (s *EmbeddingService) EmbedText(ctx context.Context, text string) ([]float32, error) {
-	return s.Embed(text)
-}
-
-// EmbedBatch embeds multiple texts in a single request (if supported by provider).
-// Falls back to sequential embedding if batch not supported.
-func (s *EmbeddingService) EmbedBatch(ctx context.Context, texts []string) ([][]float32, error) {
-	if s == nil || s.embeddingsURL == "" || s.modelName == "" {
-		return nil, fmt.Errorf("embedding service not configured")
-	}
-
-	results := make([][]float32, len(texts))
-	for i, text := range texts {
-		vec, err := s.Embed(text)
-		if err != nil {
-			return nil, fmt.Errorf("embed text %d: %w", i, err)
-		}
-		results[i] = vec
-	}
-	return results, nil
+	return s.EmbedWithContext(ctx, text)
 }

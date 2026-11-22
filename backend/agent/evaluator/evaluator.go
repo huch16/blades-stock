@@ -95,11 +95,3 @@ func loadGoldenCases(path string) ([]GoldenCase, error) {
 	}
 	return cases, nil
 }
-
-// Run evaluates agent traces against golden cases for a given period
-// loadTraces loads agent_plan_traces for the given period
-// evaluateCase evaluates a single golden case against traces
-// calculateRetrieverHitRate calculates the retriever hit rate from traces
-// saveCSVReport saves the evaluation results to a CSV file
-// AutoRun runs the evaluator for the last 24 hours (for cron/scheduled runs)
-// createDefaultGolden creates a default golden set file

@@ -1,6 +1,11 @@
 package agent
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"blades-stock/backend/data"
@@ -203,5 +208,78 @@ func TestResolveEmbeddingCandidateDisabled(t *testing.T) {
 	}
 	if c := resolveEmbeddingCandidate(s, s.AiConfigs[0]); c != nil {
 		t.Errorf("expected nil when embedding disabled, got %+v", c)
+	}
+}
+
+// TestVerifyEmbedding_FailureVerdictExpires 验证失败的健康检查结论
+// 会过期重试：旧实现把失败 verdict 永久缓存，启动期一次瞬时抖动
+// 会让向量服务在整个进程生命周期内永久降级。
+func TestVerifyEmbedding_FailureVerdictExpires(t *testing.T) {
+	embedPingMu.Lock()
+	embedPingCache = map[string]embedVerdict{}
+	embedPingMu.Unlock()
+	oldTTL := embedFailureRetryAfter
+	embedFailureRetryAfter = 0
+	t.Cleanup(func() { embedFailureRetryAfter = oldTTL })
+
+	var hits int32
+	// 第一次请求失败，之后成功。用唯一模型名避免命中其它测试
+	// 留下的 "ping" 缓存向量（缓存键含模型名）。
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&hits, 1)
+		if n == 1 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte("boom"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data":  []map[string]interface{}{{"embedding": []float32{1, 0}}},
+			"usage": map[string]int{"total_tokens": 1},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	svc := NewEmbeddingService(srv.URL, "", "test-model-verify-ttl")
+	if got := verifyEmbedding(svc); got != nil {
+		t.Fatalf("first verify should fail and return nil, got %v", got)
+	}
+	if atomic.LoadInt32(&hits) != 1 {
+		t.Fatalf("expected 1 ping attempt, got %d", hits)
+	}
+	// TTL 设为 0 后，失败结论立即过期：下一次应重新 Ping 并成功。
+	if got := verifyEmbedding(svc); got == nil {
+		t.Fatalf("expired failure verdict should be retried, got nil (hits=%d)", hits)
+	}
+	if atomic.LoadInt32(&hits) != 2 {
+		t.Fatalf("expected exactly 2 ping attempts, got %d", hits)
+	}
+	// 成功结论长期缓存：不再 Ping。
+	if got := verifyEmbedding(svc); got == nil {
+		t.Fatalf("success verdict should be cached, got nil")
+	}
+	if atomic.LoadInt32(&hits) != 2 {
+		t.Fatalf("success verdict must not re-ping, hits=%d", hits)
+	}
+}
+
+// TestNewEmbeddingService_EmbeddingsSuffixNoDoubleAppend 验证 baseURL
+// 已是完整 /embeddings 端点时不再追加一次。
+func TestNewEmbeddingService_EmbeddingsSuffixNoDoubleAppend(t *testing.T) {
+	svc := NewEmbeddingService("https://api.openai.com/v1/embeddings", "", "text-embedding-3-small")
+	if svc.embeddingsURL != "https://api.openai.com/v1/embeddings" {
+		t.Errorf("embeddingsURL = %q, want no double append", svc.embeddingsURL)
+	}
+}
+
+// TestEmbedText_HonoursCancelledContext 验证 EmbedText 遵守 ctx，
+// 而不是像旧实现那样在 context.Background() 上发请求。
+func TestEmbedText_HonoursCancelledContext(t *testing.T) {
+	srv := fakeEmbedServer(t, []float32{1, 0})
+	es := NewEmbeddingService(srv.URL, "", "test-model-embedtext-ctx")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := es.EmbedText(ctx, "unique-text-never-embedded-before-xyz"); err == nil {
+		t.Errorf("EmbedText with cancelled context should fail")
 	}
 }

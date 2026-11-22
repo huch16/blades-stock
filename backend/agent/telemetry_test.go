@@ -28,6 +28,14 @@ func TestTelemetryMetricsRecording(t *testing.T) {
 	RecordQuotaExceeded(ctx, "WebSearch", "daily_calls")
 	RecordToolCost(ctx, "WebSearch", 0.010)
 	RecordQuotaLimits(ctx, 15, 200, 2.0)
+
+	// 验证新增的回测准确率与 embedding 延迟度量（此前只有注释
+	// 提及而无函数体，backtestAccuracyGauge 创建后从未被赋值）。
+	SetBacktestAccuracy(ctx, 0.85)
+	RecordEmbeddingLatency(ctx, "text-embedding-3-small", 120*time.Millisecond)
+	// 失败的工具调用现在会计入 toolErrorCounter（此前失败分支
+	// 从不计数，生产里 agent_tool_errors_total 恒为 0）。
+	RecordToolCall(ctx, "GetStockPriceInfo", false, 50*time.Millisecond)
 }
 
 func TestStartMetricsExporter_Endpoints(t *testing.T) {

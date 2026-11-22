@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
@@ -12,8 +13,20 @@ import (
 
 var (
 	embedPingMu    sync.Mutex
-	embedPingCache = map[string]bool{}
+	embedPingCache = map[string]embedVerdict{}
 )
+
+// embedVerdict 是某端点的健康检查结论。成功结论长期缓存（端点
+// 一旦可用，反复 Ping 只是浪费）；失败结论只缓存一段时间，
+// 否则启动期一次瞬时网络抖动会让向量服务在整个进程生命周期内
+// 永久降级，恢复后也永不重试。
+type embedVerdict struct {
+	ok bool
+	at time.Time
+}
+
+// embedFailureRetryAfter 是失败结论过期、允许重新健康检查的间隔。
+var embedFailureRetryAfter = 5 * time.Minute
 
 // embeddingCandidate is a resolved (url, apikey, model) triple before any
 // network verification.
@@ -184,7 +197,8 @@ func providerEmbeddingDefaults(selected *data.AIConfig) (baseURL, model string, 
 
 // verifyEmbedding health-checks the endpoint once per (url|model|apikey) and
 // caches the verdict, so unreachable endpoints degrade to nil instead of
-// spamming errors on every request.
+// spamming errors on every request. A failed verdict expires after
+// embedFailureRetryAfter so a recovered endpoint is retried.
 func verifyEmbedding(svc *EmbeddingService) *EmbeddingService {
 	if svc == nil {
 		return nil
@@ -192,13 +206,16 @@ func verifyEmbedding(svc *EmbeddingService) *EmbeddingService {
 	key := embeddingPingKey(svc)
 
 	embedPingMu.Lock()
-	ok, cached := embedPingCache[key]
+	v, cached := embedPingCache[key]
 	embedPingMu.Unlock()
 	if cached {
-		if !ok {
+		if v.ok {
+			return svc
+		}
+		if time.Since(v.at) < embedFailureRetryAfter {
 			return nil
 		}
-		return svc
+		// 失败结论已过期：重新健康检查。
 	}
 
 	if err := svc.Ping(); err != nil {
@@ -224,7 +241,7 @@ func setEmbeddingVerdict(key string, ok bool) {
 	embedPingMu.Lock()
 	defer embedPingMu.Unlock()
 	if len(embedPingCache) > 128 {
-		embedPingCache = map[string]bool{}
+		embedPingCache = map[string]embedVerdict{}
 	}
-	embedPingCache[key] = ok
+	embedPingCache[key] = embedVerdict{ok: ok, at: time.Now()}
 }

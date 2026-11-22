@@ -229,6 +229,12 @@ func (sg *SkillGenerator) ImportProject(sourceURL string, name string) (*models.
 	if sourceURL != "" {
 		db.Dao.Where("source_url = ?", sourceURL).First(&analysis)
 	}
+	// sourceURL 为空时（本地路径导入，调用方可能传空 source）旧实现
+	// 每次都 INSERT 新行，重复导入同一项目会产生多条 pending 记录。
+	// 此时按名称兜底查找，避免无意义重复。
+	if analysis.ID == 0 && sourceURL == "" && name != "" {
+		db.Dao.Where("source_url = ? AND name = ?", sourceURL, name).First(&analysis)
+	}
 
 	if analysis.ID == 0 {
 		analysis = models.ProjectAnalysis{

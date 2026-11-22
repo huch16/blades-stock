@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 type ChatMemoryService struct {
@@ -264,6 +265,23 @@ func (s *ChatMemoryService) semanticRetrieve(memories []db.ChatMemory, query str
 	return result, nil
 }
 
+// truncateBytesToRuneBoundary truncates s to at most maxBytes bytes without
+// splitting a UTF-8 rune: if the cut lands mid-rune, it backs off to the
+// previous valid boundary. Returns s unchanged when it already fits.
+func truncateBytesToRuneBoundary(s string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := s[:maxBytes]
+	for len(cut) > 0 && !utf8.ValidString(cut) {
+		cut = cut[:len(cut)-1]
+	}
+	return cut
+}
+
 func (s *ChatMemoryService) GetSummary() (string, error) {
 	summary, err := db.GetChatMemorySummary(s.sessionID)
 	if err != nil {
@@ -345,7 +363,7 @@ func (s *ChatMemoryService) CompressHistory(latestMessages []map[string]string) 
 	}).Save()
 
 	// 异步 LLM 升级为真正的自然语言摘要（不阻塞请求路径）。
-	s.summarizeHistoryAsync(s.sessionID, pairs)
+	go s.summarizeHistoryAsync(s.sessionID, pairs)
 
 	logger.SugaredLogger.Infof("compressed %d messages into summary for session %s", len(compressible), s.sessionID)
 
@@ -420,8 +438,11 @@ func (s *ChatMemoryService) summarizeHistoryAsync(sessionID string, pairs []stri
 		sb.WriteString("\n")
 	}
 	raw := sb.String()
-	if len(raw) > 8000 {
-		raw = raw[:8000] + "\n...(内容截断)"
+	// 按字节上限截断时必须落在 UTF-8 rune 边界上，否则切出来的非法
+	// UTF-8 会污染 LLM prompt。直接 raw[:8000] 可能正好切在多字节
+	// 汉字中间，此处回退到上一个合法边界。
+	if truncated := truncateBytesToRuneBoundary(raw, 8000); truncated != raw {
+		raw = truncated + "\n...(内容截断)"
 	}
 
 	summaryGenMu.Lock()

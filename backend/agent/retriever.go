@@ -36,31 +36,3 @@ type Retriever interface {
 	// IsReady returns true if the retriever is initialized and ready.
 	IsReady() bool
 }
-
-// RetrieverConfig holds configuration for retriever implementations.
-type RetrieverConfig struct {
-	// EmbeddingModel is the name of the embedding model to use.
-	EmbeddingModel string
-
-	// VectorDimension is the dimension of embedding vectors.
-	VectorDimension int
-
-	// TopK is the default number of results to return.
-	TopK int
-
-	// ScoreThreshold is the minimum similarity score for results.
-	ScoreThreshold float32
-
-	// EnableCache enables in-memory caching of embeddings.
-	EnableCache bool
-
-	// CacheTTL is the time-to-live for cached embeddings.
-	CacheTTL time.Duration
-}
-
-// RetrieverError represents a retriever-specific error.
-type RetrieverError struct {
-	Code    string
-	Message string
-	Err     error
-}

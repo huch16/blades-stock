@@ -108,12 +108,6 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 		wg      sync.WaitGroup
 	)
 
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
 	for g, prompt := range subPrompts {
 		if g == tools.GroupBase {
 			continue
@@ -228,19 +222,41 @@ func preFetchInParallel(ctx context.Context, question string, allTools []bladesT
 		}(g, prompt)
 	}
 
+	// watcher 必须在所有 wg.Add 之后启动：WaitGroup 要求正数 Add
+	// 发生在 Wait 之前；旧实现先启动 watcher 再循环 Add，Add 与
+	// 已开始的 Wait 在 WaitGroup 内部状态上竞态（-race 可复现，
+	// 且计数器为 0 时 Wait 立即返回，done 会提前关闭）。
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
 	// 等待所有子Agent完成，或总超时（30秒）到达
 	select {
 	case <-done:
 		// 所有子Agent已完成
 	case <-prefetchCtx.Done():
-		// 总超时，放弃等待，返回已收集的结果
-		logger.SugaredLogger.Warnf("[parallel] 预取总超时（30s），返回已收集的 %d 个分组数据", len(results))
+		// 总超时，放弃等待，返回已收集的结果。
+		// 注意：子 goroutine 仍可能在持 mu 追加 results，直接读
+		// len(results) 是数据竞态，必须加锁。
+		mu.Lock()
+		collected := len(results)
+		mu.Unlock()
+		logger.SugaredLogger.Warnf("[parallel] 预取总超时（30s），返回已收集的 %d 个分组数据", collected)
 	}
 
-	if len(results) == 0 {
+	// 超时返回时子 goroutine 可能仍在持 mu 追加 results：直接返回共享
+	// 切片会在调用方读取时与追加竞态，此处在锁内快照一份再返回。
+	// （done 分支下所有 goroutine 已结束，快照同样安全。）
+	mu.Lock()
+	out := make([]PreFetchedData, len(results))
+	copy(out, results)
+	mu.Unlock()
+	if len(out) == 0 {
 		return nil
 	}
-	return results
+	return out
 }
 
 // buildParallelContext builds a system-context string from pre-fetched data
@@ -326,7 +342,7 @@ func mergeParallelResults(data []PreFetchedData) mergedParallel {
 	seenLines := make(map[string]string) // normalized line -> originating group
 	for _, d := range data {
 		groupName := describeGroup(tools.ToolGroup(d.Group))
-		deduped := dedupeSummaryLines(d.Summary, seenLines)
+		deduped := dedupeSummaryLines(d.Summary, seenLines, groupName)
 		out.sections = append(out.sections, parallelSection{
 			Group:    groupName,
 			Summary:  deduped,
@@ -387,8 +403,10 @@ func inferPolarity(text string) string {
 }
 
 // dedupeSummaryLines removes lines already emitted by an earlier group so the
-// same fact (e.g. identical quote line) isn't injected twice.
-func dedupeSummaryLines(summary string, seen map[string]string) string {
+// same fact (e.g. identical quote line) isn't injected twice. A repeated line
+// is kept once with a "与<group>组重复，已合并" note instead of being dropped
+// silently, so the corroboration stays visible to the main agent.
+func dedupeSummaryLines(summary string, seen map[string]string, group string) string {
 	if summary == "" {
 		return summary
 	}
@@ -406,7 +424,7 @@ func dedupeSummaryLines(summary string, seen map[string]string) string {
 			}
 			continue
 		}
-		seen[norm] = ""
+		seen[norm] = group
 		out = append(out, line)
 	}
 	return strings.Join(out, "\n")

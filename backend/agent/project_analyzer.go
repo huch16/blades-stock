@@ -76,6 +76,12 @@ func (pa *ProjectAnalyzer) AnalyzeProject(projectID uint, localPath string) erro
 		return fmt.Errorf("保存项目分析失败: %w", err)
 	}
 
+	// 重分析必须先清掉该项目上一轮的旧代码块：旧实现只 INSERT，
+	// 第二次分析会让 chunks 翻倍，第三次三倍，无界增长。
+	if err := db.Dao.Where("project_analysis_id = ?", projectID).Delete(&models.CodeChunk{}).Error; err != nil {
+		logger.SugaredLogger.Warnf("清理旧代码块失败 [项目ID=%d]: %v", projectID, err)
+	}
+
 	for _, chunk := range result.Chunks {
 		codeChunk := &models.CodeChunk{
 			ProjectAnalysisID: projectID,
@@ -126,9 +132,6 @@ func (pa *ProjectAnalyzer) analyze(localPath string) *AnalyzeResult {
 		}
 		rel, _ := filepath.Rel(localPath, path)
 		if strings.HasPrefix(rel, ".") || strings.Contains(rel, "node_modules") || strings.Contains(rel, "vendor") || strings.Contains(rel, ".git") {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		ext := filepath.Ext(rel)
@@ -283,9 +286,6 @@ func (pa *ProjectAnalyzer) findAPIDefinitions(localPath string) []string {
 		}
 		rel, _ := filepath.Rel(localPath, path)
 		if strings.HasPrefix(rel, ".") || strings.Contains(rel, "node_modules") || strings.Contains(rel, "vendor") || strings.Contains(rel, ".git") {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		ext := filepath.Ext(rel)
@@ -325,9 +325,6 @@ func (pa *ProjectAnalyzer) findModelDefinitions(localPath string) []string {
 		}
 		rel, _ := filepath.Rel(localPath, path)
 		if strings.HasPrefix(rel, ".") || strings.Contains(rel, "node_modules") || strings.Contains(rel, "vendor") || strings.Contains(rel, ".git") {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		ext := filepath.Ext(rel)
@@ -349,9 +346,6 @@ func (pa *ProjectAnalyzer) chunkCodeFiles(localPath string) []CodeChunkItem {
 		}
 		rel, _ := filepath.Rel(localPath, path)
 		if strings.HasPrefix(rel, ".") || strings.Contains(rel, "node_modules") || strings.Contains(rel, "vendor") || strings.Contains(rel, ".git") {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		ext := filepath.Ext(rel)

@@ -32,6 +32,49 @@ var (
 	dbMigrateOnce   sync.Once
 )
 
+// embeddingCacheRetention 是 SQLite 持久化缓存行的保留期：LRU 本身
+// 只有 24 小时 TTL，但 DB 行此前永不过期、无任何清理入口，表会
+// 随使用无界增长。行是可再生的派生数据（未命中即重新 Embed），
+// 删旧行只会造成一次缓存未命中，不丢任何原始数据。
+const embeddingCacheRetention = 30 * 24 * time.Hour
+
+var (
+	embedCacheCleanupMu sync.Mutex
+	embedCacheCleanupAt time.Time
+)
+
+// CleanupOldEmbeddingCache 删除早于 retention 的持久化缓存行，返回删除条数。
+// 供维护入口调用；SaveCachedEmbedding 的异步写盘里也会顺带触发，
+// 但每小时最多跑一次，避免每次 Embed 都扫表。
+func CleanupOldEmbeddingCache(retention time.Duration) int {
+	if db.Dao == nil {
+		return 0
+	}
+	if retention <= 0 {
+		retention = embeddingCacheRetention
+	}
+	ensureEmbeddingCacheTable()
+	res := db.Dao.Where("created_at < ?", time.Now().Add(-retention)).Delete(&EmbeddingCache{})
+	if res.Error != nil {
+		logger.SugaredLogger.Warnf("清理过期 embedding 缓存失败: %v", res.Error)
+		return 0
+	}
+	return int(res.RowsAffected)
+}
+
+// maybeCleanupOldEmbeddingCache 每小时最多触发一次过期清理。
+func maybeCleanupOldEmbeddingCache() {
+	embedCacheCleanupMu.Lock()
+	defer embedCacheCleanupMu.Unlock()
+	if time.Since(embedCacheCleanupAt) < time.Hour {
+		return
+	}
+	embedCacheCleanupAt = time.Now()
+	if n := CleanupOldEmbeddingCache(embeddingCacheRetention); n > 0 {
+		logger.SugaredLogger.Infof("清理过期 embedding 缓存 %d 条", n)
+	}
+}
+
 func getEmbeddingLRU() *lru.LRU[string, []float32] {
 	lruInitOnce.Do(func() {
 		memEmbeddingLRU = lru.NewLRU[string, []float32](1500, nil, 24*time.Hour)
@@ -117,9 +160,15 @@ func SaveCachedEmbedding(modelName, text string, vec []float32) {
 			CreatedAt: time.Now(),
 		}
 
+		// 冲突时同时刷新 created_at：保留期按“最后一次写入”算，
+		// 否则一个仍在被反复重新 Embed 的热向量会因首次写入时间早
+		// 而被过期清理误删（虽可重算，但没必要）。
 		_ = db.Dao.Clauses(gorm_clause.OnConflict{
 			Columns:   []gorm_clause.Column{{Name: "hash"}},
-			DoUpdates: gorm_clause.AssignmentColumns([]string{"embedding"}),
+			DoUpdates: gorm_clause.AssignmentColumns([]string{"embedding", "created_at"}),
 		}).Create(&record).Error
+
+		// 顺带过期清理（每小时最多一次，见 maybeCleanupOldEmbeddingCache）。
+		maybeCleanupOldEmbeddingCache()
 	}()
 }

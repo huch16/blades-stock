@@ -231,6 +231,7 @@ func (a *CronTaskApi) executeTaskByType(ctx context.Context, task *models.CronTa
 func (a *CronTaskApi) CalculateNextRunTime(cronExpr string) time.Time {
 	schedule, err := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow).Parse(cronExpr)
 	if err != nil {
+		logger.SugaredLogger.Warnf("Cron 表达式非法 (%q)，下次运行时间 fallback 为 1 小时后: %v", cronExpr, err)
 		return time.Now().Add(time.Hour)
 	}
 	return schedule.Next(time.Now())
@@ -288,16 +289,10 @@ func (a *CronTaskApi) executeFundAnalysis(ctx context.Context, task *models.Cron
 		}
 	}
 
-	for _, fundCode := range params.FundCodes {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			logger.SugaredLogger.Infof("分析基金：%s", fundCode)
-		}
-	}
-
-	return nil
+	// 未实现：此前这里只按基金代码打一条日志就返回 nil，任务会被
+	// 记录为“成功”，实际什么都没做。诚实返回错误，让运行记录
+	// 反映失败，而不是用假成功掩盖缺失的功能。
+	return fmt.Errorf("基金分析任务未实现（fund_analysis），请先实现后再启用该类型任务")
 }
 
 func (a *CronTaskApi) executeNewsFetch(ctx context.Context, task *models.CronTask) error {
@@ -326,16 +321,11 @@ func (a *CronTaskApi) executeStockMonitor(ctx context.Context, task *models.Cron
 		}
 	}
 
-	for _, stockCode := range params.StockCodes {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			logger.SugaredLogger.Infof("监控股票：%s", stockCode)
-		}
-	}
-
-	return nil
+	// 未实现：此前这里只按股票代码打一条日志就返回 nil，任务会被
+	// 记录为“成功”，实际没有执行任何监控。诚实返回错误。
+	// 注意：真正的实时价格预警由 PriceAlertAgentWatcher（20 秒巡检）
+	// 负责，本函数与之无关。
+	return fmt.Errorf("股票监控任务未实现（stock_monitor），请先实现后再启用该类型任务")
 }
 
 func (a *CronTaskApi) executeCustomTask(ctx context.Context, task *models.CronTask) error {
@@ -368,6 +358,11 @@ func (a *CronTaskApi) executeMarketAnalysis(ctx context.Context, task *models.Cr
 
 	ch := NewStockAiAgentApi().ChatWithContext(WithRunKind(ctx, RunKindCron), prompt, params.AiConfigId, &params.SysPromptId, false, 0, false, params.AgentMode)
 	for msg := range ch {
+		// 与 executeStockAnalysis 同样的守卫：流里会出现 nil 消息，
+		// 不判空直接读 msg.ReasoningContent 会 panic。
+		if msg == nil {
+			continue
+		}
 		if msg.ReasoningContent != "" {
 			content.WriteString(msg.ReasoningContent)
 		}
@@ -477,7 +472,12 @@ func (a *CronTaskApi) executePreMarketBriefing(ctx context.Context, task *models
 		AiConfigId int `json:"aiConfigId"`
 	}
 	if task.Params != "" {
-		_ = json.Unmarshal([]byte(task.Params), &params)
+		// 与其它 executor 一致：参数非法时返回错误，而不是静默
+		// 用 AiConfigId=0 回落到默认模型执行一次“意外”的晨报。
+		if err := json.Unmarshal([]byte(task.Params), &params); err != nil {
+			logger.SugaredLogger.Errorf("解析任务参数失败：%v", err)
+			return err
+		}
 	}
 	service := NewMarketLifecycleService(ctx)
 	_, err := service.GeneratePreMarketBriefing(ctx, params.AiConfigId)
@@ -490,7 +490,10 @@ func (a *CronTaskApi) executePostMarketReview(ctx context.Context, task *models.
 		AiConfigId int `json:"aiConfigId"`
 	}
 	if task.Params != "" {
-		_ = json.Unmarshal([]byte(task.Params), &params)
+		if err := json.Unmarshal([]byte(task.Params), &params); err != nil {
+			logger.SugaredLogger.Errorf("解析任务参数失败：%v", err)
+			return err
+		}
 	}
 	service := NewMarketLifecycleService(ctx)
 	_, err := service.GeneratePostMarketReview(ctx, params.AiConfigId)

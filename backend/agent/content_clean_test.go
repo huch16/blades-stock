@@ -173,3 +173,18 @@ func TestCleanFinalContent_StripClosedAgentAction(t *testing.T) {
 		t.Fatalf("closed agent-action not stripped:\ngot  %q\nwant %q", got, want)
 	}
 }
+
+// TestCleanFinalContent_DuplicateWithChinesePunctuationSeparator 验证两份
+// 重复答案之间只隔一句以中文句号结尾的短句时仍能折叠：
+// 旧实现用 t[len(t)-1:] 取行尾字节判断标点，对 "。" 这类多字节
+// 标点永远匹配不上，isCollapseJunk 误判为真实内容，重复答案
+// 无法折叠。
+func TestCleanFinalContent_DuplicateWithChinesePunctuationSeparator(t *testing.T) {
+	// 用非周期随机块：周期性中文句会因自身重复而折叠，测不出分隔行的影响。
+	block := randomBlock(500)
+	dup := block + "\n以上是初步分析结果。\n" + block
+	got := cleanFinalContent(dup)
+	if got != block {
+		t.Fatalf("duplicate answer with Chinese-punctuation separator should collapse to one copy, got %d chars (want %d)", len(got), len(block))
+	}
+}

@@ -53,6 +53,12 @@ var (
 	// 回测准确率指标
 	backtestAccuracyGauge metric.Float64Gauge
 
+	// 嵌入模型延迟指标
+	embeddingLatency metric.Float64Histogram
+
+	// 每日成本指标（当前值，非累计）
+	toolDailyCostGauge metric.Float64Gauge
+
 	serverStartTime = time.Now()
 )
 
@@ -337,6 +343,24 @@ func initMetrics() {
 		if err != nil {
 			logger.SugaredLogger.Warnf("创建 backtestAccuracyGauge 失败: %v", err)
 		}
+
+		embeddingLatency, err = meter.Float64Histogram(
+			"agent_embedding_latency_ms",
+			metric.WithDescription("Agent 嵌入模型调用延迟(毫秒)"),
+			metric.WithUnit("ms"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 embeddingLatency 失败: %v", err)
+		}
+
+		toolDailyCostGauge, err = meter.Float64Gauge(
+			"agent_tool_daily_cost_usd",
+			metric.WithDescription("Agent 工具与模型调用当日累计估算成本(美元)"),
+			metric.WithUnit("USD"),
+		)
+		if err != nil {
+			logger.SugaredLogger.Warnf("创建 toolDailyCostGauge 失败: %v", err)
+		}
 	})
 }
 
@@ -379,6 +403,13 @@ func RecordToolCall(ctx context.Context, toolName string, success bool, duration
 	}
 	if toolCallDuration != nil && duration > 0 {
 		toolCallDuration.Record(ctx, float64(duration.Milliseconds()), metric.WithAttributes(attrs...))
+	}
+	// 旧实现失败时从不计 toolErrorCounter：agent_tool_errors_total
+	// 在生产里恒为 0（只有带 errType 的 V2 会记，但 V2 没有调用者）。
+	// 这里失败即记一条 error_type="unknown"，V2 仍用于带错误类型的记账。
+	if !success && toolErrorCounter != nil {
+		errAttrs := append(attrs, attribute.String("error_type", "unknown"))
+		toolErrorCounter.Add(ctx, 1, metric.WithAttributes(errAttrs...))
 	}
 }
 
@@ -459,10 +490,26 @@ func RecordQuotaLimits(ctx context.Context, runBudget, dailyBudget int64, dailyC
 		toolQuotaLimitGauge.Record(ctx, runBudget, metric.WithAttributes(attribute.String("type", "run_budget")))
 		toolQuotaLimitGauge.Record(ctx, dailyBudget, metric.WithAttributes(attribute.String("type", "daily_budget")))
 	}
+	// 旧实现收了 dailyCostUSD 却从不记录：参数是当日累计成本
+	// （当前值），必须进 gauge 而不是累计型 toolCostCounter
+	// （Add 进 counter 会把“当前值”重复累加、越记越大）。
+	if toolDailyCostGauge != nil && dailyCostUSD > 0 {
+		toolDailyCostGauge.Record(ctx, dailyCostUSD)
+	}
 }
 
-// SetBacktestAccuracy 设置回测准备率指标
-// RecordAgentRequest 记录 Agent 请求（包含模式：react|plan_execute）
+// SetBacktestAccuracy 设置回测准确率指标（0-1）。
+// 注意：此前只有一行注释、没有函数体，backtestAccuracyGauge
+// 创建后从未被赋值，指标一直是未设置状态。
+func SetBacktestAccuracy(ctx context.Context, accuracy float64) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if backtestAccuracyGauge != nil {
+		backtestAccuracyGauge.Record(ctx, accuracy)
+	}
+}
 func RecordAgentRequest(ctx context.Context, mode string, success bool, duration time.Duration) {
 	initMetrics()
 	if ctx == nil {
@@ -552,4 +599,15 @@ func RecordTokenUsage(ctx context.Context, modelName string, promptTokens, compl
 	}
 }
 
-// RecordEmbeddingLatency 记录嵌入模型延迟
+// RecordEmbeddingLatency 记录嵌入模型调用延迟。
+// 注意：此前只有一行注释、没有函数体，调用方无处可记。
+func RecordEmbeddingLatency(ctx context.Context, modelName string, latency time.Duration) {
+	initMetrics()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if embeddingLatency != nil && latency > 0 {
+		embeddingLatency.Record(ctx, float64(latency.Milliseconds()),
+			metric.WithAttributes(attribute.String("model", modelName)))
+	}
+}

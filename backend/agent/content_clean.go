@@ -146,7 +146,10 @@ func isCollapseJunk(j string) bool {
 			continue
 		}
 		if utf8.RuneCountInString(t) <= 60 {
-			if strings.ContainsAny(t[len(t)-1:], "。！？；：.!?;:）】〉\"'…—") {
+			// 必须按最后一个 rune 判断：t[len(t)-1:] 取的是最后一个字节，
+			// 对 "。" 这类多字节标点永远匹配不上，导致中文分隔行
+			// 被误判为真实内容，重复答案无法折叠。
+			if r, _ := utf8.DecodeLastRuneInString(t); strings.ContainsRune("。！？；：.!?;:）】〉\"'…—", r) {
 				continue
 			}
 		}

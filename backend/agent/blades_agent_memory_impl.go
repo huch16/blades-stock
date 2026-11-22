@@ -4,6 +4,7 @@ import (
 	"blades-stock/backend/data"
 	"blades-stock/backend/db"
 	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -29,10 +30,11 @@ type MemoryManager struct {
 	workingMem []workingEntry
 	maxWorking int
 
-	ch     chan workingDBEntry
-	stopCh chan struct{}
-	wg     sync.WaitGroup
-	embSvc *EmbeddingService
+	ch        chan workingDBEntry
+	stopCh    chan struct{}
+	closeOnce sync.Once
+	wg        sync.WaitGroup
+	embSvc    *EmbeddingService
 }
 
 type workingEntry struct {
@@ -127,6 +129,10 @@ func (m *MemoryManager) Add(sessionID, role, content string) {
 	if len(m.workingMem) > m.maxWorking*4 {
 		m.workingMem = m.workingMem[len(m.workingMem)-m.maxWorking*4:]
 	}
+	// 旧实现只有上面这行全局裁剪，“再按会话裁剪”并没做：单个会话
+	// 可以独占全部 maxWorking*4 个槽位，注释声称要防的 starvation
+	// 实际仍会发生。此处补上每会话上限，删该会话最旧的条目。
+	m.trimSessionLocked(sessionID)
 	m.mu.Unlock()
 
 	select {
@@ -136,49 +142,34 @@ func (m *MemoryManager) Add(sessionID, role, content string) {
 	}
 }
 
+// trimSessionLocked 删除 sessionID 最旧的条目，直到该会话只剩
+// maxWorking 条。调用方必须已持 m.mu（写锁）。
+func (m *MemoryManager) trimSessionLocked(sessionID string) {
+	for {
+		count := 0
+		oldest := -1
+		for i, e := range m.workingMem {
+			if e.SessionID == sessionID {
+				count++
+				if oldest < 0 {
+					oldest = i
+				}
+			}
+		}
+		if count <= m.maxWorking || oldest < 0 {
+			return
+		}
+		m.workingMem = append(m.workingMem[:oldest], m.workingMem[oldest+1:]...)
+	}
+}
+
 func (m *MemoryManager) Close() {
-	close(m.stopCh)
+	// 幂等：旧实现直接 close(stopCh)，调两次就 panic。
+	// Close 本来就没有调用者，防一手总比炸掉好。
+	m.closeOnce.Do(func() {
+		close(m.stopCh)
+	})
 	m.wg.Wait()
-}
-
-// GetWorking returns the working-memory entries for the given session,
-// newest first. An empty sessionID returns all entries (for backward-compat
-// debugging); callers should always pass a real sessionID in production.
-func (m *MemoryManager) GetWorking(sessionID string) []workingEntry {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	filtered := make([]workingEntry, 0, len(m.workingMem))
-	for i := len(m.workingMem) - 1; i >= 0; i-- {
-		if sessionID == "" || m.workingMem[i].SessionID == sessionID {
-			filtered = append(filtered, m.workingMem[i])
-		}
-	}
-	return filtered
-}
-
-// WorkingPrompt returns a formatted working-memory prompt for the given session.
-func (m *MemoryManager) WorkingPrompt(sessionID string) string {
-	m.mu.RLock()
-	var entries []workingEntry
-	for i := len(m.workingMem) - 1; i >= 0; i-- {
-		if m.workingMem[i].SessionID == sessionID {
-			entries = append(entries, m.workingMem[i])
-		}
-	}
-	m.mu.RUnlock()
-	if len(entries) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString("【本轮工作记忆】\n")
-	for _, e := range entries {
-		label := "用户"
-		if e.Role == "assistant" {
-			label = "助手"
-		}
-		b.WriteString(fmt.Sprintf("[%s] %s\n", label, truncateText(e.Content, 200)))
-	}
-	return b.String()
 }
 
 type Fact struct {
@@ -248,11 +239,6 @@ func (m *MemoryManager) RetrieveFacts(sessionID string, limit int) []Fact {
 	return facts
 }
 
-// DeleteFact removes a fact memory by ID.
-func (m *MemoryManager) DeleteFact(id uint) error {
-	return m.DeleteMemory(id)
-}
-
 // DeleteMemory removes any agent memory row by id (facts, reflections, or
 // evolution advice), used by the reflection dedup path.
 func (m *MemoryManager) DeleteMemory(id uint) error {
@@ -305,7 +291,12 @@ func (m *MemoryManager) SemanticSearchMemory(sessionID, query string, category s
 		return nil, fmt.Errorf("failed to retrieve memories: %w", err)
 	}
 
-	// Score memories by cosine similarity
+	// Score memories by cosine similarity.
+	// 优先用库里已存的向量（AgentMemory.Embedding 是 little-endian
+	// float32 BLOB，DistillAgentMemories 等写入路径会填充它）：
+	// 旧实现对每条记忆都重新调一次 Embed，N 条记忆就是 N 次
+	// embedding 调用（缓存未命中时还是 N 次网络请求），既慢又
+	// 完全无视了已存向量。只有无存量向量时才回落到实时 Embed。
 	type scoredMemory struct {
 		mem   AgentMemory
 		score float32
@@ -313,11 +304,17 @@ func (m *MemoryManager) SemanticSearchMemory(sessionID, query string, category s
 	var scored []scoredMemory
 
 	for _, mem := range mems {
-		// Get embedding from cache (this will compute and cache if not present)
-		memEmbedding, err := m.embSvc.Embed(mem.Content)
-		if err != nil {
-			logger.SugaredLogger.Warnf("failed to embed memory %d: %v", mem.ID, err)
-			continue
+		var memEmbedding []float32
+		if len(mem.Embedding) > 0 {
+			memEmbedding = models.BytesToFloat32sLE(mem.Embedding)
+		}
+		if len(memEmbedding) == 0 {
+			var err error
+			memEmbedding, err = m.embSvc.Embed(mem.Content)
+			if err != nil {
+				logger.SugaredLogger.Warnf("failed to embed memory %d: %v", mem.ID, err)
+				continue
+			}
 		}
 
 		// Compute cosine similarity
@@ -365,47 +362,6 @@ func (m *MemoryManager) MemoryPrompt(sessionID string) string {
 		}
 	}
 	return b.String()
-}
-
-// GetAllSessions returns recent sessions
-func (m *MemoryManager) GetAllSessions(limit int) []AgentSession {
-	if limit <= 0 {
-		limit = 20
-	}
-	var sessions []AgentSession
-	db.Dao.Order("updated_at desc").Limit(limit).Find(&sessions)
-	return sessions
-}
-
-// GetSession returns a session by ID
-func (m *MemoryManager) GetSession(sessionID string) *AgentSession {
-	var session AgentSession
-	err := db.Dao.Where("session_id = ?", sessionID).First(&session).Error
-	if err != nil {
-		return nil
-	}
-	return &session
-}
-
-// GetSessionMemories returns memories for a session
-func (m *MemoryManager) GetSessionMemories(sessionID string, limit int) []AgentMemory {
-	if limit <= 0 {
-		limit = 50
-	}
-	var mems []AgentMemory
-	db.Dao.Where("session_id = ?", sessionID).Order("id desc").Limit(limit).Find(&mems)
-	return mems
-}
-
-// CleanupOldSessions removes sessions older than specified days
-func (m *MemoryManager) CleanupOldSessions(days int) (int, error) {
-	cutoff := time.Now().AddDate(0, 0, -days)
-	r := db.Dao.Where("created_at < ?", cutoff).Delete(&AgentSession{})
-	if r.Error != nil {
-		return 0, r.Error
-	}
-	db.Dao.Where("created_at < ?", cutoff).Delete(&AgentMemory{})
-	return int(r.RowsAffected), nil
 }
 
 func truncateText(s string, maxLen int) string {

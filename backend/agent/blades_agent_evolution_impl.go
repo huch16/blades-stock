@@ -236,6 +236,12 @@ func (ev *Evolver) LearnFromProject(projectName, analysis string, llm LLMOptimiz
 	return &skill, nil
 }
 
+// llmHTTPClient 是 LLMFromConfig 专用的 HTTP 客户端：带 120 秒超时。
+// 旧实现用 http.DefaultClient（无超时），上游挂起时 maybeGenerateEvolutionAdvice
+// 的 goroutine 与每日技能提取 cron 会永久卡住；reflection_llm.go 的
+// defaultLLMReflectionFunc 用的是 60 秒 context 超时，这里对齐思路。
+var llmHTTPClient = &http.Client{Timeout: 120 * time.Second}
+
 func LLMFromConfig() LLMOptimizerFunc {
 	return func(systemPrompt, userMessage string) (string, error) {
 		settingConfig := data.GetSettingConfig()
@@ -277,7 +283,7 @@ func LLMFromConfig() LLMOptimizerFunc {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+cfg.ApiKey)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := llmHTTPClient.Do(req)
 		if err != nil {
 			return "", fmt.Errorf("http call: %w", err)
 		}

@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -357,3 +358,52 @@ func stringContains(s, substr string) bool {
 }
 
 var _ = paths.DataDir
+
+// TestGetDistillationStats_ZeroValueNoPanic 验证零值 Distiller 调
+// GetDistillationStats 不 panic：旧实现在 lastStats 为 nil 时先读
+// 锁再无锁写字段，零值实例会直接空指针 panic。
+func TestGetDistillationStats_ZeroValueNoPanic(t *testing.T) {
+	setupTestDistillerDB(t)
+	d := &SemanticDistiller{}
+	stats, err := d.GetDistillationStats(context.Background())
+	if err != nil {
+		t.Fatalf("GetDistillationStats failed: %v", err)
+	}
+	if stats == nil {
+		t.Fatal("expected non-nil stats for zero-value distiller")
+	}
+	if stats.TotalCrystals != 0 {
+		t.Errorf("expected 0 crystals, got %d", stats.TotalCrystals)
+	}
+}
+
+// TestGetDistillationStats_ConcurrentSafe 验证 GetDistillationStats
+// 与 RunMaintenanceCycle 并发调用无竞态：旧实现在 RLock 读出
+// lastStats 后释放锁再无锁写字段（go test -race 可复现）。
+func TestGetDistillationStats_ConcurrentSafe(t *testing.T) {
+	setupTestDistillerDB(t)
+	d := NewSemanticDistiller(nil)
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					if s, err := d.GetDistillationStats(context.Background()); err != nil || s == nil {
+						t.Error("nil stats or error")
+						return
+					}
+				}
+			}
+		}()
+	}
+	// 维护周期内部写 lastStats，与读方并发。
+	d.RunMaintenanceCycle(context.Background())
+	close(done)
+	wg.Wait()
+}

@@ -573,24 +573,40 @@ func (d *SemanticDistiller) RunMaintenanceCycle(ctx context.Context) (*Distillat
 	stats.EstimatedFreedMB = math.Round(freedEstimate*100) / 100
 	stats.CompressionRatio = 86.5 // 语义浓缩率保持在 85% 以上
 
+	// 先打日志再发布：stats 一旦赋给 d.lastStats 就成为共享状态，
+	// 此后任何锁外读写（包括下面这行日志）都会与持锁更新的
+	// GetDistillationStats 竞态（-race 可复现）。
+	logger.SugaredLogger.Infof("[SemanticDistiller] 维护循环完成 (耗时 %v): 当前结晶总数=%d, 清理总数=%d, DB体积=%.2f MB",
+		time.Since(startTime), stats.TotalCrystals, totalPruned, stats.DatabaseSizeMB)
+
+	// 返回副本：调用方拿到的是快照，不与 d.lastStats 共享指针。
+	// 副本必须在发布之前做：发布后 stats 即共享状态，锁外读它
+	// 会与持锁更新的 GetDistillationStats 竞态。
+	out := *stats
+
 	d.stateMu.Lock()
 	d.lastStats = stats
 	d.stateMu.Unlock()
 
-	logger.SugaredLogger.Infof("[SemanticDistiller] 维护循环完成 (耗时 %v): 当前结晶总数=%d, 清理总数=%d, DB体积=%.2f MB",
-		time.Since(startTime), stats.TotalCrystals, totalPruned, stats.DatabaseSizeMB)
-
-	return stats, nil
+	return &out, nil
 }
 
 // GetDistillationStats 获取最新精炼统计数据
+//
+// 旧实现有两处问题：
+//  1. RLock 读出 lastStats 后释放锁，再无锁写 d.lastStats 的字段，
+//     与 RunMaintenanceCycle 的写锁并发时是数据竞态；
+//  2. lastStats 为 nil 时（零值 SemanticDistiller）仍直接写
+//     d.lastStats.TotalCrystals，会空指针 panic。
+//
+// 现在全程持写锁更新并返回一份副本，调用方拿到的快照不会被
+// 后续维护循环原地改写。
 func (d *SemanticDistiller) GetDistillationStats(ctx context.Context) (*DistillationStats, error) {
-	d.stateMu.RLock()
-	st := d.lastStats
-	d.stateMu.RUnlock()
+	d.stateMu.Lock()
+	defer d.stateMu.Unlock()
 
-	if st == nil {
-		st = &DistillationStats{LastRunAt: time.Now()}
+	if d.lastStats == nil {
+		d.lastStats = &DistillationStats{LastRunAt: time.Now()}
 	}
 
 	// 刷新实时总数与体积
@@ -610,7 +626,8 @@ func (d *SemanticDistiller) GetDistillationStats(ctx context.Context) (*Distilla
 		}
 	}
 
-	return d.lastStats, nil
+	out := *d.lastStats
+	return &out, nil
 }
 
 // ============================================================================

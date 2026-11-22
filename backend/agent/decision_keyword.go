@@ -16,7 +16,6 @@ func containsDecisionKeyword(content string) bool {
 	if len(content) < 10 {
 		return false
 	}
-	lower := strings.ToLower(content)
 
 	// 高权重词（任一命中即视为决策）
 	strongKeywords := []string{"买入", "卖出", "加仓", "减仓", "止损", "止盈"}
@@ -63,6 +62,5 @@ func containsDecisionKeyword(content string) bool {
 		}
 	}
 
-	_ = lower
 	return false
 }

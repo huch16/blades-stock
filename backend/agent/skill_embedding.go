@@ -31,6 +31,9 @@ type SkillEmbeddingService struct {
 	es      *EmbeddingService
 	enabled bool
 	mu      sync.RWMutex
+	// refreshMu 串行化 RefreshEmbeddings：同一服务并发刷新时，后一次
+	// 应等待前一次完成再基于最新快照计算，而不是交错读写 results。
+	refreshMu sync.Mutex
 	// skillID → embedding vector
 	embeddings map[uint][]float32
 	// skillID → content hash
@@ -48,7 +51,13 @@ func GetSkillEmbeddingService(es *EmbeddingService, retr Retriever) *SkillEmbedd
 	skillEmbedMu.Lock()
 	defer skillEmbedMu.Unlock()
 
-	if skillEmbedSvc != nil && skillEmbedSvc.enabled == enabled {
+	// 单例复用的条件除 enabled 外还必须端点一致：调用方每次传入的
+	// *EmbeddingService 都是新解析的实例（指针必不同），只比指针会
+	// 在模型/地址变化时继续返回绑定旧端点的服务，导致语义匹配
+	// 永远走旧模型；反过来只比 enabled 又会在端点变化时不刷新。
+	// 按端点身份（URL+模型）比较，相同则复用，不同则重建。
+	if skillEmbedSvc != nil && skillEmbedSvc.enabled == enabled &&
+		sameEmbeddingEndpoint(skillEmbedSvc.es, es) {
 		return skillEmbedSvc
 	}
 
@@ -63,39 +72,58 @@ func GetSkillEmbeddingService(es *EmbeddingService, retr Retriever) *SkillEmbedd
 		logger.SugaredLogger.Info("SkillEmbeddingService 已启用（语义匹配）")
 		if err := skillEmbedSvc.loadFromDB(); err != nil {
 			logger.SugaredLogger.Warnf("从DB加载skill embedding失败: %v，将异步重新计算", err)
+			// 捕获本次创建的实例而非全局 skillEmbedSvc：goroutine
+			// 启动后全局可能被下一次调用或测试重建，读全局是竞态。
+			svc := skillEmbedSvc
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
 						logger.SugaredLogger.Errorf("RefreshEmbeddings panic: %v", r)
 					}
 				}()
-				_ = skillEmbedSvc.RefreshEmbeddings()
+				_ = svc.RefreshEmbeddings()
 			}()
 		} else if skillEmbedSvc.embeddingCount() == 0 {
 			logger.SugaredLogger.Info("skill_embeddings 为空，后台异步初始化计算")
+			// 捕获本次创建的实例而非全局 skillEmbedSvc：goroutine
+			// 启动后全局可能被下一次调用或测试重建，读全局是竞态。
+			svc := skillEmbedSvc
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
 						logger.SugaredLogger.Errorf("RefreshEmbeddings panic: %v", r)
 					}
 				}()
-				_ = skillEmbedSvc.RefreshEmbeddings()
+				_ = svc.RefreshEmbeddings()
 			}()
 		} else {
 			// 本地DB已存在向量，极速启动！后台增量对比刷新
+			// 捕获本次创建的实例而非全局 skillEmbedSvc：goroutine
+			// 启动后全局可能被下一次调用或测试重建，读全局是竞态。
+			svc := skillEmbedSvc
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
 						logger.SugaredLogger.Errorf("RefreshEmbeddings panic: %v", r)
 					}
 				}()
-				_ = skillEmbedSvc.RefreshEmbeddings()
+				_ = svc.RefreshEmbeddings()
 			}()
 		}
 	} else {
 		logger.SugaredLogger.Warn("EmbeddingService 未配置，SkillEmbeddingService 降级为关键词匹配")
 	}
 	return skillEmbedSvc
+}
+
+// sameEmbeddingEndpoint 比较两个 embedding 服务是否指向同一端点
+// （URL+模型）。Describe 不含密钥，适合做身份比较；指针比较不可用，
+// 因为调用方每次传入的都是新解析的实例。
+func sameEmbeddingEndpoint(a, b *EmbeddingService) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Describe() == b.Describe()
 }
 
 func (s *SkillEmbeddingService) embeddingCount() int {
@@ -134,15 +162,31 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 	if len(skills) == 0 {
 		return nil
 	}
+	// 串行化并发刷新，避免两次刷新交错读写同一批 results。
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// 只在快照/安装两个瞬间持 s.mu：旧实现全程持写锁并在锁内
+	// wg.Wait() 等网络 Embed 返回，期间 MatchSkills 的 RLock
+	// 全部阻塞，一次刷新可卡住每次问答的技能匹配。
+	// 此处先快照旧向量与旧哈希，网络计算全程无锁，最后再上锁安装。
+	s.mu.RLock()
+	oldEmbeddings := make(map[uint][]float32, len(s.embeddings))
+	for id, vec := range s.embeddings {
+		oldEmbeddings[id] = vec
+	}
+	oldHashes := make(map[uint]string, len(s.contentHashes))
+	for id, h := range s.contentHashes {
+		oldHashes[id] = h
+	}
+	s.mu.RUnlock()
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	results := make(map[uint][]float32)
 	hashes := make(map[uint]string)
 	var dirtyRows []SkillEmbedding
+	var failedIDs []uint
 
 	for _, skill := range skills {
 		txt := skillEmbedText(skill)
@@ -150,8 +194,11 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 		hashes[skill.ID] = hash
 
 		// 增量检查：如果当前技能内容哈希与DB加载的哈希一致且向量存在，直接复用
-		if s.contentHashes[skill.ID] == hash && len(s.embeddings[skill.ID]) > 0 {
-			results[skill.ID] = s.embeddings[skill.ID]
+		// （results 由 goroutine 并发写，必须同样持 mu，避免与主循环竞态）
+		if oldHashes[skill.ID] == hash && len(oldEmbeddings[skill.ID]) > 0 {
+			mu.Lock()
+			results[skill.ID] = oldEmbeddings[skill.ID]
+			mu.Unlock()
 			continue
 		}
 
@@ -166,6 +213,9 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 			vec, err := s.es.Embed(text)
 			if err != nil {
 				logger.SugaredLogger.Warnf("skill %s embedding失败: %v", sk.Name, err)
+				mu.Lock()
+				failedIDs = append(failedIDs, sk.ID)
+				mu.Unlock()
 				return
 			}
 			mu.Lock()
@@ -180,13 +230,27 @@ func (s *SkillEmbeddingService) RefreshEmbeddings() error {
 	}
 	wg.Wait()
 
+	// 失败技能保留旧向量与旧哈希：旧实现直接丢弃该技能，换新后
+	// s.embeddings 里再无此技能，语义匹配永久跳过它，直到下一次
+	// 全量刷新；旧哈希则保证下次刷新仍会重试本次失败的重新计算。
+	// 注意：回填在 wg.Wait() 之后由主 goroutine 执行，此时再无
+	// 并发写 hashes/results，避免与主循环的写入竞态。
+	for _, id := range failedIDs {
+		if old, ok := oldEmbeddings[id]; ok && len(old) > 0 {
+			results[id] = old
+			hashes[id] = oldHashes[id]
+		}
+	}
+
 	if len(results) == 0 {
 		logger.SugaredLogger.Warn("所有skill embedding计算失败，技能触发将降级为关键词匹配")
 		return nil
 	}
 
+	s.mu.Lock()
 	s.embeddings = results
 	s.contentHashes = hashes
+	s.mu.Unlock()
 
 	// 仅批量更新变动或新增的 rows
 	if len(dirtyRows) > 0 && db.Dao != nil {
@@ -239,6 +303,12 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) []models.
 	// never depend on a slow or unhealthy embedding endpoint, so the semantic
 	// layer is only consulted when no keyword hits.
 	if kwMatched := s.keywordMatch(skills, question, topK); len(kwMatched) > 0 {
+		// keywordMatch 只对无关键词的通用技能做了 topK 截断，关键词
+		// 命中本身未截断：3 个技能同时命中时 topK=2 的约定会被打破，
+		// 多余技能的 Directive 全量注入 prompt。此处统一截断。
+		if topK > 0 && len(kwMatched) > topK {
+			kwMatched = kwMatched[:topK]
+		}
 		return kwMatched
 	}
 

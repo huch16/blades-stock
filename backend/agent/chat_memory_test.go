@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"blades-stock/backend/db"
 )
@@ -142,5 +143,31 @@ func TestCompressHistoryWritesRollingSummary(t *testing.T) {
 	}
 	if !strings.Contains(summary.Summary, "msg-0") {
 		t.Errorf("summary should mention early content: %s", summary.Summary)
+	}
+}
+
+// TestTruncateBytesToRuneBoundary 验证字节截断不切断多字节汉字：
+// 旧实现 raw[:8000] 可能正好落在汉字中间，产生非法 UTF-8 污染 LLM prompt。
+func TestTruncateBytesToRuneBoundary(t *testing.T) {
+	// "茅" 3 字节：上限 5 字节时切在第二个"茅"中间，必须回退到 3 字节。
+	s := "茅茅茅茅"
+	got := truncateBytesToRuneBoundary(s, 5)
+	if got != "茅" {
+		t.Errorf("expected single char, got %q", got)
+	}
+	if !utf8.ValidString(got) {
+		t.Errorf("result is not valid UTF-8: %q", got)
+	}
+	// 未超限时原样返回；空串与 0 上限返回空串。
+	if got := truncateBytesToRuneBoundary("你好", 100); got != "你好" {
+		t.Errorf("short string should be unchanged, got %q", got)
+	}
+	if got := truncateBytesToRuneBoundary("你好", 0); got != "" {
+		t.Errorf("zero budget should return empty, got %q", got)
+	}
+	// 混合 ASCII 与汉字：切在边界上不丢合法字符。
+	mixed := "ab茅c"
+	if got := truncateBytesToRuneBoundary(mixed, 5); got != "ab茅" {
+		t.Errorf("expected %q, got %q", "ab茅", got)
 	}
 }
