@@ -196,6 +196,16 @@ test('unreadCount：语义是“向上滚动期间新追加的消息数”，父
   assert.match(chat, /function onAnchorScroll\(id: string\)/)
   assert.match(chat, /watch\(currentSessionId, \(\) => \{\s*resetUnreadCount\(\)/)
   assert.match(chat, /messages\.value = \[\]\s*resetUnreadCount\(\)/)
+  // 第四轮放宽：流式收尾时用户正向上滚动，刚完成的回答计 1 条未读。
+  // 发送时总会强制回底，纯追加语义在现有流程里不可达，角标否则永不亮。
+  assert.match(anchor, /function markFinishedUnread\(\)/)
+  assert.match(anchor, /markFinishedUnread,/)
+  assert.match(anchor, /if \(toValue\(isScrolledUpSource\)\) \{\s*unreadCount\.value \+= 1/)
+  // finalizeStream 里调，且只有真正终结一次活跃流式时才计（agent-DONE 与
+  // 终态 finish_reason 可能先后各触发一次，重复计数会把一条回答算两条）。
+  assert.match(chat, /markFinishedUnread,/)
+  assert.match(chat, /const wasStreaming = isStreaming\.value/)
+  assert.match(chat, /if \(wasStreaming\) \{\s*markFinishedUnread\(\)/)
 })
 
 test('MessageAnchorNav 导航项编号必须用消息在时间线里的真实位置', () => {

@@ -1015,6 +1015,7 @@ const {
   anchorNavItems,
   unreadCount,
   resetUnreadCount,
+  markFinishedUnread,
   registerElement,
   unregisterElement,
   scrollToMessage,
@@ -1184,12 +1185,20 @@ function armStreamWatchdog() {
 
 function finalizeStream(targetMsg?: ChatMessage) {
   clearStreamWatchdog()
+  // 只有本次调用真正终结了一次活跃流式时，才计未读：agent-DONE 与
+  // 终态 finish_reason 可能先后各触发一次 finalizeStream，重复计
+  // 数会把一条回答算成两条未读。
+  const wasStreaming = isStreaming.value
   isStreaming.value = false
   streamingMsgId.value = null
   currentStreamStatus.value = ''
   // 流已终结：撤下看门狗超时按钮（无论后续是否继续等待，都不应再显示）
   if (targetMsg) {
     targetMsg.streamTimeout = false
+  }
+  // 收尾时用户若正向上滚动读旧内容，刚写完的回答在下方未读，角标 +1。
+  if (wasStreaming) {
+    markFinishedUnread()
   }
 
   if (targetMsg) {

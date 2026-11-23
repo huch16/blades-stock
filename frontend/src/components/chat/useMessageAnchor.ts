@@ -36,11 +36,16 @@ export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>
     return Array.isArray(list) ? list : []
   }
 
-  // 未读计数：语义 =「用户向上滚动期间新追加的消息数」（第三轮建议）。
+  // 未读计数：语义 =「用户向上滚动期间新追加的消息数」+「流式收尾时
+  // 用户正向上滚动」（第四轮放宽：发送时总会强制回底，纯追加语义在
+  // 现有流程里不可达；但流式回答可能持续数分钟，用户常在等待期间
+  // 滚上去读旧内容，收尾时若仍在上方，角标提示下方有已完成的新回答）。
   //
   // 计数规则：
   // - 只统计“真追加”：新列表以前缀方式延续旧列表（旧消息对象逐一相同），
   //   且追加发生时调用方正处于向上滚动状态（isScrolledUpSource 为 true）。
+  // - 流式收尾：调用方在 finalizeStream 时调 markFinishedUnread()，
+  //   若当时正向上滚动则 +1（一条刚写完的回答在下方未读）。
   // - 会话切换 / 清空 / 重试裁剪是整列替换或缩短，不计入。
   // - 列表被清空时清零；其余清零时机由调用方掌握（回到底部、切会话、
   //   点导航跳到最新一条），通过 resetUnreadCount() 触发。
@@ -48,6 +53,13 @@ export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>
 
   function resetUnreadCount() {
     unreadCount.value = 0
+  }
+
+  // 流式收尾时调用：若用户正向上滚动，刚完成的回答计 1 条未读。
+  function markFinishedUnread() {
+    if (toValue(isScrolledUpSource)) {
+      unreadCount.value += 1
+    }
   }
 
   // 上一次见过的消息快照（浅拷贝，存对象引用以便做前缀比对）。
@@ -309,6 +321,7 @@ export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>
     anchorNavItems,
     unreadCount,
     resetUnreadCount,
+    markFinishedUnread,
     registerElement,
     unregisterElement,
     scrollToMessage,
