@@ -187,6 +187,38 @@ func TestFallbackEmptyChunksEndNormally(t *testing.T) {
 	}
 }
 
+// TestFallbackPureThinkLongStreamEndNormally 纯 think 长流、正常结束：
+// think 体对用户不可见，应判空答降级。回归用例：旧终态检查用
+// cleanFinalContent，其“挽救”路径会在原始文本 >100 字时把 think 体
+// 当作正文，导致长 think 流被误判为“有正文”而不降级。
+func TestFallbackPureThinkLongStreamEndNormally(t *testing.T) {
+	longThink := "首先分析产业链的八层结构与稀缺环节，再评估供需格局、验证周期与政策变量，" +
+		"接着对照历史可比案例的估值区间，最后综合判断龙头公司的竞争壁垒是否仍然成立。"
+	primary := NewScriptedStreamProvider("minimax-m3", []MockStreamStep{
+		{Kind: MockStreamThink, Text: longThink},
+		{Kind: MockStreamThink, Text: longThink},
+		{Kind: MockStreamThink, Text: longThink},
+	})
+	fallback := &successMockProvider{name: "nemotron-3", respText: "fallback report"}
+	fb := NewFallbackModelProvider(primary, "minimax-m3",
+		[]blades.ModelProvider{fallback}, []string{"nemotron-3"})
+
+	text, err := collectFallbackStream(fb.NewStreaming(context.Background(), &blades.ModelRequest{
+		Messages: []*blades.Message{blades.UserMessage("test")},
+	}))
+	if err != nil {
+		t.Fatalf("纯 think 长流正常结束应降级成功，实际返回错误: %v", err)
+	}
+	// 注意：主模型已吐出的 think 块在终态判定前已下发给消费方，
+	// collectFallbackStream 拼接后会含 think 文本，故只断言备用内容出现。
+	if !strings.Contains(text, "fallback report") {
+		t.Fatalf("期望备用模型内容，实际: %q", text)
+	}
+	if atomic.LoadInt32(&fallback.callCount) != 1 {
+		t.Fatalf("备用模型应被调用 1 次，实际 %d 次", fallback.callCount)
+	}
+}
+
 // TestFallbackStreamStallTriggersFallback 流静默挂起（零字节、无错误）：
 // 看门狗应在阈值内主动取消本次尝试并降级，而不是等到 300 秒请求超时。
 func TestFallbackStreamStallTriggersFallback(t *testing.T) {

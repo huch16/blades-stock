@@ -724,7 +724,11 @@ func (f *FallbackModelProvider) NewStreaming(ctx context.Context, req *blades.Mo
 			//
 			// 现在：流正常结束、无正文（剔除 think/agent-action 后仍为空）、
 			// 且无工具调用 → 判定为空答，切换备用模型重跑本次调用。
-			if !failed && !toolPartSeen && strings.TrimSpace(cleanFinalContent(contentBuf.String())) == "" {
+			// 注意：这里必须用 hasSubstantiveContent 而不是 cleanFinalContent——
+			// cleanFinalContent 的“挽救”路径会把纯 think 长文本当作正文，
+			// 而 think 体对用户不可见（thinkFilter 会实时剥离），纯 think
+			// 长流会被误判为“有正文”而不降级，用户却什么都看不到。
+			if !failed && !toolPartSeen && !hasSubstantiveContent(contentBuf.String()) {
 				emptyNext := nextAlive(idx + 1)
 				if emptyNext < len(allProviders) {
 					nextName := names[emptyNext]
