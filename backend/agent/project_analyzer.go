@@ -304,8 +304,10 @@ func (pa *ProjectAnalyzer) findAPIDefinitions(localPath string) []string {
 			trimmed := strings.TrimSpace(line)
 			if strings.Contains(trimmed, "func(") && (strings.Contains(trimmed, "http.") || strings.Contains(trimmed, "gin") || strings.Contains(trimmed, "HandleFunc") || strings.Contains(trimmed, "POST(") || strings.Contains(trimmed, "GET(") || strings.Contains(trimmed, "PUT(") || strings.Contains(trimmed, "DELETE(")) {
 				short := trimmed
-				if len(short) > 100 {
-					short = short[:100] + "..."
+				// 必须按 rune 截断：short[:100] 按字节切，中文注释行
+				// 会在汉字中间断开，产生非法 UTF-8。
+				if r := []rune(short); len(r) > 100 {
+					short = string(r[:100]) + "..."
 				}
 				apiPaths = append(apiPaths, fmt.Sprintf("  [%s] %s", rel, short))
 			}
@@ -317,7 +319,7 @@ func (pa *ProjectAnalyzer) findAPIDefinitions(localPath string) []string {
 }
 
 func (pa *ProjectAnalyzer) findModelDefinitions(localPath string) []string {
-	var models []string
+	var modelFiles []string
 
 	filepath.Walk(localPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
@@ -329,12 +331,12 @@ func (pa *ProjectAnalyzer) findModelDefinitions(localPath string) []string {
 		}
 		ext := filepath.Ext(rel)
 		if ext == ".go" && (strings.Contains(rel, "model") || strings.Contains(rel, "type") || strings.Contains(rel, "schema") || strings.HasSuffix(filepath.Base(rel), "model.go") || strings.HasSuffix(filepath.Base(rel), "type.go")) {
-			models = append(models, rel)
+			modelFiles = append(modelFiles, rel)
 		}
 		return nil
 	})
 
-	return models
+	return modelFiles
 }
 
 func (pa *ProjectAnalyzer) chunkCodeFiles(localPath string) []CodeChunkItem {

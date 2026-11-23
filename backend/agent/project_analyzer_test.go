@@ -3,7 +3,9 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"blades-stock/backend/db"
 	"blades-stock/backend/models"
@@ -55,5 +57,30 @@ func TestAnalyzeProject_ReanalyzeNoDuplicateChunks(t *testing.T) {
 	}
 	if updated.Status != "indexed" {
 		t.Errorf("expected status indexed, got %q", updated.Status)
+	}
+}
+
+// TestFindAPIDefinitions_LongChineseLineRuneSafe 回归：API 行截断曾按
+// 字节切 short[:100]，含中文注释的长行会在汉字中间断开，产生非法
+// UTF-8。修复后按 rune 截断，输出恒为合法 UTF-8。
+func TestFindAPIDefinitions_LongChineseLineRuneSafe(t *testing.T) {
+	dir := t.TempDir()
+	longLine := "func foo() { r.HandleFunc(\"/x\", h) } // " + strings.Repeat("这是一个很长的中文注释说明", 20)
+	content := "package main\n\n" + longLine + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "server.go"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pa := NewProjectAnalyzer(nil)
+	found := pa.findAPIDefinitions(dir)
+	if len(found) == 0 {
+		t.Fatal("expected at least one API definition")
+	}
+	for _, line := range found {
+		if !utf8.ValidString(line) {
+			t.Fatalf("findAPIDefinitions produced invalid UTF-8: %q", line)
+		}
+		if !strings.Contains(line, "...") {
+			t.Errorf("long API line should be truncated with ellipsis: %q", line)
+		}
 	}
 }

@@ -18,7 +18,6 @@ func NewSkillGenerator(es *EmbeddingService) *SkillGenerator {
 }
 
 type SkillGenerationRequest struct {
-	SourceURL    string
 	Name         string
 	Description  string
 	TechStack    string
@@ -42,11 +41,14 @@ func (sg *SkillGenerator) GenerateSkill(projectID uint) (*models.Skill, error) {
 
 	var entryPoints []string
 	if analysis.EntryPoints != "" {
-		json.Unmarshal([]byte(analysis.EntryPoints), &entryPoints)
+		// 入口 JSON 损坏时不要静默丢掉：记 Warn，skill 仍可生成，
+		// 但调用方应知道入口信息丢了。
+		if err := json.Unmarshal([]byte(analysis.EntryPoints), &entryPoints); err != nil {
+			logger.SugaredLogger.Warnf("解析项目入口 JSON 失败 [项目ID=%d]: %v", projectID, err)
+		}
 	}
 
 	req := &SkillGenerationRequest{
-		SourceURL:    analysis.SourceURL,
 		Name:         analysis.Name,
 		Description:  analysis.Name + " 项目专家",
 		TechStack:    analysis.TechStack,
@@ -164,8 +166,10 @@ func (sg *SkillGenerator) buildSystemPrompt(req *SkillGenerationRequest) string 
 
 	if req.Readme != "" {
 		readmePreview := req.Readme
-		if len(readmePreview) > 2000 {
-			readmePreview = readmePreview[:2000] + "\n...（README 过长，已截断）"
+		// 必须按 rune 截断：按字节切 readmePreview[:2000] 会在中文处
+		// 切出非法 UTF-8，污染注入 prompt 的 skill 文本。
+		if r := []rune(readmePreview); len(r) > 2000 {
+			readmePreview = string(r[:2000]) + "\n...（README 过长，已截断）"
 		}
 		sb.WriteString("## README\n")
 		sb.WriteString(readmePreview + "\n\n")
@@ -259,7 +263,9 @@ func (sg *SkillGenerator) FullPipeline(sourceURL, localPath, name string) (*mode
 	pa := NewProjectAnalyzer(sg.embeddingService)
 	if err := pa.AnalyzeProject(analysis.ID, localPath); err != nil {
 		analysis.Status = "failed"
-		db.Dao.Save(analysis)
+		if err := db.Dao.Save(analysis).Error; err != nil {
+			logger.SugaredLogger.Warnf("标记项目分析失败状态失败 [项目ID=%d]: %v", analysis.ID, err)
+		}
 		return nil, fmt.Errorf("分析项目失败: %w", err)
 	}
 
