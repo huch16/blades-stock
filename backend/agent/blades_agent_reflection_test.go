@@ -162,7 +162,7 @@ func TestGenerateReflection_LLMFailureFallsBack(t *testing.T) {
 	}
 	answer := "获取到数据，查询成功，输出结果如下：涨幅 5.2%"
 	for name, llm := range map[string]LLMReflectionFunc{
-		"llm error": failingLLM,
+		"llm error":   failingLLM,
 		"llm garbage": garbageLLM,
 	} {
 		t.Run(name, func(t *testing.T) {
