@@ -2,9 +2,11 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"blades-stock/backend/db"
@@ -103,5 +105,59 @@ func TestSemanticSearchMemory_UsesStoredVectors(t *testing.T) {
 	}
 	if results[0].Content != "茅台股价上涨" {
 		t.Errorf("most similar memory should rank first, got %q", results[0].Content)
+	}
+}
+
+// TestSemanticSearchMemory_CandidateCap 回归测试：语义检索一次最多拉
+// 200 条候选。旧实现 Find 无上限，250 条无存量向量的记忆会触发
+// 251 次 embedding 调用（1 次查问句 + 250 次候选）；修复后应为
+// 201 次（1 + 200）。
+func TestSemanticSearchMemory_CandidateCap(t *testing.T) {
+	if err := db.Dao.AutoMigrate(&AgentMemory{}); err != nil {
+		t.Fatalf("migrate agent_memories: %v", err)
+	}
+	sessionID := "batch8-semantic-cap-session"
+	// 清理本会话旧数据（同包其它测试共用临时库）。
+	db.Dao.Where("session_id = ?", sessionID).Delete(&AgentMemory{})
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data":  []map[string]interface{}{{"embedding": []float32{1, 0}}},
+			"usage": map[string]int{"total_tokens": 1},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	// 250 条无存量向量的记忆，内容各不相同（避免 LRU/DB 缓存命中）。
+	rows := make([]AgentMemory, 0, 250)
+	for i := 0; i < 250; i++ {
+		rows = append(rows, AgentMemory{
+			SessionID: sessionID,
+			Role:      "user",
+			Content:   fmt.Sprintf("batch8-semantic-cap-candidate-%03d", i),
+		})
+	}
+	if err := db.Dao.CreateInBatches(rows, 100).Error; err != nil {
+		t.Fatalf("seed memories: %v", err)
+	}
+
+	m := NewMemoryManager(20)
+	defer m.Close()
+	// 唯一模型名，避免命中其它测试留下的缓存向量。
+	m.SetEmbeddingService(NewEmbeddingService(srv.URL, "", "batch8-semantic-cap-model"))
+
+	results, err := m.SemanticSearchMemory(sessionID, "batch8-semantic-cap-query", "", 5)
+	if err != nil {
+		t.Fatalf("SemanticSearchMemory: %v", err)
+	}
+	if len(results) != 5 {
+		t.Fatalf("expected top 5 results, got %d", len(results))
+	}
+	// 1 次查问句 + 200 条候选；旧实现无上限会是 1 + 250 = 251。
+	if got := atomic.LoadInt32(&hits); got != 201 {
+		t.Errorf("expected 201 embedding calls (1 query + 200 candidates), got %d", got)
 	}
 }

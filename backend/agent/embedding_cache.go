@@ -83,11 +83,15 @@ func getEmbeddingLRU() *lru.LRU[string, []float32] {
 }
 
 func ensureEmbeddingCacheTable() {
+	// 先判空再进 Once：Dao 尚未初始化时第一次调用就会把 Once 耗掉，
+	// 之后 Dao 就绪也不会再迁移，embedding_caches 表永远建不出来。
+	// （生产上 Dao 在启动期已就绪，此处只是加固时序。）
+	if db.Dao == nil {
+		return
+	}
 	dbMigrateOnce.Do(func() {
-		if db.Dao != nil {
-			if err := db.Dao.AutoMigrate(&EmbeddingCache{}); err != nil {
-				logger.SugaredLogger.Warnf("AutoMigrate embedding_caches 失败: %v", err)
-			}
+		if err := db.Dao.AutoMigrate(&EmbeddingCache{}); err != nil {
+			logger.SugaredLogger.Warnf("AutoMigrate embedding_caches 失败: %v", err)
 		}
 	})
 }

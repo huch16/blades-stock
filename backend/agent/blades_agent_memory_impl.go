@@ -267,6 +267,11 @@ func (m *MemoryManager) RetrieveEvolutions(sessionID string, limit int) []Fact {
 
 // SemanticSearchMemory searches memories by semantic similarity using embeddings
 // MemoryPrompt returns a formatted string of long-term memories for a session
+// semanticSearchMaxCandidates 限制语义检索一次从库里拉取的候选条数：
+// 此前无上限，Find 全量加载后再逐条 Embed（无存量向量时），会话记忆
+// 一多就是 N 次 embedding 调用；200 条已远超 topN 需求（默认 5）。
+const semanticSearchMaxCandidates = 200
+
 func (m *MemoryManager) SemanticSearchMemory(sessionID, query string, category string, limit int) ([]AgentMemory, error) {
 	if m.embSvc == nil || !m.embSvc.IsConfigured() {
 		return nil, fmt.Errorf("embedding service not configured")
@@ -287,7 +292,7 @@ func (m *MemoryManager) SemanticSearchMemory(sessionID, query string, category s
 	if category != "" {
 		queryDB = queryDB.Where("category = ?", category)
 	}
-	if err := queryDB.Order("id desc").Find(&mems).Error; err != nil {
+	if err := queryDB.Order("id desc").Limit(semanticSearchMaxCandidates).Find(&mems).Error; err != nil {
 		return nil, fmt.Errorf("failed to retrieve memories: %w", err)
 	}
 
