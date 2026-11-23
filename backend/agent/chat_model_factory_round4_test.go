@@ -80,9 +80,9 @@ func TestModelProviderCache_EvictsWhenOverLimit(t *testing.T) {
 		modelProviderCache.Delete(k)
 		return true
 	})
-	oldLimit := modelProviderCacheLimit
-	modelProviderCacheLimit = 3
-	defer func() { modelProviderCacheLimit = oldLimit }()
+	oldLimit := modelProviderCacheLimit.Load()
+	modelProviderCacheLimit.Store(3)
+	defer func() { modelProviderCacheLimit.Store(oldLimit) }()
 
 	mkCfg := func(i int) data.AIConfig {
 		return data.AIConfig{

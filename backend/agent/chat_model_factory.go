@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"blades-stock/backend/data"
@@ -37,7 +38,18 @@ type cachedProvider struct {
 // 高于注册表卡片数；超限时整表清空后重建——重建只是构造客户端，无
 // 网络开销，简单且安全。计数-清空之间有良性竞态（两个 goroutine 可能
 // 各清一次），最坏只是多一次重建。
-var modelProviderCacheLimit = 64
+//
+// 必须是 atomic.Int64 而不是普通变量：测试会临时收窄它，而
+// createChatModel 可能被 ChatMemoryService 的异步摘要 goroutine
+// （summarizeHistoryAsync → defaultLLMReflectionFunc）调用——普通
+// 变量会在测试恢复限额时与该 goroutine 的读形成数据竞争（-race 已
+// 抓到：TestCompressHistoryWritesRollingSummary 的异步 goroutine 读
+// 限额 vs 本包测试 defer 恢复限额的写）。
+var modelProviderCacheLimit atomic.Int64
+
+func init() {
+	modelProviderCacheLimit.Store(64)
+}
 
 func modelProviderCacheSize() int {
 	n := 0
@@ -49,7 +61,7 @@ func modelProviderCacheSize() int {
 }
 
 func storeCachedProvider(key string, provider blades.ModelProvider) {
-	if modelProviderCacheSize() >= modelProviderCacheLimit {
+	if modelProviderCacheSize() >= int(modelProviderCacheLimit.Load()) {
 		modelProviderCache.Range(func(k, _ any) bool {
 			modelProviderCache.Delete(k)
 			return true
