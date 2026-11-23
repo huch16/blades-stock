@@ -718,18 +718,24 @@ func (d *SemanticDistiller) SearchKnowledgeCrystals(ctx context.Context, query s
 
 	// 异步更新热度计数 (HitCount)
 	if len(hitIDs) > 0 {
-		go func(ids []uint) {
+		// 必须在派生 goroutine 之前把 db.Dao 读到局部变量再传参：
+		// goroutine 内再读全局 db.Dao 会与测试收尾（关闭测试库并
+		// 恢复 db.Dao）形成数据竞争（-race 已抓到）；生产上 db.Dao
+		// 启动后不再改写，但局部捕获同样正确——本次更新就该写触发
+		// 本次查询的那个库，而不是调用返回后恰好指向的库。
+		dao := db.Dao
+		go func(ids []uint, dao *gorm.DB) {
 			defer func() {
 				if r := recover(); r != nil {
 					logger.SugaredLogger.Warnf("semantic distiller hitCount update panic: %v", r)
 				}
 			}()
-			db.Dao.Model(&KnowledgeCrystal{}).Where("id IN ?", ids).
+			dao.Model(&KnowledgeCrystal{}).Where("id IN ?", ids).
 				Updates(map[string]interface{}{
 					"hit_count":   gorm.Expr("hit_count + ?", 1),
 					"last_hit_at": time.Now(),
 				})
-		}(hitIDs)
+		}(hitIDs, dao)
 	}
 
 	return results, nil
