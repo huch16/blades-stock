@@ -50,7 +50,7 @@ func TestCleanupOldAgentTraces(t *testing.T) {
 	testDB := setupTraceTestDB(t)
 	now := time.Now()
 
-	seedTrace(t, testDB, now.Add(-100*24*time.Hour), "old-session")    // 超期，应被清
+	seedTrace(t, testDB, now.Add(-100*24*time.Hour), "old-session")   // 超期，应被清
 	seedTrace(t, testDB, now.Add(-10*24*time.Hour), "recent-session") // 期内，应保留
 	seedTrace(t, testDB, now, "now-session")                          // 期内，应保留
 
