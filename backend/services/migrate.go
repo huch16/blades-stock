@@ -115,6 +115,12 @@ func AutoMigrateAll() {
 	if n := agent.CleanupOldAuditLogs(0); n > 0 {
 		logger.SugaredLogger.Infof("[Database] 启动清理过期审计日志 %d 条", n)
 	}
+	// 反思轨迹 90 天保留期：启动时清一次超期行；运行中由 GenerateReflection
+	// 写轨迹时每小时最多触发一次（见 agent/trace_retention.go）。读侧只用
+	// GetHighQualityTraces(10)，删旧行不影响进化学习。
+	if n := agent.CleanupOldAgentTraces(0); n > 0 {
+		logger.SugaredLogger.Infof("[Database] 启动清理过期反思轨迹 %d 条", n)
+	}
 
 	// 12. 校验并播种机构级基准自选股，剔除退市/ST/问题股等历史遗留垃圾标的，并完成代码格式标准化去重
 	SeedDefaultFollowedStocksIfEmpty()

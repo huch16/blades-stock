@@ -250,6 +250,8 @@ func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durat
 		DurationMs:   durationMs,
 		CreatedAt:    time.Now(),
 	}
+	// 轨迹写路径顺带触发过期清理（每小时最多一次），与审计日志同模式。
+	maybeCleanupOldAgentTraces()
 	if err := db.Dao.Create(trace).Error; err != nil {
 		logger.SugaredLogger.Errorf("save agent trace: %v", err)
 	}
