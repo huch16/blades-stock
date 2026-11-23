@@ -130,6 +130,13 @@ func (a *CronTaskApi) UpdateRunInfo(id uint, lastRunAt time.Time, nextRunAt *tim
 }
 
 func (a *CronTaskApi) GetTaskTypes() []lo.Tuple2[string, string] {
+	// 与 executeTaskByType 的 switch 保持一致：四轮前这里漏了
+	// fund_analysis / news_fetch / stock_monitor / custom，
+	// 前端下拉（GetCronTaskTypes 调本函数）里选不到这四种，
+	// 但后端执行分支其实认它们。注意 fund_analysis /
+	// stock_monitor / custom 的执行器目前仍返回“未实现”错误
+	// （第四轮改成的诚实失败），列出仅表示“类型合法、可建任务”，
+	// 不是“已可成功执行”；news_fetch 已实现。
 	return []lo.Tuple2[string, string]{
 		{A: "stock_analysis", B: "股票分析"},
 		{A: "market_analysis", B: "市场分析"},
@@ -137,6 +144,10 @@ func (a *CronTaskApi) GetTaskTypes() []lo.Tuple2[string, string] {
 		{A: "post_market_review", B: "盘后收盘深度复盘"},
 		{A: "global_stock_index_cache", B: "全球指数缓存"},
 		{A: "stock_change_save", B: "异动数据保存"},
+		{A: "fund_analysis", B: "基金分析"},
+		{A: "news_fetch", B: "新闻抓取"},
+		{A: "stock_monitor", B: "股票监控"},
+		{A: "custom", B: "自定义任务"},
 	}
 }
 

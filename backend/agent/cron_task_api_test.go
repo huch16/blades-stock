@@ -186,6 +186,46 @@ func TestExecuteMarketAnalysis_NoConfigReturnsError(t *testing.T) {
 	}
 }
 
+// TestGetTaskTypesIncludesAllExecutableTypes 验证任务类型列表与
+// executeTaskByType 的 switch 一致：第五轮前漏了 fund_analysis /
+// news_fetch / stock_monitor / custom，前端下拉（GetCronTaskTypes
+// 调本函数）里选不到这四种，但后端执行分支其实认它们。
+// 标签为空或类型重复都会让下拉出现空白/重复项，一并断言。
+func TestGetTaskTypesIncludesAllExecutableTypes(t *testing.T) {
+	got := NewCronTaskApi().GetTaskTypes()
+	byType := make(map[string]string, len(got))
+	for _, tp := range got {
+		if tp.A == "" {
+			t.Errorf("任务类型键不应为空（标签 %q）", tp.B)
+		}
+		if tp.B == "" {
+			t.Errorf("任务类型 %q 的标签不应为空", tp.A)
+		}
+		if _, dup := byType[tp.A]; dup {
+			t.Errorf("任务类型 %q 重复出现", tp.A)
+		}
+		byType[tp.A] = tp.B
+	}
+	for typ, label := range map[string]string{
+		"stock_analysis":           "股票分析",
+		"market_analysis":          "市场分析",
+		"pre_market_briefing":      "盘前智能前瞻晨报",
+		"post_market_review":       "盘后收盘深度复盘",
+		"global_stock_index_cache": "全球指数缓存",
+		"stock_change_save":        "异动数据保存",
+		"fund_analysis":            "基金分析",
+		"news_fetch":               "新闻抓取",
+		"stock_monitor":            "股票监控",
+		"custom":                   "自定义任务",
+	} {
+		if gotLabel, ok := byType[typ]; !ok {
+			t.Errorf("GetTaskTypes 缺少 %q（执行分支认、列表不认）", typ)
+		} else if gotLabel != label {
+			t.Errorf("任务类型 %q 标签应为 %q，实际 %q", typ, label, gotLabel)
+		}
+	}
+}
+
 // withEmptyModelRegistry 把 db.Dao 换成一个只有空 settings/ai_config
 // 表的隔离临时库（附 agent_run_records 表供运行记录落库），测试结束
 // 恢复。必须隔离——同包其它测试（如 agent_run_record_test.go 的
