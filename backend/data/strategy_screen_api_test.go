@@ -5,13 +5,9 @@ import (
 	"testing"
 
 	"blades-stock/backend/db"
-	"blades-stock/backend/logger"
 	"blades-stock/backend/models"
 
 	"github.com/glebarez/sqlite"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 	"gorm.io/gorm"
 )
 
@@ -75,7 +71,11 @@ func TestFallbackScreenByIndicators(t *testing.T) {
 // 但老结构遗留的生产库可能没有。旧代码不查 Find 错误，失败时无声
 // 落入 24 只兜底池且无任何日志（第三轮遗留风险 #2）。修复后：回落
 // 行为保留，但失败必须记一条 Error 日志。
-// （隔离内存库 + 捕获日志，不动包内 TestMain 的临时库。）
+// （隔离内存库 + 替换包级日志函数变量，不动包内 TestMain 的临时库；
+// 注意：不要用 zaptest/observer 交换全局 logger.SugaredLogger 来捕获
+// 日志——TestFallbackScreenByIndicators 遗留的 K 线超时孤儿 goroutine
+// 仍在后台读该全局，交换会构成 DATA RACE，见 logStrategyScreenPoolError
+// 上的注释。）
 func TestBuildStrategyUniverse_MissingSecUriTycodeLogsError(t *testing.T) {
 	memDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
@@ -103,10 +103,12 @@ func TestBuildStrategyUniverse_MissingSecUriTycodeLogsError(t *testing.T) {
 	db.Dao = memDB
 	t.Cleanup(func() { db.Dao = origDao })
 
-	core, observed := observer.New(zap.ErrorLevel)
-	origLogger := logger.SugaredLogger
-	logger.SugaredLogger = zap.New(core).Sugar()
-	t.Cleanup(func() { logger.SugaredLogger = origLogger })
+	// 捕获池查询失败的日志：替换包级函数变量（唯一读者是同步调用的
+	// buildStrategyUniverse，不与后台 goroutine 冲突）。
+	var logged []string
+	origLog := logStrategyScreenPoolError
+	logStrategyScreenPoolError = func(err error) { logged = append(logged, err.Error()) }
+	t.Cleanup(func() { logStrategyScreenPoolError = origLog })
 
 	codes, _ := buildStrategyUniverse(nil)
 
@@ -122,15 +124,13 @@ func TestBuildStrategyUniverse_MissingSecUriTycodeLogsError(t *testing.T) {
 	}
 	// 关键断言：缺列失败必须记 Error 日志，不能静默。
 	found := false
-	for _, e := range observed.All() {
-		if e.Level == zapcore.ErrorLevel &&
-			strings.Contains(e.Message, "策略选股池") &&
-			strings.Contains(e.Message, "sec_uri_tycode") {
+	for _, msg := range logged {
+		if strings.Contains(msg, "sec_uri_tycode") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected an Error log about 策略选股池 / sec_uri_tycode, got %d error entries: %v", observed.Len(), observed.All())
+		t.Fatalf("expected a pool-error log mentioning sec_uri_tycode, got %v", logged)
 	}
 }

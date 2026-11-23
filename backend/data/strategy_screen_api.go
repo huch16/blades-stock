@@ -182,6 +182,17 @@ func strategyNames(list []strategy.Strategy) string {
 
 // buildStrategyUniverse 解析待筛选股票池并查询股票名称。
 // codes 为空时取 DB all_stock_info 最新交易日的股票池（上限 strategyScreenMaxPool）。
+// logStrategyScreenPoolError 报告策略选股池查询失败（缺列等导致回落
+// 至兜底池时必须可见）。包级变量而非直接调 logger：测试需要观测这
+// 条日志，而直接交换全局 logger.SugaredLogger 会与上一个测试遗留的
+// K 线超时孤儿 goroutine 构成 DATA RACE——runKLineSourceWithTimeout
+// 超时后不等 worker 退出，fetchFromTdx 仍在后台跑并读全局 logger；
+// 本变量的唯一读者是 buildStrategyUniverse（同步调用），测试替换它
+// 不会与任何后台 goroutine 冲突。
+var logStrategyScreenPoolError = func(err error) {
+	logger.SugaredLogger.Errorf("查询策略选股池失败，将回落至兜底池: %v", err)
+}
+
 func buildStrategyUniverse(codes []string) ([]string, map[string]string) {
 	nameMap := make(map[string]string)
 
@@ -223,7 +234,7 @@ func buildStrategyUniverse(codes []string) ([]string, map[string]string) {
 	// 的库查不到该列时 Find 会失败；此前这里不查错误，失败时无声落入
 	// 24 只兜底池。回落行为保留，但失败必须记 Error 日志以便可见。
 	if err := query.Order("sec_uri_tycode ASC").Find(&stocks).Error; err != nil {
-		logger.SugaredLogger.Errorf("查询策略选股池失败，将回落至兜底池: %v", err)
+		logStrategyScreenPoolError(err)
 	}
 
 	codes = make([]string, 0, len(stocks))
