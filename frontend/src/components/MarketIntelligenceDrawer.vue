@@ -264,7 +264,7 @@ async function handleSaveThesisToLedger() {
   isSavingThesis.value = true
   try {
     const activeCfg = aiConfigStore.activeConfig
-    const modelName = activeCfg?.modelName || 'Serenity-Skill4'
+    const modelName = activeCfg?.modelName || 'Serenity'
     let verdictCode = 'NEW_THESIS'
     let verdictText = '观望/新建档'
     const vUpper = (t.verdict || '').toUpperCase()
