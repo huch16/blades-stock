@@ -136,15 +136,15 @@ func GetVectorBacktestTool() bladesTools.Tool {
 		"VectorBacktest",
 		"【VectorBT向量化回测】对单只股票运行策略回测。支持MA均线交叉、MACD、RSI、布林带等策略，返回夏普比率、最大回撤、胜率。用于测试策略参数、对比策略、寻优参数。",
 		map[string]*types.ParamDef{
-			"stock_code":  {Type: "string", Desc: "股票代码，如 000001（平安银行）、600519（贵州茅台）", Required: true},
-			"strategy":    {Type: "string", Desc: "策略类型：MA（均线交叉）、MACD、RSI、BOLL（布林带）、DualThrust", Required: false},
-			"fast":        {Type: "number", Desc: "快线周期（MA/MACD用），如 5", Required: false},
-			"slow":        {Type: "number", Desc: "慢线周期（MA/MACD用），如 20", Required: false},
-			"signal":      {Type: "number", Desc: "信号周期（MACD用），如 9", Required: false},
-			"window":      {Type: "number", Desc: "窗口周期（RSI/布林带用），如 14", Required: false},
-			"num_std":     {Type: "number", Desc: "标准差倍数（BOLL用），如 2.0", Required: false},
-			"k":           {Type: "number", Desc: "DualThrust 阈值系数，如 0.5", Required: false},
-			"period":      {Type: "number", Desc: "DualThrust 回看周期，如 5", Required: false},
+			"stock_code": {Type: "string", Desc: "股票代码，如 000001（平安银行）、600519（贵州茅台）", Required: true},
+			"strategy":   {Type: "string", Desc: "策略类型：MA（均线交叉）、MACD、RSI、BOLL（布林带）、DualThrust", Required: false},
+			"fast":       {Type: "number", Desc: "快线周期（MA/MACD用），如 5", Required: false},
+			"slow":       {Type: "number", Desc: "慢线周期（MA/MACD用），如 20", Required: false},
+			"signal":     {Type: "number", Desc: "信号周期（MACD用），如 9", Required: false},
+			"window":     {Type: "number", Desc: "窗口周期（RSI/布林带用），如 14", Required: false},
+			"num_std":    {Type: "number", Desc: "标准差倍数（BOLL用），如 2.0", Required: false},
+			"k":          {Type: "number", Desc: "DualThrust 阈值系数，如 0.5", Required: false},
+			"period":     {Type: "number", Desc: "DualThrust 回看周期，如 5", Required: false},
 			// 注意：旧 schema 里的 init_cash / stop_loss / take_profit 已删——
 			// quant.VectorBTHandler 根本不读这三个键，引擎一律用
 			// DefaultBacktestConfig（初始资金 100000、止损 5%、止盈 10%），
