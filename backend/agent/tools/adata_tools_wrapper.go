@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // GetAdataTools 获取 AData 数据工具集
@@ -42,20 +41,9 @@ func GetAdataTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			rawCodes := gjson.Get(args, "codeList").String()
-			if strings.TrimSpace(rawCodes) == "" {
-				return "【提示】未指定有效股票代码，请提供 6 位股票代码（如 000001 或 600519）。", nil
-			}
-			parts := strings.Split(rawCodes, ",")
-			var validCodes []string
-			for _, p := range parts {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					validCodes = append(validCodes, p)
-				}
-			}
+			validCodes := types.ExtractStockCodes(args)
 			if len(validCodes) == 0 {
-				return "【提示】未指定有效股票代码。", nil
+				return "【提示】未指定有效股票代码，请提供 6 位股票代码（如 000001 或 600519）。", nil
 			}
 
 			// 优先尝试外部 AData 客户端，若失联立即原生降级至本地 Sina/EastMoney 直连
@@ -117,9 +105,9 @@ func GetAdataTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := strings.TrimSpace(gjson.Get(args, "stockCode").String())
-			startDate := strings.TrimSpace(gjson.Get(args, "startDate").String())
-			endDate := strings.TrimSpace(gjson.Get(args, "endDate").String())
+			stockCode := types.ExtractStockCode(args)
+			startDate := types.ExtractStringParam(args, "startDate", "start_date")
+			endDate := types.ExtractStringParam(args, "endDate", "end_date")
 
 			client := data.NewAdataClient()
 			result, err := client.GetKLineData(stockCode, startDate, endDate)

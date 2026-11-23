@@ -14,7 +14,6 @@ import (
 	"blades-stock/backend/models"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 var etfMomentumPool = []struct {
@@ -122,8 +121,8 @@ func GetETFMomentumRankingTool() bladesTools.Tool {
 		func(args string) (string, error) {
 			logger.SugaredLogger.Infof("GetETFMomentumRanking called with args: %s", args)
 			count := 20
-			if c := gjson.Get(args, "count").Int(); c > 0 {
-				count = int(c)
+			if c, ok := types.ExtractIntParam(args, "count", "limit"); ok && c > 0 {
+				count = c
 			}
 			if count > 50 {
 				count = 50
@@ -133,16 +132,8 @@ func GetETFMomentumRankingTool() bladesTools.Tool {
 				Code string
 				Name string
 			}
-			codesParam := gjson.Get(args, "codes").String()
-			if strings.TrimSpace(codesParam) != "" {
-				rawCodes := strings.FieldsFunc(codesParam, func(r rune) bool {
-					return r == ',' || r == '，' || r == ' ' || r == ';'
-				})
+			if rawCodes := types.ExtractStockCodes(args); len(rawCodes) > 0 {
 				for _, rc := range rawCodes {
-					rc = strings.TrimSpace(rc)
-					if rc == "" {
-						continue
-					}
 					cCode := models.CleanStockCode(rc)
 					cCode = GetStockCode(cCode)
 					pool = append(pool, struct {

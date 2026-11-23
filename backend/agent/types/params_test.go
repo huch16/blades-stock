@@ -71,6 +71,7 @@ func TestExtractStringListParam(t *testing.T) {
 		{"empty", `{}`, StockCodesKeys, nil},
 		{"empty string", `{"stock_codes": ""}`, StockCodesKeys, nil},
 		{"blank entries dropped", `{"stock_codes": "600519,, 000001"}`, StockCodesKeys, []string{"600519", "000001"}},
+		{"space separated", `{"stock_codes": "600519 000001"}`, StockCodesKeys, []string{"600519", "000001"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

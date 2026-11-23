@@ -9,7 +9,6 @@ import (
 	"time"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func NewHolidayTool(name, description string, params map[string]*types.ParamDef, handler func(args string) (string, error)) bladesTools.Tool {
@@ -58,7 +57,7 @@ func GetHolidayTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			date := gjson.Get(args, "date").String()
+			date := types.ExtractStringParam(args, "date", "targetDate", "day")
 			if date == "" {
 				date = time.Now().Format("2006-01-02")
 			}
@@ -134,7 +133,7 @@ func GetHolidayTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			year := gjson.Get(args, "year").String()
+			year := types.ExtractStringParam(args, "year", "targetYear")
 			if year == "" {
 				year = time.Now().Format("2006")
 			}
@@ -223,12 +222,7 @@ func GetHolidayTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			datesStr := gjson.Get(args, "dates").String()
-			if datesStr == "" {
-				return "请提供要查询的日期列表", nil
-			}
-
-			dates := strings.Split(datesStr, ",")
+			dates := types.ExtractStringListParam(args, "dates", "date", "dateList")
 			if len(dates) == 0 {
 				return "请提供要查询的日期列表", nil
 			}
@@ -327,7 +321,7 @@ func GetHolidayTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			date := gjson.Get(args, "date").String()
+			date := types.ExtractStringParam(args, "date", "targetDate", "day")
 			if date == "" {
 				date = time.Now().Format("2006-01-02")
 			}
@@ -411,8 +405,8 @@ func GetHolidayTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			startDate := gjson.Get(args, "startDate").String()
-			days := int(gjson.Get(args, "days").Int())
+			startDate := types.ExtractStringParam(args, "startDate", "start_date")
+			days, _ := types.ExtractIntParam(args, "days", "dayCount")
 			if days <= 0 {
 				days = 30
 			}

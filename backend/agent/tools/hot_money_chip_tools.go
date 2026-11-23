@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func GetHotMoneyChipTools() []bladesTools.Tool {
@@ -39,8 +38,8 @@ func newHotMoneyActivityTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			days := int(gjson.Get(args, "days").Int())
+			stockCode := types.ExtractStockCode(args)
+			days, _ := types.ExtractIntParam(args, "days", "dayCount")
 			if days <= 0 {
 				days = 30
 			}
@@ -122,7 +121,7 @@ func newChipConcentrationTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请提供股票代码", nil
 			}
@@ -257,8 +256,8 @@ func newCapitalGameTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			days := int(gjson.Get(args, "days").Int())
+			stockCode := types.ExtractStockCode(args)
+			days, _ := types.ExtractIntParam(args, "days", "dayCount")
 			if days <= 0 {
 				days = 20
 			}

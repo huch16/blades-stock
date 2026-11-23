@@ -4,7 +4,6 @@ import (
 	"blades-stock/backend/agent/types"
 	"blades-stock/backend/data"
 	"blades-stock/backend/logger"
-	"encoding/json"
 	"strings"
 
 	bladesTools "github.com/go-kratos/blades/tools"
@@ -22,18 +21,13 @@ func GetWebSearchTool() bladesTools.Tool {
 			if strings.TrimSpace(args) == "" {
 				args = "{}"
 			}
-			parms := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &parms); err != nil {
-				logger.SugaredLogger.Errorf("WebSearch unmarshal error: %v", err)
-				return "搜索参数解析失败，请输入有效的查询关键词", nil
-			}
-			query, ok := parms["query"].(string)
-			if !ok || query == "" {
+			query := types.ExtractStringParam(args, "query", "keyword", "searchWords", "q", "text")
+			if query == "" {
 				return "搜索关键词不能为空", nil
 			}
 			count := 5
-			if c, ok := parms["count"].(float64); ok {
-				count = int(c)
+			if c, ok := types.ExtractIntParam(args, "count", "limit"); ok {
+				count = c
 			}
 			if count <= 0 {
 				count = 5

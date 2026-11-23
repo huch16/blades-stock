@@ -311,6 +311,18 @@ func GetGraphQueryTool() bladesTools.Tool {
 			if err := json.Unmarshal([]byte(input), &args); err != nil {
 				return "", fmt.Errorf("参数解析失败: %w", err)
 			}
+			// 结构体只绑定 snake_case 主键名；camelCase 别名用 helper 补读。
+			if args.MaxDepth <= 0 {
+				if d, ok := types.ExtractIntParam(input, "maxDepth", "depth"); ok && d > 0 {
+					args.MaxDepth = d
+				}
+			}
+			if args.Target == "" {
+				args.Target = types.ExtractStringParam(input, "name", "symbol", "query")
+			}
+			if args.Action == "" {
+				args.Action = types.ExtractStringParam(input, "op")
+			}
 			g, err := loadGraph()
 			if err != nil {
 				return fmt.Sprintf("⚠️ 代码图谱不可用: %v", err), nil

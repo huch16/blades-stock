@@ -20,19 +20,12 @@ func GetQueryStockCodeInfoTool() bladesTools.Tool {
 			if strings.TrimSpace(args) == "" {
 				args = "{}"
 			}
-			parms := map[string]any{}
-			err := json.Unmarshal([]byte(args), &parms)
-			if err != nil {
+			var raw json.RawMessage
+			if err := json.Unmarshal([]byte(args), &raw); err != nil {
 				logger.SugaredLogger.Errorf("QueryStockCodeInfo unmarshal error: %v", err)
 				return "未找到股票信息 (参数解析失败)", nil
 			}
-			searchWord := ""
-			for _, key := range []string{"searchWord", "code", "secid", "symbol", "keyword", "stockCode", "word", "query"} {
-				if v, ok := parms[key].(string); ok && strings.TrimSpace(v) != "" {
-					searchWord = strings.TrimSpace(v)
-					break
-				}
-			}
+			searchWord := types.ExtractStringParam(args, "searchWord", "code", "secid", "symbol", "keyword", "stockCode", "word", "query", "stock_code")
 			if searchWord == "" {
 				logger.SugaredLogger.Errorf("QueryStockCodeInfo searchWord not found in args: %s", args)
 				return "未找到股票信息", nil

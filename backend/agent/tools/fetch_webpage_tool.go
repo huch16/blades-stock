@@ -3,7 +3,6 @@ package tools
 import (
 	"blades-stock/backend/agent/types"
 	"blades-stock/backend/logger"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -29,12 +28,10 @@ func GetFetchWebPageTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			parms := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &parms); err != nil {
-				return "", err
-			}
-			url, ok := parms["url"].(string)
-			if !ok || url == "" {
+			// waitVisible 参数已声明但本实现不读取（纯 HTTP 抓取，无浏览器渲染）；
+			// 保留声明以便将来切换到浏览器抓取时启用。
+			url := types.ExtractStringParam(args, "url", "link", "href")
+			if url == "" {
 				return "URL不能为空", nil
 			}
 			client := resty.New()

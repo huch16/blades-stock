@@ -10,7 +10,6 @@ import (
 	"blades-stock/backend/quant"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // QuerySupplyChainCascadeTool 跨市场事件级联推演与A股映射雷达工具
@@ -31,8 +30,8 @@ func QuerySupplyChainCascadeTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			source := strings.TrimSpace(gjson.Get(args, "source").String())
-			headline := strings.TrimSpace(gjson.Get(args, "headline").String())
+			source := types.ExtractStringParam(args, "source", "name")
+			headline := types.ExtractStringParam(args, "headline", "event", "title")
 			if source == "" {
 				source = "NVDA"
 			}
@@ -64,7 +63,7 @@ func GetIndustrySupplyGraphTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			keyword := strings.TrimSpace(gjson.Get(args, "keyword").String())
+			keyword := types.ExtractStringParam(args, "keyword", "query", "searchWords", "keyWord")
 			if keyword == "" {
 				return "❌ 请提供查询关键词", nil
 			}

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func GetMCPServerTools() []bladesTools.Tool {
@@ -46,10 +45,10 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			name := gjson.Get(args, "name").String()
-			status := gjson.Get(args, "status").String()
-			page := int(gjson.Get(args, "page").Int())
-			pageSize := int(gjson.Get(args, "pageSize").Int())
+			name := types.ExtractStringParam(args, "name")
+			status := types.ExtractStringParam(args, "status")
+			page, _ := types.ExtractIntParam(args, "page", "page_number")
+			pageSize, _ := types.ExtractIntParam(args, "pageSize", "page_size")
 			if page <= 0 {
 				page = 1
 			}
@@ -63,8 +62,7 @@ func GetMCPServerTools() []bladesTools.Tool {
 				Page:     page,
 				PageSize: pageSize,
 			}
-			if enableVal := gjson.Get(args, "enable"); enableVal.Exists() {
-				enable := enableVal.Bool()
+			if enable, ok := types.ExtractBoolParam(args, "enable"); ok {
 				query.Enable = &enable
 			}
 
@@ -110,7 +108,8 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			id := uint(gjson.Get(args, "id").Int())
+			idInt, _ := types.ExtractIntParam(args, "id", "serverId", "server_id")
+			id := uint(idInt)
 			if id == 0 {
 				return "请提供有效的MCP服务器ID", nil
 			}
@@ -176,22 +175,22 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			name := gjson.Get(args, "name").String()
-			url := gjson.Get(args, "url").String()
+			name := types.ExtractStringParam(args, "name")
+			url := types.ExtractStringParam(args, "url", "link")
 			if name == "" || url == "" {
 				return "名称和URL不能为空", nil
 			}
 			enable := true
-			if enableVal := gjson.Get(args, "enable"); enableVal.Exists() {
-				enable = enableVal.Bool()
+			if v, ok := types.ExtractBoolParam(args, "enable"); ok {
+				enable = v
 			}
 			server := &models.MCPServer{
 				Name:        name,
-				Description: gjson.Get(args, "description").String(),
+				Description: types.ExtractStringParam(args, "description"),
 				URL:         url,
-				Command:     gjson.Get(args, "command").String(),
-				Args:        gjson.Get(args, "args").String(),
-				Env:         gjson.Get(args, "env").String(),
+				Command:     types.ExtractStringParam(args, "command"),
+				Args:        types.ExtractStringParam(args, "args"),
+				Env:         types.ExtractStringParam(args, "env"),
 				Enable:      enable,
 			}
 			if err := data.NewMCPServerApi().Create(server); err != nil {
@@ -247,7 +246,8 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			id := uint(gjson.Get(args, "id").Int())
+			idInt, _ := types.ExtractIntParam(args, "id", "serverId", "server_id")
+			id := uint(idInt)
 			if id == 0 {
 				return "请提供有效的MCP服务器ID", nil
 			}
@@ -255,26 +255,28 @@ func GetMCPServerTools() []bladesTools.Tool {
 			if err != nil {
 				return fmt.Sprintf("未找到ID为 %d 的MCP服务器", id), nil
 			}
-			if nameVal := gjson.Get(args, "name"); nameVal.Exists() {
-				existing.Name = nameVal.String()
+			// 注意：空字符串不再清空字段（旧代码用 Exists() 语义，传入 "" 会把字段置空）；
+			// 如需清空字段请在界面上直接操作数据库。
+			if v := types.ExtractStringParam(args, "name"); v != "" {
+				existing.Name = v
 			}
-			if descVal := gjson.Get(args, "description"); descVal.Exists() {
-				existing.Description = descVal.String()
+			if v := types.ExtractStringParam(args, "description"); v != "" {
+				existing.Description = v
 			}
-			if urlVal := gjson.Get(args, "url"); urlVal.Exists() {
-				existing.URL = urlVal.String()
+			if v := types.ExtractStringParam(args, "url", "link"); v != "" {
+				existing.URL = v
 			}
-			if cmdVal := gjson.Get(args, "command"); cmdVal.Exists() {
-				existing.Command = cmdVal.String()
+			if v := types.ExtractStringParam(args, "command"); v != "" {
+				existing.Command = v
 			}
-			if argsVal := gjson.Get(args, "args"); argsVal.Exists() {
-				existing.Args = argsVal.String()
+			if v := types.ExtractStringParam(args, "args"); v != "" {
+				existing.Args = v
 			}
-			if envVal := gjson.Get(args, "env"); envVal.Exists() {
-				existing.Env = envVal.String()
+			if v := types.ExtractStringParam(args, "env"); v != "" {
+				existing.Env = v
 			}
-			if enableVal := gjson.Get(args, "enable"); enableVal.Exists() {
-				existing.Enable = enableVal.Bool()
+			if v, ok := types.ExtractBoolParam(args, "enable"); ok {
+				existing.Enable = v
 			}
 			if err := data.NewMCPServerApi().Update(existing); err != nil {
 				return "更新MCP服务器失败: " + err.Error(), nil
@@ -294,7 +296,8 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			id := uint(gjson.Get(args, "id").Int())
+			idInt, _ := types.ExtractIntParam(args, "id", "serverId", "server_id")
+			id := uint(idInt)
 			if id == 0 {
 				return "请提供有效的MCP服务器ID", nil
 			}
@@ -321,8 +324,9 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			id := uint(gjson.Get(args, "id").Int())
-			enable := gjson.Get(args, "enable").Bool()
+			idInt, _ := types.ExtractIntParam(args, "id", "serverId", "server_id")
+			id := uint(idInt)
+			enable, _ := types.ExtractBoolParam(args, "enable")
 			if id == 0 {
 				return "请提供有效的MCP服务器ID", nil
 			}
@@ -348,7 +352,8 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			id := uint(gjson.Get(args, "id").Int())
+			idInt, _ := types.ExtractIntParam(args, "id", "serverId", "server_id")
+			id := uint(idInt)
 			if id == 0 {
 				return "请提供有效的MCP服务器ID", nil
 			}
@@ -371,7 +376,8 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			serverID := uint(gjson.Get(args, "serverId").Int())
+			serverIDInt, _ := types.ExtractIntParam(args, "serverId", "server_id", "id")
+			serverID := uint(serverIDInt)
 			var toolList []models.MCPServerTool
 			if serverID > 0 {
 				toolList = data.NewMCPServerApi().GetToolsByServerID(serverID)
@@ -415,7 +421,8 @@ func GetMCPServerTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			toolID := uint(gjson.Get(args, "toolId").Int())
+			toolIDInt, _ := types.ExtractIntParam(args, "toolId", "tool_id", "id")
+			toolID := uint(toolIDInt)
 			if toolID == 0 {
 				return "请提供有效的MCP工具ID", nil
 			}

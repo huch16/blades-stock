@@ -8,7 +8,6 @@ import (
 	"blades-stock/backend/quant"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // RunAutoAlphaExplorationTool 触发策略参数网格优化与自发现
@@ -24,17 +23,7 @@ func RunAutoAlphaExplorationTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			targetPoolRaw := strings.TrimSpace(gjson.Get(args, "targetPool").String())
-			var codes []string
-			if targetPoolRaw != "" {
-				parts := strings.Split(targetPoolRaw, ",")
-				for _, p := range parts {
-					c := strings.TrimSpace(p)
-					if c != "" {
-						codes = append(codes, c)
-					}
-				}
-			}
+			codes := types.ExtractStringListParam(args, "targetPool", "codes", "stock_codes", "codeList")
 
 			explorer := quant.NewAutoAlphaExplorer()
 			proposal, err := explorer.ExploreETFMomentumParams(codes)
@@ -76,7 +65,7 @@ func GetAutoAlphaProposalsTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			limit := int(gjson.Get(args, "limit").Int())
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if limit <= 0 {
 				limit = 5
 			}

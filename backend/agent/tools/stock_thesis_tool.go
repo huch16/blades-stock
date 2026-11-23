@@ -10,7 +10,6 @@ import (
 	"blades-stock/backend/models"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // GetStockThesisTool 查询标的当前买方认知假说与最新判定
@@ -26,11 +25,7 @@ func GetStockThesisTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			if stockCode == "" {
-				stockCode = gjson.Get(args, "code").String()
-			}
-			stockCode = strings.TrimSpace(stockCode)
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "❌ 股票代码不能为空", nil
 			}
@@ -102,20 +97,16 @@ func SaveStockThesisTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			if stockCode == "" {
-				stockCode = gjson.Get(args, "code").String()
-			}
-			stockCode = strings.TrimSpace(stockCode)
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "❌ 股票代码不能为空", nil
 			}
 
-			stockName := gjson.Get(args, "stockName").String()
-			verdictRaw := gjson.Get(args, "verdict").String()
-			coreThesis := gjson.Get(args, "coreThesis").String()
-			keyCatalysts := gjson.Get(args, "keyCatalysts").String()
-			riskFactors := gjson.Get(args, "riskFactors").String()
+			stockName := types.ExtractStringParam(args, "stockName", "name", "stock_name")
+			verdictRaw := types.ExtractStringParam(args, "verdict")
+			coreThesis := types.ExtractStringParam(args, "coreThesis")
+			keyCatalysts := types.ExtractStringParam(args, "keyCatalysts")
+			riskFactors := types.ExtractStringParam(args, "riskFactors")
 
 			api := data.NewStockThesisApi()
 			_, _, _, _, _ = api.ExtractThesisFromContent(verdictRaw)

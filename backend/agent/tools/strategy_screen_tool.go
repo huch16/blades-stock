@@ -8,7 +8,6 @@ import (
 	"blades-stock/backend/data"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // GetStrategyScreenTool 返回策略评分选股工具。
@@ -35,21 +34,12 @@ func GetStrategyScreenTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			name := gjson.Get(args, "strategyName").String()
+			name := types.ExtractStringParam(args, "strategyName", "strategy", "name")
 			if strings.TrimSpace(name) == "" {
 				return "请指定策略名称 strategyName", nil
 			}
-			codeStr := gjson.Get(args, "codeList").String()
-			var codes []string
-			for _, c := range strings.FieldsFunc(codeStr, func(r rune) bool {
-				return r == ',' || r == '，' || r == ' '
-			}) {
-				c = strings.TrimSpace(c)
-				if c != "" {
-					codes = append(codes, c)
-				}
-			}
-			limit := int(gjson.Get(args, "limit").Int())
+			codes := types.ExtractStockCodes(args)
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 
 			outcome, err := data.ScreenByStrategy(name, codes, limit)
 			if err != nil {

@@ -8,7 +8,6 @@ import (
 	"blades-stock/backend/quant"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // GetPaperPortfolioSummaryTool 查询智能体专属模拟盘账户资产、净值与持仓问责报表
@@ -126,15 +125,15 @@ func ExecutePaperTradeTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			side := strings.ToUpper(strings.TrimSpace(gjson.Get(args, "side").String()))
-			stockCode := strings.TrimSpace(gjson.Get(args, "stockCode").String())
-			stockName := strings.TrimSpace(gjson.Get(args, "stockName").String())
-			price := gjson.Get(args, "price").Float()
-			shares := int(gjson.Get(args, "shares").Int())
-			stopLoss := gjson.Get(args, "stopLoss").Float()
-			takeProfit := gjson.Get(args, "takeProfit").Float()
-			targetWeight := gjson.Get(args, "targetWeight").Float()
-			reason := strings.TrimSpace(gjson.Get(args, "reason").String())
+			side := strings.ToUpper(types.ExtractStringParam(args, "side", "direction", "action"))
+			stockCode := types.ExtractStockCode(args)
+			stockName := types.ExtractStringParam(args, "stockName", "name", "stock_name")
+			price, _ := types.ExtractFloatParam(args, "price")
+			shares, _ := types.ExtractIntParam(args, "shares", "quantity")
+			stopLoss, _ := types.ExtractFloatParam(args, "stopLoss", "stop_loss")
+			takeProfit, _ := types.ExtractFloatParam(args, "takeProfit", "take_profit")
+			targetWeight, _ := types.ExtractFloatParam(args, "targetWeight", "target_weight")
+			reason := types.ExtractStringParam(args, "reason")
 
 			if stockCode == "" {
 				return "❌ 股票代码不能为空", nil

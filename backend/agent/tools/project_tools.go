@@ -4,7 +4,6 @@ import (
 	"blades-stock/backend/agent/types"
 	"blades-stock/backend/logger"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -37,11 +36,7 @@ func GetReadProjectFileTool() bladesTools.Tool {
 			"path": {Type: "string", Desc: "文件路径，相对于项目根目录", Required: true},
 		},
 		func(args string) (string, error) {
-			params := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &params); err != nil {
-				return "", err
-			}
-			path, _ := params["path"].(string)
+			path := types.ExtractStringParam(args, "path", "filePath", "filepath")
 			if path == "" {
 				return "缺少 path 参数", nil
 			}
@@ -77,17 +72,13 @@ func GetListProjectDirTool() bladesTools.Tool {
 			"depth": {Type: "integer", Desc: "递归深度，默认3，最大10", Required: false},
 		},
 		func(args string) (string, error) {
-			params := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &params); err != nil {
-				return "", err
-			}
-			path, _ := params["path"].(string)
+			path := types.ExtractStringParam(args, "path", "filePath", "filepath")
 			if path == "" {
 				path = "."
 			}
 			depth := 3
-			if d, ok := params["depth"].(float64); ok {
-				depth = int(d)
+			if d, ok := types.ExtractIntParam(args, "depth"); ok {
+				depth = d
 				if depth > 10 {
 					depth = 10
 				}
@@ -123,15 +114,11 @@ func GetSearchProjectFilesTool() bladesTools.Tool {
 			"root":    {Type: "string", Desc: "搜索根目录，相对于项目根目录。留空表示整个项目", Required: false},
 		},
 		func(args string) (string, error) {
-			params := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &params); err != nil {
-				return "", err
-			}
-			pattern, _ := params["pattern"].(string)
+			pattern := types.ExtractStringParam(args, "pattern", "glob", "query")
 			if pattern == "" {
 				return "缺少 pattern 参数", nil
 			}
-			root, _ := params["root"].(string)
+			root := types.ExtractStringParam(args, "root", "path", "dir")
 			searchRoot := "."
 			if root != "" {
 				searchRoot = root
@@ -177,13 +164,9 @@ func GetGitOperationTool() bladesTools.Tool {
 			"path": {Type: "string", Desc: "目标路径。clone 时指定存放目录，其他操作指定已有仓库路径。留空表示当前项目根目录", Required: false},
 		},
 		func(args string) (string, error) {
-			params := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &params); err != nil {
-				return "", err
-			}
-			op, _ := params["op"].(string)
-			gitArgs, _ := params["args"].(string)
-			path, _ := params["path"].(string)
+			op := types.ExtractStringParam(args, "op", "command")
+			gitArgs := types.ExtractStringParam(args, "args", "arguments")
+			path := types.ExtractStringParam(args, "path", "filePath", "filepath")
 
 			workDir := projectRoot()
 			if path != "" {
@@ -233,12 +216,8 @@ func GetLearnProjectTool() bladesTools.Tool {
 			"name":   {Type: "string", Desc: "项目名称。留空则从 URL/路径自动生成", Required: false},
 		},
 		func(args string) (string, error) {
-			params := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &params); err != nil {
-				return "", err
-			}
-			source, _ := params["source"].(string)
-			name, _ := params["name"].(string)
+			source := types.ExtractStringParam(args, "source", "url", "path")
+			name := types.ExtractStringParam(args, "name")
 			if source == "" {
 				return "缺少 source 参数（git URL 或本地路径）", nil
 			}
@@ -257,12 +236,8 @@ func GetWriteProjectFileTool() bladesTools.Tool {
 			"content": {Type: "string", Desc: "文件内容", Required: true},
 		},
 		func(args string) (string, error) {
-			params := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &params); err != nil {
-				return "", err
-			}
-			path, _ := params["path"].(string)
-			content, _ := params["content"].(string)
+			path := types.ExtractStringParam(args, "path", "filePath", "filepath")
+			content := types.ExtractStringParam(args, "content", "text")
 			if path == "" {
 				return "缺少 path 参数", nil
 			}
@@ -294,12 +269,8 @@ func GetRunCommandTool() bladesTools.Tool {
 			"timeout": {Type: "integer", Desc: "超时秒数，默认60。编译等耗时任务可设为120-300", Required: false},
 		},
 		func(args string) (string, error) {
-			params := map[string]any{}
-			if err := json.Unmarshal([]byte(args), &params); err != nil {
-				return "", err
-			}
-			command, _ := params["command"].(string)
-			cmdArgs, _ := params["args"].(string)
+			command := types.ExtractStringParam(args, "command", "cmd")
+			cmdArgs := types.ExtractStringParam(args, "args", "arguments")
 			if command == "" {
 				return "缺少 command 参数", nil
 			}
@@ -308,8 +279,8 @@ func GetRunCommandTool() bladesTools.Tool {
 			}
 
 			timeoutSec := 60
-			if t, ok := params["timeout"].(float64); ok && t > 0 {
-				timeoutSec = int(t)
+			if t, ok := types.ExtractIntParam(args, "timeout", "timeoutSec"); ok && t > 0 {
+				timeoutSec = t
 			}
 
 			workDir := projectRoot()

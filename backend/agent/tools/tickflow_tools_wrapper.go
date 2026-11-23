@@ -7,7 +7,6 @@ import (
 	"blades-stock/backend/agent/types"
 	"blades-stock/backend/data"
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // GetTickFlowToolWrappers returns TickFlow tool schemas.
@@ -41,16 +40,16 @@ func GetTickFlowToolWrappers() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			symbol := gjson.Get(args, "symbol").String()
-			period := strings.TrimSpace(gjson.Get(args, "period").String())
+			symbol := types.ExtractStringParam(args, "symbol", "stockCode", "stock_code", "code", "ticker")
+			period := types.ExtractStringParam(args, "period", "periodType")
 			if period == "" {
 				period = "1d"
 			}
-			count := int(gjson.Get(args, "count").Int())
+			count, _ := types.ExtractIntParam(args, "count", "limit")
 			if count <= 0 {
 				count = 100
 			}
-			adjust := gjson.Get(args, "adjust").String()
+			adjust := types.ExtractStringParam(args, "adjust", "adjustFlag")
 			if symbol == "" {
 				return "请提供symbol参数", nil
 			}
@@ -81,21 +80,17 @@ func GetTickFlowToolWrappers() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			symbolsStr := gjson.Get(args, "symbols").String()
-			period := strings.TrimSpace(gjson.Get(args, "period").String())
+			symbols := types.ExtractStockCodes(args)
+			period := types.ExtractStringParam(args, "period", "periodType")
 			if period == "" {
 				period = "1d"
 			}
-			count := int(gjson.Get(args, "count").Int())
+			count, _ := types.ExtractIntParam(args, "count", "limit")
 			if count <= 0 {
 				count = 100
 			}
-			if symbolsStr == "" {
+			if len(symbols) == 0 {
 				return "请提供symbols参数", nil
-			}
-			symbols := strings.Split(symbolsStr, ",")
-			for i, s := range symbols {
-				symbols[i] = strings.TrimSpace(s)
 			}
 			client := data.NewTickFlowClient()
 			results := client.GetKlinesBatch(symbols, period, count, "")
@@ -129,8 +124,8 @@ func GetTickFlowToolWrappers() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			name := gjson.Get(args, "name").String()
-			limit := int(gjson.Get(args, "limit").Int())
+			name := types.ExtractStringParam(args, "name")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if name == "" {
 				return "请提供name参数（标的池名称）", nil
 			}
@@ -151,7 +146,7 @@ func GetTickFlowToolWrappers() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			symbol := gjson.Get(args, "symbol").String()
+			symbol := types.ExtractStringParam(args, "symbol", "stockCode", "stock_code", "code", "ticker")
 			if symbol == "" {
 				return "请提供symbol参数", nil
 			}
@@ -172,13 +167,9 @@ func GetTickFlowToolWrappers() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			symbolsStr := gjson.Get(args, "symbols").String()
-			if symbolsStr == "" {
+			symbols := types.ExtractStockCodes(args)
+			if len(symbols) == 0 {
 				return "请提供symbols参数", nil
-			}
-			symbols := strings.Split(symbolsStr, ",")
-			for i, s := range symbols {
-				symbols[i] = strings.TrimSpace(s)
 			}
 			return data.NewTickFlowClient().GetRealtimeQuotesAsMarkdown(symbols), nil
 		},

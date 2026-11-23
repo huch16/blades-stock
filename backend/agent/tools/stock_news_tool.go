@@ -6,7 +6,6 @@ import (
 	"blades-stock/backend/util"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func GetQueryStockNewsTool() bladesTools.Tool {
@@ -15,16 +14,7 @@ func GetQueryStockNewsTool() bladesTools.Tool {
 			"searchWords": {Type: "string", Desc: "搜索关键词(多个关键词使用空格分隔)", Required: true},
 		},
 		func(args string) (string, error) {
-			searchWords := gjson.Get(args, "searchWords").String()
-			if searchWords == "" {
-				searchWords = gjson.Get(args, "keyword").String()
-			}
-			if searchWords == "" {
-				searchWords = gjson.Get(args, "searchWord").String()
-			}
-			if searchWords == "" {
-				searchWords = gjson.Get(args, "stockName").String()
-			}
+			searchWords := types.ExtractStringParam(args, "searchWords", "keyword", "searchWord", "stockName", "query")
 			if searchWords == "" {
 				searchWords = "市场资讯"
 			}

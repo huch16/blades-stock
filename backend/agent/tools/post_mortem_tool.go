@@ -10,7 +10,6 @@ import (
 	"blades-stock/backend/quant"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // TriggerPostMortemAuditTool 触发 T+1/T+5/T+20 决策胜率闭环对账与死后剖析
@@ -26,7 +25,7 @@ func TriggerPostMortemAuditTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			targetDate := gjson.Get(args, "targetDate").String()
+			targetDate := types.ExtractStringParam(args, "targetDate", "date", "day")
 			service := quant.NewPostMortemLoopService()
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -80,7 +79,7 @@ func GetPostMortemAuditHistoryTool() bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			limit := int(gjson.Get(args, "limit").Int())
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if limit <= 0 {
 				limit = 10
 			}

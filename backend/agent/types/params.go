@@ -74,10 +74,11 @@ func ExtractStringParam(args string, keys ...string) string {
 	return ""
 }
 
-// splitListValue 把逗号/中文逗号/分号分隔的列表字符串拆成干净的元素。
+// splitListValue 把逗号/中文逗号/分号/空白分隔的列表字符串拆成干净的元素。
+// 代码类值不含空白，按空白切分是安全的（如 "600519 000001"）。
 func splitListValue(s string) []string {
 	parts := strings.FieldsFunc(s, func(r rune) bool {
-		return r == ',' || r == '，' || r == ';' || r == '；'
+		return r == ',' || r == '，' || r == ';' || r == '；' || r == ' ' || r == '\t'
 	})
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
