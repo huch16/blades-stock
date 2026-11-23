@@ -20,6 +20,10 @@ type AgentMemory struct {
 
 func (AgentMemory) TableName() string { return "agent_memories" }
 
+// AgentSession 是 agent_sessions 表的旧模型定义：全仓无任何读写，
+// 只有 AutoMigrate 建表（第五轮核实）。自本轮起不再自动建表——
+// 旧库里已存在的空表不受影响（不删表、不碰数据），新库不再建该表。
+// 结构保留仅作遗留表形记录；如需彻底删除表，必须由用户另行决定。
 type AgentSession struct {
 	ID        uint      `json:"id" gorm:"primarykey"`
 	SessionID string    `json:"sessionId" gorm:"uniqueIndex;size:64"`
@@ -51,9 +55,10 @@ type AgentTrace struct {
 func (AgentTrace) TableName() string { return "agent_traces" }
 
 func init() {
+	// 注意：AgentSession 已从迁移列表移除（第五轮，见上）：该表全仓
+	// 无读写、是空表；只停掉新库建表，旧库已存在的表原样保留。
 	db.AutoMigrateList = append(db.AutoMigrateList,
 		&AgentMemory{},
-		&AgentSession{},
 		&AgentTrace{},
 	)
 }
