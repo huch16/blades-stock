@@ -173,6 +173,95 @@ func (m *ScriptedStreamProvider) NewStreaming(ctx context.Context, req *blades.M
 	}
 }
 
+// ── 工具调用流式 Mock（tool_calls 端到端测试用）─────────────────────────
+//
+// ToolCallStreamProvider 按生产 OpenAI provider（blades/contrib/openai）
+// 的真实形态复现一轮“工具调用 → 追问 → 正文”：
+//
+//   - 第 1 次流式调用：先 yield 正文 chunk（prelude，可空），再 yield 终态
+//     RoleTool / StatusCompleted 工具调用消息——ToolPart 只有 Request、
+//     无 Response，FinishReason="tool_calls"。blades 的流式处理会跳过
+//     这条终态消息的透传，改由 executeTools 真正执行工具、
+//     再把带 Response 的工具消息 yield 给上层；
+//   - 第 2 次及以后流式调用：yield 正文终态（RoleAssistant /
+//     StatusCompleted，FinishReason="stop"）。
+//
+// 与 ScriptedStreamProvider 的 MockStreamTool 步骤不同：后者把 Response
+// 预填为 "ok" 且不带 StatusCompleted，blades 会把它当作普通流消息直接
+// 透传给 ChatWithContext（未执行的调用就先画进时间线），
+// 随后 executeTools 又执行一次——同一调用会出现两条 tool_calls，
+// 不是生产形态，不能用来测 tool_calls。
+
+// ToolCallStreamProvider 是生产形态的二轮工具调用流式 Mock。
+type ToolCallStreamProvider struct {
+	name        string
+	toolName    string
+	toolID      string
+	toolRequest string
+	prelude     string // 工具调用前的正文 chunk，可空
+	answer      string // 第二轮返回的最终正文
+	calls       int32
+}
+
+// NewToolCallStreamProvider 创建一个工具调用流式 Mock provider。
+func NewToolCallStreamProvider(name, toolName, toolID, toolRequest, prelude, answer string) *ToolCallStreamProvider {
+	return &ToolCallStreamProvider{
+		name:        name,
+		toolName:    toolName,
+		toolID:      toolID,
+		toolRequest: toolRequest,
+		prelude:     prelude,
+		answer:      answer,
+	}
+}
+
+// Name 返回模型提供者的名称。
+func (m *ToolCallStreamProvider) Name() string { return m.name }
+
+// Calls 返回流式/非流式调用的总次数。
+func (m *ToolCallStreamProvider) Calls() int32 { return atomic.LoadInt32(&m.calls) }
+
+// Generate 返回最终正文（非流式路径的对齐实现；ChatWithContext 只走流式）。
+func (m *ToolCallStreamProvider) Generate(ctx context.Context, req *blades.ModelRequest) (*blades.ModelResponse, error) {
+	atomic.AddInt32(&m.calls, 1)
+	msg := blades.NewAssistantMessage(blades.StatusCompleted)
+	msg.FinishReason = "stop"
+	msg.Parts = append(msg.Parts, blades.TextPart{Text: m.answer})
+	return &blades.ModelResponse{Message: msg}, nil
+}
+
+// NewStreaming 按轮次产出生产形态的流式事件：首轮工具调用，次轮最终正文。
+func (m *ToolCallStreamProvider) NewStreaming(ctx context.Context, req *blades.ModelRequest) blades.Generator[*blades.ModelResponse, error] {
+	return func(yield func(*blades.ModelResponse, error) bool) {
+		n := atomic.AddInt32(&m.calls, 1)
+		if n == 1 {
+			if m.prelude != "" {
+				chunk := blades.NewAssistantMessage(blades.StatusIncomplete)
+				chunk.Parts = append(chunk.Parts, blades.TextPart{Text: m.prelude})
+				if !yield(&blades.ModelResponse{Message: chunk}, nil) {
+					return
+				}
+			}
+			toolMsg := &blades.Message{
+				Role:         blades.RoleTool,
+				Status:       blades.StatusCompleted,
+				FinishReason: "tool_calls",
+				Parts: []blades.Part{blades.ToolPart{
+					ID:      m.toolID,
+					Name:    m.toolName,
+					Request: m.toolRequest,
+				}},
+			}
+			yield(&blades.ModelResponse{Message: toolMsg}, nil)
+			return
+		}
+		msg := blades.NewAssistantMessage(blades.StatusCompleted)
+		msg.FinishReason = "stop"
+		msg.Parts = append(msg.Parts, blades.TextPart{Text: m.answer})
+		yield(&blades.ModelResponse{Message: msg}, nil)
+	}
+}
+
 // StallStreamProvider 模拟“流静默挂起”：连接不断、一个 chunk 都不发，
 // 直到 ctx 被取消才以 ctx 错误结束。用于验证停滞看门狗能否主动取消并降级。
 type StallStreamProvider struct {

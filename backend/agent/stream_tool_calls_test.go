@@ -19,9 +19,10 @@ import (
 // result、id、duration；序列化走 encoding/json，与 AgentMessageToFrontendMap
 //（services 层对 StreamMessage 的 Marshal/Unmarshal 透传）同一机制。
 //
-// 注意：本文件只覆盖“转换 + 序列化”——ChatWithContext 里的 blades Agent
-// 循环没有 mock provider 注入缝，端到端（mock 模型 → 通道）无法在不碰
-// 网络/真实 AI 的单测里驱动；转换函数本身就是 runOnce 循环里唯一新增逻辑。
+// 注意：本文件只覆盖“转换 + 序列化”——端到端（mock 模型 → 工具执行 →
+// 流里出现 tool_calls）见 stream_tool_calls_e2e_test.go，
+// 接缝在 run_context.go WithMockAgent 与 mock_model_provider.go
+// ToolCallStreamProvider。
 
 // frontendToolCall 是前端 ToolCall 的 Go 侧镜像，只用于校验 JSON 形状兼容。
 type frontendToolCall struct {

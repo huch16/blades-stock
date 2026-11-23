@@ -1,6 +1,11 @@
 package agent
 
-import "context"
+import (
+	"context"
+
+	"github.com/go-kratos/blades"
+	bladesTools "github.com/go-kratos/blades/tools"
+)
 
 // 运行类型（写入 agent_run_record.Kind，用于区分“这次是谁在跑”）
 const (
@@ -93,4 +98,48 @@ func injectedSinkFrom(ctx context.Context) *string {
 		return v
 	}
 	return nil
+}
+
+// ── Mock Agent 接缝（仅供单测）────────────────────────────────────────────
+//
+// 背景：ChatWithContext 里 blades Agent 的 provider 来自 createChatModel
+// （真实模型 + 真实网关），工具集按问题分类组装——
+// StreamMessage.tool_calls 因此一直只有“转换 + 序列化”单测，
+// 端到端（mock 模型 → 工具执行 → 流里出现 tool_calls）无从驱动。
+//
+// 本接缝只换 provider 与工具集两处：GetStockAiAgent 建 agent 时若 ctx
+// 携带本接缝，跳过 createChatModel / 降级链 / 能力闸门，直接用 mock
+// provider + 桩工具建 agent；其余流程（runOnce 流循环、[STEP] 文本、
+// tool_calls 结构化消息、终态护栏、运行记录）全部走生产路径。
+// 生产调用方从不设置该值，行为零变化。
+
+type mockAgentSeam struct {
+	provider blades.ModelProvider
+	tools    []bladesTools.Tool
+}
+
+type mockAgentSeamCtxKey struct{}
+
+// WithMockAgent 把 mock provider（+ 可选桩工具）注入 ctx，仅供单测使用。
+// 不传工具时沿用按问题分类组装的真实工具集；传了则只用桩工具，
+// 让测试不依赖问题分类与任何真实数据源。
+func WithMockAgent(ctx context.Context, provider blades.ModelProvider, tools ...bladesTools.Tool) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if provider == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, mockAgentSeamCtxKey{}, &mockAgentSeam{provider: provider, tools: tools})
+}
+
+// mockAgentFrom 取 mock 接缝（无则 ok=false）。
+func mockAgentFrom(ctx context.Context) (blades.ModelProvider, []bladesTools.Tool, bool) {
+	if ctx == nil {
+		return nil, nil, false
+	}
+	if v, ok := ctx.Value(mockAgentSeamCtxKey{}).(*mockAgentSeam); ok && v != nil && v.provider != nil {
+		return v.provider, v.tools, true
+	}
+	return nil, nil, false
 }

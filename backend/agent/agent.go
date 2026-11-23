@@ -149,6 +149,44 @@ func classifyComplexity(question string) AgentMode {
 func GetStockAiAgent(ctx context.Context, aiConfig data.AIConfig, question string, agentMode string, matchedSkills []models.Skill, extraTools ...bladesTools.Tool) *AgentInstance {
 	logger.SugaredLogger.Infof("GetStockAiAgent aiConfig: %+v", redactAIConfig(aiConfig))
 
+	// Mock 接缝（仅单测，见 run_context.go WithMockAgent）：ctx 携带
+	// mock provider 时跳过 createChatModel / 降级链，直接用 mock
+	// provider + 桩工具建 agent；其余构造与生产路径一致（同一
+	// blades.NewAgent、同一 ReasoningMiddleware、同一 maxStep 规则），
+	// Direct 模式零工具的不变量同样保留。
+	if mockProvider, mockTools, ok := mockAgentFrom(ctx); ok {
+		mode := resolveAgentMode(agentMode, question)
+		allTools := mockTools
+		if len(allTools) == 0 {
+			allTools = resolveToolsForMode(ctx, mode, question, matchedSkills, extraTools)
+		}
+		if mode == AgentModeDirect {
+			allTools = nil
+		}
+		logger.SugaredLogger.Infof("Agent mode selected: %s (user=%q), question=%q, tools=%d [mock provider]", mode, agentMode, question, len(allTools))
+		maxStep := len(allTools)*2 + 10
+		if maxStep < 30 {
+			maxStep = 30
+		}
+		agent, err := blades.NewAgent("stock-agent",
+			blades.WithModel(mockProvider),
+			blades.WithTools(allTools...),
+			blades.WithMaxIterations(maxStep),
+			blades.WithInstruction(personalityPromptForMode(mode)),
+			blades.WithMiddleware(ReasoningMiddleware),
+		)
+		if err != nil {
+			logger.SugaredLogger.Errorf("创建Blades Agent失败(mock): %v", err)
+			return nil
+		}
+		return &AgentInstance{
+			Agent:    agent,
+			Mode:     mode,
+			AIConfig: aiConfig,
+			AllTools: allTools,
+		}
+	}
+
 	modelProvider, err := createChatModel(ctx, aiConfig)
 	if err != nil {
 		logger.SugaredLogger.Error(err.Error())

@@ -788,7 +788,14 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				}
 
 				for _, part := range msg.Parts {
-					if tp, ok := part.(*blades.ToolPart); ok {
+					// 注意断言必须用值类型：blades 全仓都把 ToolPart 存为值
+					// （provider 拼 `blades.ToolPart{...}`、agent.go 的
+					// handleTools / executeTools 也按值处理，`case ToolPart:`）。
+					// 旧代码断言 `*blades.ToolPart`（指针）永远匹配不上，
+					// 导致整个分支是死代码：工具照常执行，但工具名/指标/
+					// [STEP]/审计/tool_calls 全都收不到——端到端测试
+					// （stream_tool_calls_e2e_test.go）第一次跑就抓住了它。
+					if tp, ok := part.(blades.ToolPart); ok {
 						toolNames = append(toolNames, tp.Name)
 						succeeded := toolCallSucceeded(tp.Response)
 						toolSuccess = append(toolSuccess, succeeded)
@@ -839,7 +846,7 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 						// 没有本字段时时间线永远收不到数据。
 						sendStreamMsg(ch, ctx, &StreamMessage{
 							Role:      "assistant",
-							ToolCalls: []StreamToolCall{buildStreamToolCall(tp)},
+							ToolCalls: []StreamToolCall{buildStreamToolCall(&tp)},
 						})
 					}
 				}
