@@ -21,7 +21,10 @@ func defaultLLMReflectionFunc() LLMReflectionFunc {
 	}
 	var cfg *data.AIConfig
 	for _, c := range settingConfig.AiConfigs {
-		if c != nil {
+		// 只认带凭证的卡：首张卡若 BaseUrl/ApiKey 为空，旧实现会直接
+		// 拿它建 provider，调用时才失败；与 LLMFromConfig 的选卡
+		// 规则对齐，跳过无凭证的卡用下一张。
+		if c != nil && c.BaseUrl != "" && c.ApiKey != "" {
 			cfg = c
 			break
 		}

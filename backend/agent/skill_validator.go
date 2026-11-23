@@ -2,7 +2,9 @@
 //
 // 设计目标：
 //   - 在 AutoMigrate 之后、Agent 启动之前，扫描所有 Skill.ToolGroups
-//     字段，凡包含非法 ToolGroup 名称 → log.Fatal（避免 typo 永远沉默）
+//     字段，凡包含非法 ToolGroup 名称 → 记 Warn（不要 log.Fatal：
+//     一个技能的配置 typo 不应让整个应用闪退；该函数目前尚未接线，
+//     见 ValidateSkillToolGroups 的注释，属 dormant 的校验工具）。
 //   - 在 matchedSkills 注入 Directive 之前，校验每个 Skill 的 ToolGroups
 //     实际能在当前 agent 上下文中满足，缺失的工具加入警告标记
 package agent
@@ -51,6 +53,10 @@ func IsValidToolGroup(name string) bool {
 
 // ValidateSkillToolGroups 扫描 DB 中所有 Skill.ToolGroups，凡包含非法名 → 记录警告日志（避免因配置错误导致应用闪退）。
 // 设计：在 AutoMigrate 后、SeedDefaultSkills 后调用一次。
+//
+// 注意：本函数目前全仓零生产调用者（dormant）——启动路径从未接线，
+// 校验只存在于测试中。不要误以为技能配置已在启动时被校验过；
+// 要恢复校验应从启动处调用一次，而不是删掉本函数。
 //
 // 失败模式：
 //   - 非法 ToolGroup → logger.Warnf（平滑容错，避免意外崩溃）
@@ -132,8 +138,8 @@ func WarnMissingSkillDependencies(matched []models.Skill, availableGroups map[to
 		copy := s
 		warning := fmt.Sprintf("\n⚠️ 警告：本 Skill 声明依赖 %v，但当前会话已注入的工具组中没有这些；"+
 			"部分指令可能无法执行。\n", missing)
-		// 仅追加一次（避免重复注入）
-		// dedup 条件：包含 "⚠️ 警告" 或 "⚠️" 后面跟着 " " 在前 80 字符内
+		// 仅追加一次（避免重复注入）：Directive 里只要出现过 "⚠️"
+		// 就不再追加警告块。
 		if !strings.Contains(copy.Directive, "⚠️") {
 			copy.Directive = warning + copy.Directive
 		}
