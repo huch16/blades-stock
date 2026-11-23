@@ -160,6 +160,28 @@ test('MarketIntelligenceDrawer：当前模型必须与聊天共用 aiConfigStore
   assert.doesNotMatch(src, /GetAiConfigs\(\)/)
 })
 
+test('g / Shift+G 必须用常规语义：g 到最旧、Shift+G 到最新（与 Home/End 一致）', () => {
+  const src = read('src/components/chat/useMessageAnchor.ts')
+  // 旧映射写反了（g 到最新、Shift+G 到最旧），第四轮统一为常规语义。
+  assert.match(src, /case 'g':\s*if \(e\.shiftKey\) \{\s*e\.preventDefault\(\)\s*scrollToLatest\(\)/)
+  assert.match(src, /case 'g':[\s\S]*?else \{\s*e\.preventDefault\(\)\s*scrollToOldest\(\)/)
+  // UI 文案必须同步改，否则标注与行为再次脱节；悬浮按钮的快捷键提示同理。
+  const nav = read('src/components/chat/MessageAnchorNav.vue')
+  assert.match(nav, /<kbd>G<\/kbd> 最旧/)
+  assert.match(nav, /<kbd>Shift\+G<\/kbd> 最新/)
+  assert.match(nav, /最新消息 \(Shift\+G\)/)
+  assert.doesNotMatch(nav, /<kbd>G<\/kbd> 最新/)
+  assert.doesNotMatch(nav, /最新消息 \(G\)/)
+})
+
+test('MessageAnchorNav 导航项编号必须用消息在时间线里的真实位置', () => {
+  const src = read('src/components/chat/useMessageAnchor.ts')
+  // 旧写法 `AI 回复 ${msgs.length - index}` 用的是过滤后列表的下标，
+  // 与消息在完整时间线里的位置对不上（过滤会跳过短用户消息），编号是错的。
+  assert.doesNotMatch(src, /AI 回复 \$\{msgs\.length - index\}/)
+  assert.match(src, /AI 回复 \$\{idx \+ 1\}/)
+})
+
 test('settings：硅基流动离线兜底模型必须与后端注册表一致', () => {
   const src = read('src/components/settings.vue')
   // 后端模板与种子卡均为 Qwen/Qwen2.5-7B-Instruct，前端兜底曾用

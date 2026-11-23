@@ -195,13 +195,18 @@ export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>
         e.preventDefault()
         scrollToPrev()
         break
+      // g / Shift+G 按常规语义（与 vim 的 gg/G、Home/End 一致）：
+      // g 回顶部 = 最旧消息，Shift+G 到底部 = 最新消息。
+      // 此前两者写反了（g 到最新、Shift+G 到最旧）：虽与 UI 标注一致，
+      // 但与 Home（最旧）/End（最新）互相矛盾，属有意设计还是写反已无从分辨，
+      // 第四轮决定统一为常规语义，文案同步改。
       case 'g':
         if (e.shiftKey) {
           e.preventDefault()
-          scrollToOldest()
+          scrollToLatest()
         } else {
           e.preventDefault()
-          scrollToLatest()
+          scrollToOldest()
         }
         break
       // Home/End 按平台标准语义：聊天区是自然时间线（旧消息在上、
@@ -221,13 +226,17 @@ export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>
   // 生成导航栏数据
   const anchorNavItems = computed(() => {
     const msgs = getMessages()
+    // 编号必须用消息在完整时间线里的真实位置（idx + 1），不能用过滤后
+    // 列表的下标：过滤会跳过短用户消息，`msgs.length - index` 算出来的
+    // “AI 回复 N”与实际第 N 条消息对不上。
     return msgs
-      .filter(m => m.role === 'assistant' || m.content.length > 100) // 只显示 AI 回复或长用户消息
+      .map((msg, idx) => ({ msg, idx }))
+      .filter(({ msg }) => msg.role === 'assistant' || msg.content.length > 100) // 只显示 AI 回复或长用户消息
       .slice(0, 20) // 最多 20 个
-      .map((msg, index) => ({
+      .map(({ msg, idx }) => ({
         id: msg.id,
         label: msg.role === 'assistant'
-          ? `AI 回复 ${msgs.length - index}`
+          ? `AI 回复 ${idx + 1}`
           : `用户: ${msg.content.slice(0, 30)}...`,
         time: msg.datetime,
         role: msg.role,

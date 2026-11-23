@@ -55,8 +55,8 @@
         <!-- 底部快捷键提示 -->
         <div class="nav-shortcuts">
           <kbd>J</kbd>/<kbd>K</kbd> 上下
-          <kbd>G</kbd> 最新
-          <kbd>Shift+G</kbd> 最旧
+          <kbd>G</kbd> 最旧
+          <kbd>Shift+G</kbd> 最新
         </div>
       </div>
     </aside>
@@ -69,7 +69,7 @@
       class="fab-scroll"
       @click="scrollToLatest"
       :aria-label="'滚动到最新消息'"
-      :title="'最新消息 (G)'"
+      :title="'最新消息 (Shift+G)'"
     >
       <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
         <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
