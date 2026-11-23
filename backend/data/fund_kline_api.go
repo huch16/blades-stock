@@ -2,6 +2,7 @@ package data
 
 import (
 	"blades-stock/backend/logger"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/duke-git/lancet/v2/convertor"
@@ -166,7 +167,7 @@ func (f *FundKLineApi) getOnExchangeFundKLine(fundCode, klt string, limit int) *
 	}
 
 	if sinaCode != "" {
-		sinaResult := fetchFromSina(sinaCode, klt, limit)
+		sinaResult := fetchFromSina(context.Background(), sinaCode, klt, limit)
 		if sinaResult != nil && sinaResult.Data != nil && len(*sinaResult.Data) > 0 {
 			sinaResult.Source = "sina(场内)"
 			return sinaResult
@@ -182,7 +183,7 @@ func (f *FundKLineApi) getOnExchangeFundKLine(fundCode, klt string, limit int) *
 	logger.SugaredLogger.Warnf("东财场内基金K线也为空，尝试腾讯: code=%s klt=%s", fundCode, klt)
 
 	if sinaCode != "" {
-		tencentResult := fetchFromTencent(sinaCode, klt, limit)
+		tencentResult := fetchFromTencent(context.Background(), sinaCode, klt, limit)
 		if tencentResult != nil && tencentResult.Data != nil && len(*tencentResult.Data) > 0 {
 			tencentResult.Source = "tencent(场内)"
 			return tencentResult

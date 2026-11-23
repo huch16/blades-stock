@@ -4,6 +4,7 @@ import (
 	"blades-stock/backend/logger"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,8 +37,10 @@ func SetEastMoneyKlineBrowserHeaders(r *resty.Request, referer string) {
 // 注意：超时在构造时已固化到独立 client（见 NewEastMoneyKLineApi），这里
 // 不再调 client.SetTimeout——receiver.client 曾是共享单例，每次请求改写
 // 其 http.Client.Timeout 是并发 K 线拉取的数据竞态根因之一。
-func (receiver *EastMoneyKLineApi) fetchKLineJSONBytesByHTTP(reqURL string) ([]byte, error) {
-	req := receiver.client.R()
+// ctx 用于 K 线降级链的源级超时取消（见 data.runKLineSourceWithTimeout），
+// 经请求级 SetContext 生效。
+func (receiver *EastMoneyKLineApi) fetchKLineJSONBytesByHTTP(ctx context.Context, reqURL string) ([]byte, error) {
+	req := receiver.client.R().SetContext(ctx)
 	SetEastMoneyKlineBrowserHeaders(req, "https://quote.eastmoney.com")
 	// 使用缓存的 Cookie，pageURL 参数传空字符串由函数内部使用默认值
 	//cookieHeader, err := FetchEastMoneyCookiesViaChromedp("", time.Second*5, reqURL)
@@ -176,10 +179,16 @@ func (receiver *EastMoneyKLineApi) GetKLineData(stockCode, kLineType, adjustFlag
 	return receiver.GetKLineDataBefore(stockCode, kLineType, adjustFlag, days, "20500101")
 }
 
-// GetKLineData2 与 GetKLineData 相同，保留给历史测试/调用方。
 // GetKLineDataBefore 获取 end 时间点之前的 limit 根 K 线。
 // end 为空或 "20500101" 表示取到最新；否则为东方财富格式：日/周等为 YYYYMMDD，分钟线多为 YYYYMMDDHHmmss（与 f51 字段一致即可）。
 func (receiver *EastMoneyKLineApi) GetKLineDataBefore(stockCode, kLineType, adjustFlag string, limit int, end string) *[]KLineData {
+	return receiver.GetKLineDataBeforeWithContext(context.Background(), stockCode, kLineType, adjustFlag, limit, end)
+}
+
+// GetKLineDataBeforeWithContext 是 GetKLineDataBefore 的 context 版：ctx 用于
+// K 线降级链的源级超时取消（见 data.runKLineSourceWithTimeout），经请求级
+// SetContext 生效；本客户端的超时仍在构造时固化，不调 SetTimeout。
+func (receiver *EastMoneyKLineApi) GetKLineDataBeforeWithContext(ctx context.Context, stockCode, kLineType, adjustFlag string, limit int, end string) *[]KLineData {
 	kLines := &[]KLineData{}
 
 	// 转换股票代码格式
@@ -225,7 +234,7 @@ func (receiver *EastMoneyKLineApi) GetKLineDataBefore(stockCode, kLineType, adju
 
 	var body []byte
 	var fetchErr error
-	body, fetchErr = receiver.fetchKLineJSONBytesByHTTP(reqURL)
+	body, fetchErr = receiver.fetchKLineJSONBytesByHTTP(ctx, reqURL)
 
 	if fetchErr != nil {
 		logger.SugaredLogger.Errorf("GetKLineData error: %v", fetchErr)

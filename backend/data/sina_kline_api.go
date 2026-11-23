@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -125,15 +126,15 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 	}
 	// 港美股：仅走 MAC/东财（新浪/腾讯/通达信不支持港美股）
 	if IsHKStockCode(stockCode) || IsUSStockCode(stockCode) {
-		if macResult := tryKLineSource("tdx-mac", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
-			return fetchFromMAC(stockCode, klt, limit)
+		if macResult := tryKLineSource("tdx-mac", klineSourceTimeout, stockCode, klt, func(ctx context.Context) *KLineSourceResult {
+			return fetchFromMAC(ctx, stockCode, klt, limit)
 		}); macResult != nil {
 			macResult.Source = "tdx-mac"
 			fillVolumeRatio(macResult.Data)
 			return macResult
 		}
-		if eastMoneyResult := tryKLineSource("eastmoney", 0, stockCode, klt, func() *KLineSourceResult {
-			return fetchFromEastMoney(stockCode, stockName, klt, limit, end)
+		if eastMoneyResult := tryKLineSource("eastmoney", 0, stockCode, klt, func(ctx context.Context) *KLineSourceResult {
+			return fetchFromEastMoney(ctx, stockCode, stockName, klt, limit, end)
 		}); eastMoneyResult != nil {
 			eastMoneyResult.Source = "eastmoney"
 			fillVolumeRatio(eastMoneyResult.Data)
@@ -143,8 +144,8 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 	}
 
 	// A股：优先通达信 MAC 行情源（响应最快、极速直连），失败再尝试通达信标准源及远程源。
-	macResult := tryKLineSource("tdx-mac", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
-		return fetchFromMAC(stockCode, klt, limit)
+	macResult := tryKLineSource("tdx-mac", klineSourceTimeout, stockCode, klt, func(ctx context.Context) *KLineSourceResult {
+		return fetchFromMAC(ctx, stockCode, klt, limit)
 	})
 	if macResult != nil {
 		macResult.Source = "tdx-mac"
@@ -152,8 +153,8 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 		return macResult
 	}
 
-	tdxResult := tryKLineSource("tdx", klineSourceTimeout, stockCode, klt, func() *KLineSourceResult {
-		return fetchFromTdx(stockCode, klt, limit)
+	tdxResult := tryKLineSource("tdx", klineSourceTimeout, stockCode, klt, func(ctx context.Context) *KLineSourceResult {
+		return fetchFromTdx(ctx, stockCode, klt, limit)
 	})
 	if tdxResult != nil {
 		tdxResult.Source = "tdx"
@@ -161,8 +162,8 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 		return tdxResult
 	}
 
-	eastMoneyResult := tryKLineSource("eastmoney", 0, stockCode, klt, func() *KLineSourceResult {
-		return fetchFromEastMoney(stockCode, stockName, klt, limit, end)
+	eastMoneyResult := tryKLineSource("eastmoney", 0, stockCode, klt, func(ctx context.Context) *KLineSourceResult {
+		return fetchFromEastMoney(ctx, stockCode, stockName, klt, limit, end)
 	})
 	if eastMoneyResult != nil {
 		eastMoneyResult.Source = "eastmoney"
@@ -170,8 +171,8 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 		return eastMoneyResult
 	}
 
-	tushareResult := tryKLineSource("tushare", 0, stockCode, klt, func() *KLineSourceResult {
-		return fetchFromTushare(stockCode, klt, limit)
+	tushareResult := tryKLineSource("tushare", 0, stockCode, klt, func(ctx context.Context) *KLineSourceResult {
+		return fetchFromTushare(ctx, stockCode, klt, limit)
 	})
 	if tushareResult != nil {
 		tushareResult.Source = "tushare"
@@ -179,8 +180,8 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 		return tushareResult
 	}
 
-	sinaResult := tryKLineSource("sina", 0, stockCode, klt, func() *KLineSourceResult {
-		return fetchFromSina(stockCode, klt, limit)
+	sinaResult := tryKLineSource("sina", 0, stockCode, klt, func(ctx context.Context) *KLineSourceResult {
+		return fetchFromSina(ctx, stockCode, klt, limit)
 	})
 	if sinaResult != nil {
 		sinaResult.Source = "sina"
@@ -188,8 +189,8 @@ func fetchKLineWithFallbackInner(stockCode, stockName, klt string, limit int, en
 		return sinaResult
 	}
 
-	tencentResult := tryKLineSource("tencent", 0, stockCode, klt, func() *KLineSourceResult {
-		return fetchFromTencent(stockCode, klt, limit)
+	tencentResult := tryKLineSource("tencent", 0, stockCode, klt, func(ctx context.Context) *KLineSourceResult {
+		return fetchFromTencent(ctx, stockCode, klt, limit)
 	})
 	if tencentResult != nil {
 		tencentResult.Source = "tencent"
@@ -213,7 +214,10 @@ const klineSourceTimeout = 5 * time.Second
 //   - 超时/结果为 nil 视为数据源级故障，上报 Failure 计入连续失败，触发熔断；
 //   - 数据源可达但该标的无数据视为软失败，不惩罚断路器，仅继续降级；
 //   - 返回有效数据上报 Success。
-func tryKLineSource(name string, timeout time.Duration, stockCode, klt string, fn func() *KLineSourceResult) *KLineSourceResult {
+//   - fn 收到带超时的 ctx：timeout>0 时由 runKLineSourceWithTimeout 以该超时
+//     建 ctx，超时后取消，在途的 resty 请求（东财/Tushare/新浪/腾讯）立即
+//     中断、worker 随即退出，不再留超时孤儿 goroutine 在后台跑完网络请求。
+func tryKLineSource(name string, timeout time.Duration, stockCode, klt string, fn func(ctx context.Context) *KLineSourceResult) *KLineSourceResult {
 	cb := circuitbreaker.Get(name)
 	if !cb.Allow() {
 		logger.SugaredLogger.Debugf("断路器断开，跳过数据源 %s: code=%s klt=%s", name, stockCode, klt)
@@ -225,7 +229,7 @@ func tryKLineSource(name string, timeout time.Duration, stockCode, klt string, f
 	if timeout > 0 {
 		rs, ok = runKLineSourceWithTimeout(name, timeout, stockCode, klt, fn)
 	} else {
-		rs = fn()
+		rs = fn(context.Background())
 	}
 	if !ok {
 		cb.Failure()
@@ -243,11 +247,20 @@ func tryKLineSource(name string, timeout time.Duration, stockCode, klt string, f
 	return rs
 }
 
-func runKLineSourceWithTimeout(name string, timeout time.Duration, stockCode, klt string, fn func() *KLineSourceResult) (*KLineSourceResult, bool) {
+// runKLineSourceWithTimeout 在 worker goroutine 里跑 fn，timeout 内未返回
+// 即判超时。超时后取消 ctx：在途的 resty 请求（东财/Tushare/新浪/腾讯，
+// 经请求级 SetContext 接 ctx）立即中断，worker 随即退出、结果丢弃进带
+// 缓冲的 ch，不再像以前那样超时后仍在后台把整次网络请求跑完（孤儿
+// goroutine，见 ROUND4-REPORT §5/§7 第 9 条）。TDX（gotdx）不支持
+// context，worker 仍需等 gotdx 自身超时返回，但该超时由 CrawlTimeOut 限定
+// （kline_tdx.go newClient 的 WithTimeoutSec），不会无限挂起。
+func runKLineSourceWithTimeout(name string, timeout time.Duration, stockCode, klt string, fn func(ctx context.Context) *KLineSourceResult) (*KLineSourceResult, bool) {
 	type result struct {
 		rs *KLineSourceResult
 	}
 	ch := make(chan result, 1)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 	go func() {
 		// 重要：某些第三方库（gotdx）可能在响应解析时 panic（如上游 issue: ParseResponse
 		// 返回的响应长度不足，仍访问 [:6]）。裸 panic 会沿着 goroutine 一路上溯，最终
@@ -259,13 +272,16 @@ func runKLineSourceWithTimeout(name string, timeout time.Duration, stockCode, kl
 				ch <- result{rs: nil}
 			}
 		}()
-		ch <- result{rs: fn()}
+		ch <- result{rs: fn(ctx)}
 	}()
 
 	select {
 	case r := <-ch:
 		return r.rs, true
-	case <-time.After(timeout):
+	case <-ctx.Done():
+		// 超时：cancel()（defer 也会调一次，幂等）让在途请求中断、worker 退出；
+		// 本函数不等 worker，降级链立即继续下一源。
+		cancel()
 		logger.SugaredLogger.Warnf("%s 超时 (%v)，降级到下一个数据源: code=%s klt=%s", name, timeout, stockCode, klt)
 		return nil, false
 	}
@@ -303,42 +319,45 @@ func fillVolumeRatio(data *[]KLineData) {
 	}
 }
 
-func fetchFromEastMoney(stockCode, stockName, klt string, limit int, end string) *KLineSourceResult {
+func fetchFromEastMoney(ctx context.Context, stockCode, stockName, klt string, limit int, end string) *KLineSourceResult {
 	api := NewEastMoneyKLineApi(GetSettingConfig())
 	var data *[]KLineData
 	if strings.TrimSpace(end) == "" {
-		data = api.GetKLineDataBefore(stockCode, klt, "", limit, "20500101")
+		data = api.GetKLineDataBeforeWithContext(ctx, stockCode, klt, "", limit, "20500101")
 	} else {
-		data = api.GetKLineDataBefore(stockCode, klt, "", limit, end)
+		data = api.GetKLineDataBeforeWithContext(ctx, stockCode, klt, "", limit, end)
 	}
 	return &KLineSourceResult{Data: data}
 }
 
-func fetchFromTushare(stockCode, klt string, limit int) *KLineSourceResult {
+func fetchFromTushare(ctx context.Context, stockCode, klt string, limit int) *KLineSourceResult {
 	api := NewTushareApi(GetSettingConfig())
-	data := api.GetKLineData(stockCode, klt, limit)
+	data := api.GetKLineDataWithContext(ctx, stockCode, klt, limit)
 	return &KLineSourceResult{Data: data}
 }
 
-func fetchFromSina(stockCode, klt string, limit int) *KLineSourceResult {
+func fetchFromSina(ctx context.Context, stockCode, klt string, limit int) *KLineSourceResult {
 	api := datasource.NewSinaKLineApi(GetSettingConfig().CrawlTimeOut)
-	data := api.GetKLineData(stockCode, klt, limit)
+	data := api.GetKLineDataWithContext(ctx, stockCode, klt, limit)
 	return &KLineSourceResult{Data: data}
 }
 
-func fetchFromTencent(stockCode, klt string, limit int) *KLineSourceResult {
+func fetchFromTencent(ctx context.Context, stockCode, klt string, limit int) *KLineSourceResult {
 	api := datasource.NewTencentKLineApi(GetSettingConfig().CrawlTimeOut)
-	data := api.GetKLineData(stockCode, klt, limit)
+	data := api.GetKLineDataWithContext(ctx, stockCode, klt, limit)
 	return &KLineSourceResult{Data: data}
 }
 
-func fetchFromTdx(stockCode, klt string, limit int) *KLineSourceResult {
+// fetchFromTdx / fetchFromMAC 不接 ctx：gotdx 不支持 context，超时由其自身
+// WithTimeoutSec（CrawlTimeOut）限定；runKLineSourceWithTimeout 超时后
+// worker 仍需等该调用返回，但不会无限挂起（见该函数注释）。
+func fetchFromTdx(ctx context.Context, stockCode, klt string, limit int) *KLineSourceResult {
 	api := NewTdxKLineApi()
 	data := api.GetKLineData(stockCode, klt, limit)
 	return &KLineSourceResult{Data: data}
 }
 
-func fetchFromMAC(stockCode, klt string, limit int) *KLineSourceResult {
+func fetchFromMAC(ctx context.Context, stockCode, klt string, limit int) *KLineSourceResult {
 	api := NewTdxKLineApi()
 	data := api.GetMACKLineData(stockCode, klt, limit)
 	return &KLineSourceResult{Data: data}

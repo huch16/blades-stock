@@ -26,7 +26,12 @@ func (receiver StockDataApi) GetStockMinutePriceData(stockCode string) (*[]Minut
 	}
 	//logger.SugaredLogger.Infof("GetStockMinutePriceData url:%s", url)
 	res := make(map[string]interface{})
-	resp, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
+	// 请求级 context 超时：receiver.client 是共享 SharedHTTPClient，在此调
+	// SetTimeout 会改写所有并发请求的超时（数据竞态，见 httpclient.go
+	// crawlTimeoutContext），超时语义不变。
+	ctx, cancel := crawlTimeoutContext(receiver.config.CrawlTimeOut)
+	defer cancel()
+	resp, err := receiver.client.R().SetContext(ctx).
 		SetHeader("Host", "web.ifzq.gtimg.cn").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
 		Get(url)
@@ -125,7 +130,10 @@ func (receiver StockDataApi) GetKLineData(stockCode string, kLineType string, da
 	callback := fmt.Sprintf("callback_%d", ts)
 	url := fmt.Sprintf("https://quotes.sina.cn/cn/api/jsonp_v2.php/%s/CN_MarketDataService.getKLineData?symbol=%s&scale=%s&ma=no&datalen=%d", callback, stockCode, scale, days)
 	K := &[]KLineData{}
-	resp, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
+	// 请求级 context 超时（不用共享 client 的 SetTimeout，见上）。
+	ctx, cancel := crawlTimeoutContext(receiver.config.CrawlTimeOut)
+	defer cancel()
+	resp, err := receiver.client.R().SetContext(ctx).
 		SetHeader("Host", "quotes.sina.cn").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
 		Get(url)
@@ -159,7 +167,10 @@ func (receiver StockDataApi) GetHK_KLineData(stockCode string, kLineType string,
 	//logger.SugaredLogger.Infof("url:%s", url)
 	K := &[]KLineData{}
 	res := make(map[string]interface{})
-	resp, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
+	// 请求级 context 超时（不用共享 client 的 SetTimeout，见 GetKLineData）。
+	ctx, cancel := crawlTimeoutContext(receiver.config.CrawlTimeOut)
+	defer cancel()
+	resp, err := receiver.client.R().SetContext(ctx).
 		SetHeader("Host", "web.ifzq.gtimg.cn").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
 		Get(url)
@@ -215,7 +226,10 @@ func (receiver StockDataApi) GetCommonKLineData(stockCode string, kLineType stri
 	//logger.SugaredLogger.Infof("url:%s", url)
 	K := &[]KLineData{}
 	res := make(map[string]interface{})
-	resp, err := receiver.client.SetTimeout(time.Duration(receiver.config.CrawlTimeOut)*time.Second).R().
+	// 请求级 context 超时（不用共享 client 的 SetTimeout，见 GetKLineData）。
+	ctx, cancel := crawlTimeoutContext(receiver.config.CrawlTimeOut)
+	defer cancel()
+	resp, err := receiver.client.R().SetContext(ctx).
 		SetHeader("Host", "web.ifzq.gtimg.cn").
 		SetHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0").
 		Get(url)

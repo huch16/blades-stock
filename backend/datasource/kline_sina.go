@@ -3,6 +3,7 @@ package datasource
 import (
 	"blades-stock/backend/logger"
 
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -97,6 +98,13 @@ func SinaSymbolFromStockCode(stockCode string) string {
 }
 
 func (s *SinaKLineApi) GetKLineData(stockCode, klt string, limit int) *[]KLineData {
+	return s.GetKLineDataWithContext(context.Background(), stockCode, klt, limit)
+}
+
+// GetKLineDataWithContext 是 GetKLineData 的 context 版：ctx 用于 K 线降级链
+// 的源级超时取消（见 data.runKLineSourceWithTimeout），经请求级 SetContext
+// 生效；本客户端的超时仍在构造时固化（见 NewSinaKLineApi），不调 SetTimeout。
+func (s *SinaKLineApi) GetKLineDataWithContext(ctx context.Context, stockCode, klt string, limit int) *[]KLineData {
 	result := &[]KLineData{}
 	scale := sinaScaleFromKlt(klt)
 	if scale == "" {
@@ -125,7 +133,7 @@ func (s *SinaKLineApi) GetKLineData(stockCode, klt string, limit int) *[]KLineDa
 	params.Set("datalen", fmt.Sprintf("%d", limit))
 	reqURL := fmt.Sprintf("%s?%s", baseURL, params.Encode())
 
-	req := s.client.R()
+	req := s.client.R().SetContext(ctx)
 	req.SetHeader("User-Agent", GetRandomUA())
 	req.SetHeader("Accept", "*/*")
 	req.SetHeader("Referer", "https://finance.sina.com.cn")
@@ -150,7 +158,7 @@ func (s *SinaKLineApi) GetKLineData(stockCode, klt string, limit int) *[]KLineDa
 	converted := s.convertToKLineData(items, klt)
 
 	if klt == "101" || klt == "102" || klt == "103" {
-		converted = s.appendTodayKLine(converted, stockCode, klt)
+		converted = s.appendTodayKLine(ctx, converted, stockCode, klt)
 	}
 
 	return &converted
@@ -198,7 +206,7 @@ func TruncateStr(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-func (s *SinaKLineApi) appendTodayKLine(data []KLineData, stockCode, klt string) []KLineData {
+func (s *SinaKLineApi) appendTodayKLine(ctx context.Context, data []KLineData, stockCode, klt string) []KLineData {
 	if len(data) == 0 {
 		return data
 	}
@@ -226,7 +234,7 @@ func (s *SinaKLineApi) appendTodayKLine(data []KLineData, stockCode, klt string)
 	}
 
 	url := fmt.Sprintf("http://hq.sinajs.cn/rn=%d&list=%s", now.UnixMilli(), sinaCode)
-	resp, err := s.client.R().
+	resp, err := s.client.R().SetContext(ctx).
 		SetHeader("Host", "hq.sinajs.cn").
 		SetHeader("Referer", "https://finance.sina.com.cn/").
 		SetHeader("User-Agent", GetRandomUA()).
@@ -456,6 +464,13 @@ func tencentSymbolFromStockCode(stockCode string) string {
 }
 
 func (t *TencentKLineApi) GetKLineData(stockCode, klt string, limit int) *[]KLineData {
+	return t.GetKLineDataWithContext(context.Background(), stockCode, klt, limit)
+}
+
+// GetKLineDataWithContext 是 GetKLineData 的 context 版：ctx 用于 K 线降级链
+// 的源级超时取消（见 data.runKLineSourceWithTimeout），经请求级 SetContext
+// 生效；本客户端的超时仍在构造时固化（见 NewTencentKLineApi），不调 SetTimeout。
+func (t *TencentKLineApi) GetKLineDataWithContext(ctx context.Context, stockCode, klt string, limit int) *[]KLineData {
 	result := &[]KLineData{}
 	period := tencentPeriodFromKlt(klt)
 	if period == "" {
@@ -481,7 +496,7 @@ func (t *TencentKLineApi) GetKLineData(stockCode, klt string, limit int) *[]KLin
 	params.Set("param", param)
 	reqURL := "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?" + params.Encode()
 
-	req := t.client.R()
+	req := t.client.R().SetContext(ctx)
 	req.SetHeader("User-Agent", GetRandomUA())
 	req.SetHeader("Accept", "*/*")
 	req.SetHeader("Referer", "https://gu.qq.com")

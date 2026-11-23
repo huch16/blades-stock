@@ -2,6 +2,7 @@ package data
 
 import (
 	"blades-stock/backend/logger"
+	"context"
 	"fmt"
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/slice"
@@ -52,6 +53,14 @@ func tushareApiNameFromKlt(klt string) string {
 }
 
 func (receiver *TushareApi) GetKLineData(stockCode, klt string, limit int) *[]KLineData {
+	return receiver.GetKLineDataWithContext(context.Background(), stockCode, klt, limit)
+}
+
+// GetKLineDataWithContext 是 GetKLineData 的 context 版：ctx 用于 K 线降级链
+// 的源级超时取消（见 runKLineSourceWithTimeout）；请求超时仍按配置的
+// CrawlTimeOut 取（与父 ctx 的 deadline 取较早者），不再调共享 client 的
+// SetTimeout（并发下改写共享 http.Client.Timeout 是数据竞态）。
+func (receiver *TushareApi) GetKLineDataWithContext(ctx context.Context, stockCode, klt string, limit int) *[]KLineData {
 	result := &[]KLineData{}
 	if receiver.config.TushareToken == "" {
 		return result
@@ -84,7 +93,10 @@ func (receiver *TushareApi) GetKLineData(stockCode, klt string, limit int) *[]KL
 	startDate := time.Now().AddDate(0, 0, -limit*2).Format("20060102")
 
 	resp := &TushareKLineResponse{}
-	_, err := receiver.client.SetTimeout(time.Duration(timeout)*time.Second).R().
+	// 请求级 context 超时（不用共享 client 的 SetTimeout，见 GetKLineDataWithContext）。
+	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+	defer cancel()
+	_, err := receiver.client.R().SetContext(reqCtx).
 		SetHeader("content-type", "application/json").
 		SetBody(&TushareRequest{
 			ApiName: apiName,
@@ -181,7 +193,10 @@ func (receiver TushareApi) GetDaily(tsCode, startDate, endDate string, crawlTime
 	stockType := getStockType(tsCode)
 	tsCodeNEW := getTsCode(tsCode)
 	//logger.SugaredLogger.Debugf("tushare daily request: %s,tsCode:%s,tsCodeNEW:%s", stockType, tsCode, tsCodeNEW)
-	_, err := receiver.client.SetTimeout(time.Duration(crawlTimeOut)*time.Second).R().
+	// 请求级 context 超时（不用共享 client 的 SetTimeout，见 GetKLineDataWithContext）。
+	reqCtx, cancel := crawlTimeoutContext(crawlTimeOut)
+	defer cancel()
+	_, err := receiver.client.R().SetContext(reqCtx).
 		SetHeader("content-type", "application/json").
 		SetBody(&TushareRequest{
 			ApiName: stockType,
