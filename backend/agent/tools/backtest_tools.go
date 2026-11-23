@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // GetBacktestStatsTool 获取AI分析回测统计
@@ -20,7 +19,7 @@ func GetBacktestStatsTool() bladesTools.Tool {
 			"stock_code": {Type: "string", Desc: "股票代码（可选，指定则返回该股票统计）"},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stock_code").String()
+			stockCode := types.ExtractStockCode(args)
 			mgr := quant.NewBacktestManager()
 
 			if stockCode != "" {
@@ -42,7 +41,8 @@ func GetBacktestDetailTool() bladesTools.Tool {
 			"report_id": {Type: "integer", Desc: "分析报告ID", Required: true},
 		},
 		func(args string) (string, error) {
-			reportID := uint(gjson.Get(args, "report_id").Int())
+			reportIDInt, _ := types.ExtractIntParam(args, "report_id", "reportId", "id")
+			reportID := uint(reportIDInt)
 			if reportID == 0 {
 				return "请提供 report_id", nil
 			}
@@ -101,8 +101,8 @@ func GetRunBacktestTool() bladesTools.Tool {
 		},
 		func(args string) (string, error) {
 			mgr := quant.NewBacktestManager()
-			startDate := gjson.Get(args, "start_date").String()
-			endDate := gjson.Get(args, "end_date").String()
+			startDate := types.ExtractStringParam(args, "start_date", "startDate")
+			endDate := types.ExtractStringParam(args, "end_date", "endDate")
 
 			if startDate != "" || endDate != "" {
 				count, err := mgr.RunBacktestOnDateRange(startDate, endDate)
@@ -142,34 +142,26 @@ func GetVectorBacktestTool() bladesTools.Tool {
 			"slow":        {Type: "number", Desc: "慢线周期（MA/MACD用），如 20", Required: false},
 			"signal":      {Type: "number", Desc: "信号周期（MACD用），如 9", Required: false},
 			"window":      {Type: "number", Desc: "窗口周期（RSI/布林带用），如 14", Required: false},
-			"init_cash":   {Type: "number", Desc: "初始资金，默认 100000", Required: false},
-			"stop_loss":   {Type: "number", Desc: "止损比例，如 0.05 表示 5%", Required: false},
-			"take_profit": {Type: "number", Desc: "止盈比例，如 0.10 表示 10%", Required: false},
+			"num_std":     {Type: "number", Desc: "标准差倍数（BOLL用），如 2.0", Required: false},
+			"k":           {Type: "number", Desc: "DualThrust 阈值系数，如 0.5", Required: false},
+			"period":      {Type: "number", Desc: "DualThrust 回看周期，如 5", Required: false},
+			// 注意：旧 schema 里的 init_cash / stop_loss / take_profit 已删——
+			// quant.VectorBTHandler 根本不读这三个键，引擎一律用
+			// DefaultBacktestConfig（初始资金 100000、止损 5%、止盈 10%），
+			// 模型传了也会被静默丢弃；等 quant 侧接线后再恢复声明。
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stock_code").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "错误：缺少必需参数 stock_code", nil
 			}
 
-			strategyType := gjson.Get(args, "strategy").String()
+			strategyType := types.ExtractStringParam(args, "strategy", "strategyType", "strategy_name")
 			if strategyType == "" {
 				strategyType = "MA"
 			}
 
-			params := make(map[string]any)
-			if gjson.Get(args, "fast").Exists() {
-				params["fast"] = gjson.Get(args, "fast").Float()
-			}
-			if gjson.Get(args, "slow").Exists() {
-				params["slow"] = gjson.Get(args, "slow").Float()
-			}
-			if gjson.Get(args, "signal").Exists() {
-				params["signal"] = gjson.Get(args, "signal").Float()
-			}
-			if gjson.Get(args, "window").Exists() {
-				params["window"] = gjson.Get(args, "window").Float()
-			}
+			params := vectorStrategyParams(args)
 
 			resp, err := quant.VectorBTHandler(stockCode, strategyType, params)
 			if err != nil {
@@ -205,57 +197,21 @@ func GetRunVectorizedBacktestTool() bladesTools.Tool {
 			"days":        {Type: "integer", Desc: "回测历史天数，默认 365（过去一年）", Required: false},
 		},
 		func(args string) (string, error) {
-			rawCodes := gjson.Get(args, "stock_codes").String()
-			if rawCodes == "" {
-				rawCodes = gjson.Get(args, "stock_code").String()
-			}
-			if rawCodes == "" {
+			// hs300 快捷方式：只有明确要求 hs300/沪深300/300 时才展开
+			// 代表性权重股，见 expandHS300Shortcut。
+			stockList := expandHS300Shortcut(types.ExtractStockCodes(args))
+			if len(stockList) == 0 {
 				return "错误：请提供 stock_codes 参数", nil
 			}
 
-			// 解析股票列表
-			var stockList []string
-			lowerCodes := strings.ToLower(rawCodes)
-			if strings.Contains(lowerCodes, "hs300") || strings.Contains(lowerCodes, "300") || strings.Contains(rawCodes, "沪深300") {
-				// 选取沪深300各主要行业龙头与代表性权重股
-				stockList = []string{
-					"600519", "300750", "601318", "600036", "000858",
-					"000333", "601899", "601012", "002594", "600900",
-				}
-			} else {
-				parts := strings.Split(rawCodes, ",")
-				for _, p := range parts {
-					p = strings.TrimSpace(p)
-					if p != "" {
-						stockList = append(stockList, p)
-					}
-				}
-			}
-
-			if len(stockList) == 0 {
-				return "错误：未解析到有效的股票代码", nil
-			}
-
-			strategyType := gjson.Get(args, "strategy").String()
+			strategyType := types.ExtractStringParam(args, "strategy", "strategyType", "strategy_name")
 			if strategyType == "" {
 				strategyType = "MA"
 			}
 
-			params := make(map[string]any)
-			if gjson.Get(args, "fast").Exists() {
-				params["fast"] = gjson.Get(args, "fast").Float()
-			}
-			if gjson.Get(args, "slow").Exists() {
-				params["slow"] = gjson.Get(args, "slow").Float()
-			}
-			if gjson.Get(args, "signal").Exists() {
-				params["signal"] = gjson.Get(args, "signal").Float()
-			}
-			if gjson.Get(args, "window").Exists() {
-				params["window"] = gjson.Get(args, "window").Float()
-			}
+			params := vectorStrategyParams(args)
 
-			days := int(gjson.Get(args, "days").Int())
+			days, _ := types.ExtractIntParam(args, "days", "dayCount", "lookback_days")
 			if days <= 0 {
 				days = 365
 			}
@@ -296,17 +252,20 @@ func GetVectorGridSearchTool() bladesTools.Tool {
 		"VectorGridSearch",
 		"【VectorBT参数网格扫描】对单只股票并行测试多种参数组合，自动找出最优参数。适用场景：批量测试策略参数空间、寻找最优参数、策略参数优化。输入股票代码和策略类型即可自动运行。",
 		map[string]*types.ParamDef{
-			"stock_code":       {Type: "string", Desc: "股票代码，如 000001、600519", Required: true},
-			"strategy":         {Type: "string", Desc: "策略类型：MA（均线）、MACD、RSI", Required: false},
-			"max_combinations": {Type: "integer", Desc: "最大测试组合数，默认 100", Required: false},
+			"stock_code": {Type: "string", Desc: "股票代码，如 000001、600519", Required: true},
+			"strategy":   {Type: "string", Desc: "策略类型：MA（均线）、MACD、RSI", Required: false},
+			// 注意：旧 schema 里的 max_combinations 已删——
+			// quant.VectorBTGridSearchHandler 不接收组合数上限，各策略
+			// 网格固定（MA 24、MACD 48、RSI 4、BOLL 9、DualThrust 9），
+			// 均在旧默认值 100 以内，声明了也不会生效。
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stock_code").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "错误：缺少必需参数 stock_code", nil
 			}
 
-			strategyType := gjson.Get(args, "strategy").String()
+			strategyType := types.ExtractStringParam(args, "strategy", "strategyType", "strategy_name")
 			if strategyType == "" {
 				strategyType = "MA"
 			}
@@ -336,6 +295,45 @@ func GetVectorGridSearchTool() bladesTools.Tool {
 			return b.String(), nil
 		},
 	)
+}
+
+// expandHS300Shortcut：只有明确要求 hs300/沪深300/300 时才把代码列表
+// 展开为沪深300代表性权重股。旧实现用 strings.Contains(rawCodes, "300")，
+// 单只 300750（宁德时代）也会被误触展开成 10 只权重股。
+func expandHS300Shortcut(codes []string) []string {
+	joined := strings.Join(codes, ",")
+	lowerJoined := strings.ToLower(joined)
+	if strings.Contains(lowerJoined, "hs300") || strings.Contains(joined, "沪深300") || lowerJoined == "300" {
+		return []string{
+			"600519", "300750", "601318", "600036", "000858",
+			"000333", "601899", "601012", "002594", "600900",
+		}
+	}
+	return codes
+}
+
+// vectorStrategyParams 提取 VectorBT 系列工具共用的策略参数：
+// quant.VectorBTHandler / RunVectorizedBacktestMulti 只读这几个键
+// （float64 形态），缺失时不填，quant 侧用默认值。
+func vectorStrategyParams(args string) map[string]any {
+	params := make(map[string]any)
+	for _, key := range []string{"fast", "slow", "signal", "window", "num_std", "k", "period"} {
+		aliases := []string{key}
+		switch key {
+		case "fast":
+			aliases = []string{"fast", "fast_period"}
+		case "slow":
+			aliases = []string{"slow", "slow_period"}
+		case "signal":
+			aliases = []string{"signal", "signal_period"}
+		case "num_std":
+			aliases = []string{"num_std", "numStd"}
+		}
+		if v, ok := types.ExtractFloatParam(args, aliases...); ok {
+			params[key] = v
+		}
+	}
+	return params
 }
 
 // extractDiagnoseStockCode 从工具调用参数里提取股票代码。
