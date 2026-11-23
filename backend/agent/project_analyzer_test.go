@@ -65,7 +65,9 @@ func TestAnalyzeProject_ReanalyzeNoDuplicateChunks(t *testing.T) {
 // UTF-8。修复后按 rune 截断，输出恒为合法 UTF-8。
 func TestFindAPIDefinitions_LongChineseLineRuneSafe(t *testing.T) {
 	dir := t.TempDir()
-	longLine := "func foo() { r.HandleFunc(\"/x\", h) } // " + strings.Repeat("这是一个很长的中文注释说明", 20)
+	// 注意：前缀刻意凑成 63 字节，使 100 字节处正好落在汉字中间——
+	// 旧的按字节截断会在此切出非法 UTF-8，测试必须能抓到它。
+	longLine := "handler := func(w http.ResponseWriter, r *http.Request) { // A " + strings.Repeat("这是一个很长的中文注释说明", 20)
 	content := "package main\n\n" + longLine + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "server.go"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
