@@ -1,23 +1,8 @@
 package evaluator
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"strings"
 	"time"
-
-	"blades-stock/backend/logger"
 )
-
-// GoldenCase represents a test case in the golden set
-type GoldenCase struct {
-	ID              string   `json:"id"`
-	Question        string   `json:"question"`
-	ExpectedTools   []string `json:"expected_tools"`
-	ExpectedSummary string   `json:"expected_summary"`
-	Tags            []string `json:"tags,omitempty"`
-}
 
 // EvaluatorReport represents the evaluation report
 type EvaluatorReport struct {
@@ -39,59 +24,12 @@ func (EvaluatorReport) TableName() string {
 	return "evaluator_reports"
 }
 
-// CaseResult represents the result of evaluating a single golden case
-type CaseResult struct {
-	GoldenID      string   `json:"golden_id"`
-	PlanID        string   `json:"plan_id,omitempty"`
-	Found         bool     `json:"found"`
-	ExpectedTools []string `json:"expected_tools"`
-	ActualTools   []string `json:"actual_tools"`
-	ToolMatch     bool     `json:"tool_match"`
-	LatencyMs     int64    `json:"latency_ms"`
-	Error         string   `json:"error,omitempty"`
-}
-
-// Evaluator handles the evaluation of agent traces against golden cases
-type Evaluator struct {
-	goldenCases []GoldenCase
-	threshold   float64
-}
-
-// NewEvaluator creates a new evaluator instance
-func NewEvaluator(goldenPath string, threshold float64) (*Evaluator, error) {
-	cases, err := loadGoldenCases(goldenPath)
-	if err != nil {
-		return nil, fmt.Errorf("load golden cases: %w", err)
-	}
-	if threshold <= 0 {
-		threshold = 0.9
-	}
-	return &Evaluator{
-		goldenCases: cases,
-		threshold:   threshold,
-	}, nil
-}
-
-// loadGoldenCases loads golden cases from a JSONL file
-func loadGoldenCases(path string) ([]GoldenCase, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var cases []GoldenCase
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var gc GoldenCase
-		if err := json.Unmarshal([]byte(line), &gc); err != nil {
-			logger.SugaredLogger.Warnf("Failed to parse golden case line: %v", err)
-			continue
-		}
-		cases = append(cases, gc)
-	}
-	return cases, nil
-}
+// NOTE: 本包曾经还有一套 golden-case 离线评估架子（Evaluator、
+// NewEvaluator、loadGoldenCases、GoldenCase、CaseResult 及配套测试），
+// 2026-11-23 第四轮核查时确认已死：全仓零生产调用者——没有 runner、
+// 没有 golden 文件、没有任何地方构造它，唯一的测试也只测它自己。
+// 已整套删除，只保留真正被 AutoMigrate 使用的 EvaluatorReport 模型。
+// 若将来要恢复离线评估，应从“有 golden 文件 + 有 runner 入口”
+// 一起恢复，而不是只恢复加载函数。
+// 另：evaluator_reports 表目前只有建表迁移、从无写入（没有任何地方
+// 创建 EvaluatorReport 行），恢复评估时需先补写入路径。
