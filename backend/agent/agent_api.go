@@ -166,6 +166,32 @@ func (receiver StockAiAgent) Chat(question string, aiConfigId int, sysPromptId *
 	return receiver.ChatWithContext(context.Background(), question, aiConfigId, sysPromptId, true, 20, false, "")
 }
 
+// sendStreamMsg 把一条流消息发给消费者；消费者已退出（ctx 已取消）时
+// 直接丢弃而不是永久阻塞。
+//
+// 背景：本文件旧实现里 18 处都是无 select 的 `ch <- m`。当前全部消费方
+// 都是 `for msg := range ch` 读到 close，正常情况下不会阻塞；但只要任
+// 一消费方提前停止消费（或前端断连）且 1024 缓冲被填满，生产 goroutine
+// 就会永久泄漏（通道也永远不 close）。ctx 在中途会被派生为带 900s 上限
+// 的 toCtx，因此最坏情况下泄漏仍以 ctx 到期为界；但有 select 后，取消
+// 信号到达即退出，不必等到超时。
+// 刻意只守 ctx.Done()、不加定时器：消费者只是慢时绝不能丢正文 chunk
+// （会损坏已流出的答案）；只有“本次运行已取消”才是安全的丢弃条件。
+// 终态发送（sendTerminal）另有 3s 超时兜底，不走这里。
+// ctx 为 nil 时退化为 Background（select 的 Done 分支永不触发，即等价
+// 于旧的阻塞发送）；ChatWithContext 的调用方从不传 nil。
+func sendStreamMsg(ch chan *StreamMessage, ctx context.Context, m *StreamMessage) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case ch <- m:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question string, aiConfigId int, sysPromptId *int, memoryMode bool, memoryCount int, thinkingMode bool, agentMode string, optsOverride ...string) chan *StreamMessage {
 	ch := make(chan *StreamMessage, 1024)
 
@@ -270,10 +296,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			if r := recover(); r != nil {
 				logger.SugaredLogger.Errorf("panic in ChatWithContext: %v", r)
 				runRecord.ErrorMsg = fmt.Sprintf("内部错误: %v", r)
-				ch <- &StreamMessage{
+				sendStreamMsg(ch, ctx, &StreamMessage{
 					Role:    "assistant",
 					Content: fmt.Sprintf("❌ 内部错误: %v", r),
-				}
+				})
 				// 不再自行 close：交给终态护栏统一发送终态后关闭
 			}
 		}()
@@ -298,10 +324,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		if resolveErr != nil {
 			logger.SugaredLogger.Errorf("模型解析失败: %v", resolveErr)
 			runRecord.ErrorMsg = resolveErr.Error()
-			ch <- &StreamMessage{
+			sendStreamMsg(ch, ctx, &StreamMessage{
 				Role:    "assistant",
 				Content: "❌ " + resolveErr.Error(),
-			}
+			})
 			return
 		}
 		runRecord.ResolvedID = resolved.ResolvedID
@@ -347,24 +373,24 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			strings.Contains(question, "【盘前自选股与持仓综合排雷诊断】") {
 			scanItems := quant.ParseHoldingScanItemsFromPrompt(question)
 			if len(scanItems) > 0 {
-				ch <- &StreamMessage{
+				sendStreamMsg(ch, ctx, &StreamMessage{
 					Role:             "assistant",
 					Content:          "",
 					ReasoningContent: "[STATUS]🛡️ 正在执行纯 Go 确定性持仓风控与均线量比扫描...",
 					StatusText:       "正在执行纯 Go 确定性持仓风控与均线量比扫描...",
-				}
+				})
 				scanRes, err := quant.ScanHoldingRisk(scanItems)
 				if err == nil && scanRes != nil && scanRes.MarkdownReport != "" {
-					ch <- &StreamMessage{
+					sendStreamMsg(ch, ctx, &StreamMessage{
 						Role:    "assistant",
 						Content: scanRes.MarkdownReport,
-					}
-					ch <- &StreamMessage{
+					})
+					sendStreamMsg(ch, ctx, &StreamMessage{
 						Role:             "assistant",
 						Content:          "",
 						ReasoningContent: "[DONE]",
 						StatusText:       "[DONE]",
-					}
+					})
 					// 异步记录审计日志与持久化对话记录
 					go RecordAuditLog(models.AuditLog{
 						ToolName:    "ScanHoldingRisk",
@@ -388,10 +414,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 		if stockAiAgent == nil {
 			logger.SugaredLogger.Errorf("stockAiAgent is nil")
 			runRecord.ErrorMsg = "AI 配置不存在或无效"
-			ch <- &StreamMessage{
+			sendStreamMsg(ch, ctx, &StreamMessage{
 				Role:    "assistant",
 				Content: "❌ AI 配置不存在或无效，请检查 AI 配置",
-			}
+			})
 			// 终态由 defer 护栏统一发送（此前只 close 不发终态 → 前端卡在“思考中”）
 			return
 		}
@@ -620,28 +646,28 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 			}
 		}
 
-		ch <- &StreamMessage{
+		sendStreamMsg(ch, ctx, &StreamMessage{
 			Role:             "assistant",
 			Content:          "",
 			ReasoningContent: "[STATUS]🤔 正在理解问题并制定分析计划...",
 			StatusText:       "正在理解问题并制定分析计划...",
-		}
+		})
 
 		ctx = WithFallbackNotifier(ctx, func(curModel, nextModel string, err error) {
 			reason := FormatFallbackReason(err)
-			ch <- &StreamMessage{
+			sendStreamMsg(ch, ctx, &StreamMessage{
 				Role:             "assistant",
 				Content:          "",
 				ReasoningContent: fmt.Sprintf("[STATUS]⚠️ 主模型 [%s] 异常：%s，正在自动降级切换至备用模型 [%s] 继续分析...", curModel, reason, nextModel),
 				StatusText:       fmt.Sprintf("主模型异常，正在自动降级切换至备用模型 [%s]...", nextModel),
 				ModelName:        nextModel,
-			}
-			ch <- &StreamMessage{
+			})
+			sendStreamMsg(ch, ctx, &StreamMessage{
 				Role:             "assistant",
 				Content:          "",
 				ReasoningContent: fmt.Sprintf("[STEP]🔄 容灾切换：主模型 [%s] 异常(%s)，已无缝切换为备用模型 [%s]\n", curModel, reason, nextModel),
 				ModelName:        nextModel,
-			}
+			})
 		})
 
 		var fullResponse strings.Builder
@@ -702,11 +728,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 					// 是不完整的，静默保存会让用户拿到半份研报。
 					if fr == "length" || fr == "content_filter" {
 						logger.SugaredLogger.Warnf("⚠️ [Agent] 模型结束原因为 %q，输出可能不完整（finish_reason=%s）", fr, fr)
-						ch <- &StreamMessage{
+						sendStreamMsg(ch, ctx, &StreamMessage{
 							Role:       "assistant",
 							Content:    "",
 							StatusText: fmt.Sprintf("⚠️ 模型输出因 %s 结束，内容可能不完整", finishReasonLabel(fr)),
-						}
+						})
 					}
 				}
 
@@ -727,12 +753,12 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 							// before the first content delta so the status appears ahead
 							// of the body instead of after it.
 							if fullResponse.Len() == 0 {
-								ch <- &StreamMessage{
+								sendStreamMsg(ch, ctx, &StreamMessage{
 									Role:             "assistant",
 									Content:          "",
 									ReasoningContent: "[STATUS]✍️ 正在根据数据生成回答...",
 									StatusText:       "正在根据数据生成回答...",
-								}
+								})
 							}
 							// Skip if this is the final accumulated message (openai stream
 							// yields both delta chunks and the final full text — appending
@@ -741,10 +767,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 								// final accumulated message, already streamed as deltas
 							} else {
 								fullResponse.WriteString(text)
-								ch <- &StreamMessage{
+								sendStreamMsg(ch, ctx, &StreamMessage{
 									Role:    "assistant",
 									Content: text,
-								}
+								})
 							}
 						}
 					}
@@ -752,11 +778,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 					if msg.Metadata != nil {
 						if rc, ok := msg.Metadata["reasoning_content"].(string); ok && rc != "" {
 							processChars += len([]rune(rc))
-							ch <- &StreamMessage{
+							sendStreamMsg(ch, ctx, &StreamMessage{
 								Role:             "assistant",
 								Content:          "",
 								ReasoningContent: rc,
-							}
+							})
 						}
 					}
 				}
@@ -784,11 +810,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 						logger.SugaredLogger.Infof("[ToolCall] %s(%s)", tp.Name, safeReq)
 						toolStepText := fmt.Sprintf("[STEP]🔧 调用工具：%s(%s)\n", tp.Name, safeReq)
 						processChars += len([]rune(toolStepText))
-						ch <- &StreamMessage{
+						sendStreamMsg(ch, ctx, &StreamMessage{
 							Role:             "assistant",
 							Content:          "",
 							ReasoningContent: toolStepText,
-						}
+						})
 						if safeResp != "" {
 							resultLen := len(safeResp)
 							status := "✅"
@@ -802,19 +828,19 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 							summary = strings.ReplaceAll(summary, "\n", " ")
 							resultStepText := fmt.Sprintf("[STEP]%s 工具 %s 返回数据 (%d 字符): %s\n", status, tp.Name, resultLen, summary)
 							processChars += len([]rune(resultStepText))
-							ch <- &StreamMessage{
+							sendStreamMsg(ch, ctx, &StreamMessage{
 								Role:             "assistant",
 								Content:          "",
 								ReasoningContent: resultStepText,
-							}
+							})
 						}
 						// 结构化工具调用：供前端 ToolTimeline 渲染（agent-chat.vue
 						// 的 data.tool_calls 分支）。[STEP] 文本只进思考区，
 						// 没有本字段时时间线永远收不到数据。
-						ch <- &StreamMessage{
+						sendStreamMsg(ch, ctx, &StreamMessage{
 							Role:      "assistant",
 							ToolCalls: []StreamToolCall{buildStreamToolCall(tp)},
-						}
+						})
 					}
 				}
 			}
@@ -964,10 +990,10 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				errMsg += "\n\n**提示**：模型服务端暂时繁忙（限流/过载/网络中断），已自动重试仍失败，请稍后再试或切换其他 AI 配置。"
 			}
 
-			ch <- &StreamMessage{
+			sendStreamMsg(ch, ctx, &StreamMessage{
 				Role:    "assistant",
 				Content: errMsg,
-			}
+			})
 		}
 
 		// Agent 因错误提前退出：错误正文已在上方发出，这里只需 return，
@@ -1020,11 +1046,11 @@ func (receiver StockAiAgent) ChatWithContext(ctx context.Context, question strin
 				}
 			}
 			if len(actions) > 0 {
-				ch <- &StreamMessage{
+				sendStreamMsg(ch, ctx, &StreamMessage{
 					Role:    "assistant",
 					Content: "",
 					Actions: actions,
-				}
+				})
 			}
 		}
 
@@ -1171,6 +1197,19 @@ func isTransientModelError(err error) bool {
 		"unexpected eof",
 		"eof",
 		"connection reset by peer",
+		"connection reset",
+		"connection refused",
+		"connection timed out",
+		"connection aborted",
+		"dial tcp",
+		"no such host",
+		"temporary failure in name resolution",
+		"network is unreachable",
+		"socket hang up",
+		"at capacity",
+		"unavailable",
+		"handshake timeout",
+		"i/o timeout",
 		"broken pipe",
 		"wsarecv",
 		"timeout awaiting response headers",
@@ -1225,6 +1264,12 @@ func extractStockInfo(question string) (stockCode, stockName string) {
 // 而 `context deadline exceeded` 在这里几乎总是卡片「请求超时」配置过低
 // （chat_model_factory 用 aiConfig.TimeOut 作为每一次 LLM 请求的上限）。
 // 混为一谈会把用户引向错误的排查方向。
+//
+// 注意：`i/o timeout` 不在这里——它是 net 层拨号/读写超时（原始网络
+// 故障），不是我们配置的请求超时：openai-go 的 WithRequestTimeout 到期
+// 时报的是 `context deadline exceeded (Client.Timeout exceeded while
+// awaiting headers)`。`i/o timeout` 只在 isTransientModelError 里按
+// 瞬时故障重试；重试仍失败时走“服务商繁忙”文案，不误报为配置问题。
 func isRequestTimeoutError(err error) bool {
 	if err == nil {
 		return false
@@ -1235,7 +1280,6 @@ func isRequestTimeoutError(err error) bool {
 		"request timeout",
 		"timeout awaiting response headers",
 		"client.timeout exceeded",
-		"i/o timeout",
 	} {
 		if strings.Contains(lower, m) {
 			return true
