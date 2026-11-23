@@ -217,13 +217,20 @@ func TestGetRecentAgentRunsOrderingAndLimit(t *testing.T) {
 
 // 契约六：`context deadline exceeded` 必须被判定为「我们自己的单次请求超时」，
 // 而不是「服务端繁忙」—— 两者混淆会把用户引向完全错误的排查方向。
+//
+// 注意：`i/o timeout` 不在这里——它是 net 层拨号/读写超时（原始网络
+// 故障），不是我们配置的请求超时：openai-go 的 WithRequestTimeout 到期
+// 时报的是 `context deadline exceeded (Client.Timeout exceeded while
+// awaiting headers)`。`i/o timeout` 只在 isTransientModelError 里按
+// 瞬时故障重试；重试仍失败时走“服务商繁忙”文案，不误报为配置问题。
+// （2026-11-23 第四轮 B 组修正：此前本契约把 `i/o timeout` 也列为
+// 请求超时，导致网络抖动既不重试、失败文案又误导用户去调大卡片超时。）
 func TestRequestTimeoutIsNotClassifiedAsServerBusy(t *testing.T) {
 	cases := []string{
 		"context deadline exceeded",
 		"Post \"https://x/v1/chat/completions\": context deadline exceeded",
 		"request timeout",
 		"timeout awaiting response headers",
-		"i/o timeout",
 	}
 	for _, c := range cases {
 		err := errors.New(c)
@@ -236,6 +243,13 @@ func TestRequestTimeoutIsNotClassifiedAsServerBusy(t *testing.T) {
 		if isRequestTimeoutError(errors.New(c)) {
 			t.Errorf("%q 是上游繁忙，不应判为请求超时", c)
 		}
+	}
+	// i/o timeout 是原始网络故障：不是配置超时，但应进瞬时重试。
+	if isRequestTimeoutError(errors.New("i/o timeout")) {
+		t.Errorf("%q 是网络超时，不应判为卡片配置超时", "i/o timeout")
+	}
+	if !isTransientModelError(errors.New("read: i/o timeout")) {
+		t.Errorf("%q 应判为瞬时故障（可重试）", "read: i/o timeout")
 	}
 	if isRequestTimeoutError(nil) {
 		t.Error("nil 不应判为请求超时")
