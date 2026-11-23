@@ -21,15 +21,8 @@ func GetFetchWebPageTool() bladesTools.Tool {
 				Desc:     "目标网页URL，必须是完整的http/https地址",
 				Required: true,
 			},
-			"waitVisible": {
-				Type:     "string",
-				Desc:     "等待页面中指定元素可见后抓取，默认body。如表格页可传#content或.table-class",
-				Required: false,
-			},
 		},
 		func(args string) (string, error) {
-			// waitVisible 参数已声明但本实现不读取（纯 HTTP 抓取，无浏览器渲染）；
-			// 保留声明以便将来切换到浏览器抓取时启用。
 			url := types.ExtractStringParam(args, "url", "link", "href")
 			if url == "" {
 				return "URL不能为空", nil
