@@ -57,7 +57,10 @@ func (e *Evaluator) ScoreResultStructured(result string) ReflectionScore {
 	}
 	negative := []string{
 		"失败", "错误", "异常", "无法", "超时",
-		"error", "failed", "timeout", "nil", "空",
+		"error", "failed", "timeout", "nil",
+		// 注意：不要用裸 "空"——它会误伤"空间/空头/空白"等正常词。
+		// 只认表示"查无结果"的精确短语。
+		"为空", "空值", "无数据",
 	}
 	lower := strings.ToLower(result)
 	score := 0
@@ -151,7 +154,21 @@ func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durat
 	if toolsUsed == "" {
 		toolsUsed = "（无工具调用记录）"
 	}
-	reflectionPrompt := fmt.Sprintf(`你是一个严格的智能体反思评估器。请从四个维度评估以下智能体回答的质量，并输出 JSON。
+	// 反思 prompt 只在真的要调 LLM 时才构造：生产调用传 llm == nil，
+	// 每次问答都拼一个 ~2KB 的 prompt 字符串是纯浪费。
+	result := ReflectionScore{
+		Score:        autoScore,
+		Accuracy:     fallback.Accuracy,
+		Relevance:    fallback.Relevance,
+		ToolUse:      fallback.ToolUse,
+		Completeness: fallback.Completeness,
+	}
+	var insight, improvement string
+	if llm != nil {
+		// prompt 模板与调用点：恢复 LLM 打分时应复用这里的
+		// shouldRunLLMReflection 限频（见 evolution_wiring.go），
+		// 不要无条件每次问答都调。
+		reflectionPrompt := fmt.Sprintf(`你是一个严格的智能体反思评估器。请从四个维度评估以下智能体回答的质量，并输出 JSON。
 
 ## 评分维度（每项 0-10 分）
 - accuracy: 回答中的数据/事实是否真实可信、有无编造或自相矛盾
@@ -183,18 +200,12 @@ func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durat
   "insight": "对该回答质量的一句洞察",
   "improvement": "如果分数低，给出具体改进建议；如果分数高，指出可复用的经验"
 }`, question, toolsUsed, truncateText(answer, 2000))
-
-	result := ReflectionScore{
-		Score:        autoScore,
-		Accuracy:     fallback.Accuracy,
-		Relevance:    fallback.Relevance,
-		ToolUse:      fallback.ToolUse,
-		Completeness: fallback.Completeness,
-	}
-	var insight, improvement string
-	if llm != nil {
 		raw, err := llm("你是一个严格的智能体反思分析器，以 JSON 格式输出。", reflectionPrompt)
-		if err == nil {
+		if err != nil {
+			// LLM 打分失败不要静默吞掉：记 Warn 后仍用确定性评分兜底，
+			// 否则打分链路全断也无人知道。
+			logger.SugaredLogger.Warnf("LLM reflection failed, fallback to keyword scoring: %v", err)
+		} else {
 			var parsed struct {
 				Score        int    `json:"score"`
 				Accuracy     int    `json:"accuracy"`
@@ -205,7 +216,9 @@ func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durat
 				Improvement  string `json:"improvement"`
 			}
 			raw = extractJSONBraces(raw)
-			if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+			if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+				logger.SugaredLogger.Debugf("LLM reflection response not JSON, fallback to keyword scoring: %v", err)
+			} else {
 				result.Score = parsed.Score
 				result.Accuracy = parsed.Accuracy
 				result.Relevance = parsed.Relevance

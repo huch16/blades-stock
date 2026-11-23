@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"errors"
 	"testing"
 )
+
+var errFakeLLM = errors.New("fake llm failure")
 
 // TestScoreResultStructured 锁定确定性反思评分的四维度计算契约。
 //
@@ -116,5 +119,63 @@ func TestScoreResultStructured_Deterministic(t *testing.T) {
 	second := e.ScoreResultStructured(input)
 	if first != second {
 		t.Errorf("ScoreResultStructured should be deterministic, got %+v vs %+v", first, second)
+	}
+}
+
+// TestScoreResultStructured_BareKongNotNegative 回归：裸 "空" 曾是负面词，
+// 会误伤"空间/空头/空白"等正常词，导致正常研报被打低分并误触发进化。
+// 修复后只有"为空/空值/无数据"这类精确短语才扣分。
+func TestScoreResultStructured_BareKongNotNegative(t *testing.T) {
+	e := NewEvaluator()
+
+	t.Run("normal words containing kong are neutral", func(t *testing.T) {
+		withKong := e.ScoreResultStructured("分析完成，市场空间广阔，空头仓位下降，空白表格已填好")
+		withoutKong := e.ScoreResultStructured("分析完成，市场广阔，仓位下降，表格已填好")
+		if withKong != withoutKong {
+			t.Errorf("words with 空 should score the same as without: %+v vs %+v", withKong, withoutKong)
+		}
+	})
+
+	t.Run("precise empty-result phrases still penalize", func(t *testing.T) {
+		// 注意：不要用"查询结果为空"这类输入——"结果/数据"本身是正面词，
+		// 会抵消负面词，这是关键词启发式的固有噪声，不是本回归要锁的。
+		got := e.ScoreResultStructured("查询为空，无数据")
+		if got.Score >= 0 {
+			t.Errorf("empty-result phrases should yield Score < 0, got %+v", got)
+		}
+		if got.Accuracy >= 5 {
+			t.Errorf("empty-result phrases should lower Accuracy < 5, got %+v", got)
+		}
+	})
+}
+
+// TestGenerateReflection_LLMFailureFallsBack 回归：LLM 打分失败（或返回
+// 非 JSON）时应静默无声地退回确定性评分之外——至少记一条日志，
+// 且结果仍为确定性评分（本测试只锁定后者：错误不冒泡、不丢分）。
+func TestGenerateReflection_LLMFailureFallsBack(t *testing.T) {
+	e := NewEvaluator()
+	failingLLM := func(systemPrompt, userMessage string) (string, error) {
+		return "", errFakeLLM
+	}
+	garbageLLM := func(systemPrompt, userMessage string) (string, error) {
+		return "not json at all", nil
+	}
+	answer := "获取到数据，查询成功，输出结果如下：涨幅 5.2%"
+	for name, llm := range map[string]LLMReflectionFunc{
+		"llm error": failingLLM,
+		"llm garbage": garbageLLM,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := e.GenerateReflection("test-session", "600519 怎么样", answer, 100, llm, "GetStockQuote")
+			if err != nil {
+				t.Fatalf("GenerateReflection should not fail on LLM error: %v", err)
+			}
+			want := e.ScoreResultStructured(answer)
+			if got.Score != want.Score || got.Accuracy != want.Accuracy ||
+				got.Relevance != want.Relevance || got.ToolUse != want.ToolUse ||
+				got.Completeness != want.Completeness {
+				t.Errorf("LLM failure should fall back to deterministic score %+v, got %+v", want, got)
+			}
+		})
 	}
 }
