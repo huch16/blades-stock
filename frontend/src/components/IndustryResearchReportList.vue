@@ -98,11 +98,12 @@ function handleSearch(value) {
         <n-th>机构</n-th>
         <n-th>
           <n-flex justify="space-between">
+            <!-- 刷新必须显传 ''（全部行业）：@click 直接写函数名会把 MouseEvent 当参数传给后端 -->
             日期<n-icon
               color="#409EFF"
               :size="20"
               :component="RefreshCircleSharp"
-              @click="getIndustryResearchReport"
+              @click="getIndustryResearchReport('')"
             />
           </n-flex>
         </n-th>

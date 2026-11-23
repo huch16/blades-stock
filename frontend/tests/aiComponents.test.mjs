@@ -206,6 +206,35 @@ test('MessageAnchorNav 导航项编号必须用消息在时间线里的真实位
   assert.match(src, /AI 回复 \$\{idx \+ 1\}/)
 })
 
+test('cron 盘前/盘后研报任务必须能选模型：后端只认 aiConfigId', () => {
+  const src = read('src/components/cron-task-manager.vue')
+  // 后端 executePreMarketBriefing / executePostMarketReview 只读 aiConfigId，
+  // 此前表单对这两类任务不提供任何参数入口，generatedParamsJson 直接返回 {}。
+  assert.match(src, /const briefingParamsData = reactive\(\{\s*aiConfigId: 0\s*\}\)/)
+  assert.match(src, /v-else-if="formData\.taskType === 'pre_market_briefing' \|\| formData\.taskType === 'post_market_review'"/)
+  assert.match(src, /v-model:value="briefingParamsData\.aiConfigId"/)
+  assert.match(src, /if \(formData\.taskType === 'pre_market_briefing' \|\| formData\.taskType === 'post_market_review'\) \{\s*return JSON\.stringify\(\{\s*aiConfigId: briefingParamsData\.aiConfigId/)
+  // 0 = 默认模型，下拉必须有显式的 0 选项；编辑时要回填，旧的 ai_config_id 键要认回。
+  assert.match(src, /label: '默认模型（设置页默认配置）', value: 0/)
+  assert.match(src, /briefingParamsData\.aiConfigId = parsed\.aiConfigId \?\? parsed\.ai_config_id \?\? 0/)
+  assert.match(src, /Object\.assign\(briefingParamsData, \{\s*aiConfigId: 0\s*\}\)/)
+  // 兜底 JSON 输入框的占位示例不得再教 ai_config_id（盘前/盘后 executor 会忽略它）。
+  assert.match(src, /placeholder="JSON 格式[^"]*aiConfigId/)
+  assert.doesNotMatch(src, /placeholder="JSON 格式[^"]*ai_config_id/)
+})
+
+test('研报列表刷新按钮不得把 MouseEvent 当参数传给后端', () => {
+  // @click 直接写函数名时 Vue 会把 $event（MouseEvent）当第一个参数，
+  // 后端 StockResearchReport/IndustryResearchReport 要的是 string，
+  // 点刷新会直接报错进 .catch。必须显传参数。
+  const stock = read('src/components/StockResearchReportList.vue')
+  assert.match(stock, /@click="getStockResearchReport\(stockCode\)"/)
+  assert.doesNotMatch(stock, /@click="getStockResearchReport"/)
+  const industry = read('src/components/IndustryResearchReportList.vue')
+  assert.match(industry, /@click="getIndustryResearchReport\(''\)"/)
+  assert.doesNotMatch(industry, /@click="getIndustryResearchReport"/)
+})
+
 test('settings：硅基流动离线兜底模型必须与后端注册表一致', () => {
   const src = read('src/components/settings.vue')
   // 后端模板与种子卡均为 Qwen/Qwen2.5-7B-Instruct，前端兜底曾用
