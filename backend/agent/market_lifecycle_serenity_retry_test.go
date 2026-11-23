@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // serenityRetryHarness records every round the retry helper runs, so tests
@@ -14,15 +16,33 @@ type serenityRetryHarness struct {
 	rounds    []reportStreamResult
 	pick      func(ctx context.Context, primaryID int) (int, string, bool)
 	pickCalls []int
+	// deadlines 记录每轮拿到的 ctx 的 deadline，用于断言重试轮拿到的是
+	// 全新预算而非首轮剩下的。
+	deadlines []time.Time
+	// round1Delay 在首轮开始时睡这么久（0 = 不睡），用于把两轮的
+	// deadline 拉开到可观测的差距。
+	round1Delay time.Duration
 }
 
 func (h *serenityRetryHarness) chatRound(ctx context.Context, prompt, sysPrompt string, aiConfigId int) reportStreamResult {
 	h.calls = append(h.calls, aiConfigId)
+	if dl, ok := ctx.Deadline(); ok {
+		h.deadlines = append(h.deadlines, dl)
+	}
+	if len(h.calls) == 1 && h.round1Delay > 0 {
+		time.Sleep(h.round1Delay)
+	}
 	i := len(h.calls) - 1
 	if i < len(h.rounds) {
 		return h.rounds[i]
 	}
 	return reportStreamResult{FinishReason: "stop"}
+}
+
+// testReportGenCtx 是重试测试用的无超时工厂：轮次由替身控制，不涉
+// 及真实 deadline。
+func testReportGenCtx() (context.Context, context.CancelFunc) {
+	return context.Background(), func() {}
 }
 
 func (h *serenityRetryHarness) picker(ctx context.Context, primaryID int) (int, string, bool) {
@@ -69,7 +89,7 @@ func TestSerenityRetry_PartialThenFallbackSuccess(t *testing.T) {
 	}
 	svc := newSerenityRetryService(h)
 
-	res := svc.runSerenityGeneration(context.Background(), "prompt", "sysPrompt", 3)
+	res := svc.runReportGeneration(context.Background(), "prompt", "sysPrompt", 3, "Serenity", testReportGenCtx)
 
 	if len(h.calls) != 2 {
 		t.Fatalf("应恰好跑两轮（首轮 + 一次重试），实际 %d 轮：%v", len(h.calls), h.calls)
@@ -105,7 +125,7 @@ func TestSerenityRetry_BothRoundsFail(t *testing.T) {
 	}
 	svc := newSerenityRetryService(h)
 
-	res := svc.runSerenityGeneration(context.Background(), "prompt", "sysPrompt", 3)
+	res := svc.runReportGeneration(context.Background(), "prompt", "sysPrompt", 3, "Serenity", testReportGenCtx)
 
 	if len(h.calls) != 2 {
 		t.Fatalf("应恰好跑两轮，实际 %d 轮：%v", len(h.calls), h.calls)
@@ -129,7 +149,7 @@ func TestSerenityRetry_FirstRoundSuccess(t *testing.T) {
 	}
 	svc := newSerenityRetryService(h)
 
-	res := svc.runSerenityGeneration(context.Background(), "prompt", "sysPrompt", 3)
+	res := svc.runReportGeneration(context.Background(), "prompt", "sysPrompt", 3, "Serenity", testReportGenCtx)
 
 	if len(h.calls) != 1 {
 		t.Fatalf("首轮成功应只跑一轮，实际 %d 轮", len(h.calls))
@@ -152,7 +172,7 @@ func TestSerenityRetry_NoFallbackAvailable(t *testing.T) {
 	}
 	svc := newSerenityRetryService(h)
 
-	res := svc.runSerenityGeneration(context.Background(), "prompt", "sysPrompt", 3)
+	res := svc.runReportGeneration(context.Background(), "prompt", "sysPrompt", 3, "Serenity", testReportGenCtx)
 
 	if len(h.calls) != 1 {
 		t.Fatalf("无备用卡时应只跑一轮，实际 %d 轮", len(h.calls))
@@ -176,12 +196,103 @@ func TestSerenityRetry_TruncatedDoesNotRetry(t *testing.T) {
 	}
 	svc := newSerenityRetryService(h)
 
-	res := svc.runSerenityGeneration(context.Background(), "prompt", "sysPrompt", 3)
+	res := svc.runReportGeneration(context.Background(), "prompt", "sysPrompt", 3, "Serenity", testReportGenCtx)
 
 	if len(h.calls) != 1 {
 		t.Fatalf("截断时应只跑一轮，实际 %d 轮", len(h.calls))
 	}
 	if !res.Truncated {
 		t.Error("截断标记应原样保留给调用方处理")
+	}
+}
+
+// TestReportGeneration_RetryGetsFreshDeadline 回归测试：重试轮必须拿到
+// 一个全新的 10 分钟 ctx，而不是首轮剩下的预算。旧实现两轮共用一个
+// ctx，首轮烧掉 9 分钟才断流时重试只剩约 1 分钟，几乎必撞 deadline
+// exceeded，重试只在首轮快速失败时才有效。
+func TestReportGeneration_RetryGetsFreshDeadline(t *testing.T) {
+	h := &serenityRetryHarness{
+		rounds: []reportStreamResult{
+			{Content: "半份正文", StreamErr: "❌ 首轮流中断"},
+			{Content: "完整研报", FinishReason: "stop"},
+		},
+		pick: func(ctx context.Context, primaryID int) (int, string, bool) {
+			return 7, "fallback-card", true
+		},
+		round1Delay: 150 * time.Millisecond,
+	}
+	svc := newSerenityRetryService(h)
+	newGenCtx := func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.Background(), 10*time.Minute)
+	}
+
+	res := svc.runReportGeneration(context.Background(), "prompt", "sysPrompt", 3, "Serenity", newGenCtx)
+
+	if len(h.calls) != 2 {
+		t.Fatalf("应恰好跑两轮，实际 %d 轮", len(h.calls))
+	}
+	if res.StreamErr != "" || res.Content != "完整研报" {
+		t.Fatalf("重试结果异常: %+v", res)
+	}
+	if len(h.deadlines) != 2 {
+		t.Fatalf("两轮都应拿到带 deadline 的 ctx，实际 %d 个 deadline", len(h.deadlines))
+	}
+	if !h.deadlines[1].After(h.deadlines[0]) {
+		t.Errorf("重试轮 deadline 应晚于首轮（全新 10 分钟预算），首轮 %v，重试 %v", h.deadlines[0], h.deadlines[1])
+	}
+	if gap := h.deadlines[1].Sub(h.deadlines[0]); gap < 100*time.Millisecond {
+		t.Errorf("重试轮 deadline 只比首轮晚 %v，疑似复用了首轮 ctx（首轮睡了 150ms）", gap)
+	}
+}
+
+// TestReportGenerators_WiredToRunReportGeneration 源码级接线守卫：
+// 四个研报生成器都必须走 runReportGeneration（换卡整轮重试一次），
+// 且不得再直连 ChatWithContext + collectReportStream（旧写法会绕开
+// 重试）。读本包源码断言，避免将来有人把某一链路改回直连。
+func TestReportGenerators_WiredToRunReportGeneration(t *testing.T) {
+	src, err := os.ReadFile("market_lifecycle.go")
+	if err != nil {
+		t.Fatalf("read market_lifecycle.go: %v", err)
+	}
+	text := string(src)
+
+	if strings.Contains(text, "runSerenityGeneration") {
+		t.Error("runSerenityGeneration 应已更名为 runReportGeneration，源码中仍有旧名")
+	}
+	for _, dead := range []string{"Skill 7", "Skill 4", "Serenity-Skill4"} {
+		if strings.Contains(text, dead) {
+			t.Errorf("技能数字标签 %q 应已改为按名引用，源码中仍有残留", dead)
+		}
+	}
+
+	generators := []struct {
+		fn    string
+		label string
+	}{
+		{"GeneratePreMarketBriefing", "盘前晨报"},
+		{"GeneratePostMarketReview", "盘后复盘"},
+		{"GenerateETFRotationReport", "ETF轮动"},
+		{"TriggerSectorAnomalySerenityAnalysis", "Serenity"},
+	}
+	for _, g := range generators {
+		start := strings.Index(text, "func (s *MarketLifecycleService) "+g.fn+"(")
+		if start < 0 {
+			t.Fatalf("找不到生成器 %s", g.fn)
+		}
+		rest := text[start:]
+		end := strings.Index(rest[1:], "\nfunc ")
+		body := rest
+		if end > 0 {
+			body = rest[:end+1]
+		}
+		if !strings.Contains(body, "runReportGeneration(") {
+			t.Errorf("%s 未调用 runReportGeneration（无整轮重试）", g.fn)
+		}
+		if !strings.Contains(body, `"`+g.label+`"`) {
+			t.Errorf("%s 调用 runReportGeneration 时未传 %q 标签", g.fn, g.label)
+		}
+		if strings.Contains(body, "ChatWithContext(genCtx") || strings.Contains(body, "collectReportStream(ch)") {
+			t.Errorf("%s 仍在直连 ChatWithContext + collectReportStream，会绕开重试", g.fn)
+		}
 	}
 }

@@ -309,12 +309,13 @@ func safeRuntimeEventsEmit(ctx context.Context, event string, optionalData ...an
 // MarketLifecycleService 市场全流程生命周期智能服务
 type MarketLifecycleService struct {
 	ctx context.Context
-	// serenityChatRound runs one Serenity LLM round and collects the stream.
+	// serenityChatRound runs one report LLM round and collects the stream.
 	// serenityFallbackPicker selects the first available fallback card for
-	// a Serenity whole-round retry. Both are injectable seams: production
+	// a report whole-round retry. Both are injectable seams: production
 	// defaults are set by NewMarketLifecycleService, tests replace them.
 	// A nil seam falls back to the production implementation, so a
-	// zero-value service still works.
+	// zero-value service still works. (名字留自 Serenity 首接，四个研报
+	// 生成器共用同一对 seam。)
 	serenityChatRound      func(ctx context.Context, prompt, sysPrompt string, aiConfigId int) reportStreamResult
 	serenityFallbackPicker func(ctx context.Context, primaryAIConfigID int) (fallbackID int, fallbackName string, ok bool)
 }
@@ -322,24 +323,25 @@ type MarketLifecycleService struct {
 func NewMarketLifecycleService(ctx context.Context) *MarketLifecycleService {
 	return &MarketLifecycleService{
 		ctx:                    ctx,
-		serenityChatRound:      defaultSerenityChatRound,
-		serenityFallbackPicker: defaultSerenityFallbackPicker,
+		serenityChatRound:      defaultReportChatRound,
+		serenityFallbackPicker: defaultReportFallbackPicker,
 	}
 }
 
-// defaultSerenityChatRound is the production Serenity round: Direct mode,
-// zero tools, stream collected by collectReportStream.
-func defaultSerenityChatRound(ctx context.Context, prompt, sysPrompt string, aiConfigId int) reportStreamResult {
+// defaultReportChatRound is the production report round: Direct mode,
+// zero tools, stream collected by collectReportStream. Shared by all four
+// report generators (pre-market, post-market, ETF rotation, Serenity).
+func defaultReportChatRound(ctx context.Context, prompt, sysPrompt string, aiConfigId int) reportStreamResult {
 	ch := NewStockAiAgentApi().ChatWithContext(ctx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
 	return collectReportStream(ch)
 }
 
-// defaultSerenityFallbackPicker resolves the card actually used by the
+// defaultReportFallbackPicker resolves the card actually used by the
 // first round and returns the first available fallback card from the
 // fallback chain (registry order, same exclusions as
 // BuildFallbackProvidersFromDB). It never hard-codes a model: whatever
 // the registry lists first wins.
-func defaultSerenityFallbackPicker(ctx context.Context, primaryAIConfigID int) (int, string, bool) {
+func defaultReportFallbackPicker(ctx context.Context, primaryAIConfigID int) (int, string, bool) {
 	res, err := data.ResolveModel(primaryAIConfigID)
 	if err != nil {
 		return 0, "", false
@@ -350,38 +352,47 @@ func defaultSerenityFallbackPicker(ctx context.Context, primaryAIConfigID int) (
 	return 0, "", false
 }
 
-// runSerenityGeneration runs one Serenity generation round. If the round is
+// runReportGeneration runs one report generation round. If the round is
 // interrupted mid-stream (stream error / timeout), it retries the WHOLE
 // round exactly once with the first available fallback card.
 //
 // 背景：fallback 层只在「无实质正文」时降级；已有实质正文后断流，错误会
-// 原样上抛（两段模型输出绝不能无声拼成一段）。但 Serenity 失败时半份
-// 内容本来就被丢弃、不落库，所以在 market_lifecycle 层换卡整轮重跑是
-// 安全的：重试丢弃首轮的全部半份输出（reasoning 与 content 均不带入
-// 第二轮），第二轮从空白 prompt 重新生成，最终结果只含第二轮的输出。
+// 原样上抛（两段模型输出绝不能无声拼成一段）。但研报失败时半份内容本来
+// 就被丢弃、不落库，所以在 market_lifecycle 层换卡整轮重跑是安全的：
+// 重试丢弃首轮的全部半份输出（reasoning 与 content 均不带入第二轮），
+// 第二轮从空白 prompt 重新生成，最终结果只含第二轮的输出。
 //
 // 只重试一次；第二轮的结果（成功或失败）直接采用，不再重试。
 // 截断（finish_reason=length/content_filter）不是流中断，不重试——
 // 换卡也大概率在同样的 maxTokens 下再次截断。
-func (s *MarketLifecycleService) runSerenityGeneration(ctx context.Context, prompt, sysPrompt string, aiConfigId int) reportStreamResult {
+//
+// label 标识报告类型，出现在重试日志里（如 "Serenity"、"盘前晨报")。
+// newGenCtx 为每一轮各建一个新的生成上下文：重试轮绝不能继承首轮已
+// 消耗的超时——旧实现两轮共用一个 10 分钟 ctx，首轮跑 9 分钟后断流，
+// 重试只剩约 1 分钟。两轮各拿一个完整的超时，互不挤占。
+func (s *MarketLifecycleService) runReportGeneration(ctx context.Context, prompt, sysPrompt string, aiConfigId int, label string, newGenCtx func() (context.Context, context.CancelFunc)) reportStreamResult {
 	chatRound := s.serenityChatRound
 	if chatRound == nil {
-		chatRound = defaultSerenityChatRound
+		chatRound = defaultReportChatRound
 	}
-	res := chatRound(ctx, prompt, sysPrompt, aiConfigId)
+	genCtx, cancel := newGenCtx()
+	defer cancel()
+	res := chatRound(genCtx, prompt, sysPrompt, aiConfigId)
 	if res.StreamErr == "" {
 		return res
 	}
 	picker := s.serenityFallbackPicker
 	if picker == nil {
-		picker = defaultSerenityFallbackPicker
+		picker = defaultReportFallbackPicker
 	}
 	fbID, fbName, ok := picker(ctx, aiConfigId)
 	if !ok {
 		return res
 	}
-	logger.SugaredLogger.Warnf("🔄 【Serenity换卡整轮重试】首轮生成中断（%s），丢弃半份输出，改用备用卡片 [%s] 整轮重跑（仅重试一次）", res.StreamErr, fbName)
-	return chatRound(ctx, prompt, sysPrompt, fbID)
+	logger.SugaredLogger.Warnf("🔄 【%s换卡整轮重试】首轮生成中断（%s），丢弃半份输出，改用备用卡片 [%s] 整轮重跑（仅重试一次）", label, res.StreamErr, fbName)
+	retryCtx, retryCancel := newGenCtx()
+	defer retryCancel()
+	return chatRound(retryCtx, prompt, sysPrompt, fbID)
 }
 
 // GetCurrentMarketPhase 计算当前时间的市场阶段
@@ -604,7 +615,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	retrievedCrystals, _ := DefaultSemanticDistiller().SearchKnowledgeCrystals(ctx, "A股盘前 隔夜外盘 宏观政策 行业ETF轮动", "etf_rotation", 2)
 	crystalPrompt := DefaultSemanticDistiller().FormatCrystalsForPrompt(retrievedCrystals)
 
-	// 2. 组装盘前前瞻 + ETF轮动 Prompt (包含 Skill 7 范式)
+	// 2. 组装盘前前瞻 + ETF轮动 Prompt (包含 ETF轮动多Agent分析范式)
 	prompt := fmt.Sprintf(`你现在是买方宏观与大类资产配置委员会（L1 Macro Allocation Committee）主任委员。今天是 %s。
 请严格按照【ETF轮动多Agent分析】实战范式，结合以下一手收集的盘前全球指数、核心ETF动态与要闻资讯，输出一份高水准【A股盘前智能前瞻与ETF轮动内参】：
 
@@ -630,7 +641,7 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 - 上表已给出纯数学动量排名（21日加权对数回归得分 = 年化收益率 × R²），请直接使用此矩阵进行后续分析；
 - 重点观察：动量排名变化、5日回撤情况、是否站上MA5、风控拦截状态；
 
-### 🔍 三、核心ETF池六路并发因子诊断（Skill 7 范式）
+### 🔍 三、核心ETF池六路并发因子诊断（ETF轮动多Agent分析范式）
 - 技术面：60日均线系统、MACD、RSI、布林带位置、成交量能；
 - 主力资金流：大单净流入、北向资金、基金申购赎回、融资融券变动；
 - 消息舆情：利好利空新闻热度、互动易问答、机构调研频次；
@@ -657,14 +668,15 @@ func (s *MarketLifecycleService) GeneratePreMarketBriefing(ctx context.Context, 
 	contentBuilder := strings.Builder{}
 	var streamErr string
 
-	// 使用带合理超时 (10分钟) 的独立生成上下文，解耦 HTTP 请求临时断连，确保后台研报稳定生成与持久化
-	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
-	genCtx = WithRunKind(genCtx, RunKindPreMarket)
-	defer cancel()
+	// 每轮生成用独立的 10 分钟上下文（见 runReportGeneration）：重试轮
+	// 不继承首轮已消耗的超时；标注运行类型便于区分"到底是谁在跑"。
+	// 使用独立生成上下文，解耦 HTTP 请求临时断连，确保后台研报稳定生成与持久化。
+	newGenCtx := func() (context.Context, context.CancelFunc) {
+		genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		return WithRunKind(genCtx, RunKindPreMarket), cancel
+	}
 
-	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
-	streamRes := collectReportStream(ch)
+	streamRes := s.runReportGeneration(ctx, prompt, sysPrompt, aiConfigId, "盘前晨报", newGenCtx)
 	if streamRes.Truncated {
 		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
 			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
@@ -822,7 +834,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 
 %s
 
-【必须严格遵守的 Serenity 投研铁律 (Skill 4 原作规范)】：
+【必须严格遵守的 Serenity 投研铁律 (Serenity 原作规范)】：
 1. 【产业链全景拆解】：梳理%s在产业链8层（终端需求、系统集成、模块子系统、芯片器件、工艺封测、设备量测、材料耗材、物理基础设施）中的位置及主要玩家；
 2. 【稀缺层识别】：识别其中技术壁垒最高、验证周期长、扩产约束最紧的绝对稀缺环节；
 3. 【严禁综合打分，只输出定性优先级】：
@@ -861,18 +873,19 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 	contentBuilder := strings.Builder{}
 	var streamErr string
 
-	genCtx, cancel := context.WithTimeout(context.WithoutCancel(ctxOrBackground(ctx)), 10*time.Minute)
-	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
-	// 注意：必须用 WithoutCancel 包住入参 ctx 再派生——直接用 context.Background()
+	// 每轮生成用独立的 10 分钟上下文（见 runReportGeneration）；注意：
+	// 必须用 WithoutCancel 包住入参 ctx 再派生——直接用 context.Background()
 	// 会丢掉调用方预先打上的 RunKindSerenity 标注（GenerateSerenityResearchReport
 	// 先标 serenity，这里 WithRunKindIfUnset 本应保留它），导致手动 Serenity
 	// 拆解在运行记录里被误记为 sector_anomaly；而直接用 ctx 派生又会把 HTTP
 	// 请求的取消信号带进来，后台研报会被前端断连掐断。WithoutCancel 只剥离
 	// 取消信号，保留全部 context 值，两全其美。
-	genCtx = WithRunKindIfUnset(genCtx, RunKindSectorAnomaly)
-	defer cancel()
+	newGenCtx := func() (context.Context, context.CancelFunc) {
+		genCtx, cancel := context.WithTimeout(context.WithoutCancel(ctxOrBackground(ctx)), 10*time.Minute)
+		return WithRunKindIfUnset(genCtx, RunKindSectorAnomaly), cancel
+	}
 
-	streamRes := s.runSerenityGeneration(genCtx, prompt, sysPrompt, aiConfigId)
+	streamRes := s.runReportGeneration(ctx, prompt, sysPrompt, aiConfigId, "Serenity", newGenCtx)
 	if streamRes.Truncated {
 		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
 			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
@@ -965,7 +978,7 @@ func (s *MarketLifecycleService) TriggerSectorAnomalySerenityAnalysis(ctx contex
 						CoreThesis:   parsed.Thesis,
 						KeyCatalysts: fmt.Sprintf("【证据链】%s\n【跟踪项】%s", parsed.EvidenceChain, parsed.TrackingChecklist),
 						RiskFactors:  fmt.Sprintf("【研究缺口】%s\n【证伪条件】%s", parsed.ResearchGaps, parsed.Counterarguments),
-						ModelName:    "Serenity-Skill4",
+						ModelName:    "Serenity",
 					})
 				}
 			}
@@ -1058,13 +1071,14 @@ func (s *MarketLifecycleService) GeneratePostMarketReview(ctx context.Context, a
 	contentBuilder := strings.Builder{}
 	var streamErr string
 
-	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
-	genCtx = WithRunKind(genCtx, RunKindPostMarket)
-	defer cancel()
+	// 每轮生成用独立的 10 分钟上下文（见 runReportGeneration）；
+	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）。
+	newGenCtx := func() (context.Context, context.CancelFunc) {
+		genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		return WithRunKind(genCtx, RunKindPostMarket), cancel
+	}
 
-	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
-	streamRes := collectReportStream(ch)
+	streamRes := s.runReportGeneration(ctx, prompt, sysPrompt, aiConfigId, "盘后复盘", newGenCtx)
 	if streamRes.Truncated {
 		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
 			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
@@ -1205,13 +1219,14 @@ func (s *MarketLifecycleService) GenerateETFRotationReport(ctx context.Context, 
 	contentBuilder := strings.Builder{}
 	var streamErr string
 
-	genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）
-	genCtx = WithRunKind(genCtx, RunKindETFRotation)
-	defer cancel()
+	// 每轮生成用独立的 10 分钟上下文（见 runReportGeneration）；
+	// 标注本次运行类型（写入运行记录，便于区分"到底是谁在跑"）。
+	newGenCtx := func() (context.Context, context.CancelFunc) {
+		genCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		return WithRunKind(genCtx, RunKindETFRotation), cancel
+	}
 
-	ch := NewStockAiAgentApi().ChatWithContext(genCtx, prompt, aiConfigId, nil, false, 0, false, string(AgentModeDirect), sysPrompt)
-	streamRes := collectReportStream(ch)
+	streamRes := s.runReportGeneration(ctx, prompt, sysPrompt, aiConfigId, "ETF轮动", newGenCtx)
 	if streamRes.Truncated {
 		return nil, fmt.Errorf("AI 研报生成被截断（finish_reason=%s，输出长度达到上限），当前内容不完整。"+
 			"请到「设置 → AI模型注册表」展开该卡片的「⚙️ 高级调度参数」，调大「最大输出长度 (maxTokens)」后重试。", streamRes.FinishReason)
