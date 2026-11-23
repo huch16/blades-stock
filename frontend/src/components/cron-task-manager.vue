@@ -420,13 +420,49 @@
           </n-space>
         </n-card>
           
+        <!-- 盘前/盘后研报任务的参数配置 UI -->
+        <n-card
+          v-else-if="formData.taskType === 'pre_market_briefing' || formData.taskType === 'post_market_review'"
+          size="small"
+          style="width: 100%"
+        >
+          <n-space
+            :vertical="true"
+            :size="12"
+          >
+            <n-grid
+              :cols="2"
+              :x-gap="12"
+            >
+              <n-gi>
+                <n-form-item
+                  label-width="90px"
+                  label="AI 配置:"
+                >
+                  <n-select
+                    v-model:value="briefingParamsData.aiConfigId"
+                    :options="briefingAiConfigOptions"
+                    placeholder="请选择 AI 配置（默认模型）"
+                    filterable
+                    style="width: 100%"
+                  />
+                </n-form-item>
+              </n-gi>
+            </n-grid>
+            <div style="font-size: 12px; color: #888;">
+              不选则用默认模型（设置页的默认 AI 配置）。后端按 aiConfigId 解析；
+              旧版手填的 ai_config_id 会被忽略，编辑旧任务时会自动认回。
+            </div>
+          </n-space>
+        </n-card>
+
         <!-- 其他任务类型仍使用文本输入框 -->
         <n-input
           v-else
           v-model:value="formData.params"
           type="textarea"
           :rows="5"
-          placeholder="JSON 格式，如：{&quot;stock_codes&quot;:[&quot;600519&quot;],&quot;ai_config_id&quot;:1}"
+          placeholder="JSON 格式，如盘前/盘后研报：{&quot;aiConfigId&quot;:1}（0 为默认模型）；股票监控：{&quot;stock_codes&quot;:[&quot;600519&quot;]}"
           show-count
         />
       </n-form-item>
@@ -948,6 +984,11 @@ const generatedParamsJson = computed(() => {
       agentMode: marketAnalysisParamsData.agentMode
     }, null, 2)
   }
+  if (formData.taskType === 'pre_market_briefing' || formData.taskType === 'post_market_review') {
+    return JSON.stringify({
+      aiConfigId: briefingParamsData.aiConfigId
+    }, null, 2)
+  }
 
   // 修复（vue/return-in-computed-property 捕获）：此前所有分支均不命中时
   // 计算属性隐式返回 undefined，模板 JSON 预览区会渲染成空白/报错。
@@ -1174,6 +1215,13 @@ const marketAnalysisParamsData= reactive({
   sysPromptId: 0,
   thinking: true,
   agentMode: ''
+})
+// 盘前/盘后研报任务的参数：后端两个 executor 只读 aiConfigId
+//（cron_task_api.go 的 executePreMarketBriefing / executePostMarketReview），
+// 0 表示用默认模型。此前表单对这两类任务不提供任何参数入口，
+// generatedParamsJson 直接返回 {}，用户无法指定模型，只能走默认模型。
+const briefingParamsData = reactive({
+  aiConfigId: 0
 })
 
 
@@ -1460,6 +1508,12 @@ const loadTaskTypes = async () => {
 
 // 加载 AI 配置
 const aiConfigOptions=ref([])
+// 盘前/盘后研报的模型下拉：0 = 默认模型（后端 AiConfigId=0 时走设置页默认配置），
+// 必须显式给一个 0 选项，否则下拉框无法表示“默认”。
+const briefingAiConfigOptions = computed(() => [
+  { label: '默认模型（设置页默认配置）', value: 0 },
+  ...aiConfigOptions.value
+])
 const loadAiConfigs = async () => {
   try {
     const configs = await GetAiConfigs()
@@ -1630,6 +1684,17 @@ const handleEdit = async (row) => {
           console.error('解析参数失败:', e)
         }
       }
+
+      // 如果是盘前/盘后研报任务，解析参数到表单。后端只认 aiConfigId；
+      // 兼容旧任务里按占位示例手填的 ai_config_id（否则编辑时会丢模型选择）。
+      if ((task.taskType === 'pre_market_briefing' || task.taskType === 'post_market_review') && task.params) {
+        try {
+          const parsed = JSON.parse(task.params)
+          briefingParamsData.aiConfigId = parsed.aiConfigId ?? parsed.ai_config_id ?? 0
+        } catch (e) {
+          console.error('解析参数失败:', e)
+        }
+      }
       
       showCreateModal.value = true
     }
@@ -1777,6 +1842,9 @@ const resetForm = () => {
     sysPromptId: null,
     thinking: true,
     agentMode: ''
+  })
+  Object.assign(briefingParamsData, {
+    aiConfigId: 0
   })
   // 重置 Cron 配置器
   Object.assign(cronSecond, { type: '*', start: 0, end: 0, loopStart: 0, loopStep: 1, appoint: [] })
