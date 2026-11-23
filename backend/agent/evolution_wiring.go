@@ -139,9 +139,14 @@ func (ev *Evolver) maybeGenerateEvolutionAdvice(sessionID string, trace *AgentTr
 			return
 		}
 		var recent int64
-		db.Dao.Model(&AgentMemory{}).
+		if err := db.Dao.Model(&AgentMemory{}).
 			Where("session_id = ? AND category = ? AND created_at >= ?", sessionID, "evolution", time.Now().Add(-evolutionAdviceCooldown)).
-			Count(&recent)
+			Count(&recent).Error; err != nil {
+			// 限频查询失败时不要放行：recent 为 0 会误判为"未限频"，
+			// DB 故障期间每次低分都调一次 LLM。直接跳过本次。
+			logger.SugaredLogger.Warnf("evolution advice cooldown check failed, skipped: %v", err)
+			return
+		}
 		if recent > 0 {
 			return
 		}
@@ -187,9 +192,14 @@ func RunSkillExtractionPass() {
 		}
 	}()
 	var recent int64
-	db.Dao.Model(&AgentMemory{}).
+	if err := db.Dao.Model(&AgentMemory{}).
 		Where("category = ? AND role = ? AND created_at >= ?", "evolution", "skill_pass", time.Now().Add(-skillPassCooldown)).
-		Count(&recent)
+		Count(&recent).Error; err != nil {
+		// 与 maybeGenerateEvolutionAdvice 同理：限频查询失败不放行，
+		// 避免 DB 故障期间每日 cron 反复调 LLM 做技能提取。
+		logger.SugaredLogger.Warnf("skill extraction pass cooldown check failed, skipped: %v", err)
+		return
+	}
 	if recent > 0 {
 		return
 	}
@@ -234,11 +244,14 @@ func toolCallSucceeded(resp string) bool {
 // ~1/3 sample of medium answers get an LLM call. Everything else falls back to
 // the cheap keyword scorer.
 //
-// ⚠️ 【当前无调用者，DORMANT】—— 它原本只服务于 GenerateReflection 的调用点，
-// 该调用点已在提交 a158883（strip agent reflection token burn）中删除，
-// 本函数随之成为孤儿。保留它是因为它精确记录了当时**计划**的成本上限策略，
-// 未来若要恢复 LLM 反思打分，应从这里重新接线（而不是无条件调用）。
-// 注意它**不是**安全兜底：它的存在不代表反射已启用，详见 GenerateReflection 注释。
+// ⚠️ 【当前无调用者，DORMANT】—— 它原本只服务于 GenerateReflection 的
+// LLM 打分分支。注意历史已变：GenerateReflection 的生产调用点在第三轮
+// 已恢复（agent_api.go 的 postProcessResponse），但传的是 llm == nil，
+// 只走确定性评分，所以本函数至今仍无调用者。它不是安全兜底：它的存在
+// 不代表 LLM 反思已启用，详见 GenerateReflection 注释。
+// 保留它是因为它精确记录了当时**计划**的成本上限策略，未来若要恢复
+// LLM 反思打分，应从这里重新接线（而不是无条件每次问答都调）。
+// 恢复前先看第四轮 D 组的成本收益分析结论，不要只凭本函数就开闸。
 func shouldRunLLMReflection(answer string, autoScore int) bool {
 	n := len([]rune(answer))
 	if n < 150 {

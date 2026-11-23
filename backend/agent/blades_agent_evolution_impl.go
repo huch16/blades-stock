@@ -289,7 +289,10 @@ func LLMFromConfig() LLMOptimizerFunc {
 		}
 		defer resp.Body.Close()
 
-		respBytes, _ := io.ReadAll(resp.Body)
+		respBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("read response: %w", err)
+		}
 		if resp.StatusCode != 200 {
 			return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBytes))
 		}
@@ -310,5 +313,3 @@ func LLMFromConfig() LLMOptimizerFunc {
 		return result.Choices[0].Message.Content, nil
 	}
 }
-
-var _ = fmt.Sprintf
