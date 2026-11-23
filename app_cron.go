@@ -27,6 +27,12 @@ func (a *App) getCronEntry(key string) (cron.EntryID, bool) {
 	return id, exists
 }
 
+func (a *App) removeCronEntry(key string) {
+	a.cronEntrysMu.Lock()
+	delete(a.cronEntrys, key)
+	a.cronEntrysMu.Unlock()
+}
+
 func (a *App) AddCronTask(follow data.FollowedStock) func() {
 	return func() {
 		go runtime.EventsEmit(a.ctx, "warnMsg", "开始自动分析"+follow.Name+"_"+follow.StockCode)
@@ -183,15 +189,20 @@ func (a *App) UpdateCronTask(task *models.CronTask) string {
 // @param id 任务 ID
 // @return string 操作结果
 func (a *App) DeleteCronTask(id uint) string {
-	_ = a.agentService.DeleteCronTaskRaw(id)
+	// 先查任务取 name：定时条目以 "<id>_<name>" 登记，删库之后就查不到了。
+	// 旧实现先硬删再查已删记录，必然拿到 record not found 而误报“删除失败”，
+	// 且移除定时条目的代码在 `if err == nil` 分支内永不执行，被删任务会继续执行。
 	task, err := a.agentService.GetCronTaskRaw(id)
-	if err == nil {
-		if entryID, exists := a.getCronEntry(convertor.ToString(id) + "_" + task.Name); exists {
-			a.cron.Remove(entryID)
-		}
-	}
 	if err != nil {
 		return fmt.Sprintf("删除失败：%v", err)
+	}
+	if err := a.agentService.DeleteCronTaskRaw(id); err != nil {
+		return fmt.Sprintf("删除失败：%v", err)
+	}
+	key := convertor.ToString(id) + "_" + task.Name
+	if entryID, exists := a.getCronEntry(key); exists {
+		a.cron.Remove(entryID)
+		a.removeCronEntry(key)
 	}
 	return "删除成功"
 }
