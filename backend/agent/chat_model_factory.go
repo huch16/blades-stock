@@ -31,6 +31,33 @@ type cachedProvider struct {
 	provider blades.ModelProvider
 }
 
+// modelProviderCacheLimit 是 modelProviderCache 的条目上限：缓存键含
+// UpdatedAt，每次保存卡片都会产生一个新键、旧键永不失效；不设上限则
+// 每次编辑都永久泄漏一个 provider（内含 http client 等）。上限 64 远
+// 高于注册表卡片数；超限时整表清空后重建——重建只是构造客户端，无
+// 网络开销，简单且安全。计数-清空之间有良性竞态（两个 goroutine 可能
+// 各清一次），最坏只是多一次重建。
+var modelProviderCacheLimit = 64
+
+func modelProviderCacheSize() int {
+	n := 0
+	modelProviderCache.Range(func(_, _ any) bool {
+		n++
+		return true
+	})
+	return n
+}
+
+func storeCachedProvider(key string, provider blades.ModelProvider) {
+	if modelProviderCacheSize() >= modelProviderCacheLimit {
+		modelProviderCache.Range(func(k, _ any) bool {
+			modelProviderCache.Delete(k)
+			return true
+		})
+	}
+	modelProviderCache.Store(key, cachedProvider{provider: provider})
+}
+
 func providerCacheKey(cfg data.AIConfig) string {
 	var b strings.Builder
 	b.WriteString(cfg.BaseUrl)
@@ -140,30 +167,16 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 	p := detectChatModelProvider(baseLower, aiConfig.ModelName)
 	logger.SugaredLogger.Infof("createChatModel provider=%d base=%q model=%q", p, aiConfig.BaseUrl, aiConfig.ModelName)
 
-	var provider blades.ModelProvider
-	var err error
-
-	switch p {
-	case providerAnthropic:
-		maxOut := aiConfig.MaxTokens
-		if maxOut <= 0 || maxOut > 32768 {
-			maxOut = 32768
-		}
-		provider = anthropic.NewModel(aiConfig.ModelName, anthropic.Config{
-			APIKey:          aiConfig.ApiKey,
-			BaseURL:         baseURL,
-			MaxOutputTokens: int64(maxOut),
-			Temperature:     temperature,
-		})
-
-	case providerGemini:
-		cc := &genai.ClientConfig{APIKey: aiConfig.ApiKey}
-		provider, err = gemini.NewModel(ctx, aiConfig.ModelName, gemini.Config{
-			ClientConfig: *cc,
-			Temperature:  float32(temperature),
-		})
-
-	default:
+	// OpenAI 兼容分支的构造器：DeepSeek / VolcArk / DashScope /
+	// OpenRouter / Ollama 与裸 OpenAI 兼容网关全部走同一条路（openai-go
+	// 以 BaseURL 为基准拼 /chat/completions）。此前 switch 里只有
+	// Anthropic 与 Gemini 两个显式 case，其余 6 种 provider 常量（含
+	// providerDeepSeek）全靠 default 兜底——detect 能判出 DeepSeek，
+	// switch 却没有它的 case，是死分支。现改为显式列出，default 只作
+	// 防御性兜底（detect 只返回上述 8 个值，理论不可达），行为零变化。
+	// 注意 Ollama 也在其中：它今天同样走 default 的 OpenAI 兼容构造
+	// （BaseURL 原样拼 /chat/completions），本次只显式化、不改行为。
+	buildOpenAICompatible := func() blades.ModelProvider {
 		// max_tokens 是输出 token 上限，不是上下文窗口。
 		// blades/contrib/openai 中 MaxOutputTokens 会自动映射为 params.MaxCompletionTokens。
 		// 对所有 OpenAI 兼容模型统一 cap 到 32768，兼顾安全与实用性。
@@ -189,7 +202,37 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 			ExtraFields:     extraFields,
 			RequestOptions:  reqOpts,
 		}
-		provider = openai.NewModel(aiConfig.ModelName, cfg)
+		return openai.NewModel(aiConfig.ModelName, cfg)
+	}
+
+	var provider blades.ModelProvider
+	var err error
+
+	switch p {
+	case providerAnthropic:
+		maxOut := aiConfig.MaxTokens
+		if maxOut <= 0 || maxOut > 32768 {
+			maxOut = 32768
+		}
+		provider = anthropic.NewModel(aiConfig.ModelName, anthropic.Config{
+			APIKey:          aiConfig.ApiKey,
+			BaseURL:         baseURL,
+			MaxOutputTokens: int64(maxOut),
+			Temperature:     temperature,
+		})
+
+	case providerGemini:
+		cc := &genai.ClientConfig{APIKey: aiConfig.ApiKey}
+		provider, err = gemini.NewModel(ctx, aiConfig.ModelName, gemini.Config{
+			ClientConfig: *cc,
+			Temperature:  float32(temperature),
+		})
+
+	case providerOpenAICompatible, providerVolcArk, providerDashScope, providerOpenRouter, providerOllama, providerDeepSeek:
+		provider = buildOpenAICompatible()
+
+	default:
+		provider = buildOpenAICompatible()
 	}
 
 	if err != nil {
@@ -197,7 +240,7 @@ func createChatModel(ctx context.Context, aiConfig data.AIConfig) (blades.ModelP
 	}
 
 	wrapped := NewModelProviderWrapper(provider, &aiConfig)
-	modelProviderCache.Store(key, cachedProvider{provider: wrapped})
+	storeCachedProvider(key, wrapped)
 	return wrapped, nil
 }
 
