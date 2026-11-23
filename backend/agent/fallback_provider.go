@@ -62,8 +62,22 @@ func IsPermanentAuthError(err error) bool {
 	// 硬性计费/停用信号：即使伴随 429 也视为永久。
 	if strings.Contains(s, "insufficient_quota") ||
 		strings.Contains(s, "balance exhausted") ||
+		strings.Contains(s, "insufficient balance") ||
+		strings.Contains(s, "balance_insufficient") ||
+		strings.Contains(s, "insufficient funds") ||
 		strings.Contains(s, "account_deactivated") ||
+		strings.Contains(s, "account suspended") ||
+		strings.Contains(s, "account_suspended") ||
+		strings.Contains(s, "account disabled") ||
+		strings.Contains(s, "account_disabled") ||
 		strings.Contains(s, "token plan") ||
+		strings.Contains(s, "billing limit") ||
+		strings.Contains(s, "billing hard limit") ||
+		strings.Contains(s, "billing issue") ||
+		strings.Contains(s, "billing error") ||
+		strings.Contains(s, "billing exhausted") ||
+		strings.Contains(s, "402") ||
+		strings.Contains(s, "payment required") ||
 		strings.Contains(s, "2056") || // MiniMax error code for token plan quota exhaustion
 		strings.Contains(s, "欠费") {
 		return true
@@ -75,6 +89,16 @@ func IsPermanentAuthError(err error) bool {
 		strings.Contains(s, "token_rejected") ||
 		strings.Contains(s, "invalid token") ||
 		strings.Contains(s, "invalid_api_key") ||
+		strings.Contains(s, "incorrect api key") ||
+		strings.Contains(s, "incorrect_api_key") ||
+		strings.Contains(s, "api key not valid") ||
+		strings.Contains(s, "authentication failed") ||
+		strings.Contains(s, "auth failed") ||
+		strings.Contains(s, "token expired") ||
+		strings.Contains(s, "key expired") ||
+		strings.Contains(s, "api key expired") ||
+		strings.Contains(s, "invalid credentials") ||
+		strings.Contains(s, "invalid credential") ||
 		strings.Contains(s, "unauthorized") ||
 		strings.Contains(s, "forbidden") {
 		return true
@@ -178,7 +202,18 @@ func cooldownKeyFromName(name string) string {
 func MarkModelPermanentFailure(modelIdentifier string) {
 	globalDeadModelMu.Lock()
 	defer globalDeadModelMu.Unlock()
-	globalDeadModelCooldown[cooldownKeyFromName(modelIdentifier)] = time.Now().Add(30 * time.Minute)
+	// 冷却表只增不减会无界增长：每次写入时顺带清掉已过期的条目。
+	// 条目数上限本就是注册表卡片数（键 = 模型名+网关+凭证指纹），
+	// 但过期条目若永不清理仍是泄漏；写入时清一次是 O(表大小) 的
+	// 廉价操作，且只在永久失败（低频事件）时发生。Go 允许 range
+	// 中 delete，安全。
+	now := time.Now()
+	for k, until := range globalDeadModelCooldown {
+		if !now.Before(until) {
+			delete(globalDeadModelCooldown, k)
+		}
+	}
+	globalDeadModelCooldown[cooldownKeyFromName(modelIdentifier)] = now.Add(30 * time.Minute)
 	logger.SugaredLogger.Warnf("🚫 [Fallback] 模型 [%s] 发生不可逆鉴权或用量耗尽错误，已自动进入全局熔断隔离池 (冷却30分钟)", CleanFallbackModelName(modelIdentifier))
 }
 
@@ -304,6 +339,15 @@ const emptyOutputProbeCap = 256 * 1024
 // 注意：看门狗只看“有没有 chunk 到达”，不看内容——reasoning delta 与空
 // chunk 同样能证明连接存活（blades 的 OpenAI 适配层会把 reasoning
 // delta 转成零 part 消息下发，本层仍能收到回调）。
+//
+// 阈值与其它超时的分层（由内到外）：看门狗首包 120s / 间隔 180s < 卡片
+// 单次请求超时（默认 300s，Serenity 主用卡 600s）< Serenity / 盘前 /
+// 盘后 / ETF 的 genCtx 10 分钟 < ChatWithContext 的 agent ctx 下限 900s。
+// 看门狗永远最先触发，卡片超时与 genCtx 是后备防线；agent ctx 在这些
+// 路径上基本 inert（只在交互聊天里作为整轮 900s 总上限才有意义）。
+// 残余风险是经验值本身：若某网关批量缓冲 reasoning、超过 180s 才 flush
+// 一次，慢思考流会被提前取消并换模型重做思考——降级本身无害（无实质
+// 正文不拼接），只是浪费一次思考。阈值是包级变量，可调。
 var (
 	fallbackFirstChunkTimeout  = 120 * time.Second
 	fallbackStreamStallTimeout = 180 * time.Second
@@ -329,6 +373,17 @@ func hasSubstantiveContent(raw string) bool {
 func streamStallError(stallAfter time.Duration) error {
 	return fmt.Errorf("模型流式响应停滞: %v 内未收到任何数据，疑似网关挂起或上游排队", stallAfter)
 }
+
+// fallbackGenerateTimeout 是 FallbackModelProvider.Generate 里单次非流式
+// 尝试的硬上限（包级变量而非常量，便于单测收窄；生产值 180s）。
+//
+// 目前它是 inert 的：全仓唯一非流式调用方是 reflection_llm.go 的
+// defaultLLMReflectionFunc，自带 60s ctx（比 180s 更紧），外层 deadline
+// 会先到（remain < 180s 时 fbTimeout 直接取 remain，见 Generate）。
+// 若将来有长报告走 Generate 且外层 ctx 比 180s 更宽，单次尝试会在
+// 180s 被掐断后走下一个备用模型——这是有意的逐卡熔断，不是 bug；
+// 真要放宽时调大本变量即可，不必改调用方。
+var fallbackGenerateTimeout = 180 * time.Second
 
 // FallbackModelProvider 实现多模型容灾降级
 // 当主模型执行失败、超时或限流时，自动无缝尝试备用模型列表
@@ -394,8 +449,8 @@ func (f *FallbackModelProvider) Generate(ctx context.Context, req *blades.ModelR
 		curName := names[idx]
 
 		// 备用模型单次请求设置超时保护 (原 60s 硬编码极易导致大模型思考与复杂量化计算超时)
-		// 动态调整为 180s (3分钟)，且不超过外层上下文剩余时限
-		fbTimeout := 180 * time.Second
+		// 动态调整为 fallbackGenerateTimeout (默认 180s)，且不超过外层上下文剩余时限
+		fbTimeout := fallbackGenerateTimeout
 		if deadline, ok := ctx.Deadline(); ok {
 			remain := time.Until(deadline)
 			if remain > 15*time.Second && remain < fbTimeout {
