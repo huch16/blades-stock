@@ -260,18 +260,15 @@ func (a *CronTaskApi) executeStockAnalysis(ctx context.Context, task *models.Cro
 	if prompt == "" {
 		prompt = fmt.Sprintf("全面分析%s(%s)的技术面、基本面、消息面和资金面", params.StockName, params.StockCode)
 	}
-	content := &strings.Builder{}
-	for msg := range NewStockAiAgentApi().ChatWithContext(WithRunKind(ctx, RunKindCron), prompt, params.AiConfigId, &params.SysPromptId, false, 0, params.Thinking, params.AgentMode) {
-		if msg == nil {
-			continue
-		}
-		if msg.ReasoningContent != "" {
-			content.WriteString(msg.ReasoningContent)
-		}
-		content.WriteString(msg.Content)
+	content, streamErr := collectCronAgentStream(NewStockAiAgentApi().ChatWithContext(WithRunKind(ctx, RunKindCron), prompt, params.AiConfigId, &params.SysPromptId, false, 0, params.Thinking, params.AgentMode))
+	// 流错误/空内容不得当作成功报告落库：此前这里原样保存流里拼出的
+	// 任何内容（含 ❌ 开头的错误文本），并返回 nil 记“成功”。
+	if err := checkCronAgentContent(content, streamErr, "股票分析任务"); err != nil {
+		logger.SugaredLogger.Errorf("执行股票分析任务失败：%s", err)
+		return err
 	}
-	logger.SugaredLogger.Infof("content:%s", content.String())
-	data.NewDeepSeekOpenAi(ctx, params.AiConfigId).SaveAIResponseResult(params.StockCode, params.StockName, content.String(), "", prompt)
+	logger.SugaredLogger.Infof("content:%s", content)
+	data.NewDeepSeekOpenAi(ctx, params.AiConfigId).SaveAIResponseResult(params.StockCode, params.StockName, content, "", prompt)
 	return nil
 }
 
@@ -329,7 +326,49 @@ func (a *CronTaskApi) executeStockMonitor(ctx context.Context, task *models.Cron
 }
 
 func (a *CronTaskApi) executeCustomTask(ctx context.Context, task *models.CronTask) error {
-	logger.SugaredLogger.Infof("执行自定义任务：%s", task.Name)
+	// 未实现：此前这里只打一条日志就返回 nil，任务会被记录为“成功”，
+	// 实际什么都没做。诚实返回错误，让运行记录反映失败，而不是用
+	// 假成功掩盖缺失的功能（与 fund_analysis / stock_monitor 同类）。
+	return fmt.Errorf("自定义任务未实现（custom），请先实现后再启用该类型任务")
+}
+
+// collectCronAgentStream 消费定时任务 agent 流，汇总正文并识别流错误。
+// 与 collectReportStream（market_lifecycle.go）同样的标记：内容以 ❌
+// 开头或包含“Agent 调用失败”即为流错误文本，不得当作成功报告落库。
+// 返回（汇总正文，首个流错误；无错误时流错误为空）。
+func collectCronAgentStream(ch chan *StreamMessage) (string, string) {
+	content := &strings.Builder{}
+	var streamErr string
+	for msg := range ch {
+		if msg == nil {
+			continue
+		}
+		if msg.ReasoningContent != "" {
+			content.WriteString(msg.ReasoningContent)
+		}
+		if msg.Content == "" {
+			continue
+		}
+		if strings.HasPrefix(msg.Content, "❌") || strings.Contains(msg.Content, "Agent 调用失败") {
+			if streamErr == "" {
+				streamErr = msg.Content
+			}
+			continue
+		}
+		content.WriteString(msg.Content)
+	}
+	return content.String(), streamErr
+}
+
+// checkCronAgentContent 校验汇总后的 agent 正文：流错误或空内容都
+// 必须返回错误、不落库，否则一次失败的生成会被记为“成功”报告。
+func checkCronAgentContent(content, streamErr, label string) error {
+	if streamErr != "" {
+		return fmt.Errorf("%s agent 流错误：%s", label, streamErr)
+	}
+	if strings.TrimSpace(content) == "" {
+		return fmt.Errorf("%s 未产出任何内容", label)
+	}
 	return nil
 }
 
@@ -354,22 +393,14 @@ func (a *CronTaskApi) executeMarketAnalysis(ctx context.Context, task *models.Cr
 	if prompt == "" {
 		prompt = "分析总结市场资讯，找出潜在投资机会"
 	}
-	content := &strings.Builder{}
-
-	ch := NewStockAiAgentApi().ChatWithContext(WithRunKind(ctx, RunKindCron), prompt, params.AiConfigId, &params.SysPromptId, false, 0, false, params.AgentMode)
-	for msg := range ch {
-		// 与 executeStockAnalysis 同样的守卫：流里会出现 nil 消息，
-		// 不判空直接读 msg.ReasoningContent 会 panic。
-		if msg == nil {
-			continue
-		}
-		if msg.ReasoningContent != "" {
-			content.WriteString(msg.ReasoningContent)
-		}
-		content.WriteString(msg.Content)
+	content, streamErr := collectCronAgentStream(NewStockAiAgentApi().ChatWithContext(WithRunKind(ctx, RunKindCron), prompt, params.AiConfigId, &params.SysPromptId, false, 0, false, params.AgentMode))
+	// 与 executeStockAnalysis 同样的守卫：流错误/空内容不得落库记成功。
+	if err := checkCronAgentContent(content, streamErr, "市场分析任务"); err != nil {
+		logger.SugaredLogger.Errorf("执行市场分析任务失败：%s", err)
+		return err
 	}
-	logger.SugaredLogger.Infof("content:%s", content.String())
-	data.NewDeepSeekOpenAi(ctx, params.AiConfigId).SaveAIResponseResult("市场分析", "市场分析", content.String(), "", prompt)
+	logger.SugaredLogger.Infof("content:%s", content)
+	data.NewDeepSeekOpenAi(ctx, params.AiConfigId).SaveAIResponseResult("市场分析", "市场分析", content, "", prompt)
 	return nil
 }
 

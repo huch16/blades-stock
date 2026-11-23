@@ -82,3 +82,98 @@ func TestCalculateNextRunTime_ValidExpression(t *testing.T) {
 		t.Errorf("next run should be in the future, got %v", next)
 	}
 }
+
+// TestExecuteCustomTask_NotImplemented 验证自定义任务未实现时返回
+// 错误而不是静默记“成功”（与 fund_analysis / stock_monitor 同类）。
+func TestExecuteCustomTask_NotImplemented(t *testing.T) {
+	api := &CronTaskApi{}
+	task := &models.CronTask{Params: `{}`}
+	err := api.executeCustomTask(context.Background(), task)
+	if err == nil {
+		t.Fatal("executeCustomTask should return a not-implemented error")
+	}
+	if !strings.Contains(err.Error(), "未实现") {
+		t.Errorf("error should say not implemented, got: %v", err)
+	}
+}
+
+func chanOfCronMsgs(msgs ...*StreamMessage) chan *StreamMessage {
+	ch := make(chan *StreamMessage, len(msgs))
+	for _, m := range msgs {
+		ch <- m
+	}
+	close(ch)
+	return ch
+}
+
+// TestCollectCronAgentStream_Markers 验证流错误标记与 collectReportStream
+// 一致：❌ 开头或含“Agent 调用失败”的内容记为流错误、不进正文；
+// nil 消息跳过；思考内容照常汇总。
+func TestCollectCronAgentStream_Markers(t *testing.T) {
+	content, streamErr := collectCronAgentStream(chanOfCronMsgs(
+		&StreamMessage{ReasoningContent: "思考…"},
+		&StreamMessage{Content: "正文第一段"},
+		nil,
+		&StreamMessage{Content: "❌ 尚未配置任何 AI 模型"},
+		&StreamMessage{Content: "Agent 调用失败：上游 500"},
+		&StreamMessage{Content: "正文第二段"},
+	))
+	if streamErr == "" || !strings.Contains(streamErr, "尚未配置任何 AI 模型") {
+		t.Errorf("first stream error should be kept, got %q", streamErr)
+	}
+	if content != "思考…正文第一段正文第二段" {
+		t.Errorf("error text must not be saved as content, got %q", content)
+	}
+
+	content, streamErr = collectCronAgentStream(chanOfCronMsgs(
+		&StreamMessage{Content: "正常正文"},
+	))
+	if streamErr != "" || content != "正常正文" {
+		t.Errorf("normal stream should pass through, got content=%q err=%q", content, streamErr)
+	}
+}
+
+// TestCheckCronAgentContent 验证流错误或空内容都拒绝落库。
+func TestCheckCronAgentContent(t *testing.T) {
+	if err := checkCronAgentContent("正常报告", "", "股票分析任务"); err != nil {
+		t.Errorf("normal content should pass, got %v", err)
+	}
+	if err := checkCronAgentContent("半份正文", "❌ 流中断", "股票分析任务"); err == nil {
+		t.Error("stream error should fail")
+	}
+	if err := checkCronAgentContent("   ", "", "股票分析任务"); err == nil {
+		t.Error("empty content should fail")
+	}
+	if err := checkCronAgentContent("", "", "市场分析任务"); err == nil {
+		t.Error("empty content should fail")
+	}
+}
+
+// TestExecuteStockAnalysis_NoConfigReturnsError 回归测试：无 AI 配置时
+// agent 流产出 ❌ 错误文本，旧实现会把它原样存为分析报告并返回 nil
+// 记“成功”；修复后应返回流错误、不落库。
+func TestExecuteStockAnalysis_NoConfigReturnsError(t *testing.T) {
+	api := &CronTaskApi{}
+	task := &models.CronTask{Params: `{"stockCode":"600519","stockName":"贵州茅台","aiConfigId":0}`}
+	err := api.executeStockAnalysis(context.Background(), task)
+	if err == nil {
+		t.Fatal("executeStockAnalysis with no AI config should return a stream error, not nil")
+	}
+	if !strings.Contains(err.Error(), "流错误") || !strings.Contains(err.Error(), "尚未配置任何 AI 模型") {
+		t.Errorf("error should carry the stream error, got: %v", err)
+	}
+}
+
+// TestExecuteMarketAnalysis_NoConfigReturnsError 同上：市场分析执行器
+// 的守卫接线也必须生效。
+func TestExecuteMarketAnalysis_NoConfigReturnsError(t *testing.T) {
+	api := &CronTaskApi{}
+	task := &models.CronTask{Params: `{"aiConfigId":0}`}
+	err := api.executeMarketAnalysis(context.Background(), task)
+	if err == nil {
+		t.Fatal("executeMarketAnalysis with no AI config should return a stream error, not nil")
+	}
+	if !strings.Contains(err.Error(), "流错误") || !strings.Contains(err.Error(), "尚未配置任何 AI 模型") {
+		t.Errorf("error should carry the stream error, got: %v", err)
+	}
+}
