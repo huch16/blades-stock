@@ -27,7 +27,6 @@ type SkillEmbedding struct {
 func (SkillEmbedding) TableName() string { return "skill_embeddings" }
 
 type SkillEmbeddingService struct {
-	retr    Retriever // optional external retriever for RAG
 	es      *EmbeddingService
 	enabled bool
 	mu      sync.RWMutex
@@ -45,7 +44,17 @@ var (
 	skillEmbedMu  sync.Mutex
 )
 
+// GetSkillEmbeddingService 返回单例技能语义匹配服务。
+//
+// retr 是为未来 RAG 检索器预留的扩展缝，当前恒传 nil（唯一调用方
+// agent.go:377）且有意忽略：仓库内 Retriever 没有任何实现，
+// EmbeddingService 也只有 EmbedText 而无 Search/IndexDocuments 等
+// 方法，matchSkillsViaRetriever 及其三处回退分支在生产上不可达，
+// 已于第四轮删除。签名保留 retr 是因为 agent.go 只读不改；将来
+// 真接通检索器时再把参数接回结构体。retriever.go 的 Retriever
+// 接口与 Document 类型作为预留扩展缝保留，见其文件头注释。
 func GetSkillEmbeddingService(es *EmbeddingService, retr Retriever) *SkillEmbeddingService {
+	_ = retr // 预留参数，当前无实现，不参与匹配
 	enabled := es != nil && es.IsConfigured()
 
 	skillEmbedMu.Lock()
@@ -63,7 +72,6 @@ func GetSkillEmbeddingService(es *EmbeddingService, retr Retriever) *SkillEmbedd
 
 	skillEmbedSvc = &SkillEmbeddingService{
 		es:            es,
-		retr:          retr,
 		embeddings:    make(map[uint][]float32),
 		contentHashes: make(map[uint]string),
 	}
@@ -317,17 +325,11 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) (matched 
 	// (keyword hits above are deterministic and do not go through
 	// retrieval). The defer also covers the "embeddings unavailable /
 	// embed failed" early returns — those are genuine retrieval misses.
-	// （外部 Retriever 回退路径在生产上不可达：GetSkillEmbeddingService
-	// 恒传 retr=nil；即使将来接通，命中与否仍按本次检索结果如实记录。）
 	semanticStart := time.Now()
 	defer func() {
 		RecordRetrieverHit(context.Background(), "skill_embedding", len(matched) > 0, time.Since(semanticStart))
 	}()
 	if !s.enabled || s.es == nil {
-		// Fallback to external retriever if available
-		if s.retr != nil && s.retr.IsReady() {
-			return s.matchSkillsViaRetriever(question, topK)
-		}
 		return nil
 	}
 
@@ -335,10 +337,6 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) (matched 
 	embCount := len(s.embeddings)
 	s.mu.RUnlock()
 	if embCount == 0 {
-		// Fallback to external retriever if available
-		if s.retr != nil && s.retr.IsReady() {
-			return s.matchSkillsViaRetriever(question, topK)
-		}
 		logger.SugaredLogger.Warnf("question %q 关键词未命中且无skill embedding可用（刷新失败），无技能匹配", truncateQuestion(question))
 		return nil
 	}
@@ -347,10 +345,6 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) (matched 
 	vec, err := s.es.Embed(question)
 	if err != nil {
 		logger.SugaredLogger.Warnf("question embedding失败，关键词未命中，无技能匹配: %v", err)
-		// Fallback to external retriever if available
-		if s.retr != nil && s.retr.IsReady() {
-			return s.matchSkillsViaRetriever(question, topK)
-		}
 		return nil
 	}
 
@@ -385,51 +379,6 @@ func (s *SkillEmbeddingService) MatchSkills(question string, topK int) (matched 
 
 	for _, sc := range scoredSkills {
 		matched = append(matched, sc.skill)
-	}
-	return matched
-}
-
-// matchSkillsViaRetriever uses the external retriever to find relevant skills
-func (s *SkillEmbeddingService) matchSkillsViaRetriever(question string, topK int) []models.Skill {
-	skills := data.NewSkillApi().GetEnabledSkills()
-	if len(skills) == 0 {
-		return nil
-	}
-
-	ctx := context.Background()
-	vec, err := s.retr.EmbedText(ctx, question)
-	if err != nil {
-		logger.SugaredLogger.Warnf("retriever EmbedText failed: %v", err)
-		return nil
-	}
-
-	docs, err := s.retr.Search(ctx, vec, topK)
-	if err != nil {
-		logger.SugaredLogger.Warnf("retriever Search failed: %v", err)
-		return nil
-	}
-
-	// Map retrieved documents back to skills by source/id
-	var matched []models.Skill
-	skillMap := make(map[uint]models.Skill)
-	for _, sk := range skills {
-		skillMap[sk.ID] = sk
-	}
-
-	for _, doc := range docs {
-		if doc.Source == "skill" {
-			if idStr, ok := doc.Meta["skill_id"]; ok {
-				var id uint
-				fmt.Sscanf(idStr, "%d", &id)
-				if skill, ok := skillMap[id]; ok {
-					matched = append(matched, skill)
-				}
-			}
-		}
-	}
-
-	if len(matched) > topK {
-		matched = matched[:topK]
 	}
 	return matched
 }

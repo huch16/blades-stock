@@ -1,3 +1,12 @@
+// Package agent — Retriever 预留扩展缝。
+//
+// Retriever 接口与 Document 类型是为未来 RAG 检索器预留的扩展点，
+// 当前仓库内没有任何实现：EmbeddingService 只有 EmbedText，没有
+// Search/IndexDocuments/DeleteDocuments/Name/IsReady；唯一调用方
+// agent.go:377 恒传 retr=nil，skill_embedding.go 的回退分支已于
+// 第四轮删除。不要把这里当作已接通的向量检索——真要接 RAG 时，
+// 再实现该接口并把 GetSkillEmbeddingService 的 retr 参数接回
+// SkillEmbeddingService 结构体。
 package agent
 
 import (
