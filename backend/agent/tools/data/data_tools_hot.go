@@ -12,7 +12,6 @@ import (
 
 	"github.com/duke-git/lancet/v2/convertor"
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func RegisterHotTools() []bladesTools.Tool {
@@ -35,7 +34,7 @@ func RegisterHotTools() []bladesTools.Tool {
 				CostPrice float64 `md:"成本价格"`
 				Volume    int64   `md:"持仓数量"`
 			}
-			groupId := int(gjson.Get(args, "groupId").Int())
+			groupId, _ := types.ExtractIntParam(args, "groupId", "group_id", "group")
 			var rows []followedRow
 			if groupId > 0 {
 				groupStocks := data.NewStockGroupApi(db.Dao).GetGroupStockByGroupId(groupId)
@@ -81,11 +80,11 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请输入股票代码", nil
 			}
-			codes := parseStockCodesFromArgs(args, "stockCode")
+			codes := types.ExtractStockCodes(args)
 			if len(codes) == 0 {
 				return "请输入股票代码", nil
 			}
@@ -136,8 +135,8 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			marketType := gjson.Get(args, "marketType").String()
-			size := int(gjson.Get(args, "size").Int())
+			marketType := types.ExtractStringParam(args, "marketType", "market_type", "market")
+			size, _ := types.ExtractIntParam(args, "size", "count", "limit")
 			if size <= 0 {
 				size = 20
 			}
@@ -190,7 +189,7 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			size := int(gjson.Get(args, "size").Int())
+			size, _ := types.ExtractIntParam(args, "size", "count", "limit")
 			if size <= 0 {
 				size = 20
 			}
@@ -238,9 +237,9 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			fenlei := gjson.Get(args, "fenlei").String()
-			sort := gjson.Get(args, "sort").String()
-			limit := int(gjson.Get(args, "limit").Int())
+			fenlei := types.ExtractStringParam(args, "fenlei", "category", "type")
+			sort := types.ExtractStringParam(args, "sort", "order", "sortBy")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if limit <= 0 {
 				limit = 20
 			}
@@ -293,7 +292,7 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			date := gjson.Get(args, "date").String()
+			date := types.ExtractStringParam(args, "date", "targetDate", "day", "tradeDate")
 			if date == "" {
 				date = time.Now().Format("2006-01-02")
 			}
@@ -344,7 +343,7 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			dataType := gjson.Get(args, "dataType").String()
+			dataType := types.ExtractStringParam(args, "dataType", "data_type", "type")
 			if dataType == "" {
 				return "请指定数据类型", nil
 			}
@@ -459,7 +458,7 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			yearMonth := gjson.Get(args, "yearMonth").String()
+			yearMonth := types.ExtractStringParam(args, "yearMonth", "year_month", "month")
 			if yearMonth == "" {
 				yearMonth = time.Now().Format("2006-01")
 			}
@@ -510,7 +509,7 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCodes := gjson.Get(args, "stockCodes").String()
+			stockCodes := strings.Join(types.ExtractStockCodes(args), ",")
 			if stockCodes == "" {
 				return "请输入股票代码", nil
 			}
@@ -551,7 +550,7 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请输入股票代码", nil
 			}
@@ -592,7 +591,7 @@ func RegisterHotTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请输入股票代码", nil
 			}

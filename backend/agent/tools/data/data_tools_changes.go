@@ -13,7 +13,6 @@ import (
 	"blades-stock/backend/util"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func RegisterChangesTools() []bladesTools.Tool {
@@ -35,14 +34,14 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			changeTypesStr := gjson.Get(args, "changeTypes").String()
-			pageSize := int(gjson.Get(args, "pageSize").Int())
+			changeTypesList := types.ExtractStringListParam(args, "changeTypes", "change_types", "types")
+			pageSize, _ := types.ExtractIntParam(args, "pageSize", "page_size")
 			if pageSize <= 0 {
 				pageSize = 20
 			}
 
 			var changeTypes []int
-			if changeTypesStr != "" {
+			if len(changeTypesList) > 0 {
 				typeMap := map[string]int{
 					"火箭发射": 8201, "快速反弹": 8202, "大笔买入": 8193, "封涨停板": 4,
 					"打开跌停板": 32, "有大买盘": 64, "竞价上涨": 8207, "高开5日线": 8209,
@@ -51,7 +50,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 					"打开涨停板": 16, "有大卖盘": 128, "竞价下跌": 8208, "低开5日线": 8210,
 					"向下缺口": 8212, "60日新低": 8214, "60日大幅下跌": 8216,
 				}
-				for _, t := range strings.Split(changeTypesStr, ",") {
+				for _, t := range changeTypesList {
 					t = strings.TrimSpace(t)
 					if code, ok := typeMap[t]; ok {
 						changeTypes = append(changeTypes, code)
@@ -151,22 +150,23 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			stockName := gjson.Get(args, "stockName").String()
-			changeType := int(gjson.Get(args, "changeType").Int())
-			typeName := gjson.Get(args, "typeName").String()
-			startDate := gjson.Get(args, "startDate").String()
-			endDate := gjson.Get(args, "endDate").String()
-			page := int(gjson.Get(args, "page").Int())
-			pageSize := int(gjson.Get(args, "pageSize").Int())
-			startTime := gjson.Get(args, "startTime").String()
-			endTime := gjson.Get(args, "endTime").String()
-			minVolume := gjson.Get(args, "minVolume").Int()
-			minAmount := gjson.Get(args, "minAmount").Float()
-			minChangeRate := gjson.Get(args, "minChangeRate").Float()
-			maxChangeRate := gjson.Get(args, "maxChangeRate").Float()
-			industry := gjson.Get(args, "industry").String()
-			concept := gjson.Get(args, "concept").String()
+			stockCode := types.ExtractStockCode(args)
+			stockName := types.ExtractStringParam(args, "stockName", "stock_name", "name")
+			changeType, _ := types.ExtractIntParam(args, "changeType", "change_type", "type")
+			typeName := types.ExtractStringParam(args, "typeName", "type_name", "type")
+			startDate := types.ExtractStringParam(args, "startDate", "start_date")
+			endDate := types.ExtractStringParam(args, "endDate", "end_date")
+			page, _ := types.ExtractIntParam(args, "page", "page_number")
+			pageSize, _ := types.ExtractIntParam(args, "pageSize", "page_size")
+			startTime := types.ExtractStringParam(args, "startTime", "start_time")
+			endTime := types.ExtractStringParam(args, "endTime", "end_time")
+			minVolumeInt, _ := types.ExtractIntParam(args, "minVolume", "min_volume")
+			minVolume := int64(minVolumeInt)
+			minAmount, _ := types.ExtractFloatParam(args, "minAmount", "min_amount")
+			minChangeRate, _ := types.ExtractFloatParam(args, "minChangeRate", "min_change_rate")
+			maxChangeRate, _ := types.ExtractFloatParam(args, "maxChangeRate", "max_change_rate")
+			industry := types.ExtractStringParam(args, "industry", "sector")
+			concept := types.ExtractStringParam(args, "concept", "theme")
 
 			if page <= 0 {
 				page = 1
@@ -250,7 +250,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			days := int(gjson.Get(args, "days").Int())
+			days, _ := types.ExtractIntParam(args, "days", "dayCount")
 			if days <= 0 {
 				days = 30
 			}
@@ -300,11 +300,11 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			days := int(gjson.Get(args, "days").Int())
+			days, _ := types.ExtractIntParam(args, "days", "dayCount")
 			if days <= 0 {
 				days = 1
 			}
-			topN := int(gjson.Get(args, "topN").Int())
+			topN, _ := types.ExtractIntParam(args, "topN", "top_n", "top", "limit")
 			if topN <= 0 {
 				topN = 20
 			}
@@ -391,9 +391,9 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			dimension := gjson.Get(args, "dimension").String()
-			name := gjson.Get(args, "name").String()
-			days := int(gjson.Get(args, "days").Int())
+			dimension := types.ExtractStringParam(args, "dimension", "dim")
+			name := types.ExtractStringParam(args, "name")
+			days, _ := types.ExtractIntParam(args, "days", "dayCount")
 			if dimension == "" || name == "" {
 				return "请提供dimension和name参数", nil
 			}
@@ -439,7 +439,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			date := gjson.Get(args, "date").String()
+			date := types.ExtractStringParam(args, "date", "targetDate", "day", "tradeDate")
 			if date == "" {
 				return "请提供date参数", nil
 			}
@@ -485,8 +485,8 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			query := gjson.Get(args, "query").String()
-			reportDate := gjson.Get(args, "reportDate").String()
+			query := types.ExtractStringParam(args, "query", "keyword", "searchWords", "q")
+			reportDate := types.ExtractStringParam(args, "reportDate", "report_date", "date")
 			if query == "" {
 				return "请输入股票名称或代码", nil
 			}
@@ -511,8 +511,8 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			question := gjson.Get(args, "question").String()
-			deepThink := gjson.Get(args, "deepThink").Bool()
+			question := types.ExtractStringParam(args, "question", "query", "keyword")
+			deepThink, _ := types.ExtractBoolParam(args, "deepThink", "deep_think")
 			if question == "" {
 				return "请输入您想问的问题", nil
 			}
@@ -532,7 +532,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			query := gjson.Get(args, "query").String()
+			query := types.ExtractStringParam(args, "query", "keyword", "searchWords", "q")
 			if query == "" {
 				return "请输入行业关键词", nil
 			}
@@ -552,7 +552,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			query := gjson.Get(args, "query").String()
+			query := types.ExtractStringParam(args, "query", "keyword", "searchWords", "q")
 			if query == "" {
 				return "请输入股票名称/代码或行业关键词", nil
 			}
@@ -572,7 +572,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			query := gjson.Get(args, "query").String()
+			query := types.ExtractStringParam(args, "query", "keyword", "searchWords", "q")
 			if query == "" {
 				return "请输入查询内容", nil
 			}
@@ -592,7 +592,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			query := gjson.Get(args, "query").String()
+			query := types.ExtractStringParam(args, "query", "keyword", "searchWords", "q")
 			if query == "" {
 				return "请输入搜索内容", nil
 			}
@@ -632,7 +632,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 				},
 			},
 			func(args string) (string, error) {
-				stockCode := gjson.Get(args, "stockCode").String()
+				stockCode := types.ExtractStockCode(args)
 				if stockCode == "" {
 					return "请输入股票代码", nil
 				}
@@ -652,7 +652,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			query := gjson.Get(args, "query").String()
+			query := types.ExtractStringParam(args, "query", "keyword", "searchWords", "q")
 			if query == "" {
 				return "请输入公司名称或股票代码", nil
 			}
@@ -671,7 +671,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			question := gjson.Get(args, "question").String()
+			question := types.ExtractStringParam(args, "question", "query", "keyword")
 			if question == "" {
 				return "请输入热点描述", nil
 			}
@@ -690,7 +690,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			date := gjson.Get(args, "date").String()
+			date := types.ExtractStringParam(args, "date", "targetDate", "day", "tradeDate")
 			// Check trading day
 			if date == "" && !data.IsTodayTradingDay() {
 				return "⚠️ 非交易日（周末或节假日），无涨停板块数据。请指定一个交易日日期（如 2026-07-04）", nil
@@ -790,7 +790,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			date := gjson.Get(args, "date").String()
+			date := types.ExtractStringParam(args, "date", "targetDate", "day", "tradeDate")
 			// Check trading day
 			if date == "" && !data.IsTodayTradingDay() {
 				return "⚠️ 非交易日（周末或节假日），无涨停板块数据。请指定一个交易日日期（如 2026-07-04）", nil
@@ -873,8 +873,8 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			date := gjson.Get(args, "date").String()
-			limit := int(gjson.Get(args, "limit").Int())
+			date := types.ExtractStringParam(args, "date", "targetDate", "day", "tradeDate")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if limit <= 0 {
 				limit = 30
 			}
@@ -937,7 +937,7 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			date := gjson.Get(args, "date").String()
+			date := types.ExtractStringParam(args, "date", "targetDate", "day", "tradeDate")
 			// Check trading day
 			if date == "" && !data.IsTodayTradingDay() {
 				return "⚠️ 非交易日（周末或节假日），无涨停板块数据。请指定一个交易日日期（如 2026-07-04）", nil
@@ -1009,11 +1009,11 @@ func RegisterChangesTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			plateName := gjson.Get(args, "plate_name").String()
+			plateName := types.ExtractStringParam(args, "plate_name", "plateName", "name")
 			if plateName == "" {
 				return "请提供板块名称参数 plate_name", nil
 			}
-			date := gjson.Get(args, "date").String()
+			date := types.ExtractStringParam(args, "date", "targetDate", "day", "tradeDate")
 			dataMap, err := fetchUplimitData(date)
 			if err != nil {
 				return err.Error(), nil

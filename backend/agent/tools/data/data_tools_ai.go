@@ -11,7 +11,6 @@ import (
 	"blades-stock/backend/util"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func RegisterAITools() []bladesTools.Tool {
@@ -63,14 +62,14 @@ func RegisterAITools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			stockName := gjson.Get(args, "stockName").String()
-			question := gjson.Get(args, "question").String()
-			modelName := gjson.Get(args, "modelName").String()
-			startDate := gjson.Get(args, "startDate").String()
-			endDate := gjson.Get(args, "endDate").String()
-			page := int(gjson.Get(args, "page").Int())
-			pageSize := int(gjson.Get(args, "pageSize").Int())
+			stockCode := types.ExtractStockCode(args)
+			stockName := types.ExtractStringParam(args, "stockName", "stock_name", "name")
+			question := types.ExtractStringParam(args, "question", "query", "keyword")
+			modelName := types.ExtractStringParam(args, "modelName", "model_name", "model")
+			startDate := types.ExtractStringParam(args, "startDate", "start_date")
+			endDate := types.ExtractStringParam(args, "endDate", "end_date")
+			page, _ := types.ExtractIntParam(args, "page", "page_number")
+			pageSize, _ := types.ExtractIntParam(args, "pageSize", "page_size")
 
 			if page <= 0 {
 				page = 1
@@ -138,7 +137,8 @@ func RegisterAITools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			id := uint(gjson.Get(args, "id").Int())
+			idInt, _ := types.ExtractIntParam(args, "id", "recordId")
+			id := uint(idInt)
 			if id == 0 {
 				return "请提供有效的分析报告ID", nil
 			}
@@ -175,7 +175,7 @@ func RegisterAITools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请提供股票代码", nil
 			}
@@ -210,7 +210,7 @@ func RegisterAITools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			message := gjson.Get(args, "message").String()
+			message := types.ExtractStringParam(args, "message", "text", "content")
 			if message == "" {
 				return "消息内容不能为空", nil
 			}
@@ -235,8 +235,8 @@ func RegisterAITools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			title := gjson.Get(args, "title").String()
-			message := gjson.Get(args, "message").String()
+			title := types.ExtractStringParam(args, "title", "name", "subject")
+			message := types.ExtractStringParam(args, "message", "text", "content")
 			if title == "" || message == "" {
 				return "标题和消息内容不能为空", nil
 			}

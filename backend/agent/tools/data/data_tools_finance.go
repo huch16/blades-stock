@@ -9,7 +9,6 @@ import (
 	"blades-stock/backend/util"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func RegisterFinanceTools() []bladesTools.Tool {
@@ -26,7 +25,7 @@ func RegisterFinanceTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			news := data.NewMarketNewsApi()
 			res := news.StockResearchReport(stockCode, 30)
 			var md strings.Builder
@@ -71,7 +70,7 @@ func RegisterFinanceTools() []bladesTools.Tool {
 			if !data.IsTodayTradingDay() {
 				return "⚠️ 非交易日（周末或节假日），无热门股票数据", nil
 			}
-			pageSize := gjson.Get(args, "pageSize").String()
+			pageSize := types.ExtractStringParam(args, "pageSize", "page_size")
 			pageSizeNum := int64(50)
 			if pageSize != "" {
 				if d, err := parseInt(pageSize); err == nil {
@@ -126,10 +125,10 @@ func RegisterFinanceTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			mutualType := gjson.Get(args, "mutualType").String()
-			tradeDate := gjson.Get(args, "tradeDate").String()
-			page := int(gjson.Get(args, "page").Int())
-			pageSize := int(gjson.Get(args, "pageSize").Int())
+			mutualType := types.ExtractStringParam(args, "mutualType", "mutual_type", "type")
+			tradeDate := types.ExtractStringParam(args, "tradeDate", "trade_date", "date")
+			page, _ := types.ExtractIntParam(args, "page", "page_number")
+			pageSize, _ := types.ExtractIntParam(args, "pageSize", "page_size")
 			if page == 0 {
 				page = 1
 			}
@@ -154,7 +153,7 @@ func RegisterFinanceTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			result := data.NewStockDataApi().GetStockFinancialInfo(stockCode)
 			md := util.MarkdownTableWithTitle("股票"+stockCode+"财务报表信息", result.Result.Data)
 			return md, nil
@@ -172,7 +171,7 @@ func RegisterFinanceTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			result := data.NewStockDataApi().GetStockHolderNum(stockCode)
 			md := util.MarkdownTableWithTitle("股票"+stockCode+"股东人数信息", result.Result.Data)
 			return md, nil
@@ -190,7 +189,7 @@ func RegisterFinanceTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			result := data.NewStockDataApi().GetStockHistoryMoneyData(stockCode)
 			md := util.MarkdownTableWithTitle("股票"+stockCode+"历史资金流向数据", result)
 			return md, nil
@@ -208,7 +207,7 @@ func RegisterFinanceTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			result := data.NewStockDataApi().GetStockRZRQInfo(stockCode)
 			md := util.MarkdownTableWithTitle(stockCode+" 融资融券信息", result.Result.Data)
 			return md, nil
@@ -226,7 +225,7 @@ func RegisterFinanceTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			bkName := gjson.Get(args, "bkName").String()
+			bkName := types.ExtractStringParam(args, "bkName", "bk_name", "name")
 			result := data.NewStockDataApi().GetIndustryValuation(bkName)
 			md := util.MarkdownTableWithTitle(bkName+"行业估值", result.Result.Data)
 			return md, nil

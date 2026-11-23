@@ -12,7 +12,6 @@ import (
 	"github.com/duke-git/lancet/v2/convertor"
 	"github.com/duke-git/lancet/v2/random"
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func RegisterScreenTools() []bladesTools.Tool {
@@ -209,9 +208,9 @@ func RegisterScreenTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			keyword := gjson.Get(args, "keyword").String()
-			page := int(gjson.Get(args, "page").Int())
-			pageSize := int(gjson.Get(args, "pageSize").Int())
+			keyword := types.ExtractStringParam(args, "keyword", "query", "searchWords", "keyWord")
+			page, _ := types.ExtractIntParam(args, "page", "page_number")
+			pageSize, _ := types.ExtractIntParam(args, "pageSize", "page_size")
 			if page <= 0 {
 				page = 1
 			}
@@ -219,41 +218,52 @@ func RegisterScreenTools() []bladesTools.Tool {
 				pageSize = 20
 			}
 
+			// 结构体字面量里不能直接用返回 (bool, bool) / (int, bool) 的
+			// helper，用两个小闭包适配；键名同时接受 snake_case 别名。
+			flag := func(keys ...string) bool {
+				v, _ := types.ExtractBoolParam(args, keys...)
+				return v
+			}
+			num := func(keys ...string) int {
+				v, _ := types.ExtractIntParam(args, keys...)
+				return v
+			}
+
 			indicators := models.TechnicalIndicators{
-				MACDGOLDENFORK:     gjson.Get(args, "macdGoldenFork").Bool(),
-				KDJGOLDENFORK:      gjson.Get(args, "kdjGoldenFork").Bool(),
-				BREAKTHROUGH:       gjson.Get(args, "breakThrough").Bool(),
-				LOWFUNDSINFLOW:     gjson.Get(args, "lowFundsInflow").Bool(),
-				HIGHFUNDSOUTFLOW:   gjson.Get(args, "highFundsOutflow").Bool(),
-				BREAKUPMA5DAYS:     gjson.Get(args, "breakUpMa5Days").Bool(),
-				LONGAVGARRAY:       gjson.Get(args, "longAvgArray").Bool(),
-				SHORTAVGARRAY:      gjson.Get(args, "shortAvgArray").Bool(),
-				UPPERLARGEVOLUME:   gjson.Get(args, "upperLargeVolume").Bool(),
-				DOWNNARROWVOLUME:   gjson.Get(args, "downNarrowVolume").Bool(),
-				ONEDAYANGLINE:      gjson.Get(args, "oneDayangLine").Bool(),
-				TWODAYANGLINES:     gjson.Get(args, "twoDayangLines").Bool(),
-				RISESUN:            gjson.Get(args, "riseSun").Bool(),
-				POWERFULGUN:        gjson.Get(args, "powerFulgun").Bool(),
-				RESTOREJUSTICE:     gjson.Get(args, "restoreJustice").Bool(),
-				DOWN7DAYS:          gjson.Get(args, "down7Days").Bool(),
-				UPPER8DAYS:         gjson.Get(args, "upper8Days").Bool(),
-				UPPER9DAYS:         gjson.Get(args, "upper9Days").Bool(),
-				UPPER4DAYS:         gjson.Get(args, "upper4Days").Bool(),
-				HEAVENRULE:         gjson.Get(args, "heavenRule").Bool(),
-				UPSIDEVOLUME:       gjson.Get(args, "upsideVolume").Bool(),
-				BEARISHENGULFING:   gjson.Get(args, "bearishEngulfing").Bool(),
-				REVERSINGHAMMER:    gjson.Get(args, "reversingHammer").Bool(),
-				SHOOTINGSTAR:       gjson.Get(args, "shootingStar").Bool(),
-				EVENINGSTAR:        gjson.Get(args, "eveningStar").Bool(),
-				FIRSTDAWN:          gjson.Get(args, "firstDawn").Bool(),
-				PREGNANT:           gjson.Get(args, "pregnant").Bool(),
-				BLACKCLOUDTOPS:     gjson.Get(args, "blackCloudTops").Bool(),
-				MORNINGSTAR:        gjson.Get(args, "morningStar").Bool(),
-				NARROWFINISH:       gjson.Get(args, "narrowFinish").Bool(),
-				UPP_DAYS:           int(gjson.Get(args, "uppDays").Int()),
-				CONCERN_RANK_7DAYS: int(gjson.Get(args, "concernRank7Days").Int()),
-				UPNDAY:             int(gjson.Get(args, "upNday").Int()),
-				DOWNNDAY:           int(gjson.Get(args, "downNday").Int()),
+				MACDGOLDENFORK:     flag("macdGoldenFork", "macd_golden_fork"),
+				KDJGOLDENFORK:      flag("kdjGoldenFork", "kdj_golden_fork"),
+				BREAKTHROUGH:       flag("breakThrough", "break_through"),
+				LOWFUNDSINFLOW:     flag("lowFundsInflow", "low_funds_inflow"),
+				HIGHFUNDSOUTFLOW:   flag("highFundsOutflow", "high_funds_outflow"),
+				BREAKUPMA5DAYS:     flag("breakUpMa5Days", "break_up_ma5_days"),
+				LONGAVGARRAY:       flag("longAvgArray", "long_avg_array"),
+				SHORTAVGARRAY:      flag("shortAvgArray", "short_avg_array"),
+				UPPERLARGEVOLUME:   flag("upperLargeVolume", "upper_large_volume"),
+				DOWNNARROWVOLUME:   flag("downNarrowVolume", "down_narrow_volume"),
+				ONEDAYANGLINE:      flag("oneDayangLine", "one_dayang_line"),
+				TWODAYANGLINES:     flag("twoDayangLines", "two_dayang_lines"),
+				RISESUN:            flag("riseSun", "rise_sun"),
+				POWERFULGUN:        flag("powerFulgun", "power_fulgun"),
+				RESTOREJUSTICE:     flag("restoreJustice", "restore_justice"),
+				DOWN7DAYS:          flag("down7Days", "down7_days"),
+				UPPER8DAYS:         flag("upper8Days", "upper8_days"),
+				UPPER9DAYS:         flag("upper9Days", "upper9_days"),
+				UPPER4DAYS:         flag("upper4Days", "upper4_days"),
+				HEAVENRULE:         flag("heavenRule", "heaven_rule"),
+				UPSIDEVOLUME:       flag("upsideVolume", "upside_volume"),
+				BEARISHENGULFING:   flag("bearishEngulfing", "bearish_engulfing"),
+				REVERSINGHAMMER:    flag("reversingHammer", "reversing_hammer"),
+				SHOOTINGSTAR:       flag("shootingStar", "shooting_star"),
+				EVENINGSTAR:        flag("eveningStar", "evening_star"),
+				FIRSTDAWN:          flag("firstDawn", "first_dawn"),
+				PREGNANT:           flag("pregnant"),
+				BLACKCLOUDTOPS:     flag("blackCloudTops", "black_cloud_tops"),
+				MORNINGSTAR:        flag("morningStar", "morning_star"),
+				NARROWFINISH:       flag("narrowFinish", "narrow_finish"),
+				UPP_DAYS:           num("uppDays", "upp_days"),
+				CONCERN_RANK_7DAYS: num("concernRank7Days", "concern_rank7_days"),
+				UPNDAY:             num("upNday", "up_nday"),
+				DOWNNDAY:           num("downNday", "down_nday"),
 			}
 
 			result := data.NewStockDataApi().GetAllStocks(page, pageSize, keyword, indicators)
@@ -316,7 +326,7 @@ func RegisterScreenTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			words := gjson.Get(args, "words").String()
+			words := types.ExtractStringParam(args, "words", "word", "query", "keyword")
 			res := data.NewSearchStockApi(words).SearchStock(random.RandInt(50, 120))
 			content := data.ThsResultToMarkdown(res, "工具筛选出的相关股票数据")
 			if strings.Contains(content, "无符合条件") || strings.Contains(content, "请先获取东财用户标识") {
@@ -339,7 +349,7 @@ func RegisterScreenTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			words := gjson.Get(args, "words").String()
+			words := types.ExtractStringParam(args, "words", "word", "query", "keyword")
 			res := data.NewSearchStockApi(words).SearchBk(random.RandInt(50, 120))
 			content := data.ThsResultToMarkdown(res, "工具筛选出的相关板块/概念数据")
 			return content, nil
@@ -357,7 +367,7 @@ func RegisterScreenTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			words := gjson.Get(args, "words").String()
+			words := types.ExtractStringParam(args, "words", "word", "query", "keyword")
 			res := data.NewSearchStockApi(words).SearchETF(random.RandInt(50, 120))
 			content := data.ThsResultToMarkdown(res, "工具筛选出的相关ETF数据")
 			return content, nil
@@ -385,9 +395,9 @@ func RegisterScreenTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			page := gjson.Get(args, "page").String()
-			pageSize := gjson.Get(args, "pageSize").String()
-			keyWord := gjson.Get(args, "keyWord").String()
+			page := types.ExtractStringParam(args, "page", "page_number")
+			pageSize := types.ExtractStringParam(args, "pageSize", "page_size")
+			keyWord := types.ExtractStringParam(args, "keyWord", "keyword", "query")
 			pageNo, _ := convertor.ToInt(page)
 			if pageNo == 0 {
 				pageNo = 1

@@ -14,7 +14,6 @@ import (
 	"github.com/duke-git/lancet/v2/convertor"
 	bladesTools "github.com/go-kratos/blades/tools"
 	fakeUserAgent "github.com/lib4u/fake-useragent"
-	"github.com/tidwall/gjson"
 )
 
 func RegisterMarketTools() []bladesTools.Tool {
@@ -51,11 +50,11 @@ func RegisterMarketTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			startTime := gjson.Get(args, "startTime").String()
-			keyWord := gjson.Get(args, "keyWord").String()
-			limit := int(gjson.Get(args, "limit").Int())
-			page := int(gjson.Get(args, "page").Int())
-			pageSize := int(gjson.Get(args, "pageSize").Int())
+			startTime := types.ExtractStringParam(args, "startTime", "start_time")
+			keyWord := types.ExtractStringParam(args, "keyWord", "keyword", "query")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
+			page, _ := types.ExtractIntParam(args, "page", "page_number")
+			pageSize, _ := types.ExtractIntParam(args, "pageSize", "page_size")
 			if pageSize <= 0 {
 				pageSize = limit
 			}
@@ -105,7 +104,7 @@ func RegisterMarketTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockList := gjson.Get(args, "stock_list").String()
+			stockList := strings.Join(types.ExtractStockCodes(args), ",")
 			res := data.NewMarketNewsApi().StockNotice(stockList)
 			if len(res) == 0 {
 				return "未查询到相关上市公司公告。", nil
@@ -165,8 +164,8 @@ func RegisterMarketTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			startDate := gjson.Get(args, "startDate").String()
-			endDate := gjson.Get(args, "endDate").String()
+			startDate := types.ExtractStringParam(args, "startDate", "start_date")
+			endDate := types.ExtractStringParam(args, "endDate", "end_date")
 			res := data.NewMarketNewsApi().GetSecuritiesCompanyOpinion(startDate, endDate)
 			var md strings.Builder
 			for _, d := range res.Data {
@@ -228,11 +227,11 @@ func RegisterMarketTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			startDate := gjson.Get(args, "startDate").String()
-			endDate := gjson.Get(args, "endDate").String()
-			page := gjson.Get(args, "page").String()
-			pageSize := gjson.Get(args, "pageSize").String()
-			keyWord := gjson.Get(args, "keyWord").String()
+			startDate := types.ExtractStringParam(args, "startDate", "start_date")
+			endDate := types.ExtractStringParam(args, "endDate", "end_date")
+			page := types.ExtractStringParam(args, "page", "page_number")
+			pageSize := types.ExtractStringParam(args, "pageSize", "page_size")
+			keyWord := types.ExtractStringParam(args, "keyWord", "keyword", "query")
 
 			pageNo := int64(1)
 			if page != "" {

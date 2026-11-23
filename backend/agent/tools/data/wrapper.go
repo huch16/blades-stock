@@ -1,12 +1,9 @@
 package data
 
 import (
-	"strings"
-
 	"blades-stock/backend/agent/types"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 // NewDataToolWrapper 构造数据工具（R-26 自父包 backend/agent/tools 移入；
@@ -42,27 +39,6 @@ func TruncateToolResult(name, result string) string {
 	headText := string(runes[:head])
 	tailText := string(runes[len(runes)-tail:])
 	return headText + "\n...(工具 " + name + " 返回过长，中间已截断，保留最新数据)...\n" + tailText
-}
-
-func parseStockCodesFromArgs(args string, mainField string) []string {
-	var codes []string
-	mainCode := gjson.Get(args, mainField).String()
-	if mainCode != "" {
-		for _, c := range strings.Split(mainCode, ",") {
-			c = strings.TrimSpace(c)
-			if c != "" {
-				codes = append(codes, c)
-			}
-		}
-	}
-	codesArr := gjson.Get(args, "stockCodes").Array()
-	for _, c := range codesArr {
-		code := strings.TrimSpace(c.String())
-		if code != "" {
-			codes = append(codes, code)
-		}
-	}
-	return codes
 }
 
 func parseInt(s string) (int, error) {

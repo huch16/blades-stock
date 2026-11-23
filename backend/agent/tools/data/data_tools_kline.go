@@ -38,8 +38,8 @@ func RegisterKlineTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			days := gjson.Get(args, "days").String()
-			codes := parseStockCodesFromArgs(args, "stockCode")
+			days := types.ExtractStringParam(args, "days", "dayCount")
+			codes := types.ExtractStockCodes(args)
 			toIntDay := 90
 			if days != "" {
 				if d, err := parseInt(days); err == nil {
@@ -113,17 +113,13 @@ func RegisterKlineTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			kLineType := gjson.Get(args, "kLineType").String()
-			adjustFlag := gjson.Get(args, "adjustFlag").String()
-			limit := int(gjson.Get(args, "limit").Int())
+			kLineType := types.ExtractStringParam(args, "kLineType", "kline_type", "klineType", "type")
+			adjustFlag := types.ExtractStringParam(args, "adjustFlag", "adjust", "adjust_flag")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if limit <= 0 {
 				limit = 60
 			}
-			codes := parseStockCodesFromArgs(args, "stockCode")
-			if stockCode != "" {
-				codes = append(codes, stockCode)
-			}
+			codes := types.ExtractStockCodes(args)
 			if len(codes) == 0 {
 				return "参数 stockCode 或 stockCodes 不能为空", nil
 			}
@@ -178,17 +174,13 @@ func RegisterKlineTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			kLineType := gjson.Get(args, "kLineType").String()
-			limit := int(gjson.Get(args, "limit").Int())
-			maPeriodsStr := gjson.Get(args, "maPeriods").String()
+			kLineType := types.ExtractStringParam(args, "kLineType", "kline_type", "klineType", "type")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
+			maPeriodsStr := strings.Join(types.ExtractStringListParam(args, "maPeriods", "ma_periods", "periods"), ",")
 			if limit <= 0 {
 				limit = 60
 			}
-			codes := parseStockCodesFromArgs(args, "stockCode")
-			if stockCode != "" {
-				codes = append(codes, stockCode)
-			}
+			codes := types.ExtractStockCodes(args)
 			if len(codes) == 0 {
 				return "参数 stockCode 或 stockCodes 不能为空", nil
 			}
@@ -449,11 +441,11 @@ func RegisterKlineTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			entryPrice := gjson.Get(args, "entryPrice").Float()
-			takeProfitPrice := gjson.Get(args, "takeProfitPrice").Float()
-			stopLossPrice := gjson.Get(args, "stopLossPrice").Float()
-			costPrice := gjson.Get(args, "costPrice").Float()
+			stockCode := types.ExtractStockCode(args)
+			entryPrice, _ := types.ExtractFloatParam(args, "entryPrice", "entry_price", "price")
+			takeProfitPrice, _ := types.ExtractFloatParam(args, "takeProfitPrice", "take_profit_price")
+			stopLossPrice, _ := types.ExtractFloatParam(args, "stopLossPrice", "stop_loss_price")
+			costPrice, _ := types.ExtractFloatParam(args, "costPrice", "cost_price")
 			result := data.NewStockDataApi().SetTradingPrice(entryPrice, takeProfitPrice, stopLossPrice, costPrice, stockCode)
 			if result == "设置成功" {
 				return fmt.Sprintf("✅ 价位线设置成功！\n\n📈 %s\n💰 开仓价：%.2f\n🎯 止盈价：%.2f\n🛑 止损价：%.2f\n💵 成本价：%.2f", stockCode, entryPrice, takeProfitPrice, stopLossPrice, costPrice), nil

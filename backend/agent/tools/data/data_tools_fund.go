@@ -8,7 +8,6 @@ import (
 	"blades-stock/backend/util"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func RegisterFundTools() []bladesTools.Tool {
@@ -25,7 +24,7 @@ func RegisterFundTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			keyword := gjson.Get(args, "keyword").String()
+			keyword := types.ExtractStringParam(args, "keyword", "query", "searchWords", "keyWord")
 			if keyword == "" {
 				return "请输入搜索关键词", nil
 			}
@@ -71,7 +70,7 @@ func RegisterFundTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			fundCode := gjson.Get(args, "fundCode").String()
+			fundCode := types.ExtractFundCode(args)
 			if fundCode == "" {
 				return "请输入基金代码", nil
 			}
@@ -142,9 +141,9 @@ func RegisterFundTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			fundCode := gjson.Get(args, "fundCode").String()
-			klt := gjson.Get(args, "klt").String()
-			limit := gjson.Get(args, "limit").Int()
+			fundCode := types.ExtractFundCode(args)
+			klt := types.ExtractStringParam(args, "klt", "period", "klineType")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if fundCode == "" {
 				return "请输入基金代码", nil
 			}
@@ -224,11 +223,11 @@ func RegisterFundTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			fundCode := gjson.Get(args, "fundCode").String()
-			pageIndex := gjson.Get(args, "pageIndex").Int()
-			pageSize := gjson.Get(args, "pageSize").Int()
-			startDate := gjson.Get(args, "startDate").String()
-			endDate := gjson.Get(args, "endDate").String()
+			fundCode := types.ExtractFundCode(args)
+			pageIndex, _ := types.ExtractIntParam(args, "pageIndex", "page_index", "page")
+			pageSize, _ := types.ExtractIntParam(args, "pageSize", "page_size")
+			startDate := types.ExtractStringParam(args, "startDate", "start_date")
+			endDate := types.ExtractStringParam(args, "endDate", "end_date")
 			if fundCode == "" {
 				return "请输入基金代码", nil
 			}
@@ -275,7 +274,7 @@ func RegisterFundTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			fundCode := gjson.Get(args, "fundCode").String()
+			fundCode := types.ExtractFundCode(args)
 			if fundCode == "" {
 				return "请输入基金代码", nil
 			}

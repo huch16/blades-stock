@@ -9,7 +9,6 @@ import (
 	"blades-stock/backend/util"
 
 	bladesTools "github.com/go-kratos/blades/tools"
-	"github.com/tidwall/gjson"
 )
 
 func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
@@ -31,8 +30,8 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			channel := gjson.Get(args, "channel").String()
-			limit := int(gjson.Get(args, "limit").Int())
+			channel := types.ExtractStringParam(args, "channel", "name")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if channel == "" {
 				channel = "global-channel"
 			}
@@ -54,11 +53,7 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			prodCodesStr := gjson.Get(args, "prodCodes").String()
-			var prodCodes []string
-			if prodCodesStr != "" {
-				prodCodes = strings.Split(prodCodesStr, ",")
-			}
+			prodCodes := types.ExtractStringListParam(args, "prodCodes", "prod_codes", "codes")
 			return data.NewWallstreetcnApi().GetMarketRealReadable(prodCodes), nil
 		},
 	))
@@ -84,9 +79,9 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			prodCode := gjson.Get(args, "prodCode").String()
-			periodType := int(gjson.Get(args, "periodType").Int())
-			limit := int(gjson.Get(args, "limit").Int())
+			prodCode := types.ExtractStringParam(args, "prodCode", "prod_code", "code", "symbol")
+			periodType, _ := types.ExtractIntParam(args, "periodType", "period_type", "period")
+			limit, _ := types.ExtractIntParam(args, "limit", "count")
 			if prodCode == "" {
 				prodCode = "XAUUSD.OTC"
 			}
@@ -111,7 +106,7 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			days := int(gjson.Get(args, "days").Int())
+			days, _ := types.ExtractIntParam(args, "days", "dayCount")
 			if days <= 0 {
 				days = 3
 			}
@@ -130,7 +125,7 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请提供股票代码参数 stockCode", nil
 			}
@@ -199,7 +194,7 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请提供股票代码参数 stockCode", nil
 			}
@@ -247,7 +242,7 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请提供股票代码参数 stockCode", nil
 			}
@@ -299,8 +294,8 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
-			category := gjson.Get(args, "category").String()
+			stockCode := types.ExtractStockCode(args)
+			category := types.ExtractStringParam(args, "category", "type")
 			if stockCode == "" {
 				return "请提供股票代码参数 stockCode", nil
 			}
@@ -342,7 +337,7 @@ func RegisterWallstreetcnTdxTools() []bladesTools.Tool {
 			},
 		},
 		func(args string) (string, error) {
-			stockCode := gjson.Get(args, "stockCode").String()
+			stockCode := types.ExtractStockCode(args)
 			if stockCode == "" {
 				return "请提供股票代码参数 stockCode", nil
 			}
