@@ -219,7 +219,12 @@ func buildStrategyUniverse(codes []string) ([]string, map[string]string) {
 	if latestDate != "" {
 		query = query.Where("maxtradedate = ?", latestDate)
 	}
-	query.Order("sec_uri_tycode ASC").Find(&stocks)
+	// 注意：AllStockInfo 结构没有 sec_uri_tycode 字段，按当前结构迁移
+	// 的库查不到该列时 Find 会失败；此前这里不查错误，失败时无声落入
+	// 24 只兜底池。回落行为保留，但失败必须记 Error 日志以便可见。
+	if err := query.Order("sec_uri_tycode ASC").Find(&stocks).Error; err != nil {
+		logger.SugaredLogger.Errorf("查询策略选股池失败，将回落至兜底池: %v", err)
+	}
 
 	codes = make([]string, 0, len(stocks))
 	for _, st := range stocks {

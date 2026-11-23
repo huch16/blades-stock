@@ -1,7 +1,18 @@
 package data
 
 import (
+	"strings"
 	"testing"
+
+	"blades-stock/backend/db"
+	"blades-stock/backend/logger"
+	"blades-stock/backend/models"
+
+	"github.com/glebarez/sqlite"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+	"gorm.io/gorm"
 )
 
 func TestResolveStrategyScreenName(t *testing.T) {
@@ -56,4 +67,70 @@ func TestFallbackScreenByIndicators(t *testing.T) {
 
 	res3, ok3 := FallbackScreenByIndicators("半导体")
 	t.Logf("FallbackScreenByIndicators (半导体行业/概念): ok=%v, res_len=%d", ok3, len(res3))
+}
+
+// TestBuildStrategyUniverse_MissingSecUriTycodeLogsError 回归测试：
+// buildStrategyUniverse 的选股池查询用 sec_uri_tycode 排序；该列是
+// GORM 默认命名把 SECURITYCODE 字段映射出来的，新迁移的库本就有它，
+// 但老结构遗留的生产库可能没有。旧代码不查 Find 错误，失败时无声
+// 落入 24 只兜底池且无任何日志（第三轮遗留风险 #2）。修复后：回落
+// 行为保留，但失败必须记一条 Error 日志。
+// （隔离内存库 + 捕获日志，不动包内 TestMain 的临时库。）
+func TestBuildStrategyUniverse_MissingSecUriTycodeLogsError(t *testing.T) {
+	memDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open memory db: %v", err)
+	}
+	// 按当前结构建表（GORM 默认命名把 SECURITYCODE 映射成
+	// sec_uri_tycode，所以新迁移的库本就有该列），再删掉该列，模拟
+	// 老结构遗留的生产库——正是第三轮遗留风险 #2 的场景。
+	if err := memDB.AutoMigrate(&models.AllStockInfo{}); err != nil {
+		t.Fatalf("AutoMigrate AllStockInfo: %v", err)
+	}
+	if err := memDB.Create(&models.AllStockInfo{
+		SECUCODE: "600519", SECURITYCODE: "600519",
+		SECURITYNAMEABBR: "贵州茅台", MAXTRADEDATE: "2026-11-20",
+	}).Error; err != nil {
+		t.Fatalf("seed AllStockInfo: %v", err)
+	}
+	if err := memDB.Exec("DROP INDEX IF EXISTS idx_all_stock_info_sec_uri_tycode").Error; err != nil {
+		t.Fatalf("drop sec_uri_tycode index: %v", err)
+	}
+	if err := memDB.Exec("ALTER TABLE all_stock_info DROP COLUMN sec_uri_tycode").Error; err != nil {
+		t.Fatalf("drop sec_uri_tycode column: %v", err)
+	}
+	origDao := db.Dao
+	db.Dao = memDB
+	t.Cleanup(func() { db.Dao = origDao })
+
+	core, observed := observer.New(zap.ErrorLevel)
+	origLogger := logger.SugaredLogger
+	logger.SugaredLogger = zap.New(core).Sugar()
+	t.Cleanup(func() { logger.SugaredLogger = origLogger })
+
+	codes, _ := buildStrategyUniverse(nil)
+
+	// 回落行为保留：返回的应正是 24 只兜底池。
+	fb := fallbackUniverse()
+	if len(codes) != len(fb) {
+		t.Fatalf("buildStrategyUniverse(nil) returned %d codes, want fallback %d: %v", len(codes), len(fb), codes)
+	}
+	for i := range fb {
+		if codes[i] != fb[i] {
+			t.Fatalf("codes[%d] = %q, want fallback %q", i, codes[i], fb[i])
+		}
+	}
+	// 关键断言：缺列失败必须记 Error 日志，不能静默。
+	found := false
+	for _, e := range observed.All() {
+		if e.Level == zapcore.ErrorLevel &&
+			strings.Contains(e.Message, "策略选股池") &&
+			strings.Contains(e.Message, "sec_uri_tycode") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected an Error log about 策略选股池 / sec_uri_tycode, got %d error entries: %v", observed.Len(), observed.All())
+	}
 }
