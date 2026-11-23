@@ -118,7 +118,8 @@
       <MessageAnchorNav
         :items="anchorNavItems"
         :show="messages.length > 2"
-        @scroll="scrollToMessage"
+        :unread-count="unreadCount"
+        @scroll="onAnchorScroll"
       />
 
       <!-- 空白欢迎态：买方五阶投研决策流水线控制台 -->
@@ -771,7 +772,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, nextTick, provide } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeMount, onBeforeUnmount, nextTick, provide } from 'vue'
 import {
   NSelect,
   NButton,
@@ -1012,10 +1013,27 @@ const allScenarios = [
 // ========== 锚点导航 ==========
 const {
   anchorNavItems,
+  unreadCount,
+  resetUnreadCount,
   registerElement,
   unregisterElement,
   scrollToMessage,
-} = useMessageAnchor(messages)
+} = useMessageAnchor(messages, () => userIsScrolledUp)
+
+// 未读角标清零时机：切会话（消息列整体换掉，旧未读不再有意义）。
+watch(currentSessionId, () => {
+  resetUnreadCount()
+})
+
+// 锚点导航跳转：跳到最新一条 = 已读完新追加的消息，清零；
+// 跳到中间某条不算读完，保留角标，等用户自己滚到底部。
+function onAnchorScroll(id: string) {
+  scrollToMessage(id)
+  const msgs = messages.value
+  if (msgs.length > 0 && id === msgs[msgs.length - 1].id) {
+    resetUnreadCount()
+  }
+}
 
 provide('registerMessageElement', registerElement)
 provide('unregisterMessageElement', unregisterElement)
@@ -1196,6 +1214,8 @@ function handleScroll() {
   const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
   userIsScrolledUp = distanceFromBottom > 150
   showScrollBottom.value = userIsScrolledUp
+  // 回到底部 = 已读完新追加的消息，未读角标清零。
+  if (!userIsScrolledUp) resetUnreadCount()
 }
 
 function autoScrollIfNearBottom() {
@@ -1496,12 +1516,14 @@ function clearCurrentHistory() {
       negativeText: '取消',
       onPositiveClick: () => {
         messages.value = []
+        resetUnreadCount()
         saveSessionsToStorage()
         notifySuccess('会话已清空')
       }
     })
   } else {
     messages.value = []
+    resetUnreadCount()
     saveSessionsToStorage()
     notifySuccess('会话已清空')
   }

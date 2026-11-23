@@ -174,6 +174,30 @@ test('g / Shift+G 必须用常规语义：g 到最旧、Shift+G 到最新（与 
   assert.doesNotMatch(nav, /最新消息 \(G\)/)
 })
 
+test('unreadCount：语义是“向上滚动期间新追加的消息数”，父组件必须传给导航', () => {
+  const anchor = read('src/components/chat/useMessageAnchor.ts')
+  // composable 必须提供未读计数与清零入口，并接受调用方的“是否向上滚动”信号。
+  assert.match(anchor, /const unreadCount = ref\(0\)/)
+  assert.match(anchor, /function resetUnreadCount\(\)/)
+  assert.match(anchor, /unreadCount,\s*resetUnreadCount,/)
+  assert.match(anchor, /isScrolledUpSource: MaybeRefOrGetter<boolean>/)
+  // 只统计真追加（新列表以前缀延续旧列表）且追加时用户正向上滚动；
+  // 会话切换/清空/裁剪是整列替换或缩短，不得计入；清空时清零。
+  assert.match(anchor, /msgs\.slice\(0, prev\.length\)\.every\(\(m, i\) => m === prev\[i\]\)/)
+  assert.match(anchor, /if \(toValue\(isScrolledUpSource\)\) \{\s*unreadCount\.value \+= newLen - prev\.length/)
+  assert.match(anchor, /if \(newLen === 0\) \{\s*unreadCount\.value = 0/)
+  // agent-chat 必须把计数传给 MessageAnchorNav，否则角标永不显示。
+  const chat = read('src/components/agent-chat.vue')
+  assert.match(chat, /useMessageAnchor\(messages, \(\) => userIsScrolledUp\)/)
+  assert.match(chat, /:unread-count="unreadCount"/)
+  assert.match(chat, /@scroll="onAnchorScroll"/)
+  // 清零时机：回到底部、跳到最新一条、切会话、清空会话。
+  assert.match(chat, /if \(!userIsScrolledUp\) resetUnreadCount\(\)/)
+  assert.match(chat, /function onAnchorScroll\(id: string\)/)
+  assert.match(chat, /watch\(currentSessionId, \(\) => \{\s*resetUnreadCount\(\)/)
+  assert.match(chat, /messages\.value = \[\]\s*resetUnreadCount\(\)/)
+})
+
 test('MessageAnchorNav 导航项编号必须用消息在时间线里的真实位置', () => {
   const src = read('src/components/chat/useMessageAnchor.ts')
   // 旧写法 `AI 回复 ${msgs.length - index}` 用的是过滤后列表的下标，

@@ -23,12 +23,35 @@ function toValue<T>(source: MaybeRefOrGetter<T>): T {
  * - URL hash 同步（深度链接分享）
  * - 键盘导航（j/k 上下跳转）
  * - 生成锚点导航栏数据
+ * - 未读计数（见下方 unreadCount 说明）
+ *
+ * @param messagesSource 消息列表
+ * @param isScrolledUpSource 调用方是否正处于“向上滚动、未贴底”状态。
+ *   由调用方传入 getter（agent-chat 的 handleScroll 维护的 userIsScrolledUp），
+ *   composable 本身不持有滚动容器，不知道是否贴底。
  */
-export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>) {
+export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>, isScrolledUpSource: MaybeRefOrGetter<boolean> = false) {
   function getMessages(): ChatMessage[] {
     const list = toValue(messagesSource)
     return Array.isArray(list) ? list : []
   }
+
+  // 未读计数：语义 =「用户向上滚动期间新追加的消息数」（第三轮建议）。
+  //
+  // 计数规则：
+  // - 只统计“真追加”：新列表以前缀方式延续旧列表（旧消息对象逐一相同），
+  //   且追加发生时调用方正处于向上滚动状态（isScrolledUpSource 为 true）。
+  // - 会话切换 / 清空 / 重试裁剪是整列替换或缩短，不计入。
+  // - 列表被清空时清零；其余清零时机由调用方掌握（回到底部、切会话、
+  //   点导航跳到最新一条），通过 resetUnreadCount() 触发。
+  const unreadCount = ref(0)
+
+  function resetUnreadCount() {
+    unreadCount.value = 0
+  }
+
+  // 上一次见过的消息快照（浅拷贝，存对象引用以便做前缀比对）。
+  let prevMessages: ChatMessage[] = []
 
   // 当前高亮的消息 ID
   const activeAnchor = ref<string | null>(null)
@@ -259,19 +282,33 @@ export function useMessageAnchor(messagesSource: MaybeRefOrGetter<ChatMessage[]>
     if (scrollTimeout) clearTimeout(scrollTimeout)
   })
 
-  // 当 messages 变化时，重新观察新元素
-  watch(() => getMessages().length, () => {
+  // 当 messages 变化时，重新观察新元素，并维护未读计数。
+  watch(() => getMessages().length, (newLen) => {
     if (observer) {
       messageElements.forEach((el) => {
         if (el.id) observer.observe(el)
       })
     }
+    const msgs = getMessages()
+    const prev = prevMessages
+    if (newLen > prev.length && msgs.slice(0, prev.length).every((m, i) => m === prev[i])) {
+      // 真追加：只有调用方确认用户正向上滚动时才计入未读。
+      if (toValue(isScrolledUpSource)) {
+        unreadCount.value += newLen - prev.length
+      }
+    }
+    if (newLen === 0) {
+      unreadCount.value = 0
+    }
+    prevMessages = msgs.slice()
   })
 
   return {
     activeAnchor,
     visibleMessages,
     anchorNavItems,
+    unreadCount,
+    resetUnreadCount,
     registerElement,
     unregisterElement,
     scrollToMessage,
