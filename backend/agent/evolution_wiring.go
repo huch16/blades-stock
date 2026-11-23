@@ -239,40 +239,7 @@ func toolCallSucceeded(resp string) bool {
 	return true
 }
 
-// shouldRunLLMReflection bounds the LLM reflection cost: only substantive
-// answers, negative-scored answers (need a second opinion), and a deterministic
-// ~1/3 sample of medium answers get an LLM call. Everything else falls back to
-// the cheap keyword scorer.
-//
-// ⚠️ 【当前无调用者，DORMANT】—— 它原本只服务于 GenerateReflection 的
-// LLM 打分分支。注意历史已变：GenerateReflection 的生产调用点在第三轮
-// 已恢复（agent_api.go 的 postProcessResponse），但传的是 llm == nil，
-// 只走确定性评分，所以本函数至今仍无调用者。它不是安全兜底：它的存在
-// 不代表 LLM 反思已启用，详见 GenerateReflection 注释。
-// 保留它是因为它精确记录了当时**计划**的成本上限策略，未来若要恢复
-// LLM 反思打分，应从这里重新接线（而不是无条件每次问答都调）。
-// 恢复前先看第四轮 D 组的成本收益分析结论，不要只凭本函数就开闸。
-func shouldRunLLMReflection(answer string, autoScore int) bool {
-	n := len([]rune(answer))
-	if n < 150 {
-		return false
-	}
-	if autoScore < 0 {
-		return true
-	}
-	if n >= 500 {
-		return true
-	}
-	return sampleHash(answer) == 0
-}
-
-// sampleHash returns a stable 0..2 hash bucket for a string, used to sample
-// without randomness so the same answer is always sampled the same way.
-func sampleHash(s string) int {
-	var h uint32 = 2166136261
-	for i := 0; i < len(s) && i < 256; i++ {
-		h ^= uint32(s[i])
-		h *= 16777619
-	}
-	return int(h % 3)
-}
+// shouldRunLLMReflection 的采样门禁已移至 reflection_llm_sampling.go：
+// 第五轮按用户批准的条件恢复 LLM 打分（约 1/10 采样 + 每日上限约 20 次
+// + 最便宜模型），取代这里旧的 ~1/3 采样 + 长回答/负分必打策略。
+// 旧实现同时删掉了 sampleHash（仅供旧采样使用）。

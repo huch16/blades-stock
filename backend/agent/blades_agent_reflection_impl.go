@@ -130,14 +130,17 @@ type LLMReflectionFunc func(systemPrompt, userMessage string) (string, error)
 // GenerateReflection 对一次回答做四维度质量评分，写入 AgentTrace 与长期记忆，
 // 并在低分时触发 Prompt 进化建议。
 //
-// 【已恢复接线】生产调用点：agent_api.go 的 postProcessResponse（回答收尾
-// 的 fire-and-forget 步骤 3），只走 llm == nil 的确定性路径（零 Token）。
-// 下面 a158883 的历史记录保留作背景：当初清理掐掉的是「LLM 打分」的 token
-// 成本，但被连带删掉的确定性评分 + 写库是零 Token 的误伤，本处只恢复这一半。
-// 千万不要顺手把 LLM 打分也接回来（那才是当初要掐掉的成本）。
+// 调用点：agent_api.go 的 postProcessResponse（回答收尾的 fire-and-forget
+// 步骤 3）。llm == nil 时只走确定性评分（零 Token）；llm != nil 时走 LLM
+// 打分，失败则兜底到确定性评分。
+//
+// 【第五轮已恢复 LLM 打分】按用户批准的条件：约 1/10 采样 + 每日上限约 20 次
+// + 最便宜模型，门禁见 reflection_llm_sampling.go，选卡见 reflection_llm.go
+// 的 selectReflectionConfig。采样/上限由 postProcessResponse 在调用前判定，
+// 本函数只负责“LLM 打分失败 → 确定性兜底”，不做采样决策。
 // 另注：低分分支的 maybeGenerateEvolutionAdvice 内部会**真的调 LLM**
-// （OptimizePrompt），因此恢复确定性路径时需一并注意，别把成本从侧门放回来；
-// 该分支受 6 小时/会话限频（见 evolution_wiring.go）。
+// （OptimizePrompt），该分支受 6 小时/会话限频（见 evolution_wiring.go），
+// 是独立于打分预算的另一条成本，不要与打分采样混为一谈。
 //
 // 历史（提交 a158883，strip agent reflection token burn）：
 // 唯一调用点曾在 agent_api.go 的回答收尾处被整体删除。那次清理针对的是
@@ -148,6 +151,8 @@ type LLMReflectionFunc func(systemPrompt, userMessage string) (string, error)
 //  2. 确定性评分 + writeBackToMemory + 写 AgentTrace（**零 token**）——
 //     被连带删除。当 llm == nil 时本函数完全自给自足：仍会
 //     ScoreResultStructured → defaultInsight/defaultImprovement → 写库。
+//
+// 第三轮恢复了第 2 部分；第五轮按采样/上限条件恢复了第 1 部分。
 func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durationMs int64, llm LLMReflectionFunc, toolsUsed string) (*ReflectionResult, error) {
 	fallback := e.ScoreResultStructured(answer)
 	autoScore := fallback.Score
@@ -165,9 +170,9 @@ func (e *Evaluator) GenerateReflection(sessionID, question, answer string, durat
 	}
 	var insight, improvement string
 	if llm != nil {
-		// prompt 模板与调用点：恢复 LLM 打分时应复用这里的
-		// shouldRunLLMReflection 限频（见 evolution_wiring.go），
-		// 不要无条件每次问答都调。
+		// prompt 模板与调用点：采样/上限由调用方（postProcessResponse +
+		// reflectionLLMGate）在传 llm 之前判定，本处只负责调用与兜底，
+		// 不要在这里再加采样——否则同一回答会被两道门禁各算一次。
 		reflectionPrompt := fmt.Sprintf(`你是一个严格的智能体反思评估器。请从四个维度评估以下智能体回答的质量，并输出 JSON。
 
 ## 评分维度（每项 0-10 分）

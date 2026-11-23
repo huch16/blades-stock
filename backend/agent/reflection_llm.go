@@ -11,24 +11,41 @@ import (
 	"github.com/go-kratos/blades"
 )
 
-// defaultLLMReflectionFunc builds an LLMReflectionFunc backed by the first
-// enabled AI config. Returns nil when no usable config exists (caller falls
-// back to keyword scoring). The model provider is reused via the shared cache.
+// selectReflectionConfig picks the AI config used for reflection scoring.
+// Preference order:
+//  1. a credentialed card whose model name contains the configured preference
+//     substring (default "deepseek" — the cheapest provider in the registry);
+//  2. otherwise the first credentialed card.
+//
+// Cards without BaseUrl/ApiKey are skipped, aligned with LLMFromConfig's
+// card-picking rule. Returns nil when no usable config exists.
+func selectReflectionConfig(configs []*data.AIConfig, preference string) *data.AIConfig {
+	var first *data.AIConfig
+	pref := strings.ToLower(strings.TrimSpace(preference))
+	for _, c := range configs {
+		if c == nil || c.BaseUrl == "" || c.ApiKey == "" {
+			continue
+		}
+		if first == nil {
+			first = c
+		}
+		if pref != "" && strings.Contains(strings.ToLower(c.ModelName), pref) {
+			return c
+		}
+	}
+	return first
+}
+
+// defaultLLMReflectionFunc builds an LLMReflectionFunc backed by the cheapest
+// usable AI config (see selectReflectionConfig). Returns nil when no usable
+// config exists (caller falls back to keyword scoring). The model provider is
+// reused via the shared cache.
 func defaultLLMReflectionFunc() LLMReflectionFunc {
 	settingConfig := data.GetSettingConfig()
 	if settingConfig == nil {
 		return nil
 	}
-	var cfg *data.AIConfig
-	for _, c := range settingConfig.AiConfigs {
-		// 只认带凭证的卡：首张卡若 BaseUrl/ApiKey 为空，旧实现会直接
-		// 拿它建 provider，调用时才失败；与 LLMFromConfig 的选卡
-		// 规则对齐，跳过无凭证的卡用下一张。
-		if c != nil && c.BaseUrl != "" && c.ApiKey != "" {
-			cfg = c
-			break
-		}
-	}
+	cfg := selectReflectionConfig(settingConfig.AiConfigs, defaultReflectionLLMGate.config().ModelPreference)
 	if cfg == nil {
 		return nil
 	}

@@ -72,33 +72,40 @@ func TestToolCallSucceeded(t *testing.T) {
 }
 
 func TestShouldRunLLMReflection(t *testing.T) {
+	// 第五轮新契约（约 1/10 采样 + 每日上限，见 reflection_llm_sampling.go）：
+	// 旧的 ~1/3 采样 + 长回答/负分必打已被取代，负分不再走旁路。
 	long := strings.Repeat("分析结论：今日行情正常，数据完整。", 40) // >500 runes
 	mid := strings.Repeat("今日行情正常，数据完整。", 30)       // 150~500
 	short := "今天涨了"
-	if !shouldRunLLMReflection(long, 1) {
-		t.Error("long substantive answer should run LLM reflection")
-	}
-	if !shouldRunLLMReflection(mid, -1) {
-		t.Error("negative-scored answer should always run LLM reflection")
-	}
-	if shouldRunLLMReflection(short, 0) {
+	if shouldRunLLMReflection(short) {
 		t.Error("short answer should skip LLM reflection")
 	}
 	// 同一回答采样结果必须确定（无随机性）。
 	a := mid + "特定后缀"
-	if shouldRunLLMReflection(a, 0) != shouldRunLLMReflection(a, 0) {
+	if shouldRunLLMReflection(a) != shouldRunLLMReflection(a) {
 		t.Error("sampling must be deterministic per answer")
 	}
-	// 中等长度中性答案仅按采样运行（~1/3），不得每次都调用也不得永不调用。
+	// 中等长度答案仅按约 1/10 采样：500 条里既不能为 0 也不能全中。
 	runs := 0
 	for i := 0; i < 500; i++ {
 		s := fmt.Sprintf("问题%d 的数据分析结果：%s", i, mid)
-		if shouldRunLLMReflection(s, 0) {
+		if shouldRunLLMReflection(s) {
 			runs++
 		}
 	}
-	if runs == 0 || runs >= 500 {
-		t.Fatalf("sampling should be partial, got %d/500", runs)
+	if runs < 20 || runs > 100 {
+		t.Fatalf("sampling should be ~1/10, got %d/500", runs)
+	}
+	// 长回答也不再必打：500 条长回答里必有未入选的。
+	longRuns := 0
+	for i := 0; i < 500; i++ {
+		s := fmt.Sprintf("长回答%d：%s", i, long)
+		if shouldRunLLMReflection(s) {
+			longRuns++
+		}
+	}
+	if longRuns == 0 || longRuns >= 500 {
+		t.Fatalf("long answers should also be sampled (~1/10), got %d/500", longRuns)
 	}
 }
 

@@ -1107,19 +1107,25 @@ func postProcessResponse(sessionID, question, response string, toolNames []strin
 		}
 	}()
 
-	// 3. 确定性反思评分（零 Token）：四维度质量评分写入 AgentTrace 与长期
-	//    记忆，低分样本触发进化建议。llm 传 nil，只走确定性评分路径，
-	//    绝不为打分调 LLM（当初清理掐掉的正是 LLM 打分的 token 成本；
-	//    零 Token 的评分 + 写库是被连带误伤的，本处只恢复这一半）。
-	//    注意：低分（score < 0）时 GenerateReflection 内部仍会触发
-	//    maybeGenerateEvolutionAdvice（OptimizePrompt 真调一次 LLM），
-	//    但受 6 小时/会话限频，见 evolution_wiring.go。
+	// 3. 反思评分：先确定性评分（零 Token），再按采样/上限决定是否用
+	//    LLM 打分（第五轮恢复，条件见 reflection_llm_sampling.go：
+	//    约 1/10 采样 + 每日上限约 20 次 + 最便宜模型）。
+	//    超限、无可用模型卡、LLM 调用失败时全部静默走确定性评分，
+	//    绝不报错、不打断主流程。
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		defer recoverLog("reflection")
 		toolsUsed := strings.Join(toolNames, ", ")
-		if _, err := NewEvaluator().GenerateReflection(sessionID, question, response, durationMs, nil, toolsUsed); err != nil {
+		var llm LLMReflectionFunc
+		if shouldRunLLMReflection(response) && defaultReflectionLLMGate.tryAcquire() {
+			llm = defaultLLMReflectionFunc()
+			if llm == nil {
+				// 无可用模型卡：本次不调 LLM，把当日名额还回去。
+				defaultReflectionLLMGate.release()
+			}
+		}
+		if _, err := NewEvaluator().GenerateReflection(sessionID, question, response, durationMs, llm, toolsUsed); err != nil {
 			logger.SugaredLogger.Warnf("reflection failed: %v", err)
 		}
 	}()
