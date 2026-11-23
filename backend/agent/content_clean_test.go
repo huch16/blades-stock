@@ -3,6 +3,7 @@ package agent
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 // randomBlock builds a non-periodic block of n chars using an LCG, so exact
@@ -186,5 +187,35 @@ func TestCleanFinalContent_DuplicateWithChinesePunctuationSeparator(t *testing.T
 	got := cleanFinalContent(dup)
 	if got != block {
 		t.Fatalf("duplicate answer with Chinese-punctuation separator should collapse to one copy, got %d chars (want %d)", len(got), len(block))
+	}
+}
+
+// TestCleanFinalContent_DuplicateChineseAlwaysValidUTF8 回归：折叠重复答案
+// 时 L 曾按字节递增，B = s[L:] 会从汉字中间断开，s[:best] 可能切出
+// 非法 UTF-8。修复后 L 只落在 rune 边界上。不同长度的中文块会改变
+// 字节/ rune 对齐相位，故多取几个长度，输出恒须为合法 UTF-8。
+func TestCleanFinalContent_DuplicateChineseAlwaysValidUTF8(t *testing.T) {
+	chars := []rune("这是一个中文分析段落数据结果市场行业公司盈利增长风险建议结论")
+	x := uint32(987654321)
+	next := func() rune {
+		x = x*1664525 + 1013904223
+		return chars[int(x>>16)%len(chars)]
+	}
+	for _, n := range []int{410, 411, 412, 500, 501, 700} {
+		block := string(func() []rune {
+			r := make([]rune, n)
+			for i := range r {
+				r[i] = next()
+			}
+			return r
+		}())
+		dup := block + "\n---\n" + block
+		got := cleanFinalContent(dup)
+		if !utf8.ValidString(got) {
+			t.Fatalf("n=%d: cleanFinalContent produced invalid UTF-8 (%d bytes)", n, len(got))
+		}
+		if len(got) > len(dup) {
+			t.Fatalf("n=%d: cleaned output grew: %d > %d", n, len(got), len(dup))
+		}
 	}
 }

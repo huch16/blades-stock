@@ -65,7 +65,7 @@ func cleanThinkBlocks(text string) string {
 // near the end of text, keeping the first copy. The two copies may be separated
 // by a small amount of separator-like junk (whitespace, markdown "---" lines,
 // short thinking sentences) which is dropped along with the second copy. Only
-// blocks >=minBlock chars trigger, so normal prose is never affected. Trailing
+// blocks >=minBlock bytes trigger, so normal prose is never affected. Trailing
 // whitespace of the whole text is preserved.
 func collapseConsecutiveDuplicates(text string, minBlock int) string {
 	if minBlock <= 0 {
@@ -79,6 +79,14 @@ func collapseConsecutiveDuplicates(text string, minBlock int) string {
 		trailing = s[len(trimmed):]
 		s = trimmed
 	}
+	// L 只能落在 rune 边界上：L 按字节递增时 B = s[L:] 会从汉字中间
+	// 断开，LastIndex 找到的“重复”会让 s[:best] 切出非法 UTF-8。
+	// 边界表由 range 直接给出（rune 起始下标 + 串尾）。
+	boundaries := make([]int, 0, len(s)/2+1)
+	for i := range s {
+		boundaries = append(boundaries, i)
+	}
+	boundaries = append(boundaries, len(s))
 	for i := 0; i < 5; i++ {
 		if len(s) < minBlock*2 {
 			break
@@ -88,7 +96,10 @@ func collapseConsecutiveDuplicates(text string, minBlock int) string {
 		// longest second copy first (largest B). For each L we look for a
 		// previous copy of B ending within gapMax chars of L (so the first copy
 		// may have a small junk suffix before the second copy begins).
-		for L := minBlock; L <= len(s)-minBlock; L++ {
+		for _, L := range boundaries {
+			if L < minBlock || L > len(s)-minBlock {
+				continue
+			}
 			B := s[L:]
 			lenB := len(s) - L
 			regionStart := L - lenB - gapMax
@@ -146,9 +157,9 @@ func isCollapseJunk(j string) bool {
 			continue
 		}
 		if utf8.RuneCountInString(t) <= 60 {
-			// 必须按最后一个 rune 判断：t[len(t)-1:] 取的是最后一个字节，
-			// 对 "。" 这类多字节标点永远匹配不上，导致中文分隔行
-			// 被误判为真实内容，重复答案无法折叠。
+			// 按最后一个 rune 判断（DecodeLastRuneInString）：直接取
+			// 最后一个字节会对 "。" 这类多字节标点误判，导致中文分隔行
+			// 被当成真实内容、重复答案无法折叠。
 			if r, _ := utf8.DecodeLastRuneInString(t); strings.ContainsRune("。！？；：.!?;:）】〉\"'…—", r) {
 				continue
 			}
