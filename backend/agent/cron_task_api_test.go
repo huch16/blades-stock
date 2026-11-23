@@ -2,11 +2,17 @@ package agent
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"blades-stock/backend/data"
+	"blades-stock/backend/db"
 	"blades-stock/backend/models"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 )
 
 // TestExecuteFundAnalysis_NotImplemented 验证未实现的任务类型
@@ -153,6 +159,7 @@ func TestCheckCronAgentContent(t *testing.T) {
 // agent 流产出 ❌ 错误文本，旧实现会把它原样存为分析报告并返回 nil
 // 记“成功”；修复后应返回流错误、不落库。
 func TestExecuteStockAnalysis_NoConfigReturnsError(t *testing.T) {
+	withEmptyModelRegistry(t)
 	api := &CronTaskApi{}
 	task := &models.CronTask{Params: `{"stockCode":"600519","stockName":"贵州茅台","aiConfigId":0}`}
 	err := api.executeStockAnalysis(context.Background(), task)
@@ -167,6 +174,7 @@ func TestExecuteStockAnalysis_NoConfigReturnsError(t *testing.T) {
 // TestExecuteMarketAnalysis_NoConfigReturnsError 同上：市场分析执行器
 // 的守卫接线也必须生效。
 func TestExecuteMarketAnalysis_NoConfigReturnsError(t *testing.T) {
+	withEmptyModelRegistry(t)
 	api := &CronTaskApi{}
 	task := &models.CronTask{Params: `{"aiConfigId":0}`}
 	err := api.executeMarketAnalysis(context.Background(), task)
@@ -176,4 +184,25 @@ func TestExecuteMarketAnalysis_NoConfigReturnsError(t *testing.T) {
 	if !strings.Contains(err.Error(), "流错误") || !strings.Contains(err.Error(), "尚未配置任何 AI 模型") {
 		t.Errorf("error should carry the stream error, got: %v", err)
 	}
+}
+
+// withEmptyModelRegistry 把 db.Dao 换成一个只有空 settings/ai_config
+// 表的隔离临时库（附 agent_run_records 表供运行记录落库），测试结束
+// 恢复。必须隔离——同包其它测试（如 agent_run_record_test.go 的
+// seedRunCards）会往共享临时库里插 AI 卡片且不清理；直接用共享库
+// 时 AiConfigId=0 会解析到那张卡并真去调不可达端点（9 秒重试后才
+// 失败），测试结果依赖执行顺序。
+func withEmptyModelRegistry(t *testing.T) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "empty-registry.db")
+	isoDB, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open isolated db: %v", err)
+	}
+	if err := isoDB.AutoMigrate(&data.Settings{}, &data.AIConfig{}, &models.AgentRunRecord{}); err != nil {
+		t.Fatalf("migrate isolated db: %v", err)
+	}
+	origDao := db.Dao
+	db.Dao = isoDB
+	t.Cleanup(func() { db.Dao = origDao })
 }
